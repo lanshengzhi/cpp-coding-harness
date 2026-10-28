@@ -99,6 +99,7 @@ class DeliveryEvidenceTest(unittest.TestCase):
         self.record = self.delivery["records"][0]
         self.claim = self.record["rows"][0]
         self.artifacts = {"audit-1101/example.json": json.dumps({"scenarios": [{"name": "preserves null"}]}).encode()}
+        self.record["routingSha256"] = consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts)
         self.root_patch = patch.object(consolidate, "ROOT", self.root)
         self.root_patch.start()
         self.addCleanup(self.root_patch.stop)
@@ -109,6 +110,26 @@ class DeliveryEvidenceTest(unittest.TestCase):
 
     def check(self):
         return consolidate.delivery_updates(self.rows, self.delivery)
+
+    def test_routing_digest_is_stable_and_binds_row_scenario_and_artifact(self) -> None:
+        digest = consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts)
+        self.assertEqual(digest, consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts))
+        self.artifacts["audit-9999/unrelated.json"] = b'{"scenarios":[{"name":"unrelated"}]}'
+        self.assertEqual(digest, consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts))
+        self.artifacts["audit-9999/unrelated.json"] = b'{"scenarios":[{"name":"preserves null"}]}'
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "ambiguous"):
+            consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts)
+        del self.artifacts["audit-9999/unrelated.json"]
+        self.rows[0]["id"] = self.claim["id"] = "cch_mcp:other"
+        self.assertNotEqual(digest, consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts))
+        self.rows[0]["id"] = self.claim["id"] = "cch_mcp:example"
+        self.rows[0]["comparisonScenarios"] = ["other"]
+        self.artifacts["audit-1101/example.json"] = b'{"scenarios":[{"name":"other"}]}'
+        self.assertNotEqual(digest, consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts))
+        self.rows[0]["comparisonScenarios"] = ["preserves null"]
+        self.artifacts.clear()
+        self.artifacts["audit-1101/other.json"] = b'{"scenarios":[{"name":"preserves null"}]}'
+        self.assertNotEqual(digest, consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts))
 
     def test_complete_delivery_promotes_only_its_row(self) -> None:
         self.rows.append({"id": "cch_mcp:unrelated", "membership": "supported", "comparisonScenarios": ["other"]})
