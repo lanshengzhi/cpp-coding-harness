@@ -224,16 +224,15 @@
           "vcpkg",
           "-L",
           "issue1101",
-          "--output-on-failure",
           "--output-junit",
-          "/tmp/cch-1103-1101.xml"
+          "/tmp/cch-1103-1101b.xml"
         ],
-        "testedRevision": "44972a90846fa0a9c453d13fbbd518d7567722ff",
-        "recordedAt": "2026-10-28T03:04:46Z",
+        "testedRevision": "6f8d17d4bebb96470c94b52f561634cfcb890fd5",
+        "recordedAt": "2026-10-28T03:09:38Z",
         "selected": 14,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1103-revalidation-1101.xml",
-          "sha256": "0ab687504a433328fae5bf079e9251f57464b618288b0d4b319717a1c3308081"
+          "sha256": "32e86a1be017eb9f208ab98b12945466043151d3a806725e1b07cb6fc2c0b64c"
         }
       },
       "rows": [
