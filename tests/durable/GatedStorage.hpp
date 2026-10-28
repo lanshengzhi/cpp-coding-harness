@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -57,6 +58,9 @@ public:
 
     /// Fail the next commit with `message` and no durable effect.
     void fail_next_commit(std::string message) { failure_ = std::move(message); }
+
+    /// Observe the inner backend just before Session closes it after a failure.
+    void on_close(std::function<void(::cch::durable::Storage&)> observer) { close_observer_ = std::move(observer); }
 
     /// The number of `commit()` calls this double received.
     [[nodiscard]] std::size_t commit_calls() const noexcept { return commit_calls_; }
@@ -155,6 +159,7 @@ public:
 
     [[nodiscard]] support::ExpectedVoid close() override {
         close_calls_ += 1;
+        if (close_observer_) close_observer_(*inner_);
         return inner_->close();
     }
 
@@ -184,6 +189,7 @@ private:
     std::unique_ptr<::cch::durable::MemoryStorage> inner_;
     std::optional<Held> held_;
     std::optional<std::string> failure_;
+    std::function<void(::cch::durable::Storage&)> close_observer_;
     bool hold_armed_{false};
     std::size_t permits_{0};
     std::size_t commit_calls_{0};

@@ -3,6 +3,7 @@
 #include <cch/durable/Harness.hpp>
 #include <cch/durable/Storage.hpp>
 #include "durable/FrozenExpectation.hpp"
+#include "durable/GatedStorage.hpp"
 #include "durable/Outcome.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -546,8 +547,29 @@ TEST_CASE(
 
     CHECK(inbox_before == static_cast<std::size_t>(expected.at("inboxBefore").get_number()));
     CHECK(inbox_after == static_cast<std::size_t>(expected.at("inboxAfter").get_number()));
+    auto submissions = storage.scan_submissions(100);
+    REQUIRE(submissions.has_value());
+    CHECK(submissions->size() == 1);
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    std::size_t user_entries = 0;
+    for (const auto& entry : *entries) {
+        if (entry.kind == "pi.user") ++user_entries;
+    }
+    CHECK(user_entries == 1);
 
     held.release();
+    REQUIRE(consume(first.value().wait()).has_value());
+    auto final_entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(final_entries.has_value());
+    std::size_t final_users = 0;
+    std::size_t final_answers = 0;
+    for (const auto& entry : *final_entries) {
+        if (entry.kind == "pi.user") ++final_users;
+        if (entry.kind == "pi.assistant") ++final_answers;
+    }
+    CHECK(final_users == 1);
+    CHECK(final_answers == 1);
     REQUIRE(consume(harness->close()).has_value());
 }
 
@@ -587,9 +609,12 @@ TEST_CASE("a conversation abort settles the queued input unanswered and aborted,
     REQUIRE(placed_before.has_value());
     REQUIRE(input_before.has_value());
     REQUIRE(write_before.has_value());
-    CHECK(placed_before.value().status == "placed");
-    CHECK(input_before.value().status == "queued");
-    CHECK(write_before.value().status == "queued");
+    const auto& expected = frozen.expected().get_object();
+    const auto& before = expected.at("before").get_array();
+    REQUIRE(before.size() == 3);
+    CHECK(placed_before.value().status == before[0].get_string());
+    CHECK(input_before.value().status == before[1].get_string());
+    CHECK(write_before.value().status == before[2].get_string());
 
     REQUIRE(consume(harness->abort_conversation(root.value())).has_value());
 
@@ -600,16 +625,21 @@ TEST_CASE("a conversation abort settles the queued input unanswered and aborted,
     REQUIRE(input_after.has_value());
     REQUIRE(write_after.has_value());
 
-    CHECK(placed_after.value().status == "unanswered");
-    CHECK(placed_after.value().reason == "aborted");
-    CHECK(input_after.value().status == "unanswered");
-    CHECK(input_after.value().reason == "aborted");
-    CHECK(write_after.value().status == "queued");
+    const auto& after = expected.at("after").get_array();
+    REQUIRE(after.size() == 3);
+    CHECK(placed_after.value().status == after[0].get_object().at("status").get_string());
+    CHECK(placed_after.value().reason == after[0].get_object().at("reason").get_string());
+    CHECK(input_after.value().status == after[1].get_object().at("status").get_string());
+    CHECK(input_after.value().reason == after[1].get_object().at("reason").get_string());
+    CHECK(write_after.value().status == after[2].get_object().at("status").get_string());
+    CHECK(after[2].get_object().at("reason").holds<support::JsonValue::null_t>());
     CHECK_FALSE(write_after.value().reason.has_value());
 
     auto items = inbox_items(storage, root.value());
-    REQUIRE(items.size() == 1);
-    CHECK(items[0].as_object()->at("mode") == chord::Json{"write"});
+    const auto& expected_inbox = expected.at("inbox").get_array();
+    REQUIRE(expected_inbox.size() == 1);
+    REQUIRE(items.size() == expected_inbox.size());
+    CHECK(items[0].as_object()->at("mode") == chord::Json{expected_inbox[0].get_object().at("mode").get_string()});
     CHECK(items[0].as_object()->at("id") == chord::Json{static_cast<double>(queued_write.value().id.value)});
 
     auto live_doc = storage.find_document(
@@ -761,6 +791,48 @@ TEST_CASE("a busy queued admission commits one batch with the submission and the
         }
     }
     CHECK(found_items_op);
+
+    held.release();
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a failed busy admission persists neither its submission nor its inbox item",
+        "[durable][workflow][issue1080]") {
+    cch::tests::GatedStorage storage;
+    HeldStep held;
+    HarnessOptions options;
+    options.stream = [&held](ai::Model, ai::AiContext, ai::SimpleStreamOptions s) { return held.step(s.stop_token); };
+
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+    auto first = consume(harness->submit(root.value(), text_input("first")));
+    REQUIRE(first.has_value());
+    REQUIRE(held.reached.try_acquire_for(std::chrono::seconds(5)));
+
+    const auto before = inbox_items(storage, root.value());
+    auto submissions_before = storage.scan_submissions(100);
+    REQUIRE(submissions_before.has_value());
+    bool observed_close = false;
+    storage.on_close([&](Storage& inner) {
+        observed_close = true;
+        auto by_request = inner.submission_by_request(root.value(), "failed-request");
+        REQUIRE(by_request.has_value());
+        CHECK_FALSE(by_request->has_value());
+        auto submissions_after = inner.scan_submissions(100);
+        REQUIRE(submissions_after.has_value());
+        CHECK(submissions_after->size() == submissions_before->size());
+        CHECK(inbox_items(inner, root.value()) == before);
+    });
+    storage.fail_next_commit("injected admission failure");
+    auto rejected = consume(harness->submit(root.value(), text_input("failed", std::nullopt, "failed-request")));
+    CHECK_FALSE(rejected.has_value());
+    CHECK(observed_close);
+    CHECK(harness->session().failed());
+    auto subsequent = consume(harness->submit(root.value(), text_input("after failure")));
+    CHECK_FALSE(subsequent.has_value());
 
     held.release();
     REQUIRE(consume(harness->close()).has_value());

@@ -56,6 +56,34 @@ accepting two successful final reads as evidence of atomicity. Storage tests in
 [SubmissionStorageTest.cpp](../../../tests/durable/SubmissionStorageTest.cpp)
 cover staged resolution and backend persistence separately from Harness policy.
 
+### Delivery audit after integration
+
+The issue had no delivery comment when this audit began. The existing public
+`Harness` boundary test compares the postTools/final transcript and answer
+identities; the successful queued-admission test records both the submission
+and inbox change in one storage batch. Those cases are retained.
+
+- The same-key/different-payload test previously checked identity, zero new
+  batches and inbox size, but did not count work. It now also counts one
+  submission, one user transcript entry and one assistant answer after the
+  original settles.
+- The conversation-abort test loaded its registered frozen scenario but did
+  not compare its values. It now compares the before and after statuses,
+  reasons and retained inbox mode against that observation; the queued input
+  is unanswered/aborted while the queued write remains queued. Loading a
+  fixture alone was not a frozen comparison.
+- The new failed busy-admission case observes the backend immediately before
+  the failed Session closes it: neither a submission for the request nor an
+  inbox change is visible. It also checks the failed Session rejects a later
+  submission. Together with the successful same-batch case this covers
+  submission-granularity atomicity and a discriminating failure through the
+  public caller. The fault double rejects the entire batch before delegating;
+  it does not simulate a physical write failing midway. Backend rollback is
+  covered separately by #1074 and #1075.
+
+No new frozen observation or capability-status claim is needed for these
+comparisons. The existing audit-1080 observations remain the authority.
+
 ### Review corrections
 
 The final review-fix merge is `1ed33cf66` (implementation commit `dff0672e1`).
@@ -102,6 +130,25 @@ made the ordering deterministic and completed the test. No timeout or assertion
 was relaxed to obtain a pass.
 
 ## Validation
+
+Delivery audit validation (2026-10-28, strict no-exception Debug):
+
+- Focused `ctest --preset vcpkg -L issue1080 --timeout 20`: **36 selected,
+  36 passed**, including one new case and two strengthened cases.
+- Full preset build and configure/build architecture gates passed. The
+  unfiltered full run selected **3,853**: **3,851 passed, 1 failed, 1
+  skipped** in 747.44 seconds. Architecture tests, including the warning
+  gate, passed. This is not a passing full validation.
+- The failure was `Native TUI fullscreen scroll-to-end indicator paints on a
+  direct-fullscreen launch while the transcript is scrolled` (#1039): after
+  the indicator click, an expected scrollbar edge was absent. Ten isolated
+  repeats passed; the cause remains undetermined. The Native TUI differential
+  capture was skipped. Original full log and JUnit are retained locally at
+  `/tmp/cch-1080-full.log` and `/tmp/cch-1080-full.xml`; isolated rerun log is
+  `/tmp/cch-1080-tui-repeat.log`.
+- An initial parallel fresh-tree build encountered PARITY-6002/6003 while
+  Ninja updated dependency evidence; serial retry passed. This separate build
+  gate race is tracked by #1162.
 
 Initial integration revision: `b2714debc`.
 
