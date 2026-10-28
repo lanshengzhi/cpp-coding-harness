@@ -240,10 +240,10 @@ discriminating tests only.
   proof the reviewers required (a held earlier read never established that
   the reservation was admitted). `[held-release]` pins the existing
   held-turn behavior: while the commit turn is held the record stays
-  `pending`, and an inspect started during the hold blocks on
-  `Session::failed()`'s line lock until the turn settles, then observes the
-  settled running state -- the same public behavior a frozen `readOnLine`
-  read spends behind the held turn. The 2s no-return assertion proves
+  `pending`, and an inspect started during the hold queues its line job
+  behind the held commit turn (line-job FIFO), then observes the settled
+  running state -- the same public behavior a frozen `readOnLine` read
+  spends behind the held turn. The 2s no-return assertion proves
   blocking only within that bounded window. `[close-race]` pins the discard
   semantics (settled write remains, identity discarded, phase never starts,
   close drains); its setup orders the release after the `closed` flag by a
@@ -274,8 +274,9 @@ discriminating tests only.
   Storage backend that synchronously re-entered Session from `task()` would
   oppose the line->mutex order; no backend does, and frozen pi carries the
   same exposure. `wait_for_idle` completes outside the mutex already.
-- Queued/asynchronous `inspect` was not implemented (see the Spec P1
-  disproof above); it is #1088-coordinated scope.
+- The queued line-job `inspect` is implemented (the seam and the
+  reservation-visibility slice). Only a complete committed scan beyond the
+  256/1024 caps remains #1088-coordinated scope.
 
 ## Inspection scan cap (issue #1088 hand-off)
 

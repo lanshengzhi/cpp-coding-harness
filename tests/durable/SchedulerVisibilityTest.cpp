@@ -102,6 +102,12 @@ public:
     StalePendingViewStorage(Storage& inner, std::string kind) : inner_(inner), kind_(std::move(kind)) {}
 
     [[nodiscard]] support::AsyncResult<Seq> commit(std::span<const StorageWrite> writes) override {
+        for (const auto& write : writes) {
+            if (write.type == "task" && write.task.has_value() && write.task->kind == kind_ &&
+                    write.task->state.status == "running") {
+                reservation_write_seen.store(true, std::memory_order_release);
+            }
+        }
         return inner_.commit(writes);
     }
 
@@ -139,6 +145,7 @@ public:
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override { return inner_.task(id); }
 
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override {
+        scan_calls.fetch_add(1, std::memory_order_relaxed);
         auto scanned = inner_.scan_tasks(limit);
         if (!scanned) return scanned;
         for (auto& record : *scanned) {
@@ -167,6 +174,10 @@ public:
 private:
     Storage& inner_; // outlives this wrapper
     std::string kind_;
+
+public:
+    std::atomic<int> scan_calls{0};
+    std::atomic_bool reservation_write_seen{false};
 };
 } // namespace
 
@@ -950,8 +961,10 @@ TEST_CASE("a held reservation commit stays unreserved until it settles", "[durab
                     continue;
                 }
                 if (record_terminal) {
-                    // A terminal record must never appear as a row: the
-                    // capture skips it before any derive.
+                    // Invariant only: the capture skips terminal records, so
+                    // this can never fire. It does NOT discriminate late
+                    // publication -- [held-release] covers that by holding
+                    // the reservation write itself.
                     terminal_row_seen.store(true);
                 } else if (row.record.state.status == "running" && row.state.kind == "running") {
                     observed_running.store(true);
@@ -1213,13 +1226,6 @@ namespace {
     })).has_value();
 }
 
-[[nodiscard]] bool inspection_has_row(const HarnessInspection& inspection, std::string_view kind) {
-    for (const auto& row : inspection.tasks) {
-        if (row.record.kind == kind) return true;
-    }
-    return false;
-}
-
 [[nodiscard]] std::optional<std::string> inspection_row_state(
         const HarnessInspection& inspection, std::string_view kind) {
     for (const auto& row : inspection.tasks) {
@@ -1442,14 +1448,25 @@ TEST_CASE("a stale scheduling snapshot reserves nothing and starts no phase", "[
         record.state.outcome = TaskOutcome{.status = "completed"};
         return tx.set_task(std::move(record));
     })).has_value());
+    const int scans_before = storage.scan_calls.load(std::memory_order_relaxed);
     REQUIRE(harness->resume().has_value());
     // Bounded observation window covering several scheduler passes.
     const auto window_end = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
     while (std::chrono::steady_clock::now() < window_end)
         std::this_thread::yield();
+    const int scans_after = storage.scan_calls.load(std::memory_order_relaxed);
+    const bool wrote_running = storage.reservation_write_seen.load(std::memory_order_acquire);
+    const bool session_failed = harness->session().failed();
     const auto final_record = memory.task(id);
     const auto close_outcome = consume(harness->close());
 
+    // The scheduler really ran against the stale view, and the reservation
+    // body refused: no running write reached Storage and the Session stayed
+    // healthy. If the terminal guard were removed, the write would be
+    // attempted, MemoryStorage would reject it, and the Session would fail.
+    CHECK(scans_after > scans_before);
+    CHECK_FALSE(wrote_running);
+    CHECK_FALSE(session_failed);
     CHECK_FALSE(phase_ready.load());
     REQUIRE(final_record.has_value());
     CHECK(final_record->has_value());
