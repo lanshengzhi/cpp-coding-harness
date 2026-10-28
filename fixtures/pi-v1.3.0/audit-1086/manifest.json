@@ -1,0 +1,199 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1086",
+  "family": "audit-1086",
+  "capturedAt": "2026-10-28T18:16:15.645Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1086/continue-1086-sqlite.mts",
+    "sha256": "b86b707fdc6aff38ec7be5c155e80e0dad119fea6ea1ba8a8640d1111a13c3e9",
+    "command": "CCH_1086_CPP_STORE_OUT=build/audit-1086/cpp/storage.sqlite PI_CHECKOUT=/tmp/cch-1080-pi-frozen ./build/cch_tests_durable 'C++ creates a SQLite store\\, pi advances it\\, and C++ finishes it' && PI_CHECKOUT=/tmp/cch-1080-pi-frozen NODE_OPTIONS=--conditions=source TSX_TSCONFIG_PATH=/tmp/cch-1080-pi-frozen/tsconfig.json /tmp/cch-1080-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1086/continue-1086-sqlite.mts build/audit-1086/pi capture-pi && PI_CHECKOUT=/tmp/cch-1080-pi-frozen NODE_OPTIONS=--conditions=source TSX_TSCONFIG_PATH=/tmp/cch-1080-pi-frozen/tsconfig.json /tmp/cch-1080-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1086/continue-1086-sqlite.mts build/audit-1086/cpp capture-cpp 7 8 1 && python3 fixtures/pi-v1.3.0/audit-1086/build-1086-evidence.py build/audit-1086",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1086/build-1086-evidence.py",
+        "sha256": "8e3915ad3272808ed2f788fcbcf167483d5a5b5a9b87c619a02eaa700fa00b98"
+      },
+      {
+        "path": "tests/durable/SqliteStorageTest.cpp",
+        "sha256": "db3cebca4862f446b89410be4aec8db7300ceb5c4dcf81d224f222cb8797c2ce"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "interchange.json",
+      "family": "audit-1086",
+      "bytes": 15999,
+      "sha256": "f7efc13446f4c8c8b9cd4b852036e1b531f61f4f8a0a8abed912ed25841a7419",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/harness.ts:Harness.open,root,resume,close",
+        "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.scanTasks,submissionByRequest,findDocument",
+        "packages/durable/src/tasks.ts:defineTask",
+        "packages/durable/src/documents.ts:defineDoc"
+      ],
+      "scenarios": [
+        {
+          "name": "pi creates a SQLite store with an unfinished task, document and checkpoint",
+          "inputs": {
+            "backend": "sqlite",
+            "creator": "pi",
+            "taskKind": "audit1086.work\"\\é",
+            "documentKind": "audit1086.history\"\\é",
+            "requestId": "audit1086/request\"\\é",
+            "action": "create and close"
+          },
+          "expected": {
+            "storeGzipBase64": "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",
+            "ids": {
+              "id": 7,
+              "submission": 8,
+              "conversation": 1
+            },
+            "task": {
+              "id": 7,
+              "conversationId": 1,
+              "kind": "audit1086.work\"\\é",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "start",
+                  "n": 7
+                }
+              }
+            },
+            "document": {
+              "n": 1
+            },
+            "submission": {
+              "conversationId": 1,
+              "requestId": "audit1086/request\"\\é",
+              "type": "input",
+              "status": "queued",
+              "id": 8
+            },
+            "raw": {
+              "schemaVersion": 1,
+              "nextId": "10",
+              "nextSeq": 3,
+              "taskKind": "\"audit1086.work\\\"\\\\é\"",
+              "requestId": "\"audit1086/request\\\"\\\\é\"",
+              "documents": [
+                {
+                  "kind": "\"audit1086.history\\\"\\\\é\"",
+                  "keyValue": "\"\""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "C++ creates a SQLite store that pi reopens, indexes and advances",
+          "inputs": {
+            "backend": "sqlite",
+            "creator": "c++",
+            "taskKind": "audit1086.work\"\\é",
+            "documentKind": "audit1086.history\"\\é",
+            "requestId": "audit1086/request\"\\é",
+            "action": "scanTasks, submissionByRequest, findDocument, resume"
+          },
+          "expected": {
+            "storeGzipBase64": "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",
+            "ids": {
+              "task": 7,
+              "submission": 8,
+              "conversation": 1
+            },
+            "initial": {
+              "task": {
+                "id": 7,
+                "conversationId": 1,
+                "kind": "audit1086.work\"\\é",
+                "version": 1,
+                "input": {
+                  "n": 7
+                },
+                "background": false,
+                "abortRequested": false,
+                "state": {
+                  "status": "pending",
+                  "checkpoint": {
+                    "phase": "start",
+                    "n": 7
+                  }
+                }
+              },
+              "document": {
+                "n": 1
+              },
+              "submission": {
+                "id": 8,
+                "conversationId": 1,
+                "requestId": "audit1086/request\"\\é",
+                "type": "input",
+                "status": "queued"
+              }
+            },
+            "advanced": {
+              "task": {
+                "id": 7,
+                "conversationId": 1,
+                "kind": "audit1086.work\"\\é",
+                "version": 1,
+                "input": {
+                  "n": 7
+                },
+                "background": false,
+                "abortRequested": false,
+                "state": {
+                  "status": "running",
+                  "checkpoint": {
+                    "phase": "finish",
+                    "n": 8
+                  }
+                }
+              },
+              "document": {
+                "n": 2
+              },
+              "submission": {
+                "id": 8,
+                "conversationId": 1,
+                "requestId": "audit1086/request\"\\é",
+                "type": "input",
+                "status": "unanswered",
+                "reason": "aborted"
+              }
+            },
+            "raw": {
+              "schemaVersion": 1,
+              "nextId": "10",
+              "nextSeq": 5,
+              "taskKind": "\"audit1086.work\\\"\\\\é\"",
+              "requestId": "\"audit1086/request\\\"\\\\é\"",
+              "documents": [
+                {
+                  "kind": "\"audit1086.history\\\"\\\\é\"",
+                  "keyValue": "\"\""
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

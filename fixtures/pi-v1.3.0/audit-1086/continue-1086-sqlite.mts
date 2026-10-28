@@ -2,7 +2,8 @@
 // the pi side of the pi -> C++ -> pi continuation test (#1086).
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
 const checkout = process.env.PI_CHECKOUT;
 if (!checkout) throw new Error("PI_CHECKOUT must identify the frozen checkout");
 const git = (args: string[]) => execFileSync("git", ["-C", checkout, ...args], { encoding: "utf8" }).trim();
@@ -20,6 +21,12 @@ const { BACKGROUND_CONTEXT: context } = await import(join(checkout, "packages/ch
 const TASK_KIND = "audit1086.work\"\\é";
 const DOC_KIND = "audit1086.history\"\\é";
 const REQUEST_ID = "audit1086/request\"\\é";
+const withoutStartTime = (task: any) => {
+    if (task === null || task === undefined) return task;
+    const copy = { ...task };
+    delete copy.startedAt;
+    return copy;
+};
 const doc = defineDoc({ kind: DOC_KIND, version: 1, scope: "conversation",
     history: "rewindable", fork: "asOf", initial: () => ({ n: 0 }) });
 let reached: () => void = () => {};
@@ -55,7 +62,7 @@ const task = defineTask({ name: TASK_KIND, version: 1,
                 tx.settleSubmission(submissionId, { status: "unanswered", reason: "aborted" });
                 return { status: "running", checkpoint: { phase: "finish", n: 8 } };
             }, ctx);
-            if (mode === "advance") {
+            if (mode === "advance" || mode === "capture-cpp") {
                 reached();
                 await runtime.sleep(Date.now() + 2000, ctx);
             }
@@ -99,6 +106,51 @@ if (mode === "create") {
     }, context);
     await harness.close(context);
     writeFileSync(join(directory, "pi-created.json"), JSON.stringify(ids));
+    process.exit(0);
+}
+if (mode === "capture-pi") {
+    const root = await harness.root(context);
+    const ids = await root.commit(async (tx: any) => {
+        const id = await tx.createTask(task, {}, { ownership: { kind: "conversation" } });
+        const submission = await tx.createSubmission({ conversationId: root.id, requestId: REQUEST_ID, type: "input", status: "queued" });
+        const draft = await tx.doc(doc, root.id);
+        draft.n = 1;
+        return { id, submission: submission.id, conversation: root.id };
+    }, context);
+    const taskRecord = await storage.task(ids.id, context);
+    const foundDoc = await storage.findDocument({ kind: DOC_KIND, scope: { kind: "conversation", conversationId: root.id } }, "current", context);
+    const document = await storage.document(foundDoc!.id, "current", context);
+    const submission = await storage.submissionByRequest(root.id, REQUEST_ID, context);
+    await harness.close(context);
+    writeFileSync(join(directory, "observations.json"), JSON.stringify({
+        storeGzipBase64: gzipSync(readFileSync(join(directory, "storage.sqlite"))).toString("base64"),
+        ids,
+        task: withoutStartTime(taskRecord),
+        document: document?.value,
+        submission,
+    }));
+    process.exit(0);
+}
+if (mode === "capture-cpp") {
+    const initialBytes = readFileSync(join(directory, "storage.sqlite"));
+    const initialTask = await storage.task(taskId, context);
+    const initialDoc = await storage.findDocument({ kind: DOC_KIND, scope: { kind: "conversation", conversationId } }, "current", context);
+    const initialValue = await storage.document(initialDoc!.id, "current", context);
+    const initialSubmission = await storage.submissionByRequest(conversationId, REQUEST_ID, context);
+    harness.resume();
+    await advancedOrTimeout;
+    if (advanceTimeout !== undefined) clearTimeout(advanceTimeout);
+    const advancedTask = await storage.task(taskId, context);
+    const advancedDoc = await storage.findDocument({ kind: DOC_KIND, scope: { kind: "conversation", conversationId } }, "current", context);
+    const advancedValue = await storage.document(advancedDoc!.id, "current", context);
+    const advancedSubmission = await storage.submissionByRequest(conversationId, REQUEST_ID, context);
+    await harness.close(context);
+    writeFileSync(join(directory, "observations.json"), JSON.stringify({
+        storeGzipBase64: gzipSync(initialBytes).toString("base64"),
+        ids: { task: taskId, submission: submissionId, conversation: conversationId },
+        initial: { task: withoutStartTime(initialTask), document: initialValue?.value, submission: initialSubmission },
+        advanced: { task: withoutStartTime(advancedTask), document: advancedValue?.value, submission: advancedSubmission },
+    }));
     process.exit(0);
 }
 if (mode === "finish") {

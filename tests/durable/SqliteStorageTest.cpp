@@ -980,6 +980,11 @@ TEST_CASE("C++ creates a SQLite store, pi advances it, and C++ finishes it",
     REQUIRE(committed.has_value());
     auto closed = consume(harness->close());
     REQUIRE(closed.has_value());
+    if (const char* capture = std::getenv("CCH_1086_CPP_STORE_OUT"); capture != nullptr) {
+        std::error_code error;
+        std::filesystem::copy_file(path, capture, std::filesystem::copy_options::overwrite_existing, error);
+        REQUIRE_FALSE(error);
+    }
     harness.reset();
     storage.reset();
 
