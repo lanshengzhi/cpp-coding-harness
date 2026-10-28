@@ -267,6 +267,8 @@ struct OpenedTaskFile {
         return std::unexpected(corruption("JSONL sidecar reclamation failed"));
     }
     if (!S_ISREG(info.st_mode) || info.st_dev != known->second.device || info.st_ino != known->second.inode) {
+        // Keep the observed identity on a mismatch: the substituted entry must
+        // keep failing a later append instead of being adopted.
         return {};
     }
     if (::unlinkat(directory_fd, entry.c_str(), 0) != 0 && errno != ENOENT) {

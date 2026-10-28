@@ -768,6 +768,32 @@ TEST_CASE("a task commit rejects a sidecar that reappears after reclamation", "[
     REQUIRE((*storage)->close());
 }
 
+TEST_CASE("a vanished task sidecar is not recreated by a live update", "[durable][jsonl][issue1085]") {
+    TempWorkspace store;
+    auto storage = JsonlStorage::open(store.path());
+    REQUIRE(storage);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    std::error_code error;
+    REQUIRE(std::filesystem::exists(store.path() / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+    REQUIRE(std::filesystem::remove(store.path() / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+
+    task.state.checkpoint = chord::Json{chord::Json::Object{{"phase", "next"}}};
+    writes = {StorageWrite{.type = "task", .task = task}};
+    CHECK_FALSE(consume((*storage)->commit(writes)).has_value());
+    error.clear();
+    CHECK_FALSE(std::filesystem::exists(store.path() / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+    REQUIRE((*storage)->close());
+}
+
 TEST_CASE("an unconfirmed live task sidecar is discarded on JSONL reopen", "[durable][jsonl][issue1085]") {
     TempWorkspace workspace;
     auto storage = JsonlStorage::open(workspace.path());
