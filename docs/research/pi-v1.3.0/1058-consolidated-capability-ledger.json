@@ -203,12 +203,8 @@
             "sha256": "cc41501d1ae9156c801529245829286055a12cb0c58a45e769d5986625a39541"
           },
           {
-            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "9514d35e0dafd5c959200a23afb8c9edb5b245f55155a469107ebd01d999118c"
-          },
-          {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f9e3412a1307b638de156645b53ce17dceff38ff2e1da96088451086064123b9"
+            "sha256": "0dcfafab3886be24770f05b45204e916a370b7a041649e0b6777d8e4be378954"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -260,14 +256,14 @@
             "issue1101",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1089-integration-1101.xml"
+            "/tmp/cch-1155-1101.xml"
           ],
-          "testedRevision": "a4a075aac9e4ec8e646d1de69ebcd831a59bd7a4",
-          "recordedAt": "2026-10-28T00:50:14Z",
+          "testedRevision": "250c8729c04a74617cb57a3431f1cac1b09058ee",
+          "recordedAt": "2026-10-28T01:09:14Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1089-integration-1101.xml",
-            "sha256": "faca732fe982e2d78c6169385e2b0d2fb282e1d608cdc86581ef7beafc62d235"
+            "path": "docs/research/pi-v1.3.0/deliveries/1155-revalidation-1101.xml",
+            "sha256": "710c49df368e47911f24e2b3ce2b3cf700d2655e4a7faed0b50c99f54c2712ae"
           }
         },
         "rows": [
@@ -306,7 +302,8 @@
               "reason": "A missing structuredContent yields no model text and no structuredContent member in script details; explicit null yields text null and retains the null member. This rejects object-only handling and omission/null collapse through the actual public application tool caller."
             }
           }
-        ]
+        ],
+        "routingSha256": "e75e524b807c4a6dbc4a3a92f0ec2bf4942b82999ab4afdee3c66292dff25b42"
       }
     ]
   },
