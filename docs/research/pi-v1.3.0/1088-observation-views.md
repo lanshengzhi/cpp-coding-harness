@@ -1,10 +1,85 @@
-# #1088 durable observation views: work in progress
+# #1088 durable observation views
 
-This work implements conversation views, document-change frames, the task graph,
-and inspection as projections of committed state. Focused observation cases
-and the architecture selection pass, but it remains unverified as a delivery:
-repository Full Validation and evidence-supported capability-ledger updates
-have not been completed.
+## Scope
+
+Issue #1088 delivers durable conversation views, document-change frames, the
+task graph, ready/running/waiting/blocked inspection, and their watches as
+projections of committed records against pi-v1.3.0 /
+`71023aec1546d6d677a65669c5665c0927ce0dd0`. The agent event stream
+(`watchEvents`) is excluded: it is not derived from committed records and is
+not in the issue's reuse list. No capability row is promoted by this slice.
+
+## Delivered behavior
+
+- `Harness::conversation_view`, `watch_conversation`, `task_graph`, and
+  `watch_task_graph` hydrate and register in one Session-line read, build one
+  shared ownership `World`, and derive every observation from committed
+  records. They do not execute task code or add a display scheduler.
+- Inspection requests complete committed task, conversation, and submission
+  sets (`SIZE_MAX`). The Storage contract requires exactly
+  `min(limit, committed count)`, or an error instead of a short page. Runtime
+  detection of a silently short-paging third-party backend is not claimed.
+- A watch has an `Idle`/`Claimed`/`Entered`/`Stopped` admission state under
+  the mount mutex. `stop()` and `end_watchers` mark and cancel a claimed
+  delivery and return without waiting for cancellation or an entered callback.
+  A claimed delivery rechecks and cancels; an entered callback may finish. No
+  user callback runs under the mount lock.
+- Reopen consistency and failed-session watch termination are covered without
+  running task code or changing committed state. Uncommitted and rolled-back
+  transactions do not appear in views or watches.
+- Review fixes include an empty value from a moved-from `ViewWatch`, a
+  non-throwing `std::from_chars` task-graph decoder, documented asynchronous
+  Harness/Session lifetime contracts, and removal of the unasked
+  `Harness::commit` delegate.
+
+## Validation
+
+Two-axis review: the first Standards review found four P1s (moved-from
+`ViewWatch::value()` dereference, `std::stoll`, undocumented raw `this` across
+asynchronous reads, and unbounded stop/end waits); Spec was PASS with one P2
+(removing the unasked `Harness::commit`). The fixes are in `ae294e20b`; the
+delta Standards and Spec reviews both passed with no findings.
+
+Focused final counts: `issue1088` 22/22, `issue1165` 15/15, `issue1063`
+16/16, `[watch]` 8/8, durable shard 228 selected (225 passed, 3 skipped,
+0 failed), frozen 5/5, and architecture 43/43. Logs are
+`/tmp/cch-1088-final-{watch,issue1088,issue1165,issue1063,durable,frozen}.log`
+and `/tmp/cch-1088-final-architecture.log`.
+
+The first repository Full Validation on `8898b55bf` built successfully and
+selected 3,931 tests: 3,929 passed, 2 failed, 1 skipped. Both failures were
+`committed ledger differs from a deterministic rebuild`: the plan correction
+had landed without rebuilding the ledger. The deterministic rebuild is
+`dd1ae3e78` (1,464 rows; 37 corrections; 36 relative links resolve), and both
+consolidation tests then passed 2/2. The final Full Validation on `dd1ae3e78`
+built successfully and selected 3,931 tests: 3,930 passed, 0 failed, 1 skipped
+(the Native TUI differential capture), exit 0, in 175.10 s. Raw output:
+`/tmp/cch-1088-full2-ctest.log`. The earlier failure is retained above; it was
+not a flaky rerun.
+
+Merge and merged-tree focused results are recorded after integration.
+
+## Capability status
+
+No capability row is promoted. The consolidation plan gains the
+`limit-1088-watch-events-exclusion` correction and the deterministic ledger
+rebuild; `cch_durable:event-stream` remains explicitly not claimed. Rows for
+the delivered committed-record views remain at their existing membership and
+verification status unless a separate evidence route supports a change.
+
+## Remaining boundary
+
+The agent event stream (`watchEvents`) is outside this slice. SQLite
+reopen-failure is a documented boundary, not a separate #1088 observation
+contract, and no combined failure+reopen test is claimed. Silent short-paging
+by a third-party backend and atomicity across an external Storage writer or
+process are not detected or claimed. `stop()`/`end_watchers` do not wait for
+or join a running callback, and cross-watch stop cycles are not claimed. This
+record covers the committed-record observation slice only.
+
+## Evidence detail
+
+The following detail records the evidence behind the summary above.
 
 `Session::read_committed` is the public counterpart of frozen pi's `readOnLine`.
 Hydration and watch registration run together on the Session mutation line, so
@@ -69,15 +144,15 @@ regression now passes. A bounded public caller probe holds the Session
 mutation line while the scheduler reserves a pending task; the merged #1165
 implementation returns the coherent committed pending row rather than the old
 inconsistent pair. The independently threaded read-order probe now passes via
-#1164's FIFO barrier. Existing synchronous stop callbacks under the Harness
+the #1164 FIFO barrier. Existing synchronous stop callbacks under the Harness
 mutex still need a lock-order review before nesting that mutex with the
 mutation line; that is a static risk, not a reproduced deadlock. Failure and
 close ordering for the barrier are covered by the merged #1165/#1166 tests.
 The architecture selection passed on the final code: `ctest --preset vcpkg
 -L architecture` selected 43, passed 43, 0 failed, exit 0, after a full
 `cmake --build --preset vcpkg` (JUnit `/tmp/cch-1088-final-architecture.xml`,
-raw `/tmp/cch-1088-final-architecture.log`). Repository Full Validation
-remains outstanding.
+raw `/tmp/cch-1088-final-architecture.log`). Repository Full Validation is
+recorded above.
 
 Watch cancellation's cross-thread claim-to-entry race is resolved. A watcher
 has an `Idle`/`Claimed`/`Entered`/`Stopped` admission state guarded by the mount
@@ -170,9 +245,9 @@ covered by `[durable][observation][failure][issue1088]`
 serve the complete scan, not a reopen failure. No combined failure+reopen test
 is claimed.
 
-Before delivery, verify the remaining observation and concurrency cases and
-coordinate repository Full Validation; record the actual results. Only
-evidence-supported capability rows may be promoted. Consolidation must be
-regenerated and checked after plan changes, and any delivery record requires
-its reviewed inputs, frozen scenario mapping, revision and validation receipt.
-No such receipt has yet been created.
+The delivery summary above records the reviewed inputs, focused and Full
+results, and the consolidation rebuild. Merge and merged-tree focused results
+are added after integration. Only evidence-supported capability rows may be
+promoted; this slice promotes none. Consolidation must be regenerated and
+checked after plan changes, and any delivery record requires its reviewed
+inputs, frozen scenario mapping, revision and validation receipt.
