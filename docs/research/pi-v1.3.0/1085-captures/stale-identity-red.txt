@@ -1,0 +1,39 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+    Start 118: a reclaimed empty task sidecar allows a later task commit
+1/1 Test #118: a reclaimed empty task sidecar allows a later task commit ...***Failed    0.01 sec
+Filters: "a reclaimed empty task sidecar allows a later task commit"
+Randomness seeded to: 243100239
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+a reclaimed empty task sidecar allows a later task commit
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:713
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:731: FAILED:
+  REQUIRE( consume((*storage)->commit(writes)).has_value() )
+with expansion:
+  false
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 5 | 4 passed | 1 failed
+
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1085    =   0.01 sec*proc (1 test)
+jsonl        =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.05 sec
+
+The following tests FAILED:
+	118 - a reclaimed empty task sidecar allows a later task commit (Failed) durable issue1085 jsonl
+Errors while running CTest

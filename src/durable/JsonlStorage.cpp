@@ -254,13 +254,16 @@ struct OpenedTaskFile {
 /// store. A substituted entry is left alone; a link placed between this check
 /// and unlinkat remains a race outside the single-owner storage contract.
 [[nodiscard]] support::ExpectedVoid reclaim_task_file(
-        int directory_fd, std::string_view name, const std::map<std::string, FileIdentity>& identities) {
-    const auto known = identities.find(std::string{name});
-    if (known == identities.end()) return {};
+        int directory_fd, std::string_view name, std::map<std::string, FileIdentity>& identities) {
     const std::string entry{name};
+    const auto known = identities.find(entry);
+    if (known == identities.end()) return {};
     struct stat info{};
     if (::fstatat(directory_fd, entry.c_str(), &info, AT_SYMLINK_NOFOLLOW) != 0) {
-        if (errno == ENOENT) return {};
+        if (errno == ENOENT) {
+            identities.erase(entry);
+            return {};
+        }
         return std::unexpected(corruption("JSONL sidecar reclamation failed"));
     }
     if (!S_ISREG(info.st_mode) || info.st_dev != known->second.device || info.st_ino != known->second.inode) {
@@ -269,6 +272,10 @@ struct OpenedTaskFile {
     if (::unlinkat(directory_fd, entry.c_str(), 0) != 0 && errno != ENOENT) {
         return std::unexpected(corruption("JSONL sidecar reclamation failed"));
     }
+    // A future commit for this task creates a new inode. Drop the observed
+    // identity once the entry is gone, otherwise that commit fails closed
+    // against an identity no longer present on disk.
+    identities.erase(entry);
     return {};
 }
 
@@ -1531,12 +1538,17 @@ struct JsonlStorage::Impl {
         EncodedCommit encoded = encode_commit(seq, writes, current_only_documents, directory);
         for (const auto& [file, content] : encoded.sidecars) {
             if (task_id_from_file(file)) {
-                auto opened = open_task_file(directory_fd.get(), file, O_WRONLY | O_CREAT | O_APPEND);
+                const auto known = task_identities.find(file);
+                // With no observed entry, create exclusively: a sidecar that
+                // reappears after reclamation must not be adopted. With an
+                // observed entry, never create: the file must still exist.
+                const int flags = known == task_identities.end() ? (O_WRONLY | O_APPEND | O_CREAT | O_EXCL)
+                                                                 : (O_WRONLY | O_APPEND);
+                auto opened = open_task_file(directory_fd.get(), file, flags);
                 if (!opened) {
                     poisoned = true;
                     return std::unexpected(poison_error());
                 }
-                const auto known = task_identities.find(file);
                 if (known != task_identities.end() && !(known->second == opened->identity)) {
                     poisoned = true;
                     return std::unexpected(poison_error());

@@ -41,3 +41,11 @@ inputs of the `1101-structured-content` delivery, the delivery was revalidated
 at `875099ba918384744a5e88cf1eff7e19cf7b1dbf`; [revalidate-1101.txt](revalidate-1101.txt)
 records the 14 passing tests and the receipt now points at
 `deliveries/1085-revalidation-1101.xml`.
+
+[stale-identity-red.txt](stale-identity-red.txt) and
+[stale-identity-green.txt](stale-identity-green.txt) cover an empty task
+sidecar reclaimed during recovery: a later commit for the same task must create
+the sidecar without failing against the removed identity. [replacement-red.txt](replacement-red.txt)
+and [replacement-green.txt](replacement-green.txt) cover the follow-on window:
+a regular file that reappears after reclamation must not be adopted and appended;
+the commit fails closed and its bytes stay unchanged.
