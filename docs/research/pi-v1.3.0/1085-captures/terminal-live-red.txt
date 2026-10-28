@@ -1,0 +1,73 @@
+UpdateCTestConfiguration  from :/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/DartConfiguration.tcl
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 125
+    Start 125: a terminal then live task batch preserves the final live sidecar
+
+125: Test command: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build/cch_tests_durable "a terminal then live task batch preserves the final live sidecar"
+125: Working Directory: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+125: Test timeout computed to be: 10000000
+125: Filters: "a terminal then live task batch preserves the final live sidecar"
+125: Randomness seeded to: 3038755612
+125:
+125: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+125: cch_tests_durable is a Catch2 v3.15.3 host application.
+125: Run with -? for options
+125:
+125: -------------------------------------------------------------------------------
+125: a terminal then live task batch preserves the final live sidecar
+125: -------------------------------------------------------------------------------
+125: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:550
+125: ...............................................................................
+125:
+125: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:560: FAILED:
+125:   REQUIRE( result.has_value() )
+125: with expansion:
+125:   false
+125:
+125: ===============================================================================
+125: test cases: 1 | 1 failed
+125: assertions: 2 | 1 passed | 1 failed
+125:
+1/1 Test #125: a terminal then live task batch preserves the final live sidecar ...***Failed    0.00 sec
+Filters: "a terminal then live task batch preserves the final live sidecar"
+Randomness seeded to: 3038755612
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+a terminal then live task batch preserves the final live sidecar
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:550
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:560: FAILED:
+  REQUIRE( result.has_value() )
+with expansion:
+  false
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 2 | 1 passed | 1 failed
+
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+durable      =   0.00 sec*proc (1 test)
+issue1085    =   0.00 sec*proc (1 test)
+jsonl        =   0.00 sec*proc (1 test)
+
+Total Test time (real) =   0.01 sec
+
+The following tests FAILED:
+	125 - a terminal then live task batch preserves the final live sidecar (Failed) durable issue1085 jsonl
+Errors while running CTest
