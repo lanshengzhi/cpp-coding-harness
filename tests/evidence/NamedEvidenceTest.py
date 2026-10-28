@@ -51,18 +51,39 @@ def run(fixture_root: Path, *arguments: str) -> subprocess.CompletedProcess[str]
     return subprocess.run(
         [sys.executable, str(RUNNER), *arguments, "--fixture-root", str(fixture_root)],
         cwd=ROOT,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         text=True,
         capture_output=True,
     )
+
+
+def ignored_paths(root: Path, paths: list[Path]) -> set[Path]:
+    """Use Git's ignore rules; tracked files remain evidence even if a pattern matches."""
+    if not paths:
+        return set()
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "check-ignore", "-z", "--stdin"],
+            input=b"".join(os.fsencode(str(path)) + b"\0" for path in paths),
+            capture_output=True,
+        )
+        if result.returncode in (0, 1):
+            return {Path(os.fsdecode(path)) for path in result.stdout.split(b"\0") if path}
+    except OSError:
+        pass
+    # Keep the fallback narrow so a Git failure cannot hide the evidence tree.
+    return {path for path in paths if "__pycache__" in path.parts or path.suffix == ".pyc"}
 
 
 def fingerprint(root: Path) -> dict[str, str]:
     digest: dict[str, str] = {}
     if not root.is_dir():
         return digest
-    for path in sorted(root.rglob("*")):
-        if path.is_file():
-            digest[str(path.relative_to(root))] = sha256_bytes(path.read_bytes())
+    paths = [path.relative_to(root) for path in sorted(root.rglob("*")) if path.is_file()]
+    ignored = ignored_paths(root, paths)
+    for path in paths:
+        if path not in ignored:
+            digest[str(path)] = sha256_bytes((root / path).read_bytes())
     return digest
 
 
@@ -497,6 +518,38 @@ class RealCaptureTest(unittest.TestCase):
 
 
 class EvidenceTreeTest(unittest.TestCase):
+    def test_fingerprint_honors_git_ignores_but_keeps_tracked_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / ".gitignore").write_text("__pycache__/\n*.pyc\n*.generated\n", encoding="utf-8")
+            tracked = root / "tracked.pyc"
+            tracked.write_bytes(b"tracked")
+            subprocess.run(["git", "-C", str(root), "add", "-f", "tracked.pyc"], check=True)
+            (root / "evidence.json").write_bytes(b"evidence")
+            before = fingerprint(root)
+            cache = root / "__pycache__"
+            cache.mkdir()
+            (cache / "module.pyc").write_bytes(b"bytecode")
+            (root / "other.generated").write_bytes(b"generated")
+            self.assertEqual(before, fingerprint(root))
+            tracked.write_bytes(b"changed")
+            self.assertNotEqual(before, fingerprint(root))
+
+    def test_fingerprint_fallback_keeps_evidence_outside_a_git_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = root / "evidence.json"
+            evidence.write_bytes(b"evidence")
+            before = fingerprint(root)
+            cache = root / "__pycache__"
+            cache.mkdir()
+            (cache / "module.pyc").write_bytes(b"bytecode")
+            (root / "other.pyc").write_bytes(b"bytecode")
+            self.assertEqual(before, fingerprint(root))
+            evidence.write_bytes(b"changed")
+            self.assertNotEqual(before, fingerprint(root))
+
     def test_validation_never_mutates_the_committed_evidence(self):
         before = fingerprint(FIXTURES)
         result = run(FIXTURES, "verify")
