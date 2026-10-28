@@ -17,6 +17,21 @@
 #include <utility>
 #include <vector>
 
+// [issue1166] Durable failure signaling and active-invocation lifecycle.
+//
+// Every case names the behavior contract it pins, run against the real
+// runtime with real threads and real storage. Tags follow CODING_STANDARDS
+// section 11: [durable][issueNNNN] plus a case tag.
+//
+// Test-TU note (ADR 0042): this suite builds with -fno-exceptions, so a
+// Catch2 REQUIRE failure throws through the test frame WITHOUT running
+// destructors. A test that REQUIRE-fails while its Harness still owns live
+// threads leaks them with dangling captures, and a later test that reuses the
+// freed memory can crash far from the cause. The RED-discriminating cases
+// therefore follow release-then-assert: drain the invocation and close the
+// harness (recording outcomes) BEFORE any REQUIRE can fail. A failed run then
+// fails clean and stays repeatable.
+
 using namespace cch;
 using namespace cch::durable;
 using namespace cch::tests::durable;
@@ -226,6 +241,28 @@ TEST_CASE("a storage failure signals the active invocation before the failing co
     const bool signalled_before_failure_return = signalled.load();
     record_event(outcome.has_value() ? "commit-settled" : "commit-rejected");
 
+    // Release-then-assert (see file header): the phase must be drained and
+    // the harness closed before any REQUIRE can fail, so a RED run cannot
+    // leak live threads into the next test case.
+    release_phase.store(true);
+    if (!wait_for(phase_done, std::chrono::seconds(5))) {
+        const auto drain = consume(harness->close());
+        CHECK(drain.has_value());
+    }
+    REQUIRE(phase_done.load());
+
+    // Record the sealing probes now; assert after the harness is closed.
+    // Frozen `commit-rejected`: the caller keeps the ORIGINAL storage error,
+    // while every later operation reports the sealed-session message.
+    const auto later = consume(harness->commit([](Transaction& tx) -> support::ExpectedVoid {
+        auto conversation = tx.create_conversation();
+        if (!conversation) return std::unexpected(conversation.error());
+        return {};
+    }));
+    const auto inspection = consume(harness->inspect());
+    const auto closed = consume(harness->close());
+    CHECK(closed.has_value());
+
     CHECK(events == std::vector<std::string>({"phase",
             "fail-call",
             "storage-reject",
@@ -238,23 +275,11 @@ TEST_CASE("a storage failure signals the active invocation before the failing co
     CHECK(signalled_before_failure_return);
     REQUIRE(callback_inspect_error.has_value());
     CHECK(*callback_inspect_error == "Session failed after a storage error; close and reopen it");
-
-    // Session sealing: every later operation reports the frozen failure
-    // message, never the original storage error (frozen `commit-rejected`).
-    const auto later = consume(harness->commit([](Transaction& tx) -> support::ExpectedVoid {
-        auto conversation = tx.create_conversation();
-        if (!conversation) return std::unexpected(conversation.error());
-        return {};
-    }));
     REQUIRE_FALSE(later.has_value());
     CHECK(later.error().message == "Session failed after a storage error; close and reopen it");
-
-    // The signalled phase unwinds without close; draining close proves no
-    // stale invocation identity survives the failure.
-    release_phase.store(true);
-    REQUIRE(wait_for(phase_done, std::chrono::seconds(5)));
+    REQUIRE_FALSE(inspection.has_value());
+    CHECK(inspection.error().message == "Session failed after a storage error; close and reopen it");
     CHECK(stop_observed_by_phase.load());
-    REQUIRE(consume(harness->close()).has_value());
 }
 
 TEST_CASE("a task that completes normally leaves no running identity behind",
