@@ -2,9 +2,9 @@
 
 ## Scope
 
-Implement B22 / F4 on the local
-`integration/1080-submission-inbox-admission` branch against **pi-v1.3.0 /
-71023aec1546d6d677a65669c5665c0927ce0dd0**, Linux x86-64 with glibc.
+B22 / F4 was integrated into `main` by merge `bc35299b9` against
+**pi-v1.3.0 / 71023aec1546d6d677a65669c5665c0927ce0dd0**, Linux x86-64
+with glibc. The subsequent delivery audit is recorded below.
 The public caller is the independent `cch::durable::Harness`; the ordinary
 application Session and `pike --resume` retain their existing storage path.
 
@@ -210,4 +210,5 @@ Workflow reopen/recovery (#1082), dynamic registry hooks (#1087), and full
 views/task graph/inspect (#1088) remain separate slices. This delivery makes no
 power-loss, fsync-failure, multiprocess, historical Pike import, or real terminal
 emulator claim. Magpie-only AI access and the XDG state root remain unchanged.
-#1044 remains open. Work is local until separately authorized for publication.
+#1044 remains open. The implementation is integrated; this delivery audit
+remains on its local ticket branch pending integration and acceptance.
