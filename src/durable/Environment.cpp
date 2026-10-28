@@ -55,9 +55,36 @@ private:
     std::jthread worker_;
 };
 
+// Pin every parent component before creating or modifying a file. Symlinks in
+// parent components are rejected; a renamed directory remains the destination.
+support::Expected<int> open_write_parent(const fs::path& target, bool create) {
+    auto parent = target.parent_path();
+    int fd = ::open(parent.is_absolute() ? "/" : ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0) return std::unexpected(system_failure("open"));
+    for (const auto& component : parent.relative_path()) {
+        auto name = component.string();
+        if (name.empty() || name == ".") continue;
+        if (create && ::mkdirat(fd, name.c_str(), 0777) != 0 && errno != EEXIST) {
+            auto error = system_failure("mkdir");
+            ::close(fd);
+            return std::unexpected(error);
+        }
+        int next = ::openat(fd, name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        if (next < 0) {
+            auto error = system_failure("open");
+            ::close(fd);
+            return std::unexpected(error);
+        }
+        ::close(fd);
+        fd = next;
+    }
+    return fd;
+}
+
 class LocalEnvironment final : public Environment {
 public:
-    explicit LocalEnvironment(std::string cwd) : cwd_(std::move(cwd)) {}
+    explicit LocalEnvironment(std::string cwd, std::function<void()> before_rename = {})
+        : cwd_(std::move(cwd)), before_rename_(std::move(before_rename)) {}
     fs::path resolve(std::string_view path) const {
         fs::path result{path};
         return (result.is_absolute() ? result : cwd_ / result).lexically_normal();
@@ -91,27 +118,42 @@ public:
     support::ExpectedVoid write(std::string_view path, std::string_view content, std::stop_token stop) override {
         if (stop.stop_requested()) return std::unexpected(cancelled());
         auto target = resolve(path);
-        std::error_code ec;
-        fs::create_directories(target.parent_path(), ec);
-        if (ec) return std::unexpected(failure(ec.message()));
+        auto parent = open_write_parent(target, true);
+        if (!parent) return std::unexpected(parent.error());
+        auto name = target.filename().string();
         struct stat st{};
-        if (::lstat(target.c_str(), &st) == 0 && S_ISLNK(st.st_mode))
+        if (::fstatat(*parent, name.c_str(), &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISLNK(st.st_mode)) {
+            ::close(*parent);
             return std::unexpected(failure("refusing to write through final symlink"));
-        auto tmp = (target.parent_path() / ".cch-durable-XXXXXX").string();
+        }
+        auto tmp = std::format("/proc/self/fd/{}/.cch-durable-XXXXXX", *parent);
         int fd = ::mkstemp(tmp.data());
-        if (fd < 0) return std::unexpected(system_failure("mkstemp"));
+        if (fd < 0) {
+            auto error = system_failure("mkstemp");
+            ::close(*parent);
+            return std::unexpected(error);
+        }
+        auto tmp_name = fs::path{tmp}.filename().string();
         auto result = write_fd(fd, content, stop);
         if (::close(fd) != 0 && result) result = std::unexpected(system_failure("close"));
         if (result && stop.stop_requested()) result = std::unexpected(cancelled());
-        if (result && ::rename(tmp.c_str(), target.c_str()) != 0) result = std::unexpected(system_failure("rename"));
-        if (!result) ::unlink(tmp.c_str());
+        if (result && before_rename_) before_rename_();
+        if (result && ::renameat(*parent, tmp_name.c_str(), *parent, name.c_str()) != 0)
+            result = std::unexpected(system_failure("rename"));
+        if (!result) ::unlinkat(*parent, tmp_name.c_str(), 0);
+        ::close(*parent);
         return result;
     }
     support::ExpectedVoid append(std::string_view path, std::string_view content, std::stop_token stop) override {
         if (stop.stop_requested()) return std::unexpected(cancelled());
-        auto name = resolve(path).string();
-        int fd = ::open(name.c_str(), O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600);
-        if (fd < 0) return std::unexpected(system_failure("open"));
+        auto target = resolve(path);
+        auto parent = open_write_parent(target, false);
+        if (!parent) return std::unexpected(parent.error());
+        int fd = ::openat(
+                *parent, target.filename().c_str(), O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600);
+        auto error = fd < 0 ? std::optional{system_failure("open")} : std::nullopt;
+        ::close(*parent);
+        if (error) return std::unexpected(*error);
         auto result = write_fd(fd, content, stop);
         ::close(fd);
         return result;
@@ -177,6 +219,7 @@ private:
         return {};
     }
     fs::path cwd_;
+    std::function<void()> before_rename_;
 };
 
 bool secret_name(std::string name) {
@@ -287,6 +330,11 @@ support::Expected<ShellResult> LocalEnvironment::exec(
     return result;
 }
 } // namespace
+
+// Private test seam: invoked synchronously after preparation, before commit.
+std::shared_ptr<Environment> local_environment_before_rename(std::string cwd, std::function<void()> hook) {
+    return std::make_shared<LocalEnvironment>(std::move(cwd), std::move(hook));
+}
 
 std::shared_ptr<Environment> local_environment(std::string cwd) {
     return std::make_shared<LocalEnvironment>(std::move(cwd));

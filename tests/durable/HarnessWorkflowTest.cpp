@@ -24,6 +24,10 @@
 #include <thread>
 #include <vector>
 
+namespace cch::durable {
+std::shared_ptr<Environment> local_environment_before_rename(std::string cwd, std::function<void()> hook);
+} // namespace cch::durable
+
 namespace cch::tests::durable {
 using namespace cch::durable;
 
@@ -220,6 +224,45 @@ TEST_CASE("Harness coding tools use the injected environment for file writes", "
     CHECK(requests == (inject_failure ? 2 : 6));
     CHECK(declarations_valid);
     REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("Durable writes remain anchored when paths are swapped", "[durable][environment][issue1160]") {
+    namespace fs = std::filesystem;
+    tests::TempWorkspace workspace;
+    auto root = workspace.path();
+    fs::create_directories(root / "safe");
+    fs::create_directories(root / "outside");
+    workspace.write("safe/file", "original");
+    workspace.write("outside/file", "protected");
+    SECTION("parent replaced with symlink") {
+        auto env = local_environment_before_rename(root.string(), [&] {
+            fs::rename(root / "safe", root / "moved");
+            fs::create_directory_symlink(root / "outside", root / "safe");
+        });
+        REQUIRE(env->write("safe/file", "new", {}));
+        CHECK(workspace.read("outside/file") == "protected");
+        CHECK(workspace.read("moved/file") == "new");
+    }
+    SECTION("final component replaced with symlink") {
+        auto env = local_environment_before_rename(root.string(), [&] {
+            fs::remove(root / "safe/file");
+            fs::create_symlink(root / "outside/file", root / "safe/file");
+        });
+        REQUIRE(env->write("safe/file", "new", {}));
+        CHECK(workspace.read("outside/file") == "protected");
+        CHECK(workspace.read("safe/file") == "new");
+        CHECK_FALSE(fs::is_symlink(root / "safe/file"));
+    }
+    SECTION("parent and final symlinks are rejected before writing") {
+        fs::create_directory_symlink(root / "outside", root / "link");
+        fs::create_symlink(root / "outside/file", root / "safe/link");
+        auto env = local_environment(root.string());
+        CHECK_FALSE(env->write("link/file", "new", {}));
+        CHECK_FALSE(env->append("link/file", "new", {}));
+        CHECK_FALSE(env->write("safe/link", "new", {}));
+        CHECK_FALSE(env->append("safe/link", "new", {}));
+        CHECK(workspace.read("outside/file") == "protected");
+    }
 }
 
 TEST_CASE("Durable local environment reports file process and watch outcomes", "[durable][environment][issue1089]") {
