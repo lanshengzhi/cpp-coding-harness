@@ -605,10 +605,11 @@ TEST_CASE("JSONL recovery opens one task sidecar at a time", "[durable][jsonl][i
     // Keep the descriptor budget well below the sidecar count so retaining one
     // descriptor per sidecar fails deterministically instead of by host limit.
     const rlim_t budget = static_cast<rlim_t>(open_descriptor_count() + 32);
+    bool limit_lowered = true;
     if (original.rlim_cur > budget) {
         struct rlimit reduced = original;
         reduced.rlim_cur = budget;
-        (void)::setrlimit(RLIMIT_NOFILE, &reduced);
+        limit_lowered = ::setrlimit(RLIMIT_NOFILE, &reduced) == 0;
     }
 
     // A failed assertion does not unwind under the strict no-exception build,
@@ -635,6 +636,7 @@ TEST_CASE("JSONL recovery opens one task sidecar at a time", "[durable][jsonl][i
     // Release the process-wide limit before asserting, whatever the outcome.
     (void)::setrlimit(RLIMIT_NOFILE, &original);
 
+    REQUIRE(limit_lowered);
     REQUIRE(created);
     REQUIRE(opened);
     REQUIRE(closed);
