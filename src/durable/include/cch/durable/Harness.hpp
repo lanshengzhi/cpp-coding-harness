@@ -58,11 +58,13 @@ public:
     /// Failure and close are reported through the Session's frozen
     /// `SessionFailed` / "Session is closed" errors.
     ///
-    /// The inspection captures at most 256 task records per call
-    /// (`Storage::scan_tasks(256)`) and derives `waiting`/abort rows through
-    /// the scheduler's `load_world()` scan (limit 1024). A repository with
-    /// more records is inspected partially; a complete committed scan beyond
-    /// that cap is the observation/views scope of issue #1088.
+    /// The inspection captures every committed task and unsettled submission
+    /// in that job (issue #1088), and derives `waiting`/abort membership from
+    /// the same capture. The former #1165 bounds of 256 task records and a
+    /// 1024-record ownership scan are historical; they no longer truncate an
+    /// inspection. The capture is not an atomic snapshot across an external
+    /// Storage writer or another process: the Session line orders this
+    /// Session's own commits and reads.
     ///
     /// The producer keeps using the Harness and its Session after this call
     /// returns, so the Harness and its Storage must outlive the operation

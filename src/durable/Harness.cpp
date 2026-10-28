@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <condition_variable>
 #include <format>
 #include <functional>
@@ -961,8 +962,10 @@ struct Harness::Impl {
         return TaskFit{.definition = std::move(def), .migrates = true};
     }
 
-    [[nodiscard]] TaskInspectionState inspect_task(
-            const TaskRecord& record, const Registry::Snapshot& snapshot, const std::set<std::int64_t>& invoked) const {
+    [[nodiscard]] TaskInspectionState inspect_task(const TaskRecord& record,
+            const Registry::Snapshot& snapshot,
+            const std::set<std::int64_t>& invoked,
+            const World& world) const {
         // The identity view is one copy taken at the capture instant (issue
         // #1165): no per-row re-read can pair rows from different instants.
         // A committed `running` record reports running even after its identity
@@ -984,20 +987,16 @@ struct Harness::Impl {
         // A marked task runs its abort handler once its ordinary owned work is
         // gone, so it reports the work it waits for, like a waiting task
         // (frozen pi `#inspectTask` -> `#waitingOn`).
-        auto world = load_world();
-        if (world) {
-            const std::vector<TaskId> on =
-                    record.abort_requested
-                            ? world->index.owned_live(record.id)
-                            : (record.state.status == "waiting" ? record.state.on : std::vector<TaskId>{});
-            std::vector<TaskId> live;
-            for (const TaskId id : on) {
-                const TaskRecord* member = world->index.task(id);
-                if (member != nullptr && task_live(*member)) live.push_back(id);
-            }
-            if (!live.empty()) {
-                return TaskInspectionState{.kind = "waiting", .on = std::move(live)};
-            }
+        const std::vector<TaskId> on =
+                record.abort_requested ? world.index.owned_live(record.id)
+                                       : (record.state.status == "waiting" ? record.state.on : std::vector<TaskId>{});
+        std::vector<TaskId> live;
+        for (const TaskId id : on) {
+            const TaskRecord* member = world.index.task(id);
+            if (member != nullptr && task_live(*member)) live.push_back(id);
+        }
+        if (!live.empty()) {
+            return TaskInspectionState{.kind = "waiting", .on = std::move(live)};
         }
         auto fit = fit_task(record, snapshot);
         if (fit.blocked_reason.has_value()) {
@@ -1012,27 +1011,34 @@ struct Harness::Impl {
         return TaskInspectionState{.kind = "ready", .migrates = fit.migrates};
     }
 
-    /// One-instant inspection capture for the line-read seam (issue #1165):
-    /// the storage scan, the scheduling flags, and one identity copy happen
-    /// inside a single line job, so every row derives from one committed
-    /// state. Runs while the mutation line is held; the Harness mutex is
-    /// taken only for the identity copy and released before the scan, the
-    /// same order the commit and close listeners already use.
+    /// One-instant inspection capture for the line-read seam (issues #1165,
+    /// #1088): every storage scan, the scheduling flags, and one identity
+    /// copy happen inside a single line job, so every row derives from one
+    /// committed capture. Runs while the mutation line is held; the Harness
+    /// mutex is taken only for the identity copy and released before the
+    /// scans, the same order the commit and close listeners already use.
     ///
-    /// The capture is bounded: `scan_tasks(256)`, `scan_submissions(256)`
-    /// here and `load_world()`'s 1024-record scan for waiting/abort rows. A
-    /// larger repository is inspected partially by contract; a complete
-    /// committed scan beyond the cap belongs to issue #1088 (see
-    /// `Harness::inspect`).
+    /// The scans request `SIZE_MAX`, so the capture includes every committed
+    /// task, conversation and submission rather than the former 256/1024
+    /// pages. Waiting/abort membership is derived from the same `World`; no
+    /// per-row scan remains. Each scan is one read of the Storage, but the
+    /// three calls are not an atomic snapshot across an external writer or
+    /// another process; the Session line orders this Session's commits and
+    /// reads.
     [[nodiscard]] support::Expected<HarnessInspection> capture_inspection(Storage& storage) const {
-        auto scan_res = storage.scan_tasks(256);
-        if (!scan_res) {
-            return std::unexpected(scan_res.error());
+        auto tasks = storage.scan_tasks(SIZE_MAX);
+        if (!tasks) {
+            return std::unexpected(tasks.error());
         }
-        auto submissions_res = storage.scan_submissions(256);
-        if (!submissions_res) {
-            return std::unexpected(submissions_res.error());
+        auto conversations = storage.scan_conversations(SIZE_MAX);
+        if (!conversations) {
+            return std::unexpected(conversations.error());
         }
+        auto submissions = storage.scan_submissions(SIZE_MAX);
+        if (!submissions) {
+            return std::unexpected(submissions.error());
+        }
+        World world{std::move(*tasks), std::move(*conversations)};
         const auto snapshot = registry.snapshot();
         HarnessInspection inspection;
         std::set<std::int64_t> invoked;
@@ -1043,7 +1049,7 @@ struct Harness::Impl {
                 invoked.insert(id);
             }
         }
-        for (const auto& task : *scan_res) {
+        for (const auto& task : world.tasks) {
             // Terminal records never derive an invocation state: a live or
             // stale identity must not report a finished task as running.
             if (task.state.status == "terminal") {
@@ -1051,10 +1057,10 @@ struct Harness::Impl {
             }
             inspection.tasks.push_back(TaskInspection{
                     .record = task,
-                    .state = inspect_task(task, snapshot, invoked),
+                    .state = inspect_task(task, snapshot, invoked, world),
             });
         }
-        for (const SubmissionRecord& submission : *submissions_res) {
+        for (const SubmissionRecord& submission : *submissions) {
             if (!submission_settled(submission.status)) {
                 inspection.submissions.push_back(submission);
             }

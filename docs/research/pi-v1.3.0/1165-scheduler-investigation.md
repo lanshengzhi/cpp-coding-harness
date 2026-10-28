@@ -293,7 +293,13 @@ discriminating tests only.
   reservation-visibility slice). Only a complete committed scan beyond the
   256/1024 caps remains #1088-coordinated scope.
 
-## Inspection scan cap (issue #1088 hand-off)
+## Inspection scan cap (issue #1088 hand-off, historical)
+
+> Historical record: #1088 completed this scan. `Harness::inspect` now
+> requests the complete committed set (`SIZE_MAX`) in one line job and
+> derives ownership from one shared `World`; `[inspect-cap]` was replaced by
+> `[inspect-complete]`. The 256/1024 bounds below are retained as the #1165
+> boundary record, not current behavior.
 
 `Harness::inspect` captures at most 256 task records per call
 (`Storage::scan_tasks(256)` in `capture_inspection`) and derives

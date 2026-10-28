@@ -47,64 +47,74 @@ without executing task code or adding a display scheduler; this exclusion does
 not remove that requirement. The boundary is also recorded in the consolidation
 plan. This does not claim verification of the event stream.
 
-Inspection remains incomplete. Its current scans cap tasks and submissions at
-256 and read the ownership world separately for each task. Frozen inspection
-runs on the Session line. A committed snapshot alone is insufficient to prove
-matching runtime state: the scheduler reserves an invocation before committing
-its running state and clears it separately after execution. Existing synchronous
-stop callbacks under the Harness mutex also need a lock-order review before
-nesting that mutex with the mutation line. These are statically identified
-interleavings and risks, not claims of a reproduced deadlock. A bounded public
-caller probe held the Session mutation line while the scheduler reserved a
-pending task: `inspect()` returned the committed pending record with a derived
-running state, independently confirmed against Storage before releasing the
-line. The regression assertion fails; a compatible fix remains outstanding.
-A separate bounded test held an asynchronous Storage commit and showed that
-`read_committed` returned the earlier snapshot before that commit settled.
-Frozen `readOnLine` queues behind prior commits; issue #1164 tracks that Session
-barrier. Both the reservation probe and the independently threaded read-order
-probe compiled and failed their strict assertions under a 90-second external
-timeout, as expected for the present defects. Failure and close ordering for
-the barrier remain untested. The latest report edits have no build impact;
-focused validation, architecture receipts and Full Validation remain outstanding.
-Watch cancellation
-also has an unverified cross-thread boundary: delivery checks cancellation under
+Inspection now completes the committed scan. In one Session-line job it
+requests every task, conversation and submission (`SIZE_MAX`), builds one
+ownership `World`, and derives every row and waiting/abort membership from
+that capture; no per-row scan remains. Focused `[inspect-complete]` covers
+Memory plus SQLite and JSONL reopen with 257 pending + 1 terminal record,
+`[inspect-world-complete]` covers 1100 live children, and
+`[inspect-scan-error]` proves a backend that rejects the complete request
+fails the inspection instead of returning a partial page. The Storage
+contract now requires exactly `min(limit, committed count)` or an error;
+silent short-paging by a third-party backend is not runtime-detectable and
+remains an explicit contract boundary. The three scans under the Session
+line are not an atomic snapshot across an external writer or process.
+
+A committed snapshot alone is insufficient to prove matching runtime state:
+the scheduler reserves an invocation before committing its running state and
+clears it separately after execution. #1165's line-job capture reports the
+committed record plus the invocation identity at one instant; the reservation
+regression now passes. A bounded public caller probe holds the Session
+mutation line while the scheduler reserves a pending task; the merged #1165
+implementation returns the coherent committed pending row rather than the old
+inconsistent pair. The independently threaded read-order probe now passes via
+#1164's FIFO barrier. Existing synchronous stop callbacks under the Harness
+mutex still need a lock-order review before nesting that mutex with the
+mutation line; that is a static risk, not a reproduced deadlock. Failure and
+close ordering for the barrier are covered by the merged #1165/#1166 tests.
+Focused validation, architecture receipts and Full Validation remain
+outstanding.
+
+Watch cancellation also has an unverified cross-thread boundary: delivery checks cancellation under
 the mount lock, but the listener begins after that lock is released. A stop can
 return in between. Frozen JavaScript checks disposal and invokes its listener
 on one event loop; the existing tests do not determine equivalence at this
-boundary. Full-table scans copy O(n) records; the strengthened scan contract requires third-party Storage
-implementations to return complete pages rather than silently truncate them.
-Each scan is a single read; separate calls are not automatically atomic.
+boundary. Full-table scans copy O(n) records; the strengthened scan contract
+requires third-party Storage implementations to return complete pages rather
+than silently truncate them. Each scan is a single read; separate calls are
+not automatically atomic.
 
-After merging main at `49850636`, the #1163 generation change made the frozen
-conversation-watch comparison pass. The bounded combined #1088/#1164 selection
-at merge commit `8165824` selected 21 tests: 20 passed, one failed, none
-skipped. The remaining failure was the reservation inconsistency described
-above. Raw output: `/tmp/cch-1088-merge-tests.log`. The passing frozen case
-replays every observed frame; this result does not verify every remaining
-observation boundary.
+After merging main at `f3e1e15b5` (merge commit `8bf804ff7`), #1164's FIFO
+barrier and #1165's line-job inspection made both former RED probes pass:
+focused `issue1088` 14/14. The complete-scan slice then replaced the
+256/1024 caps with one complete capture: focused `issue1088` 18/18 and
+`issue1165` 15/15. `[inspect-complete]` covers Memory plus SQLite and JSONL
+reopen with 257 pending + 1 terminal record; `[inspect-world-complete]`
+covers 1100 live children; `[inspect-scan-error]` proves a capped backend
+fails the inspection instead of returning a partial page. RED and GREEN raw
+output: `/tmp/cch-1088-scan-red*.log`, `/tmp/cch-1088-scan-green.log`,
+`/tmp/cch-1088-focused-issue1088.log`, `/tmp/cch-1088-focused-issue1165.log`.
+The passing frozen case replays every observed frame; this result does not
+verify every remaining observation boundary.
 
-Additional bounded probes expose constraints on a reservation fix. A public
-frozen-pi task commits a waiting record while its phase remains active; inspect
-reports record `waiting` and derived `running` in three runs
-(`/tmp/cch-1088-frozen-waiting-{1,2,3}.log`). Thus record status alone cannot
-replace invocation state. A C++ stop callback started a committed read and
-waited 500 ms; the read completed only after the callback returned, because
-publication retained the active Session line. The bounded reproducer is in
-`HarnessObservationTest.cpp`; `/tmp/cch-1088-reentry.log` records its result.
-This is an existing reentrancy risk, not evidence of an actual unbounded hang.
-Frozen abort, close, and injected Storage failure probes each ran three times:
-abort signalled synchronously before its reentrant inspection and abort settled;
-close and failure signalled before reentrant inspection rejected and before the
-outer operation settled. Logs and probe sources are under `/tmp/cch-1088-frozen-*`.
-JavaScript promise callbacks cannot establish parity for a synchronously blocking
-C++ stop callback. External concurrent Storage writers are not serialized by a
-Session. A safe shared snapshot and reservation lifecycle, including lock order,
-cleanup and callback reentrancy, remain unresolved. Issue #1165 owns the
-reservation and invocation observation lifecycle and blocks #1088. The watch
-claim-to-entry race, complete Storage scan compatibility and backend coverage,
-SQLite reopen failure, architecture and Full Validation, and evidence-supported
-capability ledger updates also remain unverified.
+The reservation probes now constrain the completed #1165 implementation
+rather than an outstanding fix: a public frozen-pi task commits a waiting
+record while its phase remains active, so inspect reports the committed
+record plus the invocation identity at one instant; record status alone
+cannot replace invocation state. The C++ stop-callback reentry probe still
+shows a committed read waiting for the callback's publication line to return
+(`/tmp/cch-1088-reentry.log`); this is an existing reentrancy risk, not an
+actual unbounded hang. Frozen abort, close, and injected Storage failure
+probes ran three times: abort signalled synchronously before its reentrant
+inspection and abort settled; close and failure signalled before reentrant
+inspection rejected and before the outer operation settled. Logs and probe
+sources are under `/tmp/cch-1088-frozen-*`. JavaScript promise callbacks
+cannot establish parity for a synchronously blocking C++ stop callback.
+External concurrent Storage writers are not serialized by a Session, and
+silent short-paging by a third-party backend is not runtime-detectable; the
+Storage contract requires an error instead. The watch claim-to-entry race,
+SQLite reopen failure, architecture and Full Validation, and evidence-
+supported capability ledger updates remain unverified.
 
 Before delivery, verify the remaining observation and concurrency cases; run focused
 validation and the required architecture checks; coordinate repository Full

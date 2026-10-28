@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -743,13 +744,13 @@ private:
     std::atomic_bool fail_on_release_{false};
 };
 
-/// Models a slow-read Storage backend: after arming, every `scan_tasks`
-/// call (limit <= 256, the scheduler/inspect scan size) whose result
-/// contains the target kind still `waiting` observes the live rows, then
-/// blocks with that observation in hand until released, and finally returns
-/// it. A real backend whose scan observed at T1 returns at T2 behaves the
-/// same way. Thread-safe; the blocked callers are attributed by thread id so
-/// a test can wait for a specific caller's scan to be held.
+/// Models a slow-read Storage backend: after arming, the complete inspection
+/// scan (`scan_tasks(SIZE_MAX)`) whose result contains the target kind still
+/// in `status` observes the live rows, then blocks with that observation in
+/// hand until released, and finally returns it. A real backend whose scan
+/// observed at T1 returns at T2 behaves the same way. Thread-safe; the
+/// blocked callers are attributed by thread id so a test can wait for a
+/// specific caller's scan to be held.
 class SlowScanStorage final : public Storage {
 public:
     explicit SlowScanStorage(Storage& inner, std::string kind, std::string status = "waiting")
@@ -804,7 +805,7 @@ public:
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override {
         auto observed = inner_.scan_tasks(limit);
         bool holdable = armed.load(std::memory_order_acquire) && !released.load(std::memory_order_acquire) &&
-                        limit <= 256 && observed.has_value();
+                        limit == SIZE_MAX && observed.has_value();
         if (holdable) {
             holdable = std::any_of(observed->begin(), observed->end(), [&](const TaskRecord& record) {
                 return record.kind == kind_ && record.state.status == status_;
@@ -1477,12 +1478,12 @@ TEST_CASE("a stale scheduling snapshot reserves nothing and starts no phase", "[
     CHECK(close_outcome.has_value());
 }
 
-// Inspection scan cap (issue #1165 / #1088 hand-off): capture_inspection
-// scans at most 256 task records per call, so a larger repository is
-// inspected partially by contract. This pins the documented bound instead of
-// an implicit unbounded scan; a complete committed scan beyond the cap is the
-// observation/views scope of #1088 (public contract and investigation doc).
-TEST_CASE("inspection captures at most the documented scan cap", "[durable][issue1165][inspect-cap]") {
+// Inspection scan completion (issue #1165 hand-off, completed by #1088):
+// #1165 captured at most 256 task records per call and derived ownership from
+// a 1024-record scan, so a larger repository was inspected partially by
+// contract. #1088 completes the committed scan; this pin now expects every
+// committed non-terminal row instead of the former page.
+TEST_CASE("inspection completes the former scan cap", "[durable][issue1165][issue1088][inspect-complete]") {
     MemoryStorage storage;
     std::vector<TaskDefinition> definitions;
     definitions.push_back(make_terminal_task("audit1165.cap"));
@@ -1494,7 +1495,7 @@ TEST_CASE("inspection captures at most the documented scan cap", "[durable][issu
     }
     const auto inspection = consume(harness->inspect());
     REQUIRE(inspection.has_value());
-    CHECK(inspection.value().tasks.size() == 256);
+    CHECK(inspection.value().tasks.size() == 257);
     CHECK(consume(harness->close()).has_value());
 }
 

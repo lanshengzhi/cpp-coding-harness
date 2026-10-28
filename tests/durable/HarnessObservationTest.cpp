@@ -13,6 +13,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
 #include <cch/durable/Harness.hpp>
+#include <cch/durable/JsonlStorage.hpp>
 #include <cch/durable/SqliteStorage.hpp>
 #include <cch/durable/Task.hpp>
 
@@ -24,6 +25,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -410,6 +412,166 @@ struct LatchedReply {
     return std::nullopt;
 }
 
+/// The inspection fields this ticket compares across a reopen. `TaskInspection`
+/// and `SubmissionRecord` have value equality; the inspection itself carries
+/// an `Error`, so compare the two vectors instead of the whole result.
+struct CompleteScanRows {
+    std::vector<TaskInspection> tasks;
+    std::vector<SubmissionRecord> submissions;
+
+    // `TaskInspectionState` carries an `Error`, which has no equality
+    // operator; compare the observation fields this case depends on.
+    [[nodiscard]] bool operator==(const CompleteScanRows& other) const {
+        if (tasks.size() != other.tasks.size() || submissions != other.submissions) return false;
+        for (std::size_t index = 0; index < tasks.size(); ++index) {
+            const TaskInspection& left = tasks[index];
+            const TaskInspection& right = other.tasks[index];
+            if (!(left.record == right.record)) return false;
+            if (left.state.kind != right.state.kind) return false;
+            if (left.state.migrates != right.state.migrates) return false;
+            if (left.state.on != right.state.on) return false;
+            if (left.state.reason != right.state.reason) return false;
+            if (left.state.error.has_value() != right.state.error.has_value()) return false;
+            if (left.state.error.has_value() && (left.state.error->code != right.state.error->code ||
+                                                        left.state.error->message != right.state.error->message)) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+/// Open a Harness over `storage` and return the inspection rows. With `seed`,
+/// first commit 258 tasks (the last one terminal); a reopen calls it with
+/// `seed = false` to observe the same committed records. The Harness stays
+/// paused, so no task phase runs. The terminal record is committed in a second
+/// transaction because a task record is read from committed state, not from
+/// the staging overlay.
+[[nodiscard]] CompleteScanRows inspect_complete_tasks(Storage& storage, bool seed = true) {
+    auto counters = std::make_shared<ExecutionCounters>();
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(counting_task(counters, "audit1088.complete"));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    const auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    if (seed) {
+        std::vector<TaskId> ids;
+        ids.reserve(258);
+        REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+            const TaskDefinition* definition = harness->task_definition("audit1088.complete");
+            if (definition == nullptr) {
+                return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
+            }
+            for (int index = 0; index < 258; ++index) {
+                auto created =
+                        tx.create_task(*definition, chord::Json(nullptr), TaskOptions{.conversation_id = root.value()});
+                if (!created) return std::unexpected(created.error());
+                ids.push_back(*created);
+            }
+            return {};
+        })).has_value());
+        REQUIRE(ids.size() == 258);
+
+        REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+            auto current = tx.task(ids.back());
+            if (!current) return std::unexpected(current.error());
+            if (!current->has_value()) {
+                return std::unexpected(support::make_error(support::ErrorCode::Validation, "terminal task missing"));
+            }
+            TaskRecord record = **current;
+            record.state.status = "terminal";
+            record.state.outcome = TaskOutcome{.status = "completed"};
+            record.ended_at = 0;
+            return tx.set_task(std::move(record));
+        })).has_value());
+    }
+
+    const auto expected = committed_live_tasks(storage);
+    auto inspection = consume(harness->inspect());
+    REQUIRE(inspection.has_value());
+    CompleteScanRows rows{
+            .tasks = std::move(inspection.value().tasks), .submissions = std::move(inspection.value().submissions)};
+    REQUIRE(rows.tasks.size() == expected.size());
+    for (std::size_t index = 0; index < expected.size(); ++index) {
+        CHECK(rows.tasks[index].record == expected[index]);
+        CHECK(rows.tasks[index].state.kind == "ready");
+    }
+    REQUIRE(consume(harness->close()).has_value());
+    return rows;
+}
+
+[[nodiscard]] bool contains_terminal(const CompleteScanRows& rows) {
+    return std::ranges::any_of(
+            rows.tasks, [](const TaskInspection& row) { return row.record.state.status == "terminal"; });
+}
+
+void check_complete_rows(const CompleteScanRows& rows) {
+    CHECK(rows.tasks.size() == 257);
+    CHECK_FALSE(contains_terminal(rows));
+    CHECK(rows.submissions.empty());
+}
+
+/// A Storage wrapper that cannot serve a limit above its cap. The contract
+/// requires an error instead of a short page, so the inspection must surface
+/// that error rather than report a partial row set.
+class CappedTaskScanStorage final : public Storage {
+public:
+    CappedTaskScanStorage(Storage& inner, std::size_t cap) : inner_(inner), cap_(cap) {}
+
+    [[nodiscard]] support::AsyncResult<Seq> commit(std::span<const StorageWrite> writes) override {
+        return inner_.commit(writes);
+    }
+    [[nodiscard]] support::Expected<std::int64_t> mint_id() override { return inner_.mint_id(); }
+    [[nodiscard]] support::Expected<std::optional<ConversationRecord>> conversation(ConversationId id) override {
+        return inner_.conversation(id);
+    }
+    [[nodiscard]] support::Expected<std::optional<StoredEntry>> entry(EntryId id) override { return inner_.entry(id); }
+    [[nodiscard]] support::Expected<std::vector<ConversationRecord>> scan_conversations(std::size_t limit) override {
+        return inner_.scan_conversations(limit);
+    }
+    [[nodiscard]] support::Expected<std::vector<EntryRecord>> scan_entries(
+            ConversationId conversation_id, std::size_t limit) override {
+        return inner_.scan_entries(conversation_id, limit);
+    }
+    [[nodiscard]] support::Expected<std::vector<DocumentRecord>> scan_conversation_documents(
+            ConversationId conversation_id, DocumentPoint at, std::size_t limit) override {
+        return inner_.scan_conversation_documents(conversation_id, at, limit);
+    }
+    [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at) override {
+        return inner_.find_document(kind, address, at);
+    }
+    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at) override {
+        return inner_.document(id, at);
+    }
+    [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override { return inner_.task(id); }
+    [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override {
+        if (limit > cap_) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::ResourceLimit, "capped task scan: limit exceeds cap"));
+        }
+        return inner_.scan_tasks(limit);
+    }
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id) override {
+        return inner_.submission(id);
+    }
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id) override {
+        return inner_.submission_by_request(conversation_id, request_id);
+    }
+    [[nodiscard]] support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit) override {
+        return inner_.scan_submissions(limit);
+    }
+    [[nodiscard]] support::ExpectedVoid close() override { return inner_.close(); }
+
+private:
+    Storage& inner_; // outlives this wrapper
+    std::size_t cap_;
+};
+
 } // namespace
 
 // Discriminating case (ticket #1088): after a durable reopen, calling only
@@ -641,6 +803,165 @@ TEST_CASE("a reopened Harness derives every observation from committed records w
     CHECK(graph_watch.value().stop() == WatchEndReason::SessionClosed);
     CHECK(view_watch.value().stop() == WatchEndReason::SessionClosed);
     REQUIRE(storage->close().has_value());
+}
+
+// Discriminating case (ticket #1088): a repository above the old 256-row
+// inspection cap is inspected completely, and a close/reopen yields the same
+// rows. The terminal record is committed so the assertion distinguishes
+// "complete non-terminal set" from "first page only". Memory and both
+// serialization backends are covered; the serialization cases close the
+// Harness and reopen Storage from its persisted directory/file.
+TEST_CASE("inspection captures every committed task beyond 256 and survives reopen",
+        "[durable][observation][issue1088][inspect-complete]") {
+    SECTION("MemoryStorage") {
+        MemoryStorage storage;
+        const CompleteScanRows rows = inspect_complete_tasks(storage);
+        check_complete_rows(rows);
+    }
+    SECTION("SQLite reopen") {
+        tests::TempWorkspace workspace;
+        const auto path = workspace.path() / "inspect-complete.sqlite";
+        CompleteScanRows before;
+        {
+            auto opened = SqliteStorage::open(path);
+            REQUIRE(opened.has_value());
+            auto storage = std::move(*opened);
+            before = inspect_complete_tasks(*storage);
+        }
+        CompleteScanRows after;
+        {
+            auto opened = SqliteStorage::open(path);
+            REQUIRE(opened.has_value());
+            auto storage = std::move(*opened);
+            after = inspect_complete_tasks(*storage, false);
+        }
+        check_complete_rows(before);
+        check_complete_rows(after);
+        CHECK(before == after);
+    }
+    SECTION("JSONL reopen") {
+        tests::TempWorkspace workspace;
+        CompleteScanRows before;
+        {
+            auto opened = JsonlStorage::open(workspace.path());
+            REQUIRE(opened.has_value());
+            auto storage = std::move(*opened);
+            before = inspect_complete_tasks(*storage);
+        }
+        CompleteScanRows after;
+        {
+            auto opened = JsonlStorage::open(workspace.path());
+            REQUIRE(opened.has_value());
+            auto storage = std::move(*opened);
+            after = inspect_complete_tasks(*storage, false);
+        }
+        check_complete_rows(before);
+        check_complete_rows(after);
+        CHECK(before == after);
+    }
+}
+
+// Discriminating case (ticket #1088): the waiting/abort membership list is
+// derived from the same complete capture as the task rows. The old per-row
+// `load_world()` scan capped ownership at 1024 records, so a parent with 1100
+// live children reported only the first 1023/1024. The parent is the oldest
+// record, so the old 256-row task scan still includes its row; the failure is
+// specifically the truncated ownership world, not a missing parent row.
+TEST_CASE("inspection derives every waiting member beyond the ownership scan cap",
+        "[durable][observation][issue1088][inspect-world-complete]") {
+    MemoryStorage storage;
+    auto counters = std::make_shared<ExecutionCounters>();
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(counting_task(counters, "audit1088.world-complete"));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    const auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    TaskId parent{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const TaskDefinition* definition = harness->task_definition("audit1088.world-complete");
+        if (definition == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
+        }
+        auto created = tx.create_task(*definition, chord::Json(nullptr), TaskOptions{.conversation_id = root.value()});
+        if (!created) return std::unexpected(created.error());
+        parent = *created;
+        return {};
+    })).has_value());
+
+    constexpr int kChildren = 1100;
+    std::vector<TaskId> children;
+    children.reserve(kChildren);
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const TaskDefinition* definition = harness->task_definition("audit1088.world-complete");
+        if (definition == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
+        }
+        for (int index = 0; index < kChildren; ++index) {
+            auto created = tx.create_task(*definition, chord::Json(nullptr), TaskOptions{.owner = parent});
+            if (!created) return std::unexpected(created.error());
+            children.push_back(*created);
+        }
+        return {};
+    })).has_value());
+    REQUIRE(children.size() == kChildren);
+
+    // An abort mark makes the parent report the live owned work it waits for;
+    // no abort handler runs because the Harness stays paused.
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto current = tx.task(parent);
+        if (!current) return std::unexpected(current.error());
+        if (!current->has_value()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "parent task missing"));
+        }
+        TaskRecord record = **current;
+        record.abort_requested = true;
+        return tx.set_task(std::move(record));
+    })).has_value());
+
+    auto inspection = consume(harness->inspect());
+    REQUIRE(inspection.has_value());
+    const auto row = std::ranges::find_if(inspection.value().tasks,
+            [parent](const TaskInspection& candidate) { return candidate.record.id == parent; });
+    REQUIRE(row != inspection.value().tasks.end());
+    CHECK(row->state.kind == "waiting");
+    CHECK(row->state.on.size() == kChildren);
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+// Discriminating case (ticket #1088): a backend that cannot serve the
+// requested limit must reject, never return a short page. Before the complete
+// scan, inspect asked for 256 and accepted the partial page; after it, the
+// complete request reaches the backend cap and the inspection must surface
+// that error with no partial rows.
+TEST_CASE("inspection fails loudly when storage cannot serve the complete scan",
+        "[durable][observation][issue1088][inspect-scan-error]") {
+    MemoryStorage memory;
+    CappedTaskScanStorage storage{memory, 256};
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(counting_task(std::make_shared<ExecutionCounters>(), "audit1088.scan-error"));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    const auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const TaskDefinition* definition = harness->task_definition("audit1088.scan-error");
+        if (definition == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
+        }
+        auto created = tx.create_task(*definition, chord::Json(nullptr), TaskOptions{.conversation_id = root.value()});
+        if (!created) return std::unexpected(created.error());
+        return {};
+    })).has_value());
+
+    auto inspection = consume(harness->inspect());
+    const bool closed = consume(harness->close()).has_value();
+    REQUIRE_FALSE(inspection.has_value());
+    CHECK(inspection.error().message == "capped task scan: limit exceeds cap");
+    CHECK(closed);
 }
 
 // Discriminating case (ticket #1088): the task-graph watch delivers exactly
