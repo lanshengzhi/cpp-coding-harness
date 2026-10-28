@@ -1,6 +1,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
 #include <cch/durable/Harness.hpp>
+#include <cch/durable/Environment.hpp>
 #include <cch/durable/JsonlStorage.hpp>
 #include <cch/durable/SqliteStorage.hpp>
 #include "durable/FrozenExpectation.hpp"
@@ -97,6 +98,202 @@ SubmissionDraft text_input(std::string text, std::optional<WhenBusy> when_busy =
 }
 
 } // namespace
+
+class FailingWriteEnvironment final : public Environment {
+public:
+    explicit FailingWriteEnvironment(std::shared_ptr<Environment> inner) : inner_(std::move(inner)) {}
+    support::Expected<std::string> read(std::string_view path, std::stop_token stop) override {
+        return inner_->read(path, stop);
+    }
+    support::ExpectedVoid write(std::string_view, std::string_view, std::stop_token) override {
+        ++writes;
+        return std::unexpected(support::make_error(support::ErrorCode::Workspace, "injected write failure"));
+    }
+    support::ExpectedVoid append(std::string_view path, std::string_view content, std::stop_token stop) override {
+        return inner_->append(path, content, stop);
+    }
+    support::Expected<FileInfo> stat(std::string_view path, std::stop_token stop) override {
+        return inner_->stat(path, stop);
+    }
+    support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
+        return inner_->list(path, stop);
+    }
+    support::Expected<ShellResult> exec(const ShellCommand& command,
+            std::chrono::milliseconds timeout,
+            OutputSink output,
+            std::stop_token stop) override {
+        return inner_->exec(command, timeout, std::move(output), stop);
+    }
+    support::Expected<std::unique_ptr<FileWatch>> watch(
+            std::string_view path, std::function<void()> callback, bool recursive) override {
+        return inner_->watch(path, std::move(callback), recursive);
+    }
+    std::atomic_int writes{0};
+
+private:
+    std::shared_ptr<Environment> inner_;
+};
+
+TEST_CASE("Harness coding tools use the injected environment for file writes", "[durable][workflow][issue1089]") {
+    tests::TempWorkspace workspace;
+    Registry registry;
+    auto local = local_environment(workspace.path().string());
+    auto failing = std::make_shared<FailingWriteEnvironment>(local);
+    bool inject_failure = false;
+    SECTION("local write succeeds") {}
+    SECTION("injected write fails without a filesystem fallback") { inject_failure = true; }
+    REQUIRE(registry.install(coding_tools(inject_failure ? std::shared_ptr<Environment>{failing} : local)).has_value());
+    int requests = 0;
+    std::atomic_bool declarations_valid{true};
+    HarnessOptions options{.registry = &registry};
+    options.stream = [&requests, &declarations_valid, inject_failure](
+                             ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+        if (context.tools.size() != 4) declarations_valid = false;
+        for (const auto& tool : context.tools) {
+            if (tool.description.empty() || !tool.parameters.holds<support::JsonValue::object_t>())
+                declarations_valid = false;
+        }
+        const int turn = requests++;
+        return ai::ModelStream{ai::ModelStreamProducer{
+                [turn, inject_failure](ai::AssistantEventSink sink, ai::ModelStreamCompletion completion) noexcept {
+                    auto message = ai::assistant_text_message("finished");
+                    if (turn == 0 || (!inject_failure && turn < 5)) {
+                        using Json = support::JsonValue;
+                        std::vector<std::string> names{"write", "read", "edit", "read", "bash"};
+                        Json::object_t args{{"path", "notes.txt"}};
+                        if (turn == 0) args["content"] = "alpha\n";
+                        if (turn == 2)
+                            args["edits"] = Json::array_t{Json::object_t{{"oldText", "alpha"}, {"newText", "omega"}}};
+                        if (turn == 4) args = Json::object_t{{"command", "cat notes.txt"}};
+                        message.content = {ai::ToolCallContent{.id = std::to_string(turn),
+                                .name = names[static_cast<std::size_t>(turn)],
+                                .arguments = Json{std::move(args)}}};
+                        message.stop_reason = ai::AssistantStopReason::ToolUse;
+                    }
+                    auto delivered = sink(ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
+                    if (!delivered)
+                        completion(std::unexpected(delivered.error()));
+                    else
+                        completion(std::move(message));
+                }}};
+    };
+    MemoryStorage storage;
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+    auto submission = consume(harness->submit(root.value(), text_input("write")));
+    REQUIRE(submission.has_value());
+    auto settled = consume(submission.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    if (inject_failure) {
+        CHECK(failing->writes == 1);
+        CHECK_FALSE(std::filesystem::exists(workspace.path() / "notes.txt"));
+        auto entries = storage.scan_entries(root.value(), 100);
+        REQUIRE(entries);
+        auto result = std::ranges::find_if(*entries, [](const auto& entry) { return entry.kind == "pi.tool-result"; });
+        REQUIRE(result != entries->end());
+        auto model = entry_model(*result).to_support();
+        CHECK(model.at("isError").get_boolean());
+        CHECK(model.at("content").get_array().at(0).at("text").get_string() == "injected write failure");
+    } else {
+        CHECK(workspace.read("notes.txt") == "omega\n");
+        auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1056/environment.json",
+                "the built-in read, write, edit and bash tools run over a real injected local environment");
+        REQUIRE(frozen);
+        auto entries = storage.scan_entries(root.value(), 100);
+        REQUIRE(entries);
+        std::ranges::reverse(*entries);
+        std::vector<std::string> outputs;
+        for (const auto& entry : *entries)
+            if (entry.kind == "pi.tool-result")
+                outputs.push_back(
+                        entry_model(entry).to_support().at("content").get_array().at(0).at("text").get_string());
+        const auto* tools = frozen->array_member("tools");
+        REQUIRE(tools);
+        REQUIRE(outputs.size() == tools->size());
+        for (std::size_t i = 0; i < outputs.size(); ++i)
+            CHECK(outputs[i] == tools->at(i).at("text").get_string());
+    }
+    CHECK(requests == (inject_failure ? 2 : 6));
+    CHECK(declarations_valid);
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("Durable local environment reports file process and watch outcomes", "[durable][environment][issue1089]") {
+    using namespace std::chrono_literals;
+    tests::TempWorkspace workspace;
+    auto env = local_environment(workspace.path().string());
+    REQUIRE(env->write("file.txt", "hel", {}));
+    REQUIRE(env->append("file.txt", "lo", {}));
+    auto text = env->read("file.txt", {});
+    REQUIRE(text);
+    CHECK(*text == "hello");
+    auto missing = env->read("missing.txt", {});
+    REQUIRE_FALSE(missing);
+    CHECK(missing.error().detail == "not_found");
+    CHECK(missing.error().message ==
+            "ENOENT: no such file or directory, open '" + (workspace.path() / "missing.txt").string() + "'");
+    auto info = env->stat("file.txt", {});
+    REQUIRE(info);
+    CHECK(info->size == 5);
+    auto listing = env->list(".", {});
+    REQUIRE(listing);
+    CHECK(listing->size() == 1);
+    auto normal =
+            env->exec(std::vector<std::string>{"/bin/sh", "-c", "printf out; printf err >&2; exit 7"}, 0ms, {}, {});
+    REQUIRE(normal);
+    CHECK(normal->exit_code == 7);
+    CHECK(normal->standard_output == "out");
+    CHECK(normal->standard_error == "err");
+    auto timeout = env->exec(std::vector<std::string>{"/bin/sleep", "30"}, 100ms, {}, {});
+    REQUIRE_FALSE(timeout);
+    CHECK(timeout.error().code == support::ErrorCode::Timeout);
+    CHECK(timeout.error().message == "timeout:0.1");
+    std::binary_semaphore started{0};
+    std::stop_source stop;
+    std::optional<support::Expected<ShellResult>> aborted;
+    std::jthread worker([&] {
+        aborted = env->exec(
+                std::vector<std::string>{"/bin/sh", "-c", "printf ready; exec sleep 30"},
+                0ms,
+                [&](std::string_view, bool) { started.release(); },
+                stop.get_token());
+    });
+    REQUIRE(started.try_acquire_for(5s));
+    stop.request_stop();
+    worker.join();
+    REQUIRE(aborted);
+    REQUIRE_FALSE(*aborted);
+    CHECK(aborted->error().code == support::ErrorCode::Cancelled);
+    auto recursive = env->watch("file.txt", [] {}, true);
+    REQUIRE_FALSE(recursive);
+    CHECK(recursive.error().code == support::ErrorCode::Validation);
+    std::atomic_int calls{0};
+    std::counting_semaphore<> changed{0};
+    auto watch = env->watch("watched.txt", [&] {
+        ++calls;
+        changed.release();
+    });
+    REQUIRE(watch);
+    workspace.write("watched.txt", "first");
+    REQUIRE(changed.try_acquire_for(5s));
+    (*watch)->close();
+    while (changed.try_acquire()) {
+    }
+    const int at_close = calls;
+    workspace.write("watched.txt", "second");
+    CHECK_FALSE(changed.try_acquire_for(250ms));
+    CHECK(calls == at_close);
+    std::counting_semaphore<> directory_changed{0};
+    auto directory_watch = env->watch(".", [&] { directory_changed.release(); });
+    REQUIRE(directory_watch);
+    workspace.write("new-child", "content");
+    CHECK(directory_changed.try_acquire_for(5s));
+    (*directory_watch)->close();
+}
 
 TEST_CASE("manual compaction decline makes no summary request or marker", "[durable][workflow][issue1083]") {
     const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1083/compaction.json",

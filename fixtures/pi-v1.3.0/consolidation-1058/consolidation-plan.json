@@ -751,6 +751,22 @@
   ],
   "orphanScenarios": [
     {
+      "family": "audit-1089",
+      "artifact": "environment.json",
+      "scenario": "watch covers creation after return and stops callbacks after close",
+      "reason": "Captured by #1089 after the #1058 ledger; no #1056 ledger row routes to this new artifact.",
+      "rows": ["cch_durable:node-env-watch"],
+      "disposition": "The durable environment watch test exercises these observations; this classification does not promote the row."
+    },
+    {
+      "family": "audit-1089",
+      "artifact": "environment.json",
+      "scenario": "normal exit cancellation and timeout have distinct shell outcomes",
+      "reason": "Captured by #1089 after the #1058 ledger; no #1056 ledger row routes to this new artifact.",
+      "rows": ["cch_durable:node-exec"],
+      "disposition": "The durable environment process test exercises these outcomes; this classification does not promote the row."
+    },
+    {
       "family": "audit-1050",
       "artifact": "input-standalone.json",
       "scenario": "input-placeholder-reversal-and-custom-styling",

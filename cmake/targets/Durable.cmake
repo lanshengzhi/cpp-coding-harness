@@ -18,7 +18,9 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_durable
     SOURCES
+        src/durable/CodingTools.cpp
         src/durable/CommittedContext.cpp
+        src/durable/Environment.cpp
         src/durable/Compaction.cpp
         src/durable/Harness.cpp
         src/durable/JsonlStorage.cpp
