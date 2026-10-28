@@ -14,9 +14,12 @@ original registered bytes were restored. `harness-g.json` through
 triplet, the expected observations matched after replacing only the generated
 provider session UUID with `<session-id>` and sorting JSON object keys. These
 are pi-only single-task observations; none establishes cross-runtime acceptance.
-The replay candidate is unregistered because the registry requires `audit-<ticket>`
-and one family per ticket. Supporting multiple captures for a ticket would need
-an independent registry/tool change, not a fabricated ticket number.
+The replay family is registered as `audit-1085-replay` through issue #1169, which
+allows `audit-<ticket>-<variant>` alongside the primary `audit-1085` family. The
+original family and its pin are unchanged. Re-running the registered replay
+command from the repository root succeeds; [replay-rerun.txt](replay-rerun.txt)
+records the only differences from the pinned capture: the capture timestamp and
+the generated provider session UUID.
 
 [writer-red.txt](writer-red.txt) records the real frozen pi rejection of a
 C++-written pending task before sidecar publication was implemented. The test

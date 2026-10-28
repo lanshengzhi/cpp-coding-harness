@@ -11,6 +11,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <sys/resource.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -477,6 +480,159 @@ TEST_CASE("JSONL task append rejects external file aliases", "[durable][jsonl][i
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().message == "JSONL storage is poisoned and must be reopened");
     CHECK(outside.read("user-data") == "untouched");
+}
+
+TEST_CASE("JSONL terminal reclamation keeps an external sidecar through a replaced store directory",
+        "[durable][jsonl][issue1085]") {
+    TempWorkspace workspace;
+    const auto store = workspace.path() / "store";
+    const auto moved = workspace.path() / "store-moved";
+    const auto external = workspace.path() / "external";
+    std::error_code error;
+    std::filesystem::create_directories(store, error);
+    REQUIRE_FALSE(error);
+    std::filesystem::create_directories(external, error);
+    REQUIRE_FALSE(error);
+    auto storage = JsonlStorage::open(store);
+    REQUIRE(storage);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    REQUIRE(std::filesystem::exists(store / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+
+    // The store path is replaced after the storage captured its directory.
+    // Reclamation must stay in the captured directory, not resolve this path.
+    std::filesystem::rename(store, moved, error);
+    REQUIRE_FALSE(error);
+    std::filesystem::create_symlink(external, store, error);
+    REQUIRE_FALSE(error);
+    workspace.write("external/task-2.jsonl", "outside\n");
+
+    task.state = TaskState{.status = "terminal", .outcome = TaskOutcome{.status = "completed"}};
+    writes = {StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    CHECK(workspace.read("external/task-2.jsonl") == "outside\n");
+    CHECK_FALSE(std::filesystem::exists(moved / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+    REQUIRE((*storage)->close());
+    std::filesystem::remove(store, error);
+    REQUIRE_FALSE(error);
+}
+
+TEST_CASE("JSONL terminal reclamation leaves a substituted sidecar entry intact", "[durable][jsonl][issue1085]") {
+    TempWorkspace store;
+    TempWorkspace outside;
+    outside.write("user-data", "untouched");
+    auto storage = JsonlStorage::open(store.path());
+    REQUIRE(storage);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    std::error_code error;
+    REQUIRE(std::filesystem::remove(store.path() / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+    SECTION("symlink") {
+        std::filesystem::create_symlink(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
+    }
+    SECTION("hard link") {
+        std::filesystem::create_hard_link(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
+    }
+    SECTION("replaced regular file") { store.write("task-2.jsonl", "replacement\n"); }
+    REQUIRE_FALSE(error);
+    task.state = TaskState{.status = "terminal", .outcome = TaskOutcome{.status = "completed"}};
+    writes = {StorageWrite{.type = "task", .task = task}};
+    // Publication succeeds; the substituted entry is unknown, so it is neither
+    // written through nor unlinked.
+    auto result = consume((*storage)->commit(writes));
+    REQUIRE(result.has_value());
+    CHECK(outside.read("user-data") == "untouched");
+    CHECK(std::filesystem::exists(store.path() / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+    REQUIRE((*storage)->close());
+}
+
+TEST_CASE("JSONL task update rejects a replaced sidecar identity", "[durable][jsonl][issue1085]") {
+    TempWorkspace store;
+    auto storage = JsonlStorage::open(store.path());
+    REQUIRE(storage);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    std::error_code error;
+    std::filesystem::rename(store.path() / "task-2.jsonl", store.path() / "task-2.user", error);
+    REQUIRE_FALSE(error);
+    store.write("task-2.jsonl", "user-data\n");
+    task.state.checkpoint = chord::Json{chord::Json::Object{{"phase", "again"}}};
+    writes = {StorageWrite{.type = "task", .task = task}};
+    auto result = consume((*storage)->commit(writes));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().message == "JSONL storage is poisoned and must be reopened");
+    CHECK(store.read("task-2.jsonl") == "user-data\n");
+    REQUIRE((*storage)->close());
+}
+
+namespace {
+
+[[nodiscard]] std::size_t open_descriptor_count() {
+    std::error_code error;
+    std::size_t count = 0;
+    for (std::filesystem::directory_iterator iterator("/proc/self/fd", error);
+            !error && iterator != std::filesystem::directory_iterator{};
+            iterator.increment(error)) {
+        ++count;
+    }
+    return count;
+}
+
+} // namespace
+
+TEST_CASE("JSONL recovery opens one task sidecar at a time", "[durable][jsonl][issue1085]") {
+    struct rlimit original{};
+    REQUIRE(::getrlimit(RLIMIT_NOFILE, &original) == 0);
+    // Keep the descriptor budget well below the sidecar count so retaining one
+    // descriptor per sidecar fails deterministically instead of by host limit.
+    const rlim_t budget = static_cast<rlim_t>(open_descriptor_count() + 32);
+    if (original.rlim_cur > budget) {
+        struct rlimit lowered = original;
+        lowered.rlim_cur = budget;
+        REQUIRE(::setrlimit(RLIMIT_NOFILE, &lowered) == 0);
+    }
+    struct RestoreLimit {
+        struct rlimit value;
+        ~RestoreLimit() { (void)::setrlimit(RLIMIT_NOFILE, &value); }
+    } restore{original};
+
+    TempWorkspace store;
+    constexpr std::size_t kSidecars = 64;
+    for (std::size_t index = 0; index < kSidecars; ++index) {
+        std::ofstream sidecar(store.path() / ("task-" + std::to_string(index + 2) + ".jsonl"), std::ios::binary);
+        REQUIRE(sidecar.good());
+    }
+    auto storage = JsonlStorage::open(store.path());
+    REQUIRE(storage);
+    REQUIRE((*storage)->close());
+    std::error_code error;
+    std::size_t remaining = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(store.path(), error)) {
+        if (entry.path().filename().string().starts_with("task-")) {
+            ++remaining;
+        }
+    }
+    REQUIRE_FALSE(error);
+    CHECK(remaining == 0);
 }
 
 TEST_CASE("an unconfirmed live task sidecar is discarded on JSONL reopen", "[durable][jsonl][issue1085]") {

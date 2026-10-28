@@ -4,6 +4,8 @@
 #include <cch/chord/Json.hpp>
 #include <cch/support/JsonAccess.hpp>
 
+#include "support/UniqueFd.hpp"
+
 #include "StorageEncoding.hpp"
 #include "StorageState.hpp"
 #include "support/Json.hpp"
@@ -222,29 +224,52 @@ constexpr std::string_view kClosedMessage = "JSONL storage is closed";
     return true;
 }
 
-class TaskFile {
-public:
-    explicit TaskFile(int fd) : fd_(fd) {}
-    ~TaskFile() {
-        if (fd_ >= 0) (void)::close(fd_);
-    }
-    TaskFile(const TaskFile&) = delete;
-    TaskFile& operator=(const TaskFile&) = delete;
-    [[nodiscard]] int get() const { return fd_; }
+struct FileIdentity {
+    dev_t device{};
+    ino_t inode{};
 
-private:
-    int fd_;
+    [[nodiscard]] bool operator==(const FileIdentity&) const = default;
 };
 
-[[nodiscard]] support::Expected<std::unique_ptr<TaskFile>> open_task_file(
-        const std::filesystem::path& path, int flags) {
-    const int fd = ::open(path.c_str(), flags | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0600);
+struct OpenedTaskFile {
+    support::UniqueFd fd;
+    FileIdentity identity{};
+};
+
+/// Open a task sidecar relative to the captured store directory. O_NOFOLLOW
+/// rejects a final symlink, and the regular single-link check rejects hard
+/// links before anything is read, truncated, or appended.
+[[nodiscard]] support::Expected<OpenedTaskFile> open_task_file(int directory_fd, std::string_view name, int flags) {
+    const std::string entry{name};
+    const int fd = ::openat(directory_fd, entry.c_str(), flags | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0600);
     if (fd < 0) return std::unexpected(corruption("JSONL task sidecar open failed"));
-    auto file = std::make_unique<TaskFile>(fd);
+    support::UniqueFd file{fd};
     struct stat info{};
     if (::fstat(fd, &info) != 0 || !S_ISREG(info.st_mode) || info.st_nlink != 1)
         return std::unexpected(corruption("JSONL task sidecar is not a singly linked regular file"));
-    return file;
+    return OpenedTaskFile{.fd = std::move(file), .identity = FileIdentity{.device = info.st_dev, .inode = info.st_ino}};
+}
+
+/// Unlink only the task sidecar whose identity was observed while opening the
+/// store. A substituted entry is left alone; a link placed between this check
+/// and unlinkat remains a race outside the single-owner storage contract.
+[[nodiscard]] support::ExpectedVoid reclaim_task_file(
+        int directory_fd, std::string_view name, const std::map<std::string, FileIdentity>& identities) {
+    const auto known = identities.find(std::string{name});
+    if (known == identities.end()) return {};
+    const std::string entry{name};
+    struct stat info{};
+    if (::fstatat(directory_fd, entry.c_str(), &info, AT_SYMLINK_NOFOLLOW) != 0) {
+        if (errno == ENOENT) return {};
+        return std::unexpected(corruption("JSONL sidecar reclamation failed"));
+    }
+    if (!S_ISREG(info.st_mode) || info.st_dev != known->second.device || info.st_ino != known->second.inode) {
+        return {};
+    }
+    if (::unlinkat(directory_fd, entry.c_str(), 0) != 0 && errno != ENOENT) {
+        return std::unexpected(corruption("JSONL sidecar reclamation failed"));
+    }
+    return {};
 }
 
 struct RawLine {
@@ -252,64 +277,30 @@ struct RawLine {
     std::size_t start{0};
 };
 
-[[nodiscard]] support::Expected<std::vector<RawLine>> read_complete_lines(
-        const std::filesystem::path& path, std::string_view name, int task_fd = -1) {
-    std::string bytes;
-    std::error_code error;
-    if (task_fd >= 0) {
-        std::array<char, 8192> buffer{};
-        for (;;) {
-            const auto count = ::read(task_fd, buffer.data(), buffer.size());
-            if (count < 0 && errno == EINTR) continue;
-            if (count < 0) return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
-            if (count == 0) break;
-            bytes.append(buffer.data(), static_cast<std::size_t>(count));
-        }
-    } else {
-        const bool exists = std::filesystem::exists(path, error);
-        if (error) {
-            return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
-        }
-        if (!exists) {
-            return std::vector<RawLine>{};
-        }
-        if (!std::filesystem::is_regular_file(path, error) || error) {
-            return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
-        }
+[[nodiscard]] std::size_t complete_prefix_size(std::string_view bytes) {
+    if (bytes.empty() || bytes.back() == '\n') return bytes.size();
+    const std::size_t last_newline = bytes.rfind('\n');
+    return last_newline == std::string_view::npos ? 0 : last_newline + 1;
+}
 
-        std::ifstream stream(path, std::ios::binary);
-        if (!stream) {
-            return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
-        }
-        bytes.assign(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-        if (stream.bad()) {
-            return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
-        }
+[[nodiscard]] support::Expected<off_t> checked_offset(std::size_t value) {
+    if (!std::in_range<off_t>(value)) {
+        return std::unexpected(corruption("JSONL truncation offset is out of range"));
     }
+    return static_cast<off_t>(value);
+}
 
-    if (!bytes.empty() && bytes.back() != '\n') {
-        const std::size_t last_newline = bytes.rfind('\n');
-        const std::size_t complete_size = last_newline == std::string::npos ? 0 : last_newline + 1;
-        if (task_fd >= 0) {
-            if (::ftruncate(task_fd, static_cast<off_t>(complete_size)) != 0)
-                return std::unexpected(corruption("JSONL torn-line truncation of " + std::string{name} + " failed"));
-        } else
-            std::filesystem::resize_file(path, complete_size, error);
-        if (error) {
-            return std::unexpected(corruption("JSONL torn-line truncation of " + std::string{name} + " failed"));
-        }
-        bytes.resize(complete_size);
-    }
-
+[[nodiscard]] support::Expected<std::vector<RawLine>> split_complete_lines(
+        std::string_view bytes, std::string_view name) {
     std::vector<RawLine> lines;
     std::size_t start = 0;
     std::size_t number = 1;
     while (start < bytes.size()) {
         const std::size_t end = bytes.find('\n', start);
-        if (end == std::string::npos) {
+        if (end == std::string_view::npos) {
             break;
         }
-        std::string text = bytes.substr(start, end - start);
+        std::string text{bytes.substr(start, end - start)};
         if (!valid_utf8(text)) {
             return std::unexpected(
                     corruption("Invalid UTF-8 in complete " + std::string{name} + " line " + std::to_string(number)));
@@ -319,6 +310,66 @@ struct RawLine {
         ++number;
     }
     return lines;
+}
+
+[[nodiscard]] support::Expected<std::vector<RawLine>> read_complete_lines(
+        const std::filesystem::path& path, std::string_view name) {
+    std::error_code error;
+    const bool exists = std::filesystem::exists(path, error);
+    if (error) {
+        return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
+    }
+    if (!exists) {
+        return std::vector<RawLine>{};
+    }
+    if (!std::filesystem::is_regular_file(path, error) || error) {
+        return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
+    }
+
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
+    }
+    std::string bytes{std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    if (stream.bad()) {
+        return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
+    }
+
+    const std::size_t complete_size = complete_prefix_size(bytes);
+    if (complete_size != bytes.size()) {
+        std::filesystem::resize_file(path, complete_size, error);
+        if (error) {
+            return std::unexpected(corruption("JSONL torn-line truncation of " + std::string{name} + " failed"));
+        }
+        bytes.resize(complete_size);
+    }
+    return split_complete_lines(bytes, name);
+}
+
+[[nodiscard]] support::Expected<std::vector<RawLine>> read_complete_lines(
+        const support::UniqueFd& file, std::string_view name) {
+    std::string bytes;
+    std::array<char, 8192> buffer{};
+    for (;;) {
+        const auto count = ::read(file.get(), buffer.data(), buffer.size());
+        if (count < 0 && errno == EINTR) continue;
+        if (count < 0) return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
+        if (count == 0) break;
+        bytes.append(buffer.data(), static_cast<std::size_t>(count));
+    }
+
+    const std::size_t complete_size = complete_prefix_size(bytes);
+    if (complete_size != bytes.size()) {
+        auto offset = checked_offset(complete_size);
+        if (!offset) {
+            return std::unexpected(std::move(offset.error()));
+        }
+        if (::ftruncate(file.get(), *offset) != 0) {
+            return std::unexpected(corruption("JSONL torn-line truncation of " + std::string{name} + " failed"));
+        }
+        bytes.resize(complete_size);
+    }
+    return split_complete_lines(bytes, name);
 }
 
 [[nodiscard]] support::ExpectedVoid append_file(const std::filesystem::path& path, std::string_view content) {
@@ -1057,6 +1108,13 @@ struct JsonlStorage::Impl {
     explicit Impl(std::filesystem::path directory) : directory(std::move(directory)) {}
 
     std::filesystem::path directory;
+    // Captured once so task sidecar access and reclamation stay in the opened
+    // store even if a later path lookup would resolve elsewhere.
+    support::UniqueFd directory_fd;
+    // Identity of every task sidecar observed in this incarnation. Appends and
+    // reclamation reject a substituted entry instead of writing to or deleting
+    // a file the store did not create or adopt during recovery.
+    std::map<std::string, FileIdentity> task_identities;
     StorageState state{std::string{kClosedMessage}};
     bool poisoned{false};
 
@@ -1080,6 +1138,11 @@ struct JsonlStorage::Impl {
         if (error || !std::filesystem::is_directory(directory, error) || error) {
             return std::unexpected(corruption("JSONL directory creation failed"));
         }
+        const int directory_handle = ::open(directory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (directory_handle < 0) {
+            return std::unexpected(corruption("JSONL directory open failed"));
+        }
+        directory_fd = support::UniqueFd{directory_handle};
 
         auto main_lines = read_complete_lines(directory / kMainFile, kMainFile);
         if (!main_lines) {
@@ -1127,25 +1190,29 @@ struct JsonlStorage::Impl {
         std::sort(sidecar_files.begin(), sidecar_files.end());
 
         std::map<std::string, std::vector<ParsedSidecar>> parsed_files;
-        std::map<std::string, std::unique_ptr<TaskFile>> task_files;
+        std::map<std::string, FileIdentity> task_identities;
         std::map<std::string, const SidecarRecord*> record_by_key;
         for (const std::string& file : sidecar_files) {
-            int task_fd = -1;
+            // One sidecar is open at a time: recovery holds no descriptor after
+            // its bytes are read, so the sidecar count never consumes the fd budget.
+            std::vector<RawLine> lines;
             if (task_id_from_file(file)) {
-                auto opened = open_task_file(directory / file, O_RDWR);
+                auto opened = open_task_file(directory_fd.get(), file, O_RDWR);
                 if (!opened) return std::unexpected(std::move(opened.error()));
-                task_fd = (*opened)->get();
-                task_files.emplace(file, std::move(*opened));
-            }
-            auto lines = read_complete_lines(directory / file, file, task_fd);
-            if (!lines) {
-                return std::unexpected(std::move(lines.error()));
+                task_identities.emplace(file, opened->identity);
+                auto read = read_complete_lines(opened->fd, file);
+                if (!read) return std::unexpected(std::move(read.error()));
+                lines = std::move(*read);
+            } else {
+                auto read = read_complete_lines(directory / file, file);
+                if (!read) return std::unexpected(std::move(read.error()));
+                lines = std::move(*read);
             }
             std::vector<ParsedSidecar> parsed;
-            parsed.reserve(lines->size());
+            parsed.reserve(lines.size());
             const SidecarRecord* previous = nullptr;
-            for (std::size_t index = 0; index < lines->size(); ++index) {
-                auto record = parse_sidecar((*lines)[index].text, file, index + 1);
+            for (std::size_t index = 0; index < lines.size(); ++index) {
+                auto record = parse_sidecar(lines[index].text, file, index + 1);
                 if (!record) {
                     return std::unexpected(std::move(record.error()));
                 }
@@ -1154,7 +1221,7 @@ struct JsonlStorage::Impl {
                                 (record->seq == previous->seq && record->ordinal <= previous->ordinal))) {
                     return std::unexpected(corruption("Sidecar records are out of order in " + file));
                 }
-                parsed.push_back(ParsedSidecar{.record = *record, .start = (*lines)[index].start});
+                parsed.push_back(ParsedSidecar{.record = *record, .start = lines[index].start});
                 previous = &parsed.back().record;
             }
             parsed_files.emplace(file, std::move(parsed));
@@ -1344,14 +1411,27 @@ struct JsonlStorage::Impl {
                                 corruption("Unconfirmed sidecar record has a closed sequence in " + file));
                     }
                 }
-                const auto task_file = task_files.find(file);
-                if (task_file != task_files.end()) {
-                    if (::ftruncate(task_file->second->get(), static_cast<off_t>(*unconfirmed_start)) != 0)
+                const auto identity = task_identities.find(file);
+                if (identity != task_identities.end()) {
+                    auto offset = checked_offset(*unconfirmed_start);
+                    if (!offset) {
+                        return std::unexpected(std::move(offset.error()));
+                    }
+                    // Reopen rather than retain a descriptor per sidecar, and
+                    // confirm the entry is still the file read a moment ago.
+                    auto opened = open_task_file(directory_fd.get(), file, O_RDWR);
+                    if (!opened) return std::unexpected(std::move(opened.error()));
+                    if (!(opened->identity == identity->second)) {
+                        return std::unexpected(corruption("JSONL task sidecar changed during recovery in " + file));
+                    }
+                    if (::ftruncate(opened->fd.get(), *offset) != 0) {
                         return std::unexpected(corruption("JSONL tail truncation of " + file + " failed"));
-                } else
+                    }
+                } else {
                     std::filesystem::resize_file(directory / file, *unconfirmed_start, error);
-                if (error) {
-                    return std::unexpected(corruption("JSONL tail truncation of " + file + " failed"));
+                    if (error) {
+                        return std::unexpected(corruption("JSONL tail truncation of " + file + " failed"));
+                    }
                 }
                 lines.erase(std::remove_if(lines.begin(),
                                     lines.end(),
@@ -1362,8 +1442,9 @@ struct JsonlStorage::Impl {
             if (const auto task_id = task_id_from_file(file)) {
                 const auto final = final_task_live.find(task_id->value);
                 if (lines.empty() || (final != final_task_live.end() && !final->second)) {
-                    std::filesystem::remove(directory / file, error);
-                    error.clear();
+                    if (auto reclaimed = reclaim_task_file(directory_fd.get(), file, task_identities); !reclaimed) {
+                        return std::unexpected(std::move(reclaimed.error()));
+                    }
                 }
                 continue;
             }
@@ -1408,6 +1489,7 @@ struct JsonlStorage::Impl {
                 return std::unexpected(std::move(replaced.error()));
             }
         }
+        this->task_identities = std::move(task_identities);
         return {};
     }
 
@@ -1448,14 +1530,20 @@ struct JsonlStorage::Impl {
         EncodedCommit encoded = encode_commit(seq, writes, current_only_documents, directory);
         for (const auto& [file, content] : encoded.sidecars) {
             if (task_id_from_file(file)) {
-                auto opened = open_task_file(directory / file, O_WRONLY | O_CREAT | O_APPEND);
+                auto opened = open_task_file(directory_fd.get(), file, O_WRONLY | O_CREAT | O_APPEND);
                 if (!opened) {
                     poisoned = true;
                     return std::unexpected(poison_error());
                 }
+                const auto known = task_identities.find(file);
+                if (known != task_identities.end() && !(known->second == opened->identity)) {
+                    poisoned = true;
+                    return std::unexpected(poison_error());
+                }
+                task_identities.insert_or_assign(file, opened->identity);
                 std::string_view remaining = content;
                 while (!remaining.empty()) {
-                    const auto count = ::write((*opened)->get(), remaining.data(), remaining.size());
+                    const auto count = ::write(opened->fd.get(), remaining.data(), remaining.size());
                     if (count < 0 && errno == EINTR) continue;
                     if (count <= 0) {
                         poisoned = true;
@@ -1482,6 +1570,14 @@ struct JsonlStorage::Impl {
         // The marker already published this state. Reclamation is retryable
         // maintenance and a failure here does not change the commit outcome.
         for (const auto& [file, content] : encoded.reclamations) {
+            if (task_id_from_file(file)) {
+                // Task sidecars are reclaimed whole, relative to the captured
+                // directory, and only while the observed identity still holds.
+                if (content.empty()) {
+                    (void)reclaim_task_file(directory_fd.get(), file, task_identities);
+                }
+                continue;
+            }
             std::error_code error;
             if (content.empty()) {
                 std::filesystem::remove(directory / file, error);

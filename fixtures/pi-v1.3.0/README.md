@@ -20,7 +20,7 @@ argument anywhere in the capture, check, register, verify or read paths.
 fixtures/pi-v1.3.0/
   baselines.json                    shared registry: baseline -> full revision -> family manifest pins
   README.md                         this convention
-  audit-<ticket>/                   ticket-owned family bundle (one directory per family)
+  audit-<ticket>[-<variant>]/       ticket-owned family bundle (one directory per family)
     manifest.json                   pinned index: capture generator, environment, artifact bytes, scenarios
     <artifact>.json                 captured observation envelope (one or more per family)
     capture-<topic>.mts             executable capture that produced the artifacts
@@ -28,9 +28,10 @@ scripts/evidence/audit_evidence.py  shared check / register / verify / read CLI
 tests/evidence/NamedEvidenceTest.py public boundary test for the registry and verifier
 ```
 
-A family is exactly `audit-<ticket>` and belongs to one ticket. The ticket owns its bundle
-directory; only the serial merger edits `baselines.json` through `register`, and no lane may
-rewrite another family's bundle or the shared verifier. Audit reports and capability ledgers live
+A family is `audit-<ticket>` or a variant `audit-<ticket>-<variant>` (for example
+`audit-1085-replay`) and belongs to one ticket; the primary family and its variants may coexist in
+one baseline. The ticket owns its bundle directories; only the serial merger edits `baselines.json`
+through `register`, and no lane may rewrite another family's bundle or the shared verifier. Audit reports and capability ledgers live
 beside the ticket documents under `docs/research/pi-v1.3.0/`.
 
 ## Registry
@@ -112,7 +113,8 @@ the verifier; unknown fields are permitted.
 
 - `baseline` and `revision` must resolve to the one registered baseline: the revision is the
   full 40-character SHA, never a tag or short prefix.
-- `ticket` is the family suffix; `family` is exactly `audit-<ticket>` and unique to one ticket.
+- `ticket` is the leading numeric suffix; `family` is `audit-<ticket>` or
+  `audit-<ticket>-<variant>` and unique within the registry.
 - `capturedAt` is a UTC ISO-8601 timestamp ending in `Z`.
 - `environment` records the actual capture host. Linux/x64/glibc is required; record the
   Node/tsx runtime versions used. Windows/macOS observations do not satisfy a selected capability.
