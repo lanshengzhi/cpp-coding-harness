@@ -37,6 +37,19 @@ namespace cch::tests {
     return read_text_if_present(path).find(needle) != std::string::npos;
 }
 
+/// How many lines of the fixture trace file contain `needle`.
+[[nodiscard]] inline std::size_t trace_line_count(const std::filesystem::path& path, std::string_view needle) {
+    std::ifstream input(path);
+    std::size_t count = 0;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.find(needle) != std::string::npos) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 /// Await until `predicate` holds or `budget` elapses; the caller asserts the
 /// property afterwards, so a timeout stays a test failure rather than a hang.
 [[nodiscard]] inline boost::asio::awaitable<void> wait_for(

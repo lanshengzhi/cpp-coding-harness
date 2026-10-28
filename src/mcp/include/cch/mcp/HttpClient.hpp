@@ -54,9 +54,13 @@ public:
     /// Connect to `config`, run the `initialize` handshake, and return the
     /// connected client. When `request_auth` is present, every JSON-RPC POST
     /// resolves its headers at request time and attaches them; a missing
-    /// credential or a failed refresh fails the request explicitly. A non-TLS
-    /// URL, a network failure, a non-2xx status, or an invalid handshake
-    /// response is reported through the shared error channel.
+    /// credential or a failed refresh fails the request explicitly. A
+    /// malformed URL, a network failure, a non-2xx status, or an invalid
+    /// handshake response is reported through the shared error channel.
+    /// Redirects (301/302/303/307/308 with a Location) are followed with the
+    /// frozen pi platform fetch rules; a cross-origin hop drops the
+    /// credential headers, so a redirect target never receives the caller's
+    /// Authorization (audit-1052 `transports.json`).
     [[nodiscard]] static support::AsyncResult<std::shared_ptr<HttpClient>> connect(HttpServerConfig config,
             std::shared_ptr<support::StreamTransport> transport = nullptr,
             std::shared_ptr<RequestAuthSource> request_auth = nullptr,

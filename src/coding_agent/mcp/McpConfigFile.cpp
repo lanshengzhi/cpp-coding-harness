@@ -54,8 +54,9 @@ using JsonArray = support::JsonValue::array_t;
 }
 
 /// pi `URL.canParse(value) && /^https?:$/.test(new URL(value).protocol)`: an
-/// absolute `http`/`https` URL with a host. The transport later enforces
-/// TLS-only (ADR 0054); this gate only matches pi's config acceptance.
+/// absolute `http`/`https` URL with a host. Assembly applies the
+/// http/https registration gate (`cch::mcp::validate_http_server_config`);
+/// this load-time gate only matches pi's config acceptance.
 [[nodiscard]] bool is_http_url(std::string_view value) {
     const auto scheme_end = value.find("://");
     if (scheme_end == std::string_view::npos) {

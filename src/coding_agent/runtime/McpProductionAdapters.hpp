@@ -127,8 +127,9 @@ private:
 };
 
 /// The production connection factory over the landed stdio/streamable-http
-/// clients (pi `createConnection` + `createDefaultTransport`). The URL gate is
-/// TLS-only (ADR 0054); an OAuth-eligible HTTP entry resolves its request-time
+/// clients (pi `createConnection` + `createDefaultTransport`). The URL gate
+/// accepts `http`/`https` (ADR 0054's TLS-only rule is superseded for MCP by
+/// ADR 0075); an OAuth-eligible HTTP entry resolves its request-time
 /// token from `<agentDir>/mcp-auth.json` (migrating a legacy `auth.json`
 /// `mcp__<server>` record on first need, pi shape). The result is never a
 /// fatal error: the connection carries `Connected`, `NeedsAuth` (an OAuth
