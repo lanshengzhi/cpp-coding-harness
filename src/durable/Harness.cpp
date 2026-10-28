@@ -1,6 +1,7 @@
 #include <cch/durable/Harness.hpp>
 
 #include "durable/Compaction.hpp"
+#include "durable/SessionErrors.hpp"
 #include "durable/WorkflowRuntime.hpp"
 
 #include <cch/durable/Records.hpp>
@@ -1266,16 +1267,30 @@ struct Harness::Impl {
         (void)session->subscribe_close([this] {
             std::map<std::int64_t, std::vector<std::shared_ptr<TaskWaiter>>> pending;
             std::map<std::optional<std::int64_t>, std::vector<std::shared_ptr<IdleWaiter>>> pending_idle;
-            const auto error = support::make_error(support::ErrorCode::Validation,
-                    session->failed() ? "Session failed after a storage error; close and reopen it" : "Session is closed");
+            const auto error = session->failed()
+                                       ? session_failed_error()
+                                       : support::make_error(support::ErrorCode::Validation, "Session is closed");
+            // A storage failure closes the Session without running the
+            // Harness shutdown path, so the active invocations are signalled
+            // here — before the failing commit's caller observes the
+            // rejection (frozen pi fail -> close -> beforeClose ->
+            // TaskScheduler.join()). Copy the sources out of the scheduler
+            // mutex first: stop callbacks run after it is released (issue
+            // #1165), and a callback that waits on the Session line is the
+            // documented reentry boundary.
+            std::vector<std::stop_source> sources;
             {
                 std::lock_guard lock(mutex);
                 wait_error = error;
+                for (const auto& [_, stop_src] : active_invocations)
+                    sources.push_back(stop_src);
                 pending = std::move(waiters);
                 waiters.clear();
                 pending_idle = std::move(idle_waiters);
                 idle_waiters.clear();
             }
+            for (auto& source : sources)
+                source.request_stop();
             submissions->reject_all(error);
             for (auto& [id, completions] : pending) {
                 (void)id;
@@ -1803,6 +1818,13 @@ const TaskDefinition* Harness::task_definition(std::string_view kind) const noex
 }
 
 support::AsyncResult<HarnessInspection> Harness::inspect() {
+    // A failed Session seals every later operation, including the direct
+    // scan, with the frozen failure message (frozen pi `SessionFailed`);
+    // the raw storage is healthy enough to scan, so without this gate a
+    // caller would observe post-failure state instead of the seal.
+    if (impl_->session->failed()) {
+        return support::AsyncResult<HarnessInspection>{std::unexpected(session_failed_error())};
+    }
     auto scan_res = impl_->storage->scan_tasks(256);
     if (!scan_res) {
         return support::AsyncResult<HarnessInspection>{std::unexpected(scan_res.error())};
