@@ -1,11 +1,14 @@
 #include "durable/ViewMounts.hpp"
 
+#include "durable/ObservationTestHooks.hpp"
 #include "durable/StorageEncoding.hpp"
 
 #include <algorithm>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -14,16 +17,59 @@
 namespace cch::durable {
 
 struct ViewWatch::Impl {
+    /// One delivery's admission state, guarded by the mount mutex. `Idle`
+    /// means no delivery is in flight, `Claimed` means a publication selected
+    /// this watcher but has not entered its listener, `Entered` means the
+    /// listener call has begun, and `Stopped` means no later delivery may
+    /// enter. `stopped` is separate because a stop can arrive while a delivery
+    /// is claimed or entered; the delivery then finishes or cancels into
+    /// `Stopped`.
+    enum class DispatchState {
+        Idle,
+        Claimed,
+        Entered,
+        Stopped,
+    };
+
     std::shared_ptr<ViewMount> mount{};
     /// The acquisition revision before the first delivery; the latest
     /// delivered revision afterwards.
     chord::Json value{};
+    DispatchState dispatch{DispatchState::Idle};
     bool stopped{false};
     WatchEndReason end{WatchEndReason::Stopped};
+    /// Wakes a stop/end waiting for a claimed delivery to cancel or enter.
+    /// The wait uses the mount mutex.
+    std::condition_variable dispatch_cv{};
     ViewFrameListener listener{};
 };
 
 namespace {
+
+std::mutex view_dispatch_hook_mutex;
+testing::ViewDispatchHook view_dispatch_hook;
+
+/// Copy the test-only hook under its mutex, then run the copy outside it. A
+/// hook that blocks therefore cannot block clearing the hook.
+void run_view_dispatch_hook(const testing::ViewDispatchHookPoint point) {
+    testing::ViewDispatchHook hook;
+    {
+        std::lock_guard lock(view_dispatch_hook_mutex);
+        hook = view_dispatch_hook;
+    }
+    if (hook) hook(point);
+}
+
+/// Record a stop under the mount mutex. A claimed or entered delivery keeps
+/// its state until it resolves; an idle watcher becomes stopped immediately.
+void mark_stopped(ViewWatch::Impl& watcher, const WatchEndReason reason) {
+    if (watcher.stopped) return;
+    watcher.stopped = true;
+    watcher.end = reason;
+    if (watcher.dispatch == ViewWatch::Impl::DispatchState::Idle) {
+        watcher.dispatch = ViewWatch::Impl::DispatchState::Stopped;
+    }
+}
 
 /// The built-in conversation document kinds (frozen pi `BUILTIN_DOC_KINDS`),
 /// keyed by their full kind including the definition version.
@@ -139,7 +185,6 @@ void deliver(ViewMount& mount, chord::Json next, chord::OpBatch ops) {
             if (watcher->stopped) {
                 continue;
             }
-            watcher->value = next;
             deliveries.emplace_back(std::move(watcher), ViewFrame{.value = next, .ops = ops});
         }
         mount.watchers = std::move(live);
@@ -147,29 +192,77 @@ void deliver(ViewMount& mount, chord::Json next, chord::OpBatch ops) {
     for (auto& [watcher, frame] : deliveries) {
         {
             std::lock_guard lock(mount.mutex);
-            // Claim the callback under the same lock used by stop(). Once
-            // claimed it may finish, but a stopped watch cannot claim a
-            // queued callback. User code always runs outside the lock.
+            // Claim only this delivery. Later deliveries stay idle so a
+            // callback may stop another watch without waiting on itself.
             if (watcher->stopped) continue;
+            watcher->dispatch = ViewWatch::Impl::DispatchState::Claimed;
+        }
+        run_view_dispatch_hook(testing::ViewDispatchHookPoint::AfterClaim);
+        {
+            std::unique_lock lock(mount.mutex);
+            // Resolve the admission under the same lock used by stop(). A
+            // stop that arrived after the claim cancels this delivery; one
+            // that arrives after this transition observes it as entered and
+            // may not wait for the callback to finish. User code always runs
+            // outside the lock.
+            if (watcher->stopped) {
+                watcher->dispatch = ViewWatch::Impl::DispatchState::Stopped;
+                watcher->dispatch_cv.notify_all();
+                continue;
+            }
+            watcher->dispatch = ViewWatch::Impl::DispatchState::Entered;
+            watcher->value = next;
+            watcher->dispatch_cv.notify_all();
         }
         watcher->listener(std::move(frame));
+        {
+            std::lock_guard lock(mount.mutex);
+            if (watcher->dispatch == ViewWatch::Impl::DispatchState::Entered) {
+                watcher->dispatch = watcher->stopped ? ViewWatch::Impl::DispatchState::Stopped
+                                                     : ViewWatch::Impl::DispatchState::Idle;
+                watcher->dispatch_cv.notify_all();
+            }
+        }
     }
 }
 
 /// End every live watcher of one mount (Session end; frozen pi
 /// `WatchEvents.close`).
 void end_watchers(ViewMount& mount, const bool failed) {
-    std::lock_guard lock(mount.mutex);
+    std::unique_lock lock(mount.mutex);
+    const WatchEndReason reason = failed ? WatchEndReason::SessionFailed : WatchEndReason::SessionClosed;
     for (const std::weak_ptr<ViewWatch::Impl>& weak : mount.watchers) {
-        if (const std::shared_ptr<ViewWatch::Impl> watcher = weak.lock(); watcher != nullptr && !watcher->stopped) {
-            watcher->stopped = true;
-            watcher->end = failed ? WatchEndReason::SessionFailed : WatchEndReason::SessionClosed;
+        if (const std::shared_ptr<ViewWatch::Impl> watcher = weak.lock(); watcher != nullptr) {
+            mark_stopped(*watcher, reason);
+        }
+    }
+    // A claimed delivery has not entered its listener yet. Wait for it to
+    // cancel or enter; an entered callback is allowed to finish and is never
+    // joined here. The wait releases the mount mutex for the delivery.
+    for (const std::weak_ptr<ViewWatch::Impl>& weak : mount.watchers) {
+        if (const std::shared_ptr<ViewWatch::Impl> watcher = weak.lock(); watcher != nullptr) {
+            watcher->dispatch_cv.wait(
+                    lock, [&watcher] { return watcher->dispatch != ViewWatch::Impl::DispatchState::Claimed; });
         }
     }
     mount.watchers.clear();
 }
 
 } // namespace
+
+namespace testing {
+
+void set_view_dispatch_hook(ViewDispatchHook hook) {
+    std::lock_guard lock(view_dispatch_hook_mutex);
+    view_dispatch_hook = std::move(hook);
+}
+
+void clear_view_dispatch_hook() {
+    std::lock_guard lock(view_dispatch_hook_mutex);
+    view_dispatch_hook = {};
+}
+
+} // namespace testing
 
 ViewWatch::ViewWatch(std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
@@ -210,12 +303,17 @@ WatchEndReason ViewWatch::stop() {
     if (impl_ == nullptr) {
         return WatchEndReason::Stopped;
     }
-    std::lock_guard lock(impl_->mount->mutex);
+    std::unique_lock lock(impl_->mount->mutex);
     if (impl_->stopped) {
         return impl_->end;
     }
-    impl_->stopped = true;
-    impl_->end = WatchEndReason::Stopped;
+    mark_stopped(*impl_, WatchEndReason::Stopped);
+    lock.unlock();
+    run_view_dispatch_hook(testing::ViewDispatchHookPoint::AfterStopMarked);
+    lock.lock();
+    // Wait only for an admission decision, never for an entered callback to
+    // finish: a running listener may return after stop() has returned.
+    impl_->dispatch_cv.wait(lock, [this] { return impl_->dispatch != Impl::DispatchState::Claimed; });
     return impl_->end;
 }
 

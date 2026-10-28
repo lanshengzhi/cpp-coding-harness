@@ -20,6 +20,7 @@
 #include "support/TempWorkspace.hpp"
 #include "durable/FrozenExpectation.hpp"
 #include "durable/GatedStorage.hpp"
+#include "durable/ObservationTestHooks.hpp"
 #include "durable/Outcome.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -1499,6 +1500,111 @@ TEST_CASE("a watch callback already running may finish after stop", "[durable][o
     writer.join();
     REQUIRE(began);
     CHECK(finished.load());
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+// Discriminating case (ticket #1088): a stop that arrives after a delivery is
+// admitted but before its listener is entered must cancel that delivery. The
+// private hook pauses exactly in that window; the stop thread records that it
+// marked the watch stopped, then releases the publication thread. Without the
+// admission state the listener runs after stop() returned; with it the
+// delivery observes the stop and is cancelled.
+TEST_CASE("stopping a watch cancels a delivery claimed before callback entry",
+        "[durable][observation][issue1088][watch-claim-race]") {
+    MemoryStorage storage;
+    auto opened = consume(Harness::open(storage, HarnessOptions{}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    const auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    struct Gate {
+        std::atomic_bool claimed{false};
+        std::atomic_bool stop_marked{false};
+        std::atomic_bool release{false};
+    };
+    Gate gate;
+    std::atomic_int calls{0};
+    std::atomic_int reason{-1};
+    class HookGuard final {
+    public:
+        explicit HookGuard(testing::ViewDispatchHook hook) { testing::set_view_dispatch_hook(std::move(hook)); }
+        ~HookGuard() { testing::clear_view_dispatch_hook(); }
+        HookGuard(const HookGuard&) = delete;
+        HookGuard& operator=(const HookGuard&) = delete;
+    };
+    HookGuard hook([&gate](const testing::ViewDispatchHookPoint point) {
+        if (point == testing::ViewDispatchHookPoint::AfterClaim) {
+            gate.claimed.store(true);
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            while (!gate.release.load() && std::chrono::steady_clock::now() < deadline) {
+                std::this_thread::yield();
+            }
+            return;
+        }
+        gate.stop_marked.store(true);
+    });
+    auto watch = consume(harness->watch_conversation(root.value(), [&](ViewFrame) { ++calls; }));
+    REQUIRE(watch.has_value());
+
+    std::jthread writer([&] {
+        static_cast<void>(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+            auto entry = tx.append_entry(root.value(), "pi.user", chord::Json(chord::Json::Object{}));
+            if (!entry) return std::unexpected(entry.error());
+            return {};
+        })));
+    });
+    std::jthread stopper;
+    // Declared last so it releases the paused publication thread before the
+    // thread joins below, including on a failed assertion.
+    struct ReleaseGuard final {
+        Gate& gate;
+        ~ReleaseGuard() { gate.release.store(true); }
+    } release_guard{gate};
+
+    wait_until([&] { return gate.claimed.load(); }, "claimed watch delivery");
+    stopper = std::jthread([&] { reason.store(static_cast<int>(watch.value().stop())); });
+    wait_until([&] { return gate.stop_marked.load(); }, "stop mark before callback entry");
+    gate.release.store(true);
+    writer.join();
+    stopper.join();
+
+    CHECK(calls.load() == 0);
+    CHECK(reason.load() == static_cast<int>(WatchEndReason::Stopped));
+    CHECK(watch.value().stop() == WatchEndReason::Stopped);
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+// The positive control for the admission rule: a callback already entered may
+// stop its own watch. The stop path must not wait for an entered callback, or
+// this call would deadlock on its own callback.
+TEST_CASE("a watch may stop itself from its callback without deadlock",
+        "[durable][observation][issue1088][watch-self-stop]") {
+    MemoryStorage storage;
+    auto opened = consume(Harness::open(storage, HarnessOptions{}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    const auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    ViewWatch* watch_ptr = nullptr;
+    std::atomic_int calls{0};
+    std::atomic_int reason{-1};
+    auto watch = consume(harness->watch_conversation(root.value(), [&](ViewFrame) {
+        ++calls;
+        if (watch_ptr != nullptr) reason.store(static_cast<int>(watch_ptr->stop()));
+    }));
+    REQUIRE(watch.has_value());
+    watch_ptr = &watch.value();
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto entry = tx.append_entry(root.value(), "pi.user", chord::Json(chord::Json::Object{}));
+        if (!entry) return std::unexpected(entry.error());
+        return {};
+    })).has_value());
+    wait_until([&] { return calls.load() == 1; }, "self-stopping watch callback");
+
+    CHECK(reason.load() == static_cast<int>(WatchEndReason::Stopped));
+    CHECK(watch.value().stop() == WatchEndReason::Stopped);
     REQUIRE(consume(harness->close()).has_value());
 }
 

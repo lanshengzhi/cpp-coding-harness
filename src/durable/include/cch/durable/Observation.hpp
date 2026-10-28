@@ -102,7 +102,10 @@ public:
     [[nodiscard]] chord::Json value() const;
 
     /// Idempotently stop future deliveries and return this watch's terminal
-    /// result (frozen pi `WatchHandle.stop`).
+    /// result (frozen pi `WatchHandle.stop`). A stop that arrives before a
+    /// callback is admitted cancels that delivery; a callback already entered
+    /// may finish after this returns, because stopping never joins a running
+    /// callback. Cross-watch stop cycles are not supported.
     [[nodiscard]] WatchEndReason stop();
 
     /// Opaque state; defined in the module's private sources.

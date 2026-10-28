@@ -45,7 +45,9 @@ struct HydratedConversationView {
 /// watchers advancing from it. The mount is a read-only projection over
 /// committed records: it owns no thread, timer, or scheduler and mutates
 /// only from the Session's commit-publication line (or under `mutex` for a
-/// watcher stopping from its own thread).
+/// watcher stopping from its own thread). A stop that arrives before a
+/// listener is admitted cancels that delivery; an entered listener may finish
+/// and is never joined. Cross-watch stop cycles are not supported.
 struct ViewMount {
     explicit ViewMount(chord::Json initial) : value(std::move(initial)) {}
 

@@ -1,8 +1,8 @@
 # #1088 durable observation views: work in progress
 
 This work implements conversation views, document-change frames, the task graph,
-and inspection as projections of committed state. It remains unverified as a
-delivery: the frozen integration comparison fails and the required focused and
+and inspection as projections of committed state. Focused observation cases
+pass, but it remains unverified as a delivery: the required architecture and
 repository Full Validation receipts have not been completed.
 
 `Session::read_committed` is the public counterpart of frozen pi's `readOnLine`.
@@ -22,16 +22,16 @@ passed the task graph (26 assertions), inspect states across SQLite reopen (45),
 and placed-submission inspection (21). A later non-frozen run passed seven cases
 and 371 assertions, including stop and move-assignment checks; that run predates
 the deliberately failing reservation and read-order regression tests. The frozen
-conversation comparison remains failing and no capability row has been promoted.
+conversation comparison now passes; no capability row has been promoted.
 
 The frozen capture's conversation watch receives three frames. An independent,
 time-bounded trace of the frozen checkout found an intermediate request commit
 that writes `live.generation`, followed by a final commit that removes it and
-updates usage. The current C++ integration produced two frames, with verbs `sp`
-and `dp`; its task-only intermediate commits did not touch the view. Issue
-#1163 tracks the independent producer gap. The frozen assertion remains intact;
-a passing controlled observation test does not substitute for that integration
-comparison.
+updates usage. Before #1163 the current C++ integration produced two frames,
+with verbs `sp` and `dp`, because its task-only intermediate commits did not
+touch the view. The merged #1163 producer change made the frozen comparison
+pass; the frozen assertion remains intact, and a passing controlled observation
+test still does not substitute for that integration comparison.
 
 A blocked task remains live, so `wait_for_idle` cannot finish while a task is
 blocked on a missing definition. The test that observes this state waits for
@@ -72,14 +72,24 @@ inconsistent pair. The independently threaded read-order probe now passes via
 mutex still need a lock-order review before nesting that mutex with the
 mutation line; that is a static risk, not a reproduced deadlock. Failure and
 close ordering for the barrier are covered by the merged #1165/#1166 tests.
-Focused validation, architecture receipts and Full Validation remain
-outstanding.
+Architecture receipts and repository Full Validation remain outstanding.
 
-Watch cancellation also has an unverified cross-thread boundary: delivery checks cancellation under
-the mount lock, but the listener begins after that lock is released. A stop can
-return in between. Frozen JavaScript checks disposal and invokes its listener
-on one event loop; the existing tests do not determine equivalence at this
-boundary. Full-table scans copy O(n) records; the strengthened scan contract
+Watch cancellation's cross-thread claim-to-entry race is resolved. A watcher
+now has an `Idle`/`Claimed`/`Entered`/`Stopped` admission state guarded by the
+mount mutex; `stop()` marks the stop and waits only while a delivery is
+`Claimed`, never for an `Entered` callback to finish. A delivery that observes
+the stop before entering cancels and notifies; one that enters first may finish
+after `stop()` returns. The deterministic `[watch-claim-race]` case pauses the
+publication thread between claim and entry, marks the stop, then releases the
+publication: RED observed one callback after stop (`1 == 0` at
+`HarnessObservationTest.cpp:1572`), GREEN observes none. `[watch-self-stop]`
+proves an entered callback may stop its own watch without deadlocking. The
+private hook is null-safe and test-scoped; no public API changed. Evidence:
+`/tmp/cch-1088-watch-red.log` and `/tmp/cch-1088-watch-green.log`. Focused
+after GREEN: `issue1088` 20/20, `issue1165` 15/15, `issue1063` 16/16,
+`[watch]` 7/7, and the durable shard 226 selected (223 passed, 3 skipped,
+0 failed). `stop()` still does not join a running callback, and cross-watch
+stop cycles are not claimed. Full-table scans copy O(n) records; the strengthened scan contract
 requires third-party Storage implementations to return complete pages rather
 than silently truncate them. Each scan is a single read; separate calls are
 not automatically atomic.
@@ -112,13 +122,13 @@ sources are under `/tmp/cch-1088-frozen-*`. JavaScript promise callbacks
 cannot establish parity for a synchronously blocking C++ stop callback.
 External concurrent Storage writers are not serialized by a Session, and
 silent short-paging by a third-party backend is not runtime-detectable; the
-Storage contract requires an error instead. The watch claim-to-entry race,
-SQLite reopen failure, architecture and Full Validation, and evidence-
-supported capability ledger updates remain unverified.
+Storage contract requires an error instead. SQLite reopen-failure coverage,
+architecture and Full Validation, and evidence-supported capability ledger
+updates remain unverified.
 
-Before delivery, verify the remaining observation and concurrency cases; run focused
-validation and the required architecture checks; coordinate repository Full
-Validation; and record the actual results. Only evidence-supported capability
+Before delivery, verify the remaining observation and concurrency cases; run
+the required architecture checks; coordinate repository Full Validation; and
+record the actual results. Only evidence-supported capability
 rows may be promoted. Consolidation must be regenerated and checked after plan
 changes, and any delivery record requires its reviewed inputs, frozen scenario
 mapping, revision and validation receipt. No such receipt has yet been created.
