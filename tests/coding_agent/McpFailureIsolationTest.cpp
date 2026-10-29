@@ -17,6 +17,7 @@
 
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -167,6 +168,12 @@ private:
     auto created = runtime.run(coding_agent::create_agent_session_async(
             std::move(options), std::nullopt, tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
+    // #1104: creation returns before the background connects settle; tests
+    // reading post-connect state settle them through the manager's wait.
+    if (auto* manager = coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*created->session);
+            manager != nullptr) {
+        REQUIRE(runtime.run(manager->wait_for_pending_connects()).has_value());
+    }
     return std::move(created->session);
 }
 

@@ -21,6 +21,7 @@
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpServerStatus.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
+#include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -235,6 +236,13 @@ struct SessionAttempt {
     auto created = runtime.run(coding_agent::create_agent_session_async(
             std::move(options), std::nullopt, tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
+    // #1104: session creation queues the server connects in the background
+    // (pi `session_start` fires and forgets); tests reading post-connect
+    // state settle them through the manager's public wait.
+    if (auto* manager = coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*created->session);
+            manager != nullptr) {
+        REQUIRE(runtime.run(manager->wait_for_pending_connects()).has_value());
+    }
     return SessionAttempt{
             .session = std::move(created->session),
             .diagnostics = std::move(created->diagnostics),
@@ -245,6 +253,24 @@ struct SessionAttempt {
 [[nodiscard]] bool session_exposes_tool(const coding_agent::AgentSession& session, std::string_view name) {
     const auto& names = session.snapshot().agent_state.active_tool_names;
     return std::ranges::find(names, name) != names.end();
+}
+
+/// The live manager's settled connection state for one server (#1104:
+/// creation returns before the background connects settle, so the
+/// creation-time status snapshot may still read `Starting`; the session
+/// helper waits the settle, making this the deterministic post-connect view).
+[[nodiscard]] std::optional<coding_agent::runtime::McpServerState> manager_state(
+        coding_agent::AgentSession& session, std::string_view name) {
+    const auto* manager = coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(session);
+    if (manager == nullptr) {
+        return std::nullopt;
+    }
+    for (const auto& snapshot : manager->servers()) {
+        if (snapshot.entry.name == name && snapshot.connection.has_value()) {
+            return snapshot.connection->state;
+        }
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] std::optional<coding_agent::mcp::McpServerStatus> status_for(
@@ -373,9 +399,10 @@ TEST_CASE("a persisted MCP server survives restart and reports the running state
     {
         auto attempt = make_persisted_session(runtime, workspace, std::make_shared<PlainTextProvider>());
         CHECK(session_exposes_tool(*attempt.session, "mcp__echo__echo"));
-        const auto status = status_for(attempt.mcp_servers, "echo");
-        REQUIRE(status.has_value());
-        CHECK(status->state == coding_agent::mcp::McpServerState::Running);
+        // The settled server is running (creation itself no longer awaits the
+        // connect phase, so the creation-time status snapshot may read
+        // `Starting`; #1104).
+        CHECK(manager_state(*attempt.session, "echo") == coding_agent::runtime::McpServerState::Connected);
         attempt.session->close();
     }
 
@@ -384,7 +411,7 @@ TEST_CASE("a persisted MCP server survives restart and reports the running state
     {
         auto attempt = make_persisted_session(runtime, workspace, std::make_shared<PlainTextProvider>());
         CHECK(session_exposes_tool(*attempt.session, "mcp__echo__echo"));
-        CHECK(status_for(attempt.mcp_servers, "echo")->state == coding_agent::mcp::McpServerState::Running);
+        CHECK(manager_state(*attempt.session, "echo") == coding_agent::runtime::McpServerState::Connected);
         attempt.session->close();
     }
 }
@@ -428,15 +455,11 @@ TEST_CASE("a persisted server whose command now fails surfaces failed state and 
 
     auto attempt = make_persisted_session(runtime, workspace, std::make_shared<PlainTextProvider>());
 
-    const auto failed = status_for(attempt.mcp_servers, "broken");
-    REQUIRE(failed.has_value());
-    CHECK(failed->state == coding_agent::mcp::McpServerState::Failed);
+    CHECK(manager_state(*attempt.session, "broken") == coding_agent::runtime::McpServerState::Failed);
     CHECK(has_diagnostic(attempt.diagnostics, "mcp:failed", "broken"));
 
     // The good server still connected and its tools are usable.
-    const auto running = status_for(attempt.mcp_servers, "echo");
-    REQUIRE(running.has_value());
-    CHECK(running->state == coding_agent::mcp::McpServerState::Running);
+    CHECK(manager_state(*attempt.session, "echo") == coding_agent::runtime::McpServerState::Connected);
     CHECK(session_exposes_tool(*attempt.session, "mcp__echo__echo"));
 
     attempt.session->close();

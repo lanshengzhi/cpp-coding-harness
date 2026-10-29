@@ -1,0 +1,150 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1104",
+  "family": "audit-1104",
+  "capturedAt": "2026-10-29T14:24:50.527Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/extensions/mcp/index.ts:createMcpExtension,session_start,startConnection,manage,serversMenu,serverMenu,runAction,signInWithUi,formatStatus,onConnectionChange,tokensAtSignIn,reconnectSignedIn,turn_start,session_shutdown,registerCommand(mcp)",
+    "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.close,connectFailed,markNeedsAuth",
+    "packages/coding-agent/src/extensions/mcp/ui.ts:McpManagerView.menu,status,redirectUrl,showMcpManager",
+    "packages/coding-agent/test/mcp-manager-view.test.ts:McpManagerView"
+  ],
+  "scenarios": [
+    {
+      "name": "the /mcp manager lists connecting servers and completes a sign-in while another server connects",
+      "inputs": {
+        "servers": [
+          {
+            "name": "slow",
+            "transport": "in-memory",
+            "behavior": "never answers initialize",
+            "exposure": "direct"
+          },
+          {
+            "name": "auth",
+            "transport": "streamable-http",
+            "behavior": "401 OAuth challenge",
+            "exposure": "direct"
+          }
+        ],
+        "panel": "real McpManagerView on a headless terminal double"
+      },
+      "expected": {
+        "serversMenuWhileConnecting": [
+          "auth                            needs sign-in · direct · /tmp/audit-1104/mcp.json",
+          "slow                            connecting… · direct · /tmp/audit-1104/mcp.json"
+        ],
+        "authServerMenuItems": [
+          "Sign in                         opens the browser",
+          "Reconnect",
+          "Exposure                        direct",
+          "Disable                         saved to mcp.json"
+        ],
+        "authMenuStateAfterSignIn": [
+          "State: connected · 1 tool"
+        ],
+        "signInMs": "<=5000ms",
+        "serversMenuAfterSignIn": [
+          "slow                            connecting… · direct · /tmp/audit-1104/mcp.json",
+          "auth                            connected · 1 tool · direct · /tmp/audit-1104/mcp.json"
+        ],
+        "slowServerMenuItems": [
+          "Exposure                        direct",
+          "Disable                         saved to mcp.json"
+        ],
+        "slowMethods": [
+          "initialize"
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "plain /mcp status waits for pending connections and then reports settled states",
+      "inputs": {
+        "servers": [
+          {
+            "name": "slow",
+            "transport": "in-memory",
+            "initializeDelayMs": 400,
+            "exposure": "codemode"
+          }
+        ],
+        "command": "/mcp with no arguments in print mode"
+      },
+      "expected": {
+        "sectionWhileConnecting": "MCP servers whose tools are not declared to you. Call the tools of `codemode` servers from codemode scripts.\n- mcp__slow (codemode)",
+        "statusWaitedForSettle": true,
+        "statusWaitedAtLeast": ">=300ms",
+        "notification": {
+          "message": "slow: connected, 1 tools (codemode)",
+          "level": "info"
+        }
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "a sign-in performed outside the session is picked up on the next turn",
+      "inputs": {
+        "servers": [
+          {
+            "name": "auth",
+            "transport": "streamable-http",
+            "behavior": "401 OAuth challenge",
+            "exposure": "direct"
+          }
+        ],
+        "externalSignIn": "credentials stored directly in mcp-auth.json, as `pi mcp login` in another process would"
+      },
+      "expected": {
+        "stateBeforeExternalSignIn": "auth: needs sign-in, run /mcp login auth (direct)",
+        "stateAfterExternalSignInBeforeTurn": "auth: needs sign-in, run /mcp login auth (direct)",
+        "stateAfterTurnStart": "auth: connected, 1 tools (direct)",
+        "authorizedRequests": true
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "closing the session while initialize is pending returns without waiting",
+      "inputs": {
+        "servers": [
+          {
+            "name": "slow",
+            "transport": "in-memory",
+            "behavior": "never answers initialize",
+            "exposure": "direct"
+          }
+        ],
+        "event": "session_shutdown while the first initialize is unanswered"
+      },
+      "expected": {
+        "shutdownMs": "<=250ms",
+        "slowMethods": [
+          "initialize"
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    }
+  ]
+}

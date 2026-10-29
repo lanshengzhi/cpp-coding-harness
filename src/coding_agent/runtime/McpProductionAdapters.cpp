@@ -362,6 +362,13 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
 McpOAuthFlowSignInDriver::McpOAuthFlowSignInDriver(std::filesystem::path agent_dir)
     : agent_dir_(std::move(agent_dir)) {}
 
+std::shared_ptr<mcp::McpAuthStore> McpOAuthFlowSignInDriver::ensure_store() {
+    if (!auth_store_) {
+        auth_store_ = std::make_shared<mcp::McpAuthStore>(mcp::McpAuthStore::default_path(agent_dir_));
+    }
+    return auth_store_;
+}
+
 support::AsyncResult<std::optional<std::string>> McpOAuthFlowSignInDriver::sign_in(
         const mcp::McpConfigEntry& entry, const McpSignInPrompt& prompt) {
     return support::detail::make_async_result(
@@ -372,11 +379,9 @@ support::AsyncResult<std::optional<std::string>> McpOAuthFlowSignInDriver::sign_
                     co_return std::optional<std::string>{
                             std::format("MCP server \"{}\" does not use OAuth.", entry.name)};
                 }
-                if (!auth_store_) {
-                    auth_store_ = std::make_shared<mcp::McpAuthStore>(mcp::McpAuthStore::default_path(agent_dir_));
-                }
+                const std::shared_ptr<mcp::McpAuthStore> store = ensure_store();
                 mcp::McpOAuthSignInRequest request;
-                request.store = auth_store_;
+                request.store = store;
                 request.server_name = entry.name;
                 request.server_url = http->url;
                 request.oauth = *http->oauth;
@@ -421,14 +426,45 @@ support::AsyncResult<bool> McpOAuthFlowSignInDriver::sign_out(const mcp::McpConf
                 if (http == nullptr) {
                     co_return false;
                 }
-                if (!auth_store_) {
-                    auth_store_ = std::make_shared<mcp::McpAuthStore>(mcp::McpAuthStore::default_path(agent_dir_));
-                }
-                auto removed = auth_store_->remove(entry.name, http->url);
+                const std::shared_ptr<mcp::McpAuthStore> store = ensure_store();
+                auto removed = store->remove(entry.name, http->url);
                 if (!removed) {
                     co_return std::unexpected(std::move(removed.error()));
                 }
                 co_return support::Expected<bool>{*removed};
+            });
+}
+
+support::AsyncResult<std::optional<std::string>> McpOAuthFlowSignInDriver::stored_tokens(
+        const mcp::McpConfigEntry& entry) {
+    return support::detail::make_async_result(
+            [this, entry]() mutable -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
+                const auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config);
+                if (http == nullptr) {
+                    co_return support::Expected<std::optional<std::string>>{std::optional<std::string>{}};
+                }
+                const std::shared_ptr<mcp::McpAuthStore> store = ensure_store();
+                // pi `credentials.tokens(server)`: the fingerprint the
+                // `turn_start` pickup compares. Any field change (a fresh
+                // access token, a new refresh token, a different type) reads
+                // as an external sign-in.
+                auto tokens = store->tokens(entry.name, http->url);
+                if (!tokens) {
+                    co_return std::unexpected(std::move(tokens.error()));
+                }
+                if (!tokens->has_value()) {
+                    co_return support::Expected<std::optional<std::string>>{std::optional<std::string>{}};
+                }
+                const cch::mcp::OAuthTokens& stored = **tokens;
+                std::string fingerprint = stored.access_token;
+                fingerprint.push_back('\n');
+                fingerprint += stored.token_type;
+                fingerprint.push_back('\n');
+                fingerprint += stored.refresh_token.value_or("");
+                fingerprint.push_back('\n');
+                fingerprint += stored.scope.value_or("");
+                co_return support::Expected<std::optional<std::string>>{
+                        std::optional<std::string>{std::move(fingerprint)}};
             });
 }
 
@@ -562,12 +598,23 @@ support::ExpectedVoid AgentMcpToolSurface::activate_tools(std::vector<std::strin
 void AgentMcpToolSurface::restore_loaded_tools(std::vector<std::string> names) {
     std::vector<std::string> accepted_names;
     for (auto& name : names) {
-        if (!is_searchable(name)) continue;
+        const auto known = exposures_.find(name);
+        // A name the registry does not know yet restores pending: its
+        // server's background connect has not registered the tool (#1104),
+        // so `apply_exposure` declares it from `loaded_tool_names_` once the
+        // registration lands. A known name keeps the searchability rule.
+        if (known != exposures_.end() && known->second != mcp::McpExposure::Deferred &&
+                known->second != mcp::McpExposure::Codemode) {
+            continue;
+        }
         if (std::ranges::find(loaded_tool_names_, name) == loaded_tool_names_.end()) {
             loaded_tool_names_.push_back(name);
         }
         accepted_names.push_back(std::move(name));
     }
+    // Names a server has not registered yet (its connect is still in flight,
+    // #1104) are filtered by the Agent's registry here; `apply_exposure`
+    // declares them from `loaded_tool_names_` when the registration lands.
     auto active = agent_.active_tools();
     for (const auto& name : accepted_names) {
         if (std::ranges::find(active, name) == active.end()) active.push_back(name);
@@ -613,7 +660,14 @@ void AgentMcpToolSurface::refresh_codemode_description() {
 void AgentMcpToolSurface::apply_exposure(const std::string& name, mcp::McpExposure exposure) {
     std::vector<std::string> active = agent_.active_tools();
     const auto found = std::ranges::find(active, name);
-    if (exposure == mcp::McpExposure::Direct) {
+    // pi `_isActivatedOnRegistration`: a `direct` tool joins the declared set
+    // on registration, and a name the replayed loadout restored stays
+    // declared at its configured exposure. The replay can run before the
+    // server's background connect registers the tool (#1104), so the
+    // declaration happens here rather than at replay time.
+    const bool declare = exposure == mcp::McpExposure::Direct ||
+                         std::ranges::find(loaded_tool_names_, name) != loaded_tool_names_.end();
+    if (declare) {
         if (found == active.end()) {
             active.push_back(name);
             static_cast<void>(agent_.set_active_tools(std::move(active)));

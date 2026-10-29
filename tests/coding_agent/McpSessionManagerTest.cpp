@@ -25,6 +25,7 @@
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -179,21 +180,55 @@ public:
 
 class ScriptedFactory final : public McpConnectionFactory {
 public:
+    /// #1104 gating: a connect for a gated name suspends (a yielded post
+    /// loop on the connect's own executor) until the test opens it, keeping
+    /// the pump deterministic without a timer whose service registry could
+    /// outlive its io_context (#473).
+    struct ConnectGate {
+        bool open{false};
+    };
+
     std::map<std::string, std::shared_ptr<ScriptedConnection>> outcomes;
+    std::map<std::string, std::shared_ptr<ConnectGate>> gates;
     std::vector<std::string> connect_order;
 
     [[nodiscard]] support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(
             const McpConfigEntry& entry) override {
         connect_order.push_back(entry.name);
-        const auto found = outcomes.find(entry.name);
-        if (found == outcomes.end()) {
-            return support::AsyncResult<std::shared_ptr<McpLiveConnection>>{
-                    std::unexpected(test_error("no scripted connection for " + entry.name))};
-        }
-        return support::AsyncResult<std::shared_ptr<McpLiveConnection>>{
-                std::shared_ptr<McpLiveConnection>{found->second}};
+        return support::detail::make_async_result(
+                [this, name = entry.name]()
+                        -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpLiveConnection>>> {
+                    const auto gate = gates.find(name);
+                    if (gate != gates.end() && gate->second) {
+                        const auto executor = co_await boost::asio::this_coro::executor;
+                        while (!gate->second->open) {
+                            co_await boost::asio::post(executor, boost::asio::use_awaitable);
+                        }
+                    }
+                    const auto found = outcomes.find(name);
+                    if (found == outcomes.end()) {
+                        co_return std::unexpected(test_error("no scripted connection for " + name));
+                    }
+                    co_return support::Expected<std::shared_ptr<McpLiveConnection>>{
+                            std::shared_ptr<McpLiveConnection>{found->second}};
+                });
     }
 };
+
+/// Open one factory gate on the loop (the suspended connect's yielded post
+/// loop observes it on its next pass).
+void open_gate(tests::RuntimeFixture& runtime, ScriptedFactory& factory, std::string_view name) {
+    REQUIRE(runtime
+                    .run(support::detail::make_async_result(
+                            [&factory, name = std::string{name}]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                                const auto gate = factory.gates.find(name);
+                                if (gate != factory.gates.end() && gate->second) {
+                                    gate->second->open = true;
+                                }
+                                co_return support::ExpectedVoid{};
+                            }))
+                    .has_value());
+}
 
 // ── Recording tool surface ──────────────────────────────────────────────────
 
@@ -275,6 +310,10 @@ public:
     bool credentials_removed{true};
     int sign_in_calls{0};
     int sign_out_calls{0};
+    /// pi `credentials.tokens(server)` as the store currently reports it;
+    /// `#1104` flips it to script an external sign-in between turns.
+    std::optional<std::string> stored_tokens_value{std::nullopt};
+    int stored_tokens_calls{0};
 
     [[nodiscard]] support::AsyncResult<std::optional<std::string>> sign_in(
             const McpConfigEntry&, const McpSignInPrompt&) override {
@@ -284,6 +323,10 @@ public:
     [[nodiscard]] support::AsyncResult<bool> sign_out(const McpConfigEntry&) override {
         ++sign_out_calls;
         return support::AsyncResult<bool>{credentials_removed};
+    }
+    [[nodiscard]] support::AsyncResult<std::optional<std::string>> stored_tokens(const McpConfigEntry&) override {
+        ++stored_tokens_calls;
+        return support::AsyncResult<std::optional<std::string>>{stored_tokens_value};
     }
 };
 
@@ -313,7 +356,8 @@ struct Harness {
     std::shared_ptr<ScriptedFactory> factory = std::make_shared<ScriptedFactory>();
     std::shared_ptr<RecordingSurface> surface = std::make_shared<RecordingSurface>();
     std::shared_ptr<ScriptedAuth> auth = std::make_shared<ScriptedAuth>();
-    std::unique_ptr<McpSessionManager> manager;
+    std::shared_ptr<std::vector<std::string>> info_notices = std::make_shared<std::vector<std::string>>();
+    std::shared_ptr<McpSessionManager> manager;
 
     [[nodiscard]] static Harness make(McpConfigLoad config,
             std::vector<std::string> overridden = {},
@@ -323,11 +367,20 @@ struct Harness {
         dependencies.connections = harness.factory;
         dependencies.tools = harness.surface;
         dependencies.auth = harness.auth;
-        harness.manager = std::make_unique<McpSessionManager>(
+        dependencies.notify_info = [notices = harness.info_notices](
+                                           std::string_view message) { notices->push_back(std::string{message}); };
+        harness.manager = std::make_shared<McpSessionManager>(
                 std::move(config), std::move(agent_dir), std::move(overridden), std::move(dependencies));
         return harness;
     }
 };
+
+/// #1104: `start()` only queues the background connects; a test that asserts
+/// post-connect state settles them first (pi's `waitForPendingConnections`).
+void start_and_settle(tests::RuntimeFixture& runtime, const std::shared_ptr<McpSessionManager>& manager) {
+    REQUIRE(runtime.run(manager->start()).has_value());
+    REQUIRE(runtime.run(manager->wait_for_pending_connects()).has_value());
+}
 
 [[nodiscard]] std::optional<McpServerSnapshot> snapshot_for(const McpSessionManager& manager, std::string_view name) {
     for (const auto& snapshot : manager.servers()) {
@@ -389,7 +442,7 @@ TEST_CASE("a server whose tools/list fails after connect reports failed with the
     connection->stderr = "traceback line one\ntraceback line two";
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
 
     const auto snapshot = snapshot_for(*harness.manager, "dead");
     REQUIRE(snapshot.has_value());
@@ -407,7 +460,7 @@ TEST_CASE("a healthy server reports connected and registers its tools", "[coding
     connection->offered_tools = {McpLiveTool{.name = "echo", .description = "echoes"}};
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
 
     const auto snapshot = snapshot_for(*harness.manager, "echo");
     REQUIRE(snapshot.has_value());
@@ -436,7 +489,7 @@ TEST_CASE("a disabled server stays disabled across a manager rebuild via the mcp
     auto connection = connection_for(first, "echo");
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(first.manager->start()).has_value());
+    start_and_settle(runtime, first.manager);
     auto outcome = runtime.run(first.manager->set_enabled("echo", false));
     REQUIRE(outcome.has_value());
     CHECK_FALSE(outcome->has_value());
@@ -450,7 +503,7 @@ TEST_CASE("a disabled server stays disabled across a manager rebuild via the mcp
     CHECK_FALSE(second_load.servers.front().enabled);
 
     auto second = Harness::make(second_load, {}, agent_dir);
-    REQUIRE(runtime.run(second.manager->start()).has_value());
+    start_and_settle(runtime, second.manager);
     CHECK(second.factory->connect_order.empty());
     const auto snapshot = snapshot_for(*second.manager, "echo");
     REQUIRE(snapshot.has_value());
@@ -473,7 +526,7 @@ TEST_CASE("an enable persists across a manager rebuild too", "[coding_agent][mcp
     auto connection = connection_for(first, "echo");
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(first.manager->start()).has_value());
+    start_and_settle(runtime, first.manager);
     CHECK(first.factory->connect_order.empty());
     auto outcome = runtime.run(first.manager->set_enabled("echo", true));
     REQUIRE(outcome.has_value());
@@ -494,7 +547,7 @@ TEST_CASE("reconnect restores a failed server and registers its tools", "[coding
     connection->offered_tools = {McpLiveTool{.name = "echo", .description = "echoes"}};
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     check_state(*harness.manager, "echo", McpServerState::Failed);
 
     auto outcome = runtime.run(harness.manager->reconnect("echo"));
@@ -526,7 +579,7 @@ TEST_CASE("a withdrawn tool re-registers as hidden while the kept tool keeps its
     };
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     CHECK(harness.surface->last_exposure_of("mcp__echo__alpha") == McpExposure::Codemode);
     CHECK(harness.surface->last_exposure_of("mcp__echo__beta") == McpExposure::Codemode);
 
@@ -545,7 +598,7 @@ TEST_CASE("disabling a server hides every tool it registered", "[coding_agent][m
     connection->offered_tools = {McpLiveTool{.name = "echo", .description = "echoes"}};
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     auto outcome = runtime.run(harness.manager->set_enabled("echo", false));
     REQUIRE(outcome.has_value());
     CHECK_FALSE(outcome->has_value());
@@ -562,7 +615,7 @@ TEST_CASE("an exposure change re-registers the server's tools at the new exposur
     connection->offered_tools = {McpLiveTool{.name = "echo", .description = "echoes"}};
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     CHECK(harness.surface->last_exposure_of("mcp__echo__echo") == McpExposure::Codemode);
 
     auto outcome = runtime.run(harness.manager->set_exposure("echo", McpExposure::Direct));
@@ -589,7 +642,7 @@ TEST_CASE("registered tools carry their input schema and execute tools/call on t
     };
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     REQUIRE(!harness.surface->registrations.empty());
     const auto& registration = harness.surface->registrations.back();
     CHECK(registration.name == "mcp__echo__echo");
@@ -622,7 +675,7 @@ TEST_CASE("a codemode-exposure server activates the codemode tool from the confi
     harness.surface->codemode_registered = true;
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     CHECK(harness.surface->active == std::vector<std::string>{"codemode"});
     CHECK(harness.manager->warnings().empty());
 }
@@ -634,7 +687,7 @@ TEST_CASE("an already-active codemode tool is not activated twice", "[coding_age
     harness.surface->active = {"codemode"};
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     CHECK(harness.surface->active == std::vector<std::string>{"codemode"});
     CHECK(harness.manager->warnings().empty());
 }
@@ -648,7 +701,7 @@ TEST_CASE("autoEnableCodemode false leaves codemode inactive and reports pi's ve
     harness.surface->codemode_registered = true;
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     CHECK(harness.surface->active.empty());
     REQUIRE(harness.manager->warnings().size() == 1);
     CHECK(harness.manager->warnings().front() ==
@@ -666,7 +719,7 @@ TEST_CASE("a deferred-exposure server activates nothing and warns once that neit
     harness.surface->codemode_registered = true;
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     CHECK(harness.surface->active.empty());
     REQUIRE(harness.manager->warnings().size() == 1);
     CHECK(harness.manager->warnings().front() ==
@@ -689,7 +742,7 @@ TEST_CASE(
     harness.surface->active = {"codemode"};
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     CHECK(harness.surface->active == std::vector<std::string>{"codemode"});
     CHECK(harness.manager->warnings().empty());
 }
@@ -705,7 +758,7 @@ TEST_CASE(
     harness.surface->codemode_registered = true;
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     CHECK(harness.surface->active.empty());
     CHECK(harness.manager->warnings().empty());
 }
@@ -719,7 +772,7 @@ TEST_CASE("an exposure change to codemode activates codemode without waiting for
     harness.surface->codemode_registered = true;
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     auto outcome = runtime.run(harness.manager->set_exposure("echo", McpExposure::Codemode));
     REQUIRE(outcome.has_value());
     CHECK_FALSE(outcome->has_value());
@@ -743,7 +796,7 @@ TEST_CASE("the resource tools take the widest non-hidden exposure of resource-be
     second->resource_count_value = 1;
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     REQUIRE(harness.surface->resource_exposure.has_value());
     CHECK(*harness.surface->resource_exposure == McpExposure::Direct);
     std::vector<std::string> resource_names;
@@ -764,7 +817,7 @@ TEST_CASE("the resource tools take the widest non-hidden exposure of resource-be
     auto only_codemode = Harness::make(config_with({stdio_entry("codemode", true, McpExposure::Codemode)}));
     auto connection = connection_for(only_codemode, "codemode");
     connection->resources = true;
-    REQUIRE(runtime.run(only_codemode.manager->start()).has_value());
+    start_and_settle(runtime, only_codemode.manager);
     REQUIRE(only_codemode.surface->resource_exposure.has_value());
     CHECK(*only_codemode.surface->resource_exposure == McpExposure::Codemode);
 }
@@ -803,7 +856,7 @@ TEST_CASE("sign-in runs the flow and reconnects", "[coding_agent][mcp][issue884]
     harness.auth->sign_in_result = std::nullopt;
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     auto outcome = runtime.run(harness.manager->sign_in("remote", McpSignInPrompt{}));
     REQUIRE(outcome.has_value());
     CHECK_FALSE(outcome->has_value());
@@ -817,7 +870,7 @@ TEST_CASE("sign-in of a non-OAuth server reports pi's message", "[coding_agent][
     auto harness = Harness::make(config_with({stdio_entry("plain")}));
     static_cast<void>(connection_for(harness, "plain"));
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     auto outcome = runtime.run(harness.manager->sign_in("plain", McpSignInPrompt{}));
     REQUIRE(outcome.has_value());
     REQUIRE(outcome->has_value());
@@ -831,10 +884,265 @@ TEST_CASE("sign-out removes credentials and signs the connection out", "[coding_
     connection->oauth = true;
 
     tests::RuntimeFixture runtime;
-    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    start_and_settle(runtime, harness.manager);
     auto outcome = runtime.run(harness.manager->sign_out("remote"));
     REQUIRE(outcome.has_value());
     CHECK(*outcome);
     CHECK(harness.auth->sign_out_calls == 1);
     CHECK(connection->sign_out_calls == 1);
+}
+
+// ── #1104: background connects keep the management surface live ─────────────
+
+TEST_CASE("start returns while a gated server is still connecting", "[coding_agent][mcp][issue1104][spec]") {
+    auto harness = Harness::make(config_with({stdio_entry("slow")}));
+    const auto connection = connection_for(harness, "slow");
+    harness.factory->gates["slow"] = std::make_shared<ScriptedFactory::ConnectGate>();
+
+    tests::RuntimeFixture runtime;
+    // The gate is still closed: session creation (pi `session_start`) must
+    // queue the connect and return, not block on the handshake.
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    CHECK(harness.manager->pending_start_count() == 1);
+    const auto pending_snapshot = snapshot_for(*harness.manager, "slow");
+    REQUIRE(pending_snapshot.has_value());
+    // pi `startConnection` publishes a `connecting` connection immediately:
+    // the pending server is visible as connecting, not connection-less.
+    REQUIRE(pending_snapshot->connection.has_value());
+    CHECK(pending_snapshot->connection->state == McpServerState::Connecting);
+
+    // Once the transport answers, the background connect lands by itself.
+    open_gate(runtime, *harness.factory, "slow");
+    REQUIRE(runtime.run(harness.manager->wait_for_pending_connects()).has_value());
+    CHECK(harness.manager->pending_start_count() == 0);
+    check_state(*harness.manager, "slow", McpServerState::Connected);
+    CHECK(connection->close_calls == 0);
+}
+
+TEST_CASE("wait_for_pending_connects blocks until the gated connect lands", "[coding_agent][mcp][issue1104][spec]") {
+    auto harness = Harness::make(config_with({stdio_entry("slow")}));
+    static_cast<void>(connection_for(harness, "slow"));
+    harness.factory->gates["slow"] = std::make_shared<ScriptedFactory::ConnectGate>();
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+
+    // One pass after the waiter starts polling, open the gate. If the waiter
+    // returned without waiting, the pump would stop before the opener ran.
+    bool opener_ran = false;
+    auto wait = support::detail::make_async_result([manager = harness.manager, factory = harness.factory, &opener_ran]()
+                                                           -> boost::asio::awaitable<support::ExpectedVoid> {
+        auto executor = co_await boost::asio::this_coro::executor;
+        boost::asio::co_spawn(
+                executor,
+                [factory, &opener_ran]() -> boost::asio::awaitable<void> {
+                    co_await boost::asio::post(co_await boost::asio::this_coro::executor, boost::asio::use_awaitable);
+                    opener_ran = true;
+                    const auto gate = factory->gates.find("slow");
+                    if (gate != factory->gates.end() && gate->second) {
+                        gate->second->open = true;
+                    }
+                },
+                boost::asio::detached);
+        co_await support::detail::await_async_result(manager->wait_for_pending_connects());
+        co_return support::ExpectedVoid{};
+    });
+    REQUIRE(runtime.run(std::move(wait)).has_value());
+    CHECK(opener_ran);
+    check_state(*harness.manager, "slow", McpServerState::Connected);
+}
+
+TEST_CASE(
+        "sign-in completes for one server while another is still connecting", "[coding_agent][mcp][issue1104][spec]") {
+    auto harness = Harness::make(config_with({stdio_entry("slow"), stdio_entry("auth")}));
+    static_cast<void>(connection_for(harness, "slow"));
+    auto auth = connection_for(harness, "auth", McpServerState::NeedsAuth);
+    auth->oauth = true;
+    harness.factory->gates["slow"] = std::make_shared<ScriptedFactory::ConnectGate>();
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    // The gated server is still connecting (pi's snapshot reads connecting
+    // while the connect is in flight), at least one connect in flight (the
+    // auth connect may already have landed).
+    const auto slow_before = snapshot_for(*harness.manager, "slow");
+    REQUIRE(slow_before.has_value());
+    REQUIRE(slow_before->connection.has_value());
+    CHECK(slow_before->connection->state == McpServerState::Connecting);
+    CHECK(harness.manager->pending_start_count() >= 1);
+
+    // The frozen pi v1.3.0 observation: the real manager completes OAuth
+    // sign-in for one server while another server's connect is still pending.
+    auto outcome = runtime.run(harness.manager->sign_in("auth", McpSignInPrompt{}));
+    REQUIRE(outcome.has_value());
+    CHECK_FALSE(outcome->has_value());
+    CHECK(harness.auth->sign_in_calls == 1);
+    CHECK(auth->reconnect_calls == 1);
+
+    // The gated server never noticed: still connecting, snapshot unchanged.
+    CHECK(harness.manager->pending_start_count() == 1);
+    const auto slow = snapshot_for(*harness.manager, "slow");
+    REQUIRE(slow.has_value());
+    REQUIRE(slow->connection.has_value());
+    CHECK(slow->connection->state == McpServerState::Connecting);
+    check_state(*harness.manager, "auth", McpServerState::Connected);
+
+    open_gate(runtime, *harness.factory, "slow");
+    REQUIRE(runtime.run(harness.manager->wait_for_pending_connects()).has_value());
+    check_state(*harness.manager, "slow", McpServerState::Connected);
+}
+
+TEST_CASE("close during a pending connect returns promptly and drops the late connection",
+        "[coding_agent][mcp][issue1104][spec]") {
+    auto harness = Harness::make(config_with({stdio_entry("slow")}));
+    const auto connection = connection_for(harness, "slow");
+    harness.factory->gates["slow"] = std::make_shared<ScriptedFactory::ConnectGate>();
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    // pi `session_end`: shutdown does not await the background connect; the
+    // late completion drops its connection instead of resurrecting it.
+    harness.manager->close();
+    CHECK(harness.manager->pending_start_count() == 1);
+
+    open_gate(runtime, *harness.factory, "slow");
+    REQUIRE(runtime.run(harness.manager->wait_for_pending_connects()).has_value());
+    CHECK(harness.manager->pending_start_count() == 0);
+    const auto after = snapshot_for(*harness.manager, "slow");
+    REQUIRE(after.has_value());
+    CHECK_FALSE(after->connection.has_value());
+    CHECK(connection->close_calls == 1);
+}
+
+TEST_CASE(
+        "on_turn_start reconnects a server signed in through another process", "[coding_agent][mcp][issue1104][spec]") {
+    auto harness = Harness::make(config_with({stdio_entry("auth")}));
+    auto auth = connection_for(harness, "auth", McpServerState::NeedsAuth);
+    auth->oauth = true;
+
+    tests::RuntimeFixture runtime;
+    start_and_settle(runtime, harness.manager);
+    check_state(*harness.manager, "auth", McpServerState::NeedsAuth);
+    // pi `onConnectionChange`: the needs-auth snapshot is taken once.
+    CHECK(harness.auth->stored_tokens_calls == 1);
+
+    // A plain status read (pi `--print` `/mcp`) settles the pending connects
+    // but must not run the pickup by itself.
+    REQUIRE(runtime.run(harness.manager->wait_for_pending_connects()).has_value());
+    CHECK(auth->reconnect_calls == 0);
+
+    // Another process writes mcp-auth.json between turns.
+    harness.auth->stored_tokens_value = "access\nBearer\nrefresh\n";
+    REQUIRE(runtime.run(harness.manager->on_turn_start()).has_value());
+    CHECK(auth->reconnect_calls == 1);
+    check_state(*harness.manager, "auth", McpServerState::Connected);
+}
+
+TEST_CASE("on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged",
+        "[coding_agent][mcp][issue1104][spec]") {
+    auto harness = Harness::make(config_with({stdio_entry("auth")}));
+    auto auth = connection_for(harness, "auth", McpServerState::NeedsAuth);
+    auth->oauth = true;
+
+    tests::RuntimeFixture runtime;
+    start_and_settle(runtime, harness.manager);
+    REQUIRE(runtime.run(harness.manager->on_turn_start()).has_value());
+    CHECK(auth->reconnect_calls == 0);
+    check_state(*harness.manager, "auth", McpServerState::NeedsAuth);
+}
+
+TEST_CASE("wait_for_direct_servers waits only for direct exposure, bounded and latched",
+        "[coding_agent][mcp][issue1104][spec]") {
+    auto harness = Harness::make(
+            config_with({stdio_entry("slow-direct", true, McpExposure::Direct), stdio_entry("fast-codemode")}));
+    static_cast<void>(connection_for(harness, "slow-direct"));
+    static_cast<void>(connection_for(harness, "fast-codemode"));
+    harness.factory->gates["slow-direct"] = std::make_shared<ScriptedFactory::ConnectGate>();
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+
+    // pi `before_agent_start`: the bound expires while the direct server is
+    // still gated; the notice is pi's verbatim text and the wait reports the
+    // timeout. The codemode-exposure server is not part of the wait and
+    // settled during the pump.
+    const auto first = runtime.run(harness.manager->wait_for_direct_servers(std::chrono::milliseconds{80}));
+    REQUIRE(first.has_value());
+    CHECK_FALSE(*first);
+    REQUIRE(harness.info_notices->size() == 1);
+    CHECK(harness.info_notices->front() ==
+            "MCP servers are still connecting; their tools become available once connected.");
+    check_state(*harness.manager, "fast-codemode", McpServerState::Connected);
+    const auto slow = snapshot_for(*harness.manager, "slow-direct");
+    REQUIRE(slow.has_value());
+    REQUIRE(slow->connection.has_value());
+    CHECK(slow->connection->state == McpServerState::Connecting);
+
+    // pi `waitedForStartup` latches: the next prompt's wait is a no-op even
+    // though the direct server is still gated, and the notice fires once.
+    const auto second = runtime.run(harness.manager->wait_for_direct_servers(std::chrono::milliseconds{80}));
+    REQUIRE(second.has_value());
+    CHECK(*second);
+    CHECK(harness.info_notices->size() == 1);
+
+    open_gate(runtime, *harness.factory, "slow-direct");
+    REQUIRE(runtime.run(harness.manager->wait_for_pending_connects()).has_value());
+    check_state(*harness.manager, "slow-direct", McpServerState::Connected);
+}
+
+TEST_CASE("a factory error is recorded as the server message, never a veto on start",
+        "[coding_agent][mcp][issue1104][spec]") {
+    // No scripted outcome: the factory itself fails. pi's `session_start`
+    // still resolves; the error surfaces as the server's panel message.
+    auto harness = Harness::make(config_with({stdio_entry("missing")}));
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    REQUIRE(runtime.run(harness.manager->wait_for_pending_connects()).has_value());
+    const auto snapshot = snapshot_for(*harness.manager, "missing");
+    REQUIRE(snapshot.has_value());
+    CHECK_FALSE(snapshot->connection.has_value());
+    REQUIRE(snapshot->message.has_value());
+    CHECK(*snapshot->message == "no scripted connection for missing");
+}
+
+TEST_CASE(
+        "enabling a still-connecting server does not launch a second connect", "[coding_agent][mcp][issue1104][spec]") {
+    tests::TempWorkspace workspace;
+    auto harness = persisted_harness(workspace, stdio_mcp_json("slow"));
+    static_cast<void>(connection_for(harness, "slow"));
+    harness.factory->gates["slow"] = std::make_shared<ScriptedFactory::ConnectGate>();
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    auto outcome = runtime.run(harness.manager->set_enabled("slow", true));
+    REQUIRE(outcome.has_value());
+    CHECK_FALSE(outcome->has_value());
+    CHECK(harness.factory->connect_order == std::vector<std::string>{"slow"});
+
+    open_gate(runtime, *harness.factory, "slow");
+    REQUIRE(runtime.run(harness.manager->wait_for_pending_connects()).has_value());
+    check_state(*harness.manager, "slow", McpServerState::Connected);
+}
+
+TEST_CASE("disabling a server while its connect is in flight drops the late connection",
+        "[coding_agent][mcp][issue1104][spec]") {
+    tests::TempWorkspace workspace;
+    auto harness = persisted_harness(workspace, stdio_mcp_json("slow"));
+    const auto connection = connection_for(harness, "slow");
+    harness.factory->gates["slow"] = std::make_shared<ScriptedFactory::ConnectGate>();
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    auto disabled = runtime.run(harness.manager->set_enabled("slow", false));
+    REQUIRE(disabled.has_value());
+    CHECK_FALSE(disabled->has_value());
+
+    open_gate(runtime, *harness.factory, "slow");
+    REQUIRE(runtime.run(harness.manager->wait_for_pending_connects()).has_value());
+    const auto after = snapshot_for(*harness.manager, "slow");
+    REQUIRE(after.has_value());
+    CHECK_FALSE(after->entry.enabled);
+    CHECK_FALSE(after->connection.has_value());
+    CHECK(connection->close_calls == 1);
 }

@@ -747,6 +747,18 @@
         "cch_chord:state:cursor-gap"
       ],
       "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1052",
+      "scenario": "the /mcp manager lists connecting servers and completes a sign-in while another server connects",
+      "rows": ["mcp-management-ui"],
+      "authority": "#1104 registered frozen capture plus tests/coding_agent/tui/McpManagerFlowTest.cpp panel-live-during-connect comparison; verification via the #1104 receipt"
+    },
+    {
+      "ticket": "1052",
+      "scenario": "a sign-in performed outside the session is picked up on the next turn",
+      "rows": ["mcp-external-signin-pickup"],
+      "authority": "#1104 registered frozen capture plus tests/coding_agent/McpSessionManagerTest.cpp turn-start pickup comparison; verification via the #1104 receipt"
     }
   ],
   "orphanScenarios": [

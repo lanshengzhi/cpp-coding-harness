@@ -95,6 +95,17 @@ public:
     void run_logout(std::string name);
     /// pi's reconnect branch with the verbatim success line.
     void run_reconnect(std::string name);
+    /// The pick half of `run_login`, run after `wait_for_pending_connects`
+    /// settled the session-start connects (pi's `await pending` before the
+    /// subcommand dispatch).
+    void login_after_settle(const std::string& name);
+    void logout_after_settle(const std::string& name);
+    void reconnect_after_settle(const std::string& name);
+    /// Run `action` on a spawned flow after the session-start connects settle
+    /// (pi `registerCommand("mcp")`'s `await pending`). The spawned coroutine
+    /// keeps this flow alive through `action`; a host that cannot spawn or has
+    /// gone away runs nothing.
+    void run_after_settle(std::string label, std::function<void()> action);
 
     /// Rebuild the `/mcp` argument-completion snapshot, (re)subscribe to the
     /// manager's changes, install the warning sink, and drain the warnings

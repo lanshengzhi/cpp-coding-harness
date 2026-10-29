@@ -18,6 +18,10 @@
 #include "support/AsyncResultBridge.hpp"
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/this_coro.hpp>
 
 #include <algorithm>
 #include <array>
@@ -205,6 +209,14 @@ std::vector<McpServerSnapshot> McpSessionManager::servers() const {
             connection.oauth = server.connection->uses_oauth();
             connection.instructions = server.connection->instructions();
             snapshot.connection = std::move(connection);
+        } else if (server.start_pending) {
+            // pi `startConnection` publishes a `connecting` connection while
+            // the background connect is in flight (#1104): the management
+            // panel and the creation status read the pending server as
+            // connecting instead of connection-less.
+            McpConnectionSnapshot connecting;
+            connecting.state = McpServerState::Connecting;
+            snapshot.connection = std::move(connecting);
         }
         snapshots.push_back(std::move(snapshot));
     }
@@ -247,7 +259,14 @@ void McpSessionManager::set_notify_warning_sink(std::function<void(std::string_v
 void McpSessionManager::set_change_listener(std::function<void()> listener) { change_listener_ = std::move(listener); }
 
 void McpSessionManager::close() noexcept {
+    // pi `session_end`: the shutdown path does not await the background
+    // connects (`backgroundActions` outlive the session); every live
+    // connection closes now and an in-flight connect drops its late
+    // connection when it lands (`launch_start`'s `isCurrent` drop).
+    closed_ = true;
+    tokens_at_sign_in_.clear();
     for (auto& server : servers_) {
+        server.generation += 1;
         if (server.connection) {
             server.connection->close();
         }
@@ -266,22 +285,197 @@ support::AsyncResult<void> McpSessionManager::start() {
         // before any connection, so a script or the first prompt never sees
         // it inactive.
         ensure_discovery_active();
+        // pi's `session_start` launches every enabled server's
+        // `createConnection` without awaiting and tracks the settle in
+        // `backgroundActions`: session creation must not block on a slow
+        // handshake (audit-1104, frozen pi v1.3.0), and a failed server is a
+        // failed connection — never a veto on the session. The launches queue
+        // on the caller's serialized executor; the settles land whenever the
+        // transports answer.
+        auto executor = co_await boost::asio::this_coro::executor;
         for (auto& server : servers_) {
             if (!is_enabled(server.entry)) {
                 continue;
             }
-            auto started = co_await support::detail::await_async_result(start_connection(server.entry.name));
-            if (!started) {
-                co_return std::unexpected(std::move(started.error()));
-            }
+            launch_start(executor, server.entry.name);
         }
         co_return support::ExpectedVoid{};
     });
 }
 
-support::AsyncResult<void> McpSessionManager::start_connection(std::string_view server) {
+support::AsyncResult<void> McpSessionManager::wait_for_pending_connects() {
+    return support::detail::make_async_result([this]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        // pi `waitForPendingConnections`: every launch decrements the shared
+        // counter on the same serialized executor this waiter polls, so one
+        // yielded pass per change settles the wait without a signal channel.
+        auto executor = co_await boost::asio::this_coro::executor;
+        while (pending_starts_ > 0 && !closed_) {
+            co_await boost::asio::post(executor, boost::asio::use_awaitable);
+        }
+        co_return support::ExpectedVoid{};
+    });
+}
+
+support::AsyncResult<bool> McpSessionManager::wait_for_direct_servers(std::chrono::milliseconds bound) {
+    return support::detail::make_async_result([this, bound]() -> boost::asio::awaitable<support::Expected<bool>> {
+        // pi `waitForDirectServers` (`before_agent_start`): the first prompt
+        // only (`waitedForStartup` latches) waits, bounded by `startupWaitMs`,
+        // for the enabled servers with `direct` exposure (pi `hasDirectTools`
+        // reads the configured exposures, so the wait is known before any
+        // connection answers). On expiry the still-connecting servers keep
+        // connecting and the model is told so.
+        if (waited_for_startup_) {
+            co_return support::Expected<bool>{true};
+        }
+        waited_for_startup_ = true;
+        auto executor = co_await boost::asio::this_coro::executor;
+        const auto deadline = std::chrono::steady_clock::now() + bound;
+        for (;;) {
+            if (closed_) {
+                co_return support::Expected<bool>{false};
+            }
+            bool any_pending = false;
+            for (auto& server : servers_) {
+                if (!is_enabled(server.entry) || !server.start_pending) {
+                    continue;
+                }
+                const auto exposures = mcp::mcp_configured_exposures(server.entry);
+                if (std::ranges::find(exposures, mcp::McpExposure::Direct) != exposures.end()) {
+                    any_pending = true;
+                }
+            }
+            if (!any_pending) {
+                co_return support::Expected<bool>{true};
+            }
+            if (std::chrono::steady_clock::now() >= deadline) {
+                if (dependencies_.notify_info) {
+                    dependencies_.notify_info(
+                            "MCP servers are still connecting; their tools become available once connected.");
+                }
+                co_return support::Expected<bool>{false};
+            }
+            co_await boost::asio::post(executor, boost::asio::use_awaitable);
+        }
+    });
+}
+
+support::AsyncResult<void> McpSessionManager::on_turn_start() {
+    return support::detail::make_async_result([this]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        // pi `turn_start` first awaits `waitForPendingConnections` so the
+        // pickup sees settled `needs-auth` states. Pike's prompt path runs the
+        // bounded `wait_for_direct_servers` just before this hook (pi's
+        // `before_agent_start`), which subsumes the unbounded wait: direct
+        // servers settle within the bound, and a codemode-only straggler is
+        // awaited by whatever reads it (status, subcommands, tool calls). The
+        // pickup itself is the observable part: reconnect every server whose
+        // stored tokens changed since its `needs-auth` snapshot.
+        co_await reconnect_signed_in();
+        co_return support::ExpectedVoid{};
+    });
+}
+
+void McpSessionManager::launch_start(const boost::asio::any_io_executor& executor, std::string_view server) {
+    auto* record = find(server);
+    if (record == nullptr || closed_ || record->start_pending || record->connection) {
+        return;
+    }
+    record->start_pending = true;
+    record->generation += 1;
+    const auto generation = record->generation;
+    ++pending_starts_;
+    // The panel's first read after `start()` should show the server
+    // connecting (pi renders the tracked connection's `connecting` state).
+    emit_change();
+    std::weak_ptr<McpSessionManager> weak = weak_from_this();
+    boost::asio::co_spawn(
+            executor,
+            [weak, name = std::string{server}, generation]() mutable -> boost::asio::awaitable<void> {
+                auto self = weak.lock();
+                if (!self) {
+                    co_return;
+                }
+                auto outcome = co_await support::detail::await_async_result(self->start_connection(name, generation));
+                auto* record = self->find(name);
+                self->pending_starts_ -= 1;
+                if (record != nullptr) {
+                    record->start_pending = false;
+                }
+                if (self->closed_ || (record != nullptr && record->generation != generation)) {
+                    // pi `startConnection`'s `isCurrent` drop: a server
+                    // disabled (or a manager closed) while the connect flew
+                    // loses the late connection instead of resurrecting it.
+                    if (record != nullptr && record->connection) {
+                        auto stale = std::move(record->connection);
+                        record->connection.reset();
+                        stale->close();
+                        self->hide_tools(name);
+                    }
+                    co_return;
+                }
+                if (!outcome && record != nullptr) {
+                    // A factory-level error (unlike a Failed connection) has
+                    // no connection to carry it: pi surfaces it as the
+                    // server's panel message, never as a session veto.
+                    record->message = outcome.error().message;
+                }
+                if (record != nullptr) {
+                    co_await self->sync_sign_in_snapshot(*record);
+                }
+                co_return;
+            },
+            boost::asio::detached);
+}
+
+boost::asio::awaitable<void> McpSessionManager::sync_sign_in_snapshot(ManagedServer& server) {
+    const std::string name = server.entry.name;
+    if (closed_ || !server.connection || !server.connection->uses_oauth() ||
+            server.connection->state() != McpServerState::NeedsAuth) {
+        tokens_at_sign_in_.erase(name);
+        co_return;
+    }
+    if (tokens_at_sign_in_.contains(name) || !dependencies_.auth) {
+        co_return;
+    }
+    auto stored = co_await support::detail::await_async_result(dependencies_.auth->stored_tokens(server.entry));
+    tokens_at_sign_in_[name] = stored.has_value() ? std::optional<std::string>{std::move(*stored)}
+                                                  : std::optional<std::string>{std::nullopt};
+}
+
+boost::asio::awaitable<void> McpSessionManager::reconnect_signed_in() {
+    // pi `reconnectSignedIn`: for every connection that was `needs-auth` with
+    // a stored-token snapshot, compare the snapshot with the live store; on a
+    // change forget the snapshot and reconnect (`Promise.allSettled` — a
+    // failed reconnect stays on the server's message and never rejects the
+    // turn).
+    const auto snapshots = tokens_at_sign_in_;
+    for (const auto& [name, snapshot] : snapshots) {
+        auto* record = find(name);
+        if (record == nullptr || !dependencies_.auth || !record->connection || !record->connection->uses_oauth() ||
+                record->connection->state() != McpServerState::NeedsAuth) {
+            tokens_at_sign_in_.erase(name);
+            continue;
+        }
+        auto current = co_await support::detail::await_async_result(dependencies_.auth->stored_tokens(record->entry));
+        if (!current) {
+            // The store cannot be read right now: keep the snapshot and try
+            // again on the next turn rather than reconnecting blind.
+            continue;
+        }
+        if (*current == snapshot) {
+            continue;
+        }
+        tokens_at_sign_in_.erase(name);
+        // The reconnect records its own outcome (message and change) on the
+        // server; pi's `Promise.allSettled` means a failed reconnect never
+        // rejects the turn.
+        (void)co_await support::detail::await_async_result(reconnect(name));
+    }
+}
+
+support::AsyncResult<void> McpSessionManager::start_connection(
+        std::string_view server, std::uint64_t expected_generation) {
     return support::detail::make_async_result(
-            [this, name = std::string{server}]() -> boost::asio::awaitable<support::ExpectedVoid> {
+            [this, name = std::string{server}, expected_generation]() -> boost::asio::awaitable<support::ExpectedVoid> {
                 auto* record = find(name);
                 if (record == nullptr) {
                     co_return support::ExpectedVoid{};
@@ -291,14 +485,38 @@ support::AsyncResult<void> McpSessionManager::start_connection(std::string_view 
                 if (!connection) {
                     co_return std::unexpected(std::move(connection.error()));
                 }
+                // pi `startConnection`'s `isCurrent` drop, checked before the
+                // connection touches the session: a connect that lands after
+                // the session closed (or the server was disabled) releases the
+                // late connection instead of registering tools on the
+                // already-released Agent (#1104).
+                if (closed_ || (expected_generation != 0 && record->generation != expected_generation)) {
+                    (*connection)->close();
+                    co_return support::ExpectedVoid{};
+                }
                 record->connection = std::move(*connection);
                 // pi runtime `notifications/tools/list_changed` -> re-list -> `onTools`;
                 // `notifications/resources/list_changed` -> re-list -> `onChange`.
-                record->connection->set_tools_changed_listener([this, name]() {
-                    register_tools(name);
-                    emit_change();
+                // The listeners outlive this call: a tool call may hold the
+                // connection after the session released the manager, so they
+                // bind the manager weakly and drop the notification instead of
+                // touching a destroyed surface.
+                std::weak_ptr<McpSessionManager> weak_self = weak_from_this();
+                record->connection->set_tools_changed_listener([weak_self, name]() {
+                    auto self = weak_self.lock();
+                    if (!self || self->closed_) {
+                        return;
+                    }
+                    self->register_tools(name);
+                    self->emit_change();
                 });
-                record->connection->set_resources_changed_listener([this]() { emit_change(); });
+                record->connection->set_resources_changed_listener([weak_self]() {
+                    auto self = weak_self.lock();
+                    if (!self || self->closed_) {
+                        return;
+                    }
+                    self->emit_change();
+                });
                 if (record->connection->state() == McpServerState::Connected) {
                     register_tools(name);
                 }
@@ -319,6 +537,12 @@ std::vector<std::string> McpSessionManager::resource_bearing_servers() const {
 }
 
 void McpSessionManager::register_tools(std::string_view server) {
+    // pi `session_end` releases the session surface with the session: a
+    // `notifications/tools/list_changed` (or any re-list) that lands after
+    // Close must never touch the released Agent (#1104).
+    if (closed_) {
+        return;
+    }
     auto* record = find(server);
     if (record == nullptr || !record->connection) {
         return;
@@ -380,6 +604,9 @@ void McpSessionManager::register_tools(std::string_view server) {
 }
 
 void McpSessionManager::hide_tools(std::string_view server) {
+    if (closed_) {
+        return;
+    }
     auto* record = find(server);
     if (record == nullptr) {
         return;
@@ -575,6 +802,10 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::sign_in(
                 // pi `runAction`: every action re-checks the discovery
                 // activation (a sign-in can make a codemode server reachable).
                 ensure_discovery_active();
+                // pi `onConnectionChange`: a connected server drops its
+                // `needs-auth` snapshot, so a later external token change can
+                // no longer retrigger a pickup reconnect.
+                co_await sync_sign_in_snapshot(*record);
                 record->message.reset();
                 emit_change();
                 co_return std::optional<std::string>{};
@@ -596,6 +827,10 @@ support::AsyncResult<bool> McpSessionManager::sign_out(std::string_view server) 
                 }
                 auto signed_out = co_await support::detail::await_async_result(record->connection->sign_out());
                 (void)signed_out;
+                // pi `onConnectionChange`: the freshly `needs-auth` connection
+                // snapshots the store as it stands after the removal, so a
+                // later external sign-in reads as a change at `turn_start`.
+                co_await sync_sign_in_snapshot(*record);
                 emit_change();
                 co_return support::Expected<bool>{*removed};
             });
@@ -620,6 +855,10 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::reconnect(st
                     register_tools(name);
                 }
                 ensure_discovery_active();
+                // pi `onConnectionChange`: the reconnect's outcome settles
+                // the snapshot question (connected erases it; a fresh
+                // `needs-auth` re-snapshots below).
+                co_await sync_sign_in_snapshot(*record);
                 record->message.reset();
                 emit_change();
                 co_return std::optional<std::string>{};
@@ -644,6 +883,11 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::set_enabled(
                 if (!enabled) {
                     auto connection = std::move(record->connection);
                     record->connection.reset();
+                    // Invalidate any in-flight connect so its late completion
+                    // drops instead of resurrecting the disabled server (pi
+                    // `startConnection`'s `isCurrent` drop).
+                    record->generation += 1;
+                    record->start_pending = false;
                     hide_tools(name);
                     ensure_discovery_active();
                     record->message.reset();
@@ -653,12 +897,22 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::set_enabled(
                     }
                     co_return support::Expected<std::optional<std::string>>{std::nullopt};
                 }
+                if (record->start_pending) {
+                    // `start()`'s background connect already owns this server;
+                    // enabling a connecting server is a no-op success (pi's
+                    // enable runs `reconnect`, whose pending `initialize` the
+                    // client itself supersedes).
+                    record->message.reset();
+                    emit_change();
+                    co_return support::Expected<std::optional<std::string>>{std::nullopt};
+                }
                 auto started = co_await support::detail::await_async_result(start_connection(name));
                 if (!started) {
                     record->message = started.error().message;
                     emit_change();
                     co_return support::Expected<std::optional<std::string>>{record->message};
                 }
+                co_await sync_sign_in_snapshot(*record);
                 ensure_discovery_active();
                 record->message.reset();
                 emit_change();

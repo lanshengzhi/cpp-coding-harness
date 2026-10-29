@@ -676,9 +676,13 @@ boost::asio::awaitable<support::Expected<std::unique_ptr<AgentSession>>> AgentSe
     // The live MCP manager binds to the Agent's live tool surface now that the
     // Agent exists (pi `session_start`): exposure-aware tool registration,
     // the resource tools, and the codemode discovery activation all write
-    // into the session's declared set through this surface. The connect phase
-    // is awaited so the creation result reports resolved server states, and a
-    // failed server is a failed connection — never a veto on the session.
+    // into the session's declared set through this surface. `start()` only
+    // queues the background connects (pi fires and forgets, tracked in
+    // `backgroundActions`): the creation result reports each server's state
+    // as it stands — a connected one running, an unsettled one connecting —
+    // and a failed server is a failed connection, never a veto on the session
+    // (audit-1104, frozen pi v1.3.0: session creation must not block on a slow
+    // handshake, and the management surface stays live while connects land).
     if (auto& manager = session->impl_->services_.mcp_manager; manager && session->impl_->agent_) {
         const std::weak_ptr<AgentSession::Impl> weak_impl = session->impl_;
         manager->attach_tool_surface(std::make_shared<runtime::AgentMcpToolSurface>(*session->impl_->agent_,

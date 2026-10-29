@@ -110,19 +110,19 @@
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-          "sha256": "64a6bb8e1706bf13e4b1c450397bcad256db432b6a5f2df383651bc7161cfbbd"
+          "sha256": "d7daf8bd8a1c70e2962819666dd4921d59eb2356993bbfa32b0b42405a8a18b4"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-          "sha256": "de212ea0d9fc091c3c8421c21f1721441feac879fc46923d1e593a7b4251c902"
+          "sha256": "dd613f58906acd99b3f149b84d338365e8f0c391dbc88f0597602cfd8c35ec2e"
         },
         {
           "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-          "sha256": "942efcd3fac8e8513e921a66b63a2f71b7d80e5901cd2ad9edb1d20c73a2ad24"
+          "sha256": "13d4ccac208a6f0bd84d029d2c14b07b231b3487a5a3b65150f71c790a354309"
         },
         {
           "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-          "sha256": "ac149e62751e6f471ed06e388dd39e0eeebc6049c11d4054d74a3dfce38466da"
+          "sha256": "4a4d3788f4b7d026387988f818b0028ac4115bb04fb89a862600c9126ece01e9"
         },
         {
           "path": "src/support/Json.cpp",
@@ -227,14 +227,14 @@
           "issue1101",
           "--output-on-failure",
           "--output-junit",
-          "/tmp/cch-1085-revalidation-1101.xml"
+          "/tmp/cch-1104-revalidation-1101.xml"
         ],
-        "testedRevision": "875099ba918384744a5e88cf1eff7e19cf7b1dbf",
-        "recordedAt": "2026-10-28T14:38:36Z",
+        "testedRevision": "3c39eccaf4ba226f916ff220887bf1a9298483b3",
+        "recordedAt": "2026-10-29T19:10:00Z",
         "selected": 14,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1085-revalidation-1101.xml",
-          "sha256": "ac6037f30160895143c7e7fa5b57157cea93eeaa102e2e355f288e189d46226c"
+          "sha256": "b61c0a37fdf061b619f4d8d49967a465d9a4c3cc0a4db53abe3e2cf74e78ccb2"
         }
       },
       "rows": [
@@ -289,18 +289,19 @@
           "ctest",
           "--preset",
           "vcpkg",
+          "-j2",
           "-L",
           "issue1090",
           "--output-on-failure",
           "--output-junit",
-          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-revalidation-1094.xml"
+          "/tmp/cch-1104-revalidation-1090.xml"
         ],
-        "testedRevision": "64c0f19d14cc772cf7e99bef8b2d2311ed8704c6",
-        "recordedAt": "2026-10-29T10:39:53Z",
+        "testedRevision": "3c39eccaf4ba226f916ff220887bf1a9298483b3",
+        "recordedAt": "2026-10-29T19:10:00Z",
         "selected": 10,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1094.xml",
-          "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
+          "sha256": "23b6f02547ff5a1fd098b0d448de4a0eafcb6d9b1f94b06e749f24cb759c1889"
         }
       },
       "inputs": [
@@ -346,7 +347,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "15aeaa2b127a4a5a835d58b82fcee955ca8c0e67cdeebaa04b5a2cbb9fc0ee68"
+          "sha256": "b3e92505f9c0d371fe298ba818d6c1ce72992ba868c395e506916f9f81ce3729"
         },
         {
           "path": "src/durable/CodingTools.cpp",

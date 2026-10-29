@@ -17,8 +17,11 @@
 
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/mcp/McpConfigFile.hpp"
+#include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/ModelsFixture.hpp"
@@ -31,10 +34,14 @@
 #include <cch/support/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -99,6 +106,13 @@ void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_vi
     auto created = runtime.run(coding_agent::create_agent_session_async(
             std::move(options), std::nullopt, tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
+    // #1104: session creation queues the server connects in the background
+    // (pi `session_start` fires and forgets); tests reading post-connect
+    // state settle them through the manager's public wait.
+    if (auto* manager = coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*created->session);
+            manager != nullptr) {
+        REQUIRE(runtime.run(manager->wait_for_pending_connects()).has_value());
+    }
     return SessionAttempt{
             .session = std::move(created->session),
             .diagnostics = std::move(created->diagnostics),
@@ -191,6 +205,114 @@ void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_vi
     }
     return loadouts;
 }
+
+/// #1104 Session-level discrimination: a scripted connection whose
+/// `connect` suspends until the test opens a gate. Through the real Session
+/// Assembly door this proves creation returns while a server is still
+/// connecting — the pre-#1104 assembly awaited every connect during
+/// `create_agent_session`, which with the gate closed never returns and lets
+/// the RuntimeFixture's stall budget fail the test.
+class GatedConnection final : public coding_agent::runtime::McpLiveConnection {
+public:
+    std::string name{"echo"};
+    coding_agent::runtime::McpServerState state_value{coding_agent::runtime::McpServerState::Connected};
+    std::vector<coding_agent::runtime::McpLiveTool> offered_tools{
+            coding_agent::runtime::McpLiveTool{.name = "echo", .description = "echo back"},
+    };
+
+    [[nodiscard]] const std::string& server_name() const noexcept override { return name; }
+    [[nodiscard]] coding_agent::runtime::McpServerState state() const noexcept override { return state_value; }
+    [[nodiscard]] const std::vector<coding_agent::runtime::McpLiveTool>& tools() const noexcept override {
+        return offered_tools;
+    }
+    [[nodiscard]] bool has_resources() const noexcept override { return false; }
+    [[nodiscard]] std::size_t resource_count() const noexcept override { return 0; }
+    [[nodiscard]] const std::optional<std::string>& error() const noexcept override { return failure_; }
+    [[nodiscard]] const std::optional<std::string>& stderr_tail() const noexcept override { return stderr_; }
+    [[nodiscard]] bool uses_oauth() const noexcept override { return false; }
+    [[nodiscard]] const std::string& oauth_url() const noexcept override { return oauth_url_; }
+    [[nodiscard]] const std::optional<std::string>& instructions() const noexcept override { return instructions_; }
+    [[nodiscard]] support::AsyncResult<cch::mcp::ToolCallResult> call_tool(
+            std::string_view, support::JsonValue, std::stop_token, cch::mcp::Client::ProgressCallback = {}) override {
+        return support::AsyncResult<cch::mcp::ToolCallResult>{cch::mcp::ToolCallResult{
+                support::JsonValue{support::JsonValue::object_t{{"content", support::JsonValue::array_t{}}}},
+                std::nullopt}};
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> resources_page(
+            std::optional<std::string>, std::stop_token) override {
+        return support::AsyncResult<support::JsonValue>{
+                support::JsonValue{support::JsonValue::object_t{{"resources", support::JsonValue::array_t{}}}}};
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> resource_templates_page(
+            std::optional<std::string>, std::stop_token) override {
+        return support::AsyncResult<support::JsonValue>{
+                support::JsonValue{support::JsonValue::object_t{{"resourceTemplates", support::JsonValue::array_t{}}}}};
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> read_resource(std::string, std::stop_token) override {
+        return support::AsyncResult<support::JsonValue>{
+                support::JsonValue{support::JsonValue::object_t{{"contents", support::JsonValue::array_t{}}}}};
+    }
+    [[nodiscard]] support::AsyncResult<void> reconnect() override {
+        state_value = coding_agent::runtime::McpServerState::Connected;
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    }
+    [[nodiscard]] support::AsyncResult<void> sign_out() override {
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    }
+    void close() noexcept override {}
+    void set_tools_changed_listener(ToolsChangedListener listener) override { tools_changed_ = std::move(listener); }
+    void set_resources_changed_listener(ResourcesChangedListener listener) override {
+        resources_changed_ = std::move(listener);
+    }
+
+private:
+    std::optional<std::string> failure_;
+    std::optional<std::string> stderr_;
+    std::string oauth_url_;
+    std::optional<std::string> instructions_;
+    ToolsChangedListener tools_changed_;
+    ResourcesChangedListener resources_changed_;
+};
+
+class GatedFactory final : public coding_agent::runtime::McpConnectionFactory,
+                           public std::enable_shared_from_this<GatedFactory> {
+public:
+    std::shared_ptr<GatedConnection> connection = std::make_shared<GatedConnection>();
+    std::atomic<bool> gate_open{false};
+    int connect_calls{0};
+
+    void open() noexcept { gate_open.store(true, std::memory_order_release); }
+
+    [[nodiscard]] support::AsyncResult<std::shared_ptr<coding_agent::runtime::McpLiveConnection>> connect(
+            const coding_agent::mcp::McpConfigEntry& entry) override {
+        ++connect_calls;
+        return support::detail::make_async_result([self = shared_from_this(), name = entry.name]
+                -> boost::asio::awaitable<
+                        support::Expected<std::shared_ptr<coding_agent::runtime::McpLiveConnection>>> {
+            const auto executor = co_await boost::asio::this_coro::executor;
+            while (!self->gate_open.load(std::memory_order_acquire)) {
+                co_await boost::asio::post(executor, boost::asio::use_awaitable);
+            }
+            self->connection->name = std::move(name);
+            co_return std::shared_ptr<coding_agent::runtime::McpLiveConnection>{self->connection};
+        });
+    }
+};
+
+class NoopAuth final : public coding_agent::runtime::McpSignInDriver {
+public:
+    [[nodiscard]] support::AsyncResult<std::optional<std::string>> sign_in(
+            const coding_agent::mcp::McpConfigEntry&, const coding_agent::runtime::McpSignInPrompt&) override {
+        return support::AsyncResult<std::optional<std::string>>{std::nullopt};
+    }
+    [[nodiscard]] support::AsyncResult<bool> sign_out(const coding_agent::mcp::McpConfigEntry&) override {
+        return support::AsyncResult<bool>{false};
+    }
+    [[nodiscard]] support::AsyncResult<std::optional<std::string>> stored_tokens(
+            const coding_agent::mcp::McpConfigEntry&) override {
+        return support::AsyncResult<std::optional<std::string>>{std::nullopt};
+    }
+};
 
 /// A scripted provider that serves plain text turns; it never calls a tool.
 class PlainTextProvider final : public tests::ScriptedProvider {
@@ -680,11 +802,18 @@ TEST_CASE("a codemode-exposure server registers its tools undeclared, activates 
     CHECK(section->find("Call the tools of `codemode` servers from codemode scripts.") != std::string::npos);
     CHECK(section->find("- mcp__echo (codemode)") != std::string::npos);
 
-    // The connect phase resolved before creation: the server is running.
-    const auto running =
-            std::ranges::find_if(attempt.mcp_servers, [](const auto& status) { return status.name == "echo"; });
-    REQUIRE(running != attempt.mcp_servers.end());
-    CHECK(running->state == coding_agent::mcp::McpServerState::Running);
+    // #1104: session creation no longer awaits the connect phase, so the
+    // creation-time status snapshot may still read "connecting"; the
+    // background connect settles right after creation (the helper waits it)
+    // and the live manager reports the server running.
+    const auto* manager = coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*attempt.session);
+    REQUIRE(manager != nullptr);
+    const auto snapshots = manager->servers();
+    const auto echo =
+            std::ranges::find_if(snapshots, [](const auto& snapshot) { return snapshot.entry.name == "echo"; });
+    REQUIRE(echo != snapshots.end());
+    REQUIRE(echo->connection.has_value());
+    CHECK(echo->connection->state == coding_agent::runtime::McpServerState::Connected);
 
     attempt.session->close();
 }
@@ -829,4 +958,104 @@ TEST_CASE("a codemode-exposure resource-bearing server keeps the resource tools 
     CHECK(result->find("file:///docs/readme.md") != std::string::npos);
 
     attempt.session->close();
+}
+
+TEST_CASE("agent session creation returns while a gated MCP server connects and the manager stays manageable",
+        "[coding_agent][mcp][issue1104][spec]") {
+    // Frozen pi v1.3.0 (audit-1104): `session_start` fires the connects and
+    // forgets them, so session creation never blocks on a handshake, and the
+    // management surface answers while a connect is pending. The gated
+    // scripted factory makes the discrimination explicit: an assembly that
+    // still awaited connects during creation would hang on the closed gate
+    // and the RuntimeFixture's stall budget would fail the test before any
+    // assertion below ran.
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    tests::RuntimeFixture runtime;
+
+    auto factory = std::make_shared<GatedFactory>();
+    coding_agent::mcp::McpStdioServerConfig config;
+    config.name = "echo";
+    config.command = "gated";
+    config.exposure = coding_agent::mcp::McpExposure::Direct;
+    coding_agent::mcp::McpConfigEntry entry;
+    entry.name = "echo";
+    entry.enabled = true;
+    entry.source = "/home/u/.pi/agent/mcp.json";
+    entry.config = std::move(config);
+    coding_agent::mcp::McpConfigLoad load;
+    load.servers = {std::move(entry)};
+    coding_agent::runtime::McpManagerDependencies dependencies;
+    dependencies.connections = factory;
+    dependencies.auth = std::make_shared<NoopAuth>();
+    auto manager = std::make_shared<coding_agent::runtime::McpSessionManager>(
+            std::move(load), "/home/u/.pi/agent", std::vector<std::string>{}, std::move(dependencies));
+
+    // No scripted calls: every request records the offered tool set and
+    // answers terminally, which is all the post-settle prompt needs.
+    auto provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{});
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::DefaultPersistedSessionTarget{};
+    options.session_facts.no_skills = true;
+    options.session_facts.no_prompt_templates = true;
+    options.workspace = workspace.path();
+    options.request_model = tests::scripted_request_model("fake", "fake-model");
+    options.execution_runtime_target = runtime.make_target();
+    auto overrides = tests::cli_fake_overrides(tests::models_from_provider(provider));
+    overrides.mcp_manager = manager;
+    auto created = runtime.run(
+            coding_agent::create_agent_session_async(std::move(options), std::nullopt, std::move(overrides)));
+    REQUIRE(created.has_value());
+
+    // Assembly bound the caller-built manager (the test-only seam) instead of
+    // the production one...
+    REQUIRE(coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*created->session) == manager.get());
+    // ...and returned while the connect was still pending: creation did not
+    // await the handshake.
+    CHECK(manager->pending_start_count() == 1);
+    // The management surface reads the pending server as connecting (pi
+    // `startConnection` publishes a connecting connection immediately), and
+    // management queries answer while the connect is in flight.
+    const auto pending = manager->servers();
+    REQUIRE(pending.size() == 1);
+    CHECK(pending.front().entry.name == "echo");
+    REQUIRE(pending.front().connection.has_value());
+    CHECK(pending.front().connection->state == coding_agent::runtime::McpServerState::Connecting);
+    CHECK(manager->search_tools("echo", 4).empty());
+    // The creation result reports the unsettled server as connecting rather
+    // than blocking (audit-1104): the diagnostic list keeps it visible.
+    REQUIRE(created->mcp_servers.size() == 1);
+    CHECK(created->mcp_servers.front().name == "echo");
+    CHECK(created->mcp_servers.front().state == coding_agent::mcp::McpServerState::Starting);
+
+    // Open the gate: the queued background connect lands (exactly one factory
+    // call), the direct-exposure tool declares, and the first prompt offers
+    // it to the model.
+    factory->open();
+    REQUIRE(runtime.run(manager->wait_for_pending_connects()).has_value());
+    CHECK(factory->connect_calls == 1);
+    const auto settled = manager->servers();
+    REQUIRE(settled.size() == 1);
+    REQUIRE(settled.front().connection.has_value());
+    CHECK(settled.front().connection->state == coding_agent::runtime::McpServerState::Connected);
+    CHECK(exposes_tool(*created->session, "mcp__echo__echo"));
+
+    REQUIRE(tests::run_awaitable(runtime, created->session->prompt("ping")).has_value());
+    REQUIRE(provider->offered_tools.size() == 1);
+    CHECK(std::ranges::find(provider->offered_tools.front(), "mcp__echo__echo") !=
+            provider->offered_tools.front().end());
+
+    // A management write after the settle still round-trips: disable stops
+    // the server and hides its tools, enable reconnects it and the tool is
+    // offered to the model again. (The session snapshot's active set is a
+    // run-published projection; the live manager and the model-facing
+    // offered set are the observable seams here.)
+    REQUIRE(runtime.run(manager->set_enabled("echo", false)).has_value());
+    CHECK(manager->search_tools("echo", 4).empty());
+    REQUIRE(runtime.run(manager->set_enabled("echo", true)).has_value());
+    REQUIRE(tests::run_awaitable(runtime, created->session->prompt("ping again")).has_value());
+    REQUIRE(provider->offered_tools.size() == 2);
+    CHECK(std::ranges::find(provider->offered_tools.back(), "mcp__echo__echo") != provider->offered_tools.back().end());
+
+    created->session->close();
 }
