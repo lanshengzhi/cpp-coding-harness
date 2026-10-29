@@ -1926,7 +1926,21 @@ support::AsyncResult<std::unique_ptr<Harness>> Harness::open(Storage& storage, H
     if (auto res = impl->init(); !res) {
         return support::AsyncResult<std::unique_ptr<Harness>>{std::unexpected(res.error())};
     }
-    return support::AsyncResult<std::unique_ptr<Harness>>{std::unique_ptr<Harness>(new Harness(std::move(impl)))};
+    auto harness = std::unique_ptr<Harness>(new Harness(std::move(impl)));
+    return support::AsyncResult<std::unique_ptr<Harness>>{
+            support::AsyncProducer<std::unique_ptr<Harness>, support::Error>{
+                    [harness = std::move(harness)](support::AsyncCompletion<std::unique_ptr<Harness>, support::Error>
+                                    completion) mutable noexcept {
+                        auto recovery = harness->open_tasks();
+                        std::move(recovery).start([harness = std::move(harness), completion = std::move(completion)](
+                                                          support::ExpectedVoid result) mutable noexcept {
+                            if (!result) {
+                                completion(std::unexpected(std::move(result.error())));
+                                return;
+                            }
+                            completion(std::move(harness));
+                        });
+                    }}};
 }
 
 Session& Harness::session() noexcept { return *impl_->session; }
@@ -2018,32 +2032,30 @@ support::AsyncResult<ViewWatch> Harness::watch_task_graph(ViewFrameListener list
                             box->emplace(ViewWatch::attach(std::move(mount), std::move(listener)));
                             return *hydrated;
                         });
-                std::move(read).start(
-                        [box, completion = std::move(completion)](
-                                support::Expected<chord::Json> result) mutable noexcept {
-                            if (!result) {
-                                completion(std::unexpected(std::move(result.error())));
-                                return;
-                            }
-                            if (!box->has_value()) {
-                                completion(std::unexpected(support::make_error(support::ErrorCode::Session,
-                                        "task-graph watch produced no watch")));
-                                return;
-                            }
-                            completion(std::move(box->value()));
-                        });
+                std::move(read).start([box, completion = std::move(completion)](
+                                              support::Expected<chord::Json> result) mutable noexcept {
+                    if (!result) {
+                        completion(std::unexpected(std::move(result.error())));
+                        return;
+                    }
+                    if (!box->has_value()) {
+                        completion(std::unexpected(support::make_error(
+                                support::ErrorCode::Session, "task-graph watch produced no watch")));
+                        return;
+                    }
+                    completion(std::move(box->value()));
+                });
             }}};
 }
 
 support::AsyncResult<chord::Json> Harness::conversation_view(ConversationId conversation_id) {
-    return impl_->session->read_committed(
-            [conversation_id](Storage& storage) -> support::Expected<chord::Json> {
-                auto hydrated = hydrate_conversation_view(storage, conversation_id);
-                if (!hydrated) {
-                    return std::unexpected(std::move(hydrated.error()));
-                }
-                return std::move(hydrated->value);
-            });
+    return impl_->session->read_committed([conversation_id](Storage& storage) -> support::Expected<chord::Json> {
+        auto hydrated = hydrate_conversation_view(storage, conversation_id);
+        if (!hydrated) {
+            return std::unexpected(std::move(hydrated.error()));
+        }
+        return std::move(hydrated->value);
+    });
 }
 
 support::AsyncResult<ViewWatch> Harness::watch_conversation(
@@ -2066,20 +2078,19 @@ support::AsyncResult<ViewWatch> Harness::watch_conversation(
                             box->emplace(ViewWatch::attach(std::move(mount), std::move(listener)));
                             return std::move(hydrated->value);
                         });
-                std::move(read).start(
-                        [box, completion = std::move(completion)](
-                                support::Expected<chord::Json> result) mutable noexcept {
-                            if (!result) {
-                                completion(std::unexpected(std::move(result.error())));
-                                return;
-                            }
-                            if (!box->has_value()) {
-                                completion(std::unexpected(support::make_error(support::ErrorCode::Session,
-                                        "conversation watch produced no watch")));
-                                return;
-                            }
-                            completion(std::move(box->value()));
-                        });
+                std::move(read).start([box, completion = std::move(completion)](
+                                              support::Expected<chord::Json> result) mutable noexcept {
+                    if (!result) {
+                        completion(std::unexpected(std::move(result.error())));
+                        return;
+                    }
+                    if (!box->has_value()) {
+                        completion(std::unexpected(support::make_error(
+                                support::ErrorCode::Session, "conversation watch produced no watch")));
+                        return;
+                    }
+                    completion(std::move(box->value()));
+                });
             }}};
 }
 
@@ -2093,7 +2104,7 @@ support::ExpectedVoid Harness::resume() {
 
 support::AsyncResult<void> Harness::open_tasks() {
     return impl_->session->commit([](Transaction& tx) -> support::ExpectedVoid {
-        auto tasks = tx.scan_tasks(1024);
+        auto tasks = tx.scan_tasks(SIZE_MAX);
         if (!tasks) return std::unexpected(tasks.error());
         for (const auto& task : *tasks) {
             if (task.state.status == "running") {

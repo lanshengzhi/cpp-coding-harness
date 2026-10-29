@@ -523,6 +523,7 @@ void check_complete_rows(const CompleteScanRows& rows) {
 class CappedTaskScanStorage final : public Storage {
 public:
     CappedTaskScanStorage(Storage& inner, std::size_t cap) : inner_(inner), cap_(cap) {}
+    void set_cap(std::size_t cap) { cap_ = cap; }
 
     [[nodiscard]] support::AsyncResult<Seq> commit(std::span<const StorageWrite> writes) override {
         return inner_.commit(writes);
@@ -934,6 +935,14 @@ TEST_CASE("inspection derives every waiting member beyond the ownership scan cap
     REQUIRE(consume(harness->close()).has_value());
 }
 
+TEST_CASE("Harness open rejects a storage that cannot scan recovery tasks", "[durable][observation][issue1084]") {
+    MemoryStorage memory;
+    CappedTaskScanStorage storage{memory, 256};
+    auto opened = consume(Harness::open(storage, HarnessOptions{}));
+    REQUIRE_FALSE(opened.has_value());
+    CHECK(opened.error().message == "capped task scan: limit exceeds cap");
+}
+
 // Discriminating case (ticket #1088): a backend that cannot serve the
 // requested limit must reject, never return a short page. Before the complete
 // scan, inspect asked for 256 and accepted the partial page; after it, the
@@ -942,7 +951,7 @@ TEST_CASE("inspection derives every waiting member beyond the ownership scan cap
 TEST_CASE("inspection fails loudly when storage cannot serve the complete scan",
         "[durable][observation][issue1088][inspect-scan-error]") {
     MemoryStorage memory;
-    CappedTaskScanStorage storage{memory, 256};
+    CappedTaskScanStorage storage{memory, SIZE_MAX};
     std::vector<TaskDefinition> definitions;
     definitions.push_back(counting_task(std::make_shared<ExecutionCounters>(), "audit1088.scan-error"));
     auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
@@ -960,6 +969,7 @@ TEST_CASE("inspection fails loudly when storage cannot serve the complete scan",
         return {};
     })).has_value());
 
+    storage.set_cap(256);
     auto inspection = consume(harness->inspect());
     const bool closed = consume(harness->close()).has_value();
     REQUIRE_FALSE(inspection.has_value());

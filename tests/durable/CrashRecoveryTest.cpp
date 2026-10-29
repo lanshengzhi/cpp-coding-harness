@@ -24,6 +24,8 @@
 #include <thread>
 #include <vector>
 
+#include <sqlite3.h>
+
 #include <poll.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
@@ -32,6 +34,25 @@
 using namespace cch;
 using namespace cch::durable;
 using namespace cch::tests::durable;
+
+TEST_CASE("SQLite rejects malformed allocator metadata without terminating", "[durable][sqlite][recovery][issue1075]") {
+    for (const char* value : {"invalid", "12suffix", "999999999999999999999999999999"}) {
+        cch::tests::TempWorkspace workspace;
+        const auto path = workspace.path() / "storage.sqlite";
+        auto storage = SqliteStorage::open(path);
+        REQUIRE(storage.has_value());
+        REQUIRE((*storage)->close().has_value());
+        sqlite3* database = nullptr;
+        REQUIRE(sqlite3_open(path.c_str(), &database) == SQLITE_OK);
+        const std::string sql = std::string{"UPDATE durable_metadata SET next_id='"} + value + "'";
+        const int result = sqlite3_exec(database, sql.c_str(), nullptr, nullptr, nullptr);
+        sqlite3_close(database);
+        REQUIRE(result == SQLITE_OK);
+        auto reopened = SqliteStorage::open(path);
+        REQUIRE_FALSE(reopened.has_value());
+        CHECK(reopened.error().message == "SQLite metadata next_id is invalid");
+    }
+}
 
 namespace {
 
@@ -97,7 +118,6 @@ int run_effect(const std::filesystem::path& directory, int ready_fd, bool first,
         auto tasks = (*storage)->scan_tasks(100);
         if (!tasks || tasks->size() != 1) return 15;
         id = tasks->front().id;
-        if (!consume(harness->open_tasks()).has_value()) return 20;
         auto record = consume(harness->get_task(id));
         if (!record.has_value() || !record.value() ||
                 record.value()->state.status != (third ? expected.at("terminalAfterThird").get_string()
@@ -196,7 +216,6 @@ int run_lifecycle(const std::filesystem::path& directory, int ready_fd, bool fir
         auto tasks = (*storage)->scan_tasks(100);
         if (!tasks || tasks->size() != 1) return 35;
         id = tasks->front().id;
-        if (!consume(harness->open_tasks()).has_value()) return 36;
         auto record = consume(harness->get_task(id));
         if (!record.has_value() || !record.value()) return 37;
         if (abort_case &&
@@ -277,7 +296,6 @@ int run_generation(const std::filesystem::path& directory, int ready_fd, bool fi
     auto harness = std::move(opened.value());
     auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
     if (!root.has_value()) return 53;
-    if (!first && !consume(harness->open_tasks()).has_value()) return 54;
     if (!first && !third) {
         auto inspection = consume(harness->inspect());
         if (!inspection.has_value() || inspection.value().scheduling != expected.at("schedulingAfterOpen").get_string())

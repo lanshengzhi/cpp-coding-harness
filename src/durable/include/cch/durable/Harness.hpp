@@ -123,7 +123,8 @@ public:
     /// Resume scheduling tasks.
     [[nodiscard]] support::ExpectedVoid resume();
 
-    /// Reconcile surviving running tasks back to pending (call upon reopen).
+    /// Reconcile surviving running tasks back to pending. Open performs this
+    /// before returning; callers may also request reconciliation explicitly.
     [[nodiscard]] support::AsyncResult<void> open_tasks();
 
     /// Wait for a task to reach terminal status and return its terminal record

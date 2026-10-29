@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -45,6 +46,17 @@ constexpr std::string_view kPoisonMessage = "SQLite storage is poisoned and must
 
 [[nodiscard]] support::Error corrupt(std::string message) {
     return support::make_error(support::ErrorCode::Validation, std::move(message));
+}
+
+[[nodiscard]] support::Expected<std::int64_t> read_next_id(sqlite3_stmt* statement) {
+    const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(statement, 0));
+    if (text == nullptr) return std::unexpected(corrupt("SQLite metadata next_id is missing"));
+    const std::string_view value{text, static_cast<std::size_t>(sqlite3_column_bytes(statement, 0))};
+    std::int64_t result{};
+    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), result);
+    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size())
+        return std::unexpected(corrupt("SQLite metadata next_id is invalid"));
+    return result;
 }
 
 [[nodiscard]] bool valid_prefix(std::string_view prefix) {
@@ -810,9 +822,9 @@ struct SqliteStorage::Impl {
         auto row = metadata.step();
         if (!row) return std::unexpected(std::move(row.error()));
         if (!*row) return std::unexpected(corrupt("SQLite metadata row is missing"));
-        const auto* next_id_text = reinterpret_cast<const char*>(sqlite3_column_text(metadata.get(), 0));
-        const std::int64_t metadata_next_id =
-                next_id_text != nullptr ? std::stoll(next_id_text) : sqlite3_column_int64(metadata.get(), 0);
+        auto parsed_next_id = read_next_id(metadata.get());
+        if (!parsed_next_id) return std::unexpected(parsed_next_id.error());
+        const std::int64_t metadata_next_id = *parsed_next_id;
         const Seq metadata_next_seq = sqlite3_column_int64(metadata.get(), 1);
         Statement high_water{database,
                 std::format("SELECT coalesce((SELECT max(id)+1 FROM {}),2), "
@@ -919,9 +931,9 @@ struct SqliteStorage::Impl {
         auto metadata_row = metadata_state.step();
         if (!metadata_row) return fail(std::move(metadata_row.error()));
         if (!*metadata_row) return fail(corrupt("SQLite metadata row is missing"));
-        const auto* next_id_text = reinterpret_cast<const char*>(sqlite3_column_text(metadata_state.get(), 0));
-        std::int64_t next_id =
-                next_id_text != nullptr ? std::stoll(next_id_text) : sqlite3_column_int64(metadata_state.get(), 0);
+        auto parsed_next_id = read_next_id(metadata_state.get());
+        if (!parsed_next_id) return fail(parsed_next_id.error());
+        std::int64_t next_id = *parsed_next_id;
         const Seq seq = sqlite3_column_int64(metadata_state.get(), 1);
         if (seq < 1 || next_id < 2) return fail(corrupt("Invalid SQLite allocator metadata"));
         if (auto valid = state.validate(writes, seq); !valid) return fail(std::move(valid.error()));
@@ -972,7 +984,8 @@ struct SqliteStorage::Impl {
                     value.emplace("head", chord::Json{static_cast<double>(write.entry->head->value)});
                 if (!write.entry->model.empty()) {
                     chord::Json::Array model;
-                    for (const auto& message : write.entry->model) model.push_back(message);
+                    for (const auto& message : write.entry->model)
+                        model.push_back(message);
                     value.emplace("model", chord::Json{std::move(model)});
                 }
                 if (write.entry->by_task_id)

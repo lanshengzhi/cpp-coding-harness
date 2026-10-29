@@ -1,5 +1,7 @@
 #include <cch/durable/Environment.hpp>
 
+#include "support/UniqueFd.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -36,8 +38,8 @@ public:
         : fd_(fd), worker_([this, callback = std::move(callback)](std::stop_token stop) {
               std::array<char, 8192> buffer{};
               while (!stop.stop_requested()) {
-                  pollfd descriptor{fd_, POLLIN, 0};
-                  if (::poll(&descriptor, 1, 50) > 0 && ::read(fd_, buffer.data(), buffer.size()) > 0 &&
+                  pollfd descriptor{fd_.get(), POLLIN, 0};
+                  if (::poll(&descriptor, 1, 50) > 0 && ::read(fd_.get(), buffer.data(), buffer.size()) > 0 &&
                           !stop.stop_requested())
                       callback();
               }
@@ -47,36 +49,28 @@ public:
         if (!worker_.joinable()) return;
         worker_.request_stop();
         worker_.join();
-        ::close(fd_);
+        fd_.reset();
     }
 
 private:
-    int fd_;
+    support::UniqueFd fd_;
     std::jthread worker_;
 };
 
 // Pin every parent component before creating or modifying a file. Symlinks in
 // parent components are rejected; a renamed directory remains the destination.
-support::Expected<int> open_write_parent(const fs::path& target, bool create) {
+support::Expected<support::UniqueFd> open_write_parent(const fs::path& target, bool create) {
     auto parent = target.parent_path();
-    int fd = ::open(parent.is_absolute() ? "/" : ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (fd < 0) return std::unexpected(system_failure("open"));
+    support::UniqueFd fd{::open(parent.is_absolute() ? "/" : ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC)};
+    if (!fd) return std::unexpected(system_failure("open"));
     for (const auto& component : parent.relative_path()) {
         auto name = component.string();
         if (name.empty() || name == ".") continue;
-        if (create && ::mkdirat(fd, name.c_str(), 0777) != 0 && errno != EEXIST) {
-            auto error = system_failure("mkdir");
-            ::close(fd);
-            return std::unexpected(error);
-        }
-        int next = ::openat(fd, name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-        if (next < 0) {
-            auto error = system_failure("open");
-            ::close(fd);
-            return std::unexpected(error);
-        }
-        ::close(fd);
-        fd = next;
+        if (create && ::mkdirat(fd.get(), name.c_str(), 0777) != 0 && errno != EEXIST)
+            return std::unexpected(system_failure("mkdir"));
+        support::UniqueFd next{::openat(fd.get(), name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)};
+        if (!next) return std::unexpected(system_failure("open"));
+        fd = std::move(next);
     }
     return fd;
 }
@@ -92,8 +86,8 @@ public:
     support::Expected<std::string> read(std::string_view path, std::stop_token stop) override {
         if (stop.stop_requested()) return std::unexpected(cancelled());
         auto name = resolve(path).string();
-        int fd = ::open(name.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-        if (fd < 0) {
+        support::UniqueFd fd{::open(name.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW)};
+        if (!fd) {
             if (errno == ENOENT)
                 return std::unexpected(support::make_error(support::ErrorCode::Workspace,
                         std::format("ENOENT: no such file or directory, open '{}'", name),
@@ -103,15 +97,11 @@ public:
         std::string result;
         std::array<char, 8192> buffer{};
         ssize_t n;
-        while ((n = ::read(fd, buffer.data(), buffer.size())) > 0) {
-            if (stop.stop_requested()) {
-                ::close(fd);
-                return std::unexpected(cancelled());
-            }
+        while ((n = ::read(fd.get(), buffer.data(), buffer.size())) > 0) {
+            if (stop.stop_requested()) return std::unexpected(cancelled());
             result.append(buffer.data(), static_cast<std::size_t>(n));
         }
         auto error = n < 0 ? std::optional{system_failure("read")} : std::nullopt;
-        ::close(fd);
         if (error) return std::unexpected(*error);
         return result;
     }
@@ -122,26 +112,19 @@ public:
         if (!parent) return std::unexpected(parent.error());
         auto name = target.filename().string();
         struct stat st{};
-        if (::fstatat(*parent, name.c_str(), &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISLNK(st.st_mode)) {
-            ::close(*parent);
+        if (::fstatat(parent->get(), name.c_str(), &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISLNK(st.st_mode))
             return std::unexpected(failure("refusing to write through final symlink"));
-        }
-        auto tmp = std::format("/proc/self/fd/{}/.cch-durable-XXXXXX", *parent);
-        int fd = ::mkstemp(tmp.data());
-        if (fd < 0) {
-            auto error = system_failure("mkstemp");
-            ::close(*parent);
-            return std::unexpected(error);
-        }
+        auto tmp = std::format("/proc/self/fd/{}/.cch-durable-XXXXXX", parent->get());
+        support::UniqueFd fd{::mkstemp(tmp.data())};
+        if (!fd) return std::unexpected(system_failure("mkstemp"));
         auto tmp_name = fs::path{tmp}.filename().string();
-        auto result = write_fd(fd, content, stop);
-        if (::close(fd) != 0 && result) result = std::unexpected(system_failure("close"));
+        auto result = write_fd(fd.get(), content, stop);
+        if (fd.close() != 0 && result) result = std::unexpected(system_failure("close"));
         if (result && stop.stop_requested()) result = std::unexpected(cancelled());
         if (result && before_rename_) before_rename_();
-        if (result && ::renameat(*parent, tmp_name.c_str(), *parent, name.c_str()) != 0)
+        if (result && ::renameat(parent->get(), tmp_name.c_str(), parent->get(), name.c_str()) != 0)
             result = std::unexpected(system_failure("rename"));
-        if (!result) ::unlinkat(*parent, tmp_name.c_str(), 0);
-        ::close(*parent);
+        if (!result) ::unlinkat(parent->get(), tmp_name.c_str(), 0);
         return result;
     }
     support::ExpectedVoid append(std::string_view path, std::string_view content, std::stop_token stop) override {
@@ -149,14 +132,12 @@ public:
         auto target = resolve(path);
         auto parent = open_write_parent(target, false);
         if (!parent) return std::unexpected(parent.error());
-        int fd = ::openat(
-                *parent, target.filename().c_str(), O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600);
-        auto error = fd < 0 ? std::optional{system_failure("open")} : std::nullopt;
-        ::close(*parent);
-        if (error) return std::unexpected(*error);
-        auto result = write_fd(fd, content, stop);
-        ::close(fd);
-        return result;
+        support::UniqueFd fd{::openat(parent->get(),
+                target.filename().c_str(),
+                O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC,
+                0600)};
+        if (!fd) return std::unexpected(system_failure("open"));
+        return write_fd(fd.get(), content, stop);
     }
     support::Expected<FileInfo> stat(std::string_view path, std::stop_token stop) override {
         if (stop.stop_requested()) return std::unexpected(cancelled());
@@ -193,18 +174,16 @@ public:
         if (recursive)
             return std::unexpected(failure("recursive watch is not implemented", support::ErrorCode::Validation));
         auto target = resolve(path);
-        int fd = ::inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
-        if (fd < 0) return std::unexpected(system_failure("inotify_init"));
+        support::UniqueFd fd{::inotify_init1(IN_CLOEXEC | IN_NONBLOCK)};
+        if (!fd) return std::unexpected(system_failure("inotify_init"));
         std::error_code ec;
         auto watched = fs::is_directory(target, ec) ? target : target.parent_path();
-        if (::inotify_add_watch(fd,
+        if (::inotify_add_watch(fd.get(),
                     watched.c_str(),
                     IN_CREATE | IN_MODIFY | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB) < 0) {
-            auto err = system_failure("inotify_add_watch");
-            ::close(fd);
-            return std::unexpected(err);
+            return std::unexpected(system_failure("inotify_add_watch"));
         }
-        return std::unique_ptr<FileWatch>{std::make_unique<NativeWatch>(fd, std::move(callback))};
+        return std::unique_ptr<FileWatch>{std::make_unique<NativeWatch>(fd.release(), std::move(callback))};
     }
 
 private:
@@ -263,11 +242,9 @@ support::Expected<ShellResult> LocalEnvironment::exec(
     envp.push_back(nullptr);
     int out[2], err[2];
     if (::pipe2(out, O_CLOEXEC) != 0) return std::unexpected(system_failure("pipe"));
-    if (::pipe2(err, O_CLOEXEC) != 0) {
-        ::close(out[0]);
-        ::close(out[1]);
-        return std::unexpected(system_failure("pipe"));
-    }
+    support::UniqueFd out_read{out[0]}, out_write{out[1]};
+    if (::pipe2(err, O_CLOEXEC) != 0) return std::unexpected(system_failure("pipe"));
+    support::UniqueFd err_read{err[0]}, err_write{err[1]};
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_init(&actions);
     posix_spawn_file_actions_adddup2(&actions, out[1], STDOUT_FILENO);
@@ -283,13 +260,9 @@ support::Expected<ShellResult> LocalEnvironment::exec(
     int rc = posix_spawnp(&pid, args[0].c_str(), &actions, &attr, argv.data(), envp.data());
     posix_spawnattr_destroy(&attr);
     posix_spawn_file_actions_destroy(&actions);
-    ::close(out[1]);
-    ::close(err[1]);
-    if (rc != 0) {
-        ::close(out[0]);
-        ::close(err[0]);
-        return std::unexpected(failure(std::strerror(rc), support::ErrorCode::Process));
-    }
+    out_write.reset();
+    err_write.reset();
+    if (rc != 0) return std::unexpected(failure(std::strerror(rc), support::ErrorCode::Process));
     ::fcntl(out[0], F_SETFL, O_NONBLOCK);
     ::fcntl(err[0], F_SETFL, O_NONBLOCK);
     ShellResult result;
@@ -316,7 +289,7 @@ support::Expected<ShellResult> LocalEnvironment::exec(
                     if (output) output(chunk, i == 1);
                 }
                 if (n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR)) {
-                    ::close(fds[i].fd);
+                    (i == 0 ? out_read : err_read).reset();
                     fds[i].fd = -1;
                 }
             }
