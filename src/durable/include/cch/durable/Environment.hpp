@@ -48,10 +48,27 @@ using ShellCommand = std::variant<std::string, std::vector<std::string>>;
 using OutputSink = std::move_only_function<void(std::string_view, bool)>;
 using FileChangeSink = std::move_only_function<void()>;
 
+struct WatchOptions {
+    bool recursive{};
+    bool exclude_hidden{};
+    std::vector<std::string> excluded_names{};
+};
+
+struct WatchChange {
+    std::vector<std::string> paths{};
+    bool overflow{};
+    bool terminal_error{};
+    support::Error error{};
+};
+
+using WatchChangeSink = std::move_only_function<void(const WatchChange&)>;
+
 class FileWatch {
 public:
     virtual ~FileWatch() = default;
     virtual void close() = 0;
+    /// How the watcher reports changes; the local adapter is native (inotify).
+    virtual std::string_view mode() const = 0;
 };
 
 /// Physical operations used by durable tools. Implementations and their callers
@@ -71,9 +88,13 @@ public:
             OutputSink output,
             std::stop_token stop,
             ShellOutputWindow window = {}) = 0;
-    /// Recursive watching is not implemented by the local adapter and is rejected.
+    /// Watch one file or directory. Recursive watches cover the whole subtree, add watches
+    /// for subdirectories created later, and never follow symbolic links below the target.
+    /// Coverage is established before watch() returns; after close() no callback starts.
+    /// The sink receives {overflow:true} when coverage becomes uncertain and a terminal
+    /// {error} once the watcher stops; no calls follow a terminal error.
     virtual support::Expected<std::unique_ptr<FileWatch>> watch(
-            std::string_view path, FileChangeSink on_change, bool recursive = false) = 0;
+            std::string_view path, WatchChangeSink on_change, WatchOptions options = {}) = 0;
 };
 
 /// Construct the durable-owned Linux environment rooted at cwd.
