@@ -26,7 +26,7 @@
 #include <vector>
 
 namespace cch::durable::testing {
-std::shared_ptr<Environment> local_environment_before_rename(std::string cwd, std::function<void()> hook);
+std::shared_ptr<Environment> local_environment_before_rename(std::string cwd, std::move_only_function<void()> hook);
 } // namespace cch::durable::testing
 
 namespace cch::tests::durable {
@@ -130,7 +130,7 @@ public:
         return inner_->exec(command, timeout, std::move(output), stop);
     }
     support::Expected<std::unique_ptr<FileWatch>> watch(
-            std::string_view path, std::function<void()> callback, bool recursive) override {
+            std::string_view path, FileChangeSink callback, bool recursive) override {
         return inner_->watch(path, std::move(callback), recursive);
     }
     std::atomic_int writes{0};
@@ -286,12 +286,20 @@ TEST_CASE("Durable local environment reports file process and watch outcomes", "
     auto listing = env->list(".", {});
     REQUIRE(listing);
     CHECK(listing->size() == 1);
-    auto normal =
-            env->exec(std::vector<std::string>{"/bin/sh", "-c", "printf out; printf err >&2; exit 7"}, 0ms, {}, {});
+    std::string streamed;
+    auto normal = env->exec(std::vector<std::string>{"/bin/sh", "-c", "printf out; printf err >&2; exit 7"},
+            0ms,
+            // The sink owns move-only state; streamed outlives this synchronous call.
+            [chunks = std::make_unique<int>(0), &streamed](std::string_view text, bool) {
+                ++*chunks;
+                streamed += text;
+            },
+            {});
     REQUIRE(normal);
     CHECK(normal->exit_code == 7);
     CHECK(normal->standard_output == "out");
     CHECK(normal->standard_error == "err");
+    CHECK(streamed == normal->output);
     auto timeout = env->exec(std::vector<std::string>{"/bin/sleep", "30"}, 100ms, {}, {});
     REQUIRE_FALSE(timeout);
     CHECK(timeout.error().code == support::ErrorCode::Timeout);
@@ -317,8 +325,9 @@ TEST_CASE("Durable local environment reports file process and watch outcomes", "
     CHECK(recursive.error().code == support::ErrorCode::Validation);
     std::atomic_int calls{0};
     std::counting_semaphore<> changed{0};
-    auto watch = env->watch("watched.txt", [&] {
-        ++calls;
+    // close() joins delivery before these borrowed locals leave scope.
+    auto watch = env->watch("watched.txt", [count = std::make_unique<int>(0), &calls, &changed] {
+        calls = ++*count;
         changed.release();
     });
     REQUIRE(watch);
@@ -337,6 +346,108 @@ TEST_CASE("Durable local environment reports file process and watch outcomes", "
     workspace.write("new-child", "content");
     CHECK(directory_changed.try_acquire_for(5s));
     (*directory_watch)->close();
+}
+
+TEST_CASE("compaction tool text follows frozen UTF-16 limits through the model request",
+        "[durable][compaction][issue1083][review1044]") {
+    const auto repeat = [](std::string_view unit, std::size_t count) {
+        std::string text;
+        for (std::size_t index = 0; index < count; ++index)
+            text += unit;
+        return text;
+    };
+    struct Example {
+        std::string input;
+        std::string expected;
+    };
+    // Observed from frozen serializeConversation, encoded as UTF-8 like Node's
+    // Buffer.from: a sliced high surrogate becomes U+FFFD. Counts are UTF-16
+    // units, so one emoji occupies two and a CJK character occupies one.
+    const std::vector<Example> examples{
+            {.input = std::string(2000, 'a'), .expected = std::string(2000, 'a')},
+            {.input = std::string(2001, 'a'),
+                    .expected = std::string(2000, 'a') + "\n\n[... 1 more characters truncated]"},
+            {.input = repeat("中", 2000), .expected = repeat("中", 2000)},
+            {.input = repeat("中", 2001), .expected = repeat("中", 2000) + "\n\n[... 1 more characters truncated]"},
+            {.input = repeat("🙂", 1000), .expected = repeat("🙂", 1000)},
+            {.input = repeat("🙂", 1001), .expected = repeat("🙂", 1000) + "\n\n[... 2 more characters truncated]"},
+            {.input = std::string(1999, 'a') + "🙂",
+                    .expected = std::string(1999, 'a') + "�\n\n[... 1 more characters truncated]"},
+    };
+    for (const auto& example : examples) {
+        INFO(example.input.size());
+        MemoryStorage storage;
+        std::string prompt;
+        HarnessOptions options;
+        options.settings.compaction.keep_recent_tokens = 1;
+        // wait_for_task below observes settlement after this task's model call,
+        // keeping prompt alive and synchronizing its write before inspection.
+        options.stream = [&prompt](ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+            for (const auto& message : context.messages) {
+                if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+                    if (const auto* text = std::get_if<std::string>(&user->content))
+                        prompt += *text;
+                    else
+                        for (const auto& block : std::get<std::vector<ai::Content>>(user->content))
+                            if (const auto* text = std::get_if<ai::TextContent>(&block)) prompt += text->text;
+                }
+            }
+            return ai::ModelStream{
+                    ai::ModelStreamProducer{[](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                        auto answer = ai::assistant_text_message("summary");
+                        auto delivered = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                        if (!delivered)
+                            done(std::unexpected(delivered.error()));
+                        else
+                            done(std::move(answer));
+                    }}};
+        };
+        auto opened = consume(Harness::open(storage, std::move(options)));
+        REQUIRE(opened.has_value());
+        auto harness = std::move(opened.value());
+        auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+        REQUIRE(root.has_value());
+        auto appended = consume(harness->session().commit(
+                [id = root.value(), text = example.input](Transaction& tx) -> support::ExpectedVoid {
+                    using Json = chord::Json;
+                    const auto history = tx.append_entry(id,
+                            "test.history",
+                            Json{Json::Object{}},
+                            {},
+                            {
+                                    Json{Json::Object{{"role", "assistant"},
+                                            {"content",
+                                                    Json::Array{Json{Json::Object{{"type", "toolCall"},
+                                                            {"id", "call"},
+                                                            {"name", "echo"},
+                                                            {"arguments", Json::Object{}}}}}}}},
+                                    Json{Json::Object{{"role", "toolResult"},
+                                            {"toolCallId", "call"},
+                                            {"toolName", "echo"},
+                                            {"content", text}}},
+                            });
+                    if (!history) return std::unexpected(history.error());
+                    const auto recent = tx.append_entry(id,
+                            "test.message",
+                            Json{Json::Object{}},
+                            {},
+                            {
+                                    Json{Json::Object{{"role", "user"}, {"content", "recent history"}}},
+                            });
+                    if (!recent) return std::unexpected(recent.error());
+                    return {};
+                }));
+        REQUIRE(appended.has_value());
+        REQUIRE(harness->resume().has_value());
+        auto task = harness->compact(root.value());
+        REQUIRE(task.has_value());
+        auto settled = consume(harness->wait_for_task(*task));
+        const auto closed = consume(harness->close());
+        REQUIRE(settled.has_value());
+        CHECK(closed.has_value());
+        CHECK(prompt.starts_with("<conversation>\n[Assistant tool calls]: echo()\n\n[Tool result]: " +
+                                 example.expected + "\n</conversation>"));
+    }
 }
 
 TEST_CASE("manual compaction decline makes no summary request or marker", "[durable][workflow][issue1083]") {

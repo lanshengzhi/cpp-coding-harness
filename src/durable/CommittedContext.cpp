@@ -2,6 +2,8 @@
 
 #include "support/Json.hpp"
 
+#include <cch/support/BoundedText.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <condition_variable>
@@ -247,31 +249,34 @@ bool is_candidate(const std::vector<std::vector<Json>>& contributions, std::size
 }
 
 std::string truncate_chars(std::string_view text, std::size_t max_chars) {
-    if (text.size() <= max_chars) return std::string{text};
-    return std::format("{}\n\n[... {} more characters truncated]", text.substr(0, max_chars), text.size() - max_chars);
+    auto prefix = support::bounded_utf16_prefix(text, max_chars);
+    if (prefix.total_units <= max_chars) return std::move(prefix.text);
+    return std::format("{}\n\n[... {} more characters truncated]", prefix.text, prefix.total_units - max_chars);
 }
 
 } // namespace
 
 support::Expected<CommittedContext> derive_committed_context(
         Session& session, ConversationId conversation_id, std::optional<EntryId> at) {
+    // Both callbacks borrow these locals until the completion releases mutex.
+    // The wait below holds this frame alive through that release.
     std::optional<CommittedContext> view;
     std::mutex mutex;
     std::condition_variable ready;
     std::optional<support::ExpectedVoid> outcome;
-    auto operation = session.commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto operation = session.commit([conversation_id, at, &view](Transaction& tx) -> support::ExpectedVoid {
         auto loaded = tx.context_view(conversation_id, at);
         if (!loaded) return std::unexpected(loaded.error());
         view = std::move(*loaded);
         return {};
     });
-    std::move(operation).start([&](support::ExpectedVoid result) noexcept {
+    std::move(operation).start([&mutex, &ready, &outcome](support::ExpectedVoid result) noexcept {
         std::lock_guard lock(mutex);
         outcome.emplace(std::move(result));
         ready.notify_one();
     });
     std::unique_lock lock(mutex);
-    ready.wait(lock, [&] { return outcome.has_value(); });
+    ready.wait(lock, [&outcome] { return outcome.has_value(); });
     if (!*outcome) return std::unexpected(outcome->error());
     return std::move(*view);
 }

@@ -64,6 +64,36 @@ struct Utf8TailResult {
     return safe;
 }
 
+struct Utf16PrefixResult {
+    std::string text;
+    std::size_t total_units{0};
+};
+
+/// Retain at most max_units UTF-16 code units from well-formed UTF-8 input.
+/// A boundary inside a surrogate pair retains its high half as U+FFFD, matching
+/// the UTF-8 encoding of that UTF-16 prefix. The count includes the whole input.
+[[nodiscard]] inline Utf16PrefixResult bounded_utf16_prefix(std::string_view text, std::size_t max_units) {
+    std::size_t total_units = 0;
+    std::size_t prefix_bytes = 0;
+    bool split_surrogate = false;
+    for (std::size_t offset = 0; offset < text.size();) {
+        const auto lead = static_cast<unsigned char>(text[offset]);
+        const std::size_t bytes = lead < 0x80 ? 1 : lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4;
+        const std::size_t units = bytes == 4 ? 2 : 1;
+        if (total_units < max_units) {
+            if (units <= max_units - total_units)
+                prefix_bytes = offset + bytes;
+            else
+                split_surrogate = true;
+        }
+        total_units += units;
+        offset += bytes;
+    }
+    auto prefix = bounded_utf8(text, prefix_bytes);
+    if (split_surrogate) prefix += "\xef\xbf\xbd";
+    return {.text = std::move(prefix), .total_units = total_units};
+}
+
 [[nodiscard]] inline std::size_t utf8_tail_start(std::string_view text, std::size_t max_bytes, std::size_t max_lines) {
     if (text.empty()) {
         return 0;

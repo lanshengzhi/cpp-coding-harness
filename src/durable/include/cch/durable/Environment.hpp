@@ -29,7 +29,8 @@ struct ShellResult {
 };
 
 using ShellCommand = std::variant<std::string, std::vector<std::string>>;
-using OutputSink = std::function<void(std::string_view, bool)>;
+using OutputSink = std::move_only_function<void(std::string_view, bool)>;
+using FileChangeSink = std::move_only_function<void()>;
 
 class FileWatch {
 public:
@@ -51,7 +52,7 @@ public:
     exec(const ShellCommand& command, std::chrono::milliseconds timeout, OutputSink output, std::stop_token stop) = 0;
     /// Recursive watching is not implemented by the local adapter and is rejected.
     virtual support::Expected<std::unique_ptr<FileWatch>> watch(
-            std::string_view path, std::function<void()> on_change, bool recursive = false) = 0;
+            std::string_view path, FileChangeSink on_change, bool recursive = false) = 0;
 };
 
 /// Construct the durable-owned Linux environment rooted at cwd.

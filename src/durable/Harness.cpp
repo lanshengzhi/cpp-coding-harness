@@ -1479,6 +1479,8 @@ struct Harness::Impl {
 
     void schedule_step() {
         for (auto thread = execution_threads.begin(); thread != execution_threads.end();) {
+            // Acquire pairs with the execution thread's release publication of
+            // run_task_execution completion; join then quiesces the thread.
             if (thread->finished->load(std::memory_order_acquire)) {
                 if (thread->thread.joinable()) {
                     thread->thread.join();
@@ -1667,6 +1669,8 @@ struct Harness::Impl {
                                                                  stop_src,
                                                                  finished]() mutable {
                             run_task_execution(tid, std::move(def), std::move(phase_snapshot), stop_src);
+                            // Publish run_task_execution completion to the
+                            // scheduler's acquire load before it joins this thread.
                             finished->store(true, std::memory_order_release);
                         });
                         execution_threads.push_back(std::move(task_thread));
@@ -2177,13 +2181,16 @@ support::AsyncResult<void> Harness::wait_for_idle(std::optional<ConversationId> 
                     support::AsyncCompletion<void, support::Error> done) mutable noexcept {
                 const std::optional<std::int64_t> scope =
                         conversation.has_value() ? std::optional<std::int64_t>{conversation->value} : std::nullopt;
+                std::optional<support::Error> wait_error;
                 {
                     std::lock_guard lock(impl_->mutex);
-                    if (impl_->wait_error) {
-                        const auto error = *impl_->wait_error;
-                        done(std::unexpected(error));
-                        return;
-                    }
+                    wait_error = impl_->wait_error;
+                }
+                // A completion may immediately start another Harness operation.
+                // Never invoke it while holding the scheduler mutex.
+                if (wait_error) {
+                    done(std::unexpected(std::move(*wait_error)));
+                    return;
                 }
                 if (stop.stop_requested()) {
                     done(std::unexpected(support::make_error(support::ErrorCode::Cancelled, "stop waiting")));

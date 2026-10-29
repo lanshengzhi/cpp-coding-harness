@@ -34,8 +34,10 @@ support::Error cancelled() { return failure("aborted", support::ErrorCode::Cance
 
 class NativeWatch final : public FileWatch {
 public:
-    NativeWatch(int fd, std::function<void()> callback)
-        : fd_(fd), worker_([this, callback = std::move(callback)](std::stop_token stop) {
+    // The worker borrows this until close() joins it, before any members are
+    // destroyed. The change sink itself is owned by that worker.
+    NativeWatch(int fd, FileChangeSink callback)
+        : fd_(fd), worker_([this, callback = std::move(callback)](std::stop_token stop) mutable {
               std::array<char, 8192> buffer{};
               while (!stop.stop_requested()) {
                   pollfd descriptor{fd_.get(), POLLIN, 0};
@@ -77,7 +79,7 @@ support::Expected<support::UniqueFd> open_write_parent(const fs::path& target, b
 
 class LocalEnvironment final : public Environment {
 public:
-    explicit LocalEnvironment(std::string cwd, std::function<void()> before_rename = {})
+    explicit LocalEnvironment(std::string cwd, std::move_only_function<void()> before_rename = {})
         : cwd_(std::move(cwd)), before_rename_(std::move(before_rename)) {}
     fs::path resolve(std::string_view path) const {
         fs::path result{path};
@@ -170,7 +172,7 @@ public:
             OutputSink output,
             std::stop_token stop) override;
     support::Expected<std::unique_ptr<FileWatch>> watch(
-            std::string_view path, std::function<void()> callback, bool recursive) override {
+            std::string_view path, FileChangeSink callback, bool recursive) override {
         if (recursive)
             return std::unexpected(failure("recursive watch is not implemented", support::ErrorCode::Validation));
         auto target = resolve(path);
@@ -198,7 +200,7 @@ private:
         return {};
     }
     fs::path cwd_;
-    std::function<void()> before_rename_;
+    std::move_only_function<void()> before_rename_;
 };
 
 bool secret_name(std::string name) {
@@ -267,12 +269,18 @@ support::Expected<ShellResult> LocalEnvironment::exec(
     ::fcntl(err[0], F_SETFL, O_NONBLOCK);
     ShellResult result;
     const auto start = std::chrono::steady_clock::now();
+    // Frozen pi NodeExecutionEnv's EXIT_STDIO_GRACE_MS: a descendant may keep
+    // inherited pipes open after the command exits. Each output chunk restarts
+    // the idle grace; timeout and cancellation remain active throughout it.
+    constexpr auto kExitStdioGrace = std::chrono::milliseconds(100);
+    auto last_output = start;
     bool done = false, aborted = false, timed = false;
     int status = 0;
     pollfd fds[2]{{out[0], POLLIN, 0}, {err[0], POLLIN, 0}};
     while (!done || fds[0].fd >= 0 || fds[1].fd >= 0) {
-        if (!done && (stop.stop_requested() ||
-                             (timeout.count() > 0 && std::chrono::steady_clock::now() - start >= timeout))) {
+        if (!aborted && !timed &&
+                (stop.stop_requested() ||
+                        (timeout.count() > 0 && std::chrono::steady_clock::now() - start >= timeout))) {
             aborted = stop.stop_requested();
             timed = !aborted;
             ::kill(-pid, SIGKILL);
@@ -281,8 +289,9 @@ support::Expected<ShellResult> LocalEnvironment::exec(
         for (int i = 0; i < 2; ++i)
             if (fds[i].fd >= 0 && (fds[i].revents & (POLLIN | POLLHUP | POLLERR))) {
                 std::array<char, 4096> buf{};
-                ssize_t n;
-                while ((n = ::read(fds[i].fd, buf.data(), buf.size())) > 0) {
+                const ssize_t n = ::read(fds[i].fd, buf.data(), buf.size());
+                if (n > 0) {
+                    last_output = std::chrono::steady_clock::now();
                     std::string_view chunk{buf.data(), static_cast<std::size_t>(n)};
                     result.output.append(chunk);
                     (i == 0 ? result.standard_output : result.standard_error).append(chunk);
@@ -293,9 +302,14 @@ support::Expected<ShellResult> LocalEnvironment::exec(
                     fds[i].fd = -1;
                 }
             }
-        if (!done && ::waitpid(pid, &status, WNOHANG) == pid) done = true;
+        if (!done && ::waitpid(pid, &status, WNOHANG) == pid) {
+            done = true;
+            last_output = std::chrono::steady_clock::now();
+        }
+        if (done && std::chrono::steady_clock::now() - last_output >= kExitStdioGrace) break;
     }
-    if (aborted) return std::unexpected(cancelled());
+    // A later abort during pipe drain cannot rewrite an established timeout.
+    if (aborted || (!timed && stop.stop_requested())) return std::unexpected(cancelled());
     if (timed)
         return std::unexpected(failure(
                 std::format("timeout:{}", static_cast<double>(timeout.count()) / 1000.0), support::ErrorCode::Timeout));
@@ -309,7 +323,7 @@ namespace testing {
 // write is prepared and before it is committed. A decorator cannot provide
 // this point because the vulnerable check and rename live inside one write
 // implementation; production paths must use local_environment instead.
-std::shared_ptr<Environment> local_environment_before_rename(std::string cwd, std::function<void()> hook) {
+std::shared_ptr<Environment> local_environment_before_rename(std::string cwd, std::move_only_function<void()> hook) {
     return std::make_shared<LocalEnvironment>(std::move(cwd), std::move(hook));
 }
 } // namespace testing

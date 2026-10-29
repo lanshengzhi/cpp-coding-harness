@@ -2,11 +2,13 @@
 // while its stable key makes the application itself idempotent.
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
+#include <cch/durable/Environment.hpp>
 #include <cch/durable/Harness.hpp>
 #include <cch/durable/SqliteStorage.hpp>
 #include <cch/durable/Task.hpp>
 
 #include "durable/FrozenExpectation.hpp"
+#include "durable/GatedStorage.hpp"
 #include "durable/Outcome.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UniqueFd.hpp"
@@ -20,6 +22,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <semaphore>
 #include <string>
 #include <thread>
 #include <vector>
@@ -458,6 +461,114 @@ std::size_t line_count(const std::filesystem::path& path) {
 }
 
 } // namespace
+
+TEST_CASE("durable shell completion keeps descendant pipes cancellable and bounded",
+        "[durable][environment][issue1089][review1044]") {
+    // Frozen pi-v1.3.0 NodeExecutionEnv keeps abort/timeout active after exit
+    // and drains inherited stdio until 100 ms without output. The second-scale
+    // bound is a liveness backstop, including on sanitizer lanes.
+    for (const std::string mode : {"timeout", "cancel", "idle", "tail"}) {
+        INFO(mode);
+        const pid_t child = fork_child();
+        if (child == 0) {
+            using namespace std::chrono_literals;
+            auto environment = local_environment("/tmp");
+            std::stop_source stop;
+            const auto start = std::chrono::steady_clock::now();
+            const std::string command = mode == "cancel" ? "(sleep 0.05; printf ready; sleep 2) &"
+                                        : mode == "tail" ? "(sleep 0.05; printf tail; sleep 2) &"
+                                                         : "sleep 2 &";
+            const auto result = environment->exec(
+                    std::vector<std::string>{"/bin/sh", "-c", command},
+                    mode == "timeout" ? 100ms : 0ms,
+                    [mode, &stop](std::string_view text, bool) {
+                        if (mode == "cancel" && text.find("ready") != std::string_view::npos) stop.request_stop();
+                    },
+                    stop.get_token());
+            if (std::chrono::steady_clock::now() - start >= 1500ms) _exit(10);
+            if (mode == "timeout") _exit(!result && result.error().code == support::ErrorCode::Timeout ? 0 : 11);
+            if (mode == "cancel") _exit(!result && result.error().code == support::ErrorCode::Cancelled ? 0 : 12);
+            _exit(result && result->exit_code == 0 && result->standard_output == (mode == "tail" ? "tail" : "") ? 0
+                                                                                                                : 13);
+        }
+        REQUIRE(child > 0);
+        const auto result = reap_bounded(child);
+        REQUIRE(result.exited);
+        REQUIRE(WIFEXITED(result.status));
+        CHECK(WEXITSTATUS(result.status) == 0);
+    }
+}
+
+TEST_CASE("a shell timeout remains final when cancellation arrives during pipe drain",
+        "[durable][environment][issue1089][review1044]") {
+    const pid_t child = fork_child();
+    if (child == 0) {
+        auto environment = local_environment("/tmp");
+        std::stop_source stop;
+        // A separate session survives the timed-out command's process group.
+        // Its output arrives after the command has been reaped, during the
+        // post-exit grace, and requests cancellation without a timing guess.
+        const auto result = environment->exec(
+                std::string{"owner=$$; export owner; /usr/bin/setsid /bin/sh -c "
+                            "'while kill -0 \"$owner\" 2>/dev/null; do sleep 0.01; done; "
+                            "printf ready; sleep 2' & wait"},
+                std::chrono::milliseconds(100),
+                [&stop](std::string_view, bool) { stop.request_stop(); },
+                stop.get_token());
+        _exit(stop.stop_requested() && !result && result.error().code == support::ErrorCode::Timeout &&
+                                result.error().message == "timeout:0.1"
+                        ? 0
+                        : 10);
+    }
+    REQUIRE(child > 0);
+    const auto result = reap_bounded(child);
+    CHECK(result.exited);
+    CHECK(WIFEXITED(result.status));
+    if (result.exited && WIFEXITED(result.status)) CHECK(WEXITSTATUS(result.status) == 0);
+}
+
+TEST_CASE("closed and failed idle waits allow completion callbacks to query the Harness",
+        "[durable][lifecycle][issue1078][review1044]") {
+    for (const bool fail : {false, true}) {
+        INFO((fail ? "failed Session" : "closed Session"));
+        const pid_t child = fork_child();
+        if (child == 0) {
+            cch::tests::GatedStorage storage;
+            auto opened = consume(Harness::open(storage));
+            if (!opened.has_value()) _exit(10);
+            auto harness = std::move(opened.value());
+            if (fail) {
+                storage.fail_next_commit("review1044 storage failure");
+                auto committed = consume(harness->session().commit([](Transaction& tx) -> support::ExpectedVoid {
+                    auto conversation = tx.create_conversation();
+                    if (!conversation) return std::unexpected(conversation.error());
+                    return {};
+                }));
+                if (committed.has_value() || !harness->session().failed()) _exit(11);
+            } else if (!consume(harness->close()).has_value()) {
+                _exit(12);
+            }
+            std::binary_semaphore finished{0};
+            bool rejected = false;
+            // The child waits for this completion before destroying its local
+            // state. Reentry is outside every Session mutation-line callback.
+            std::move(harness->wait_for_idle())
+                    .start([runtime = harness.get(), &finished, &rejected](support::ExpectedVoid idle) noexcept {
+                        const auto task = consume(runtime->wait_for_task(TaskId{.value = 2}));
+                        rejected = !idle && !task.has_value() && idle.error().message == task.error().message;
+                        finished.release();
+                    });
+            if (!finished.try_acquire_for(std::chrono::seconds(3))) _exit(13);
+            if (!consume(harness->close()).has_value()) _exit(14);
+            _exit(rejected ? 0 : 15);
+        }
+        REQUIRE(child > 0);
+        const auto result = reap_bounded(child);
+        CHECK(result.exited);
+        CHECK(WIFEXITED(result.status));
+        if (result.exited && WIFEXITED(result.status)) CHECK(WEXITSTATUS(result.status) == 0);
+    }
+}
 
 TEST_CASE("a killed effect worker retries its idempotent application after reopen", "[durable][issue1084]") {
     const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/crash-recovery.json",

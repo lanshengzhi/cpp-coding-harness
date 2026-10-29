@@ -2432,12 +2432,15 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
     replay = ReplayState{};
     Transaction::ContextView view;
     auto load_view = [&]() -> support::ExpectedVoid {
-        auto committed = await_result(session_.commit([&](Transaction& tx) -> support::ExpectedVoid {
-            auto loaded = tx.context_view(task.conversation_id);
-            if (!loaded) return std::unexpected(loaded.error());
-            view = std::move(*loaded);
-            return {};
-        }));
+        // await_result keeps view alive until the admitted commit completes;
+        // the callback owns its conversation identity across that boundary.
+        auto committed = await_result(
+                session_.commit([id = task.conversation_id, &view](Transaction& tx) -> support::ExpectedVoid {
+                    auto loaded = tx.context_view(id);
+                    if (!loaded) return std::unexpected(loaded.error());
+                    view = std::move(*loaded);
+                    return {};
+                }));
         if (!committed) return std::unexpected(committed.error());
         replay = ReplayState{};
         for (const auto& message : view.messages) {
