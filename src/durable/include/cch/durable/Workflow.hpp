@@ -33,7 +33,12 @@ struct ToolExecutionContext {
     /// signal. The Harness retains this Session until execution returns.
     Session* session{nullptr};
     std::string call_id{};
+    /// Every other callable tool, including deferred tools (frozen `Agent.callable`).
     std::vector<ai::Tool> tools{};
+    /// Deferred names not yet offered are the `tool_search` candidates.
+    std::vector<std::string> deferred_tools{};
+    /// The current request's model-visible tool names.
+    std::vector<std::string> offered_tools{};
     std::vector<std::string> replay_safe_tools{};
     /// Executes through the same tool hooks as a model-issued call.
     std::move_only_function<support::Expected<ai::ToolResultMessage>(ai::ToolCallContent)> execute_tool{};
@@ -51,6 +56,9 @@ struct ToolRegistration {
     /// Frozen pi `replay: "safe"`: an interrupted invocation may run again.
     /// The default refuses re-execution of an admitted, unfinished operation.
     bool replay_safe{false};
+    /// Not offered to the model until `tool_search` loads its name into the
+    /// conversation's persisted `modelTools.add`. Other tools can call it.
+    bool deferred{false};
 };
 
 /// A constant prompt section (frozen pi `section`). Dynamic renderers and

@@ -213,10 +213,11 @@ struct StorageState::Impl {
                 }
                 if (record.parent.has_value()) {
                     const auto parent = next_conversations.find(record.parent->conversation_id.value);
-                    if (parent == next_conversations.end() || !entry_visible(record.parent->conversation_id,
-                                                                      record.parent->at,
-                                                                      next_conversations,
-                                                                      next_entries)) {
+                    if (parent == next_conversations.end() ||
+                            (consume_seq && !entry_visible(record.parent->conversation_id,
+                                                    record.parent->at,
+                                                    next_conversations,
+                                                    next_entries))) {
                         return std::unexpected(support::make_error(
                                 support::ErrorCode::Validation, "Fork parent entry does not exist"));
                     }

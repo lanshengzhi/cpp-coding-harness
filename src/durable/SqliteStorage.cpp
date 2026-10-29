@@ -605,6 +605,17 @@ struct SqliteStorage::Impl {
                 });
         if (!loaded) return loaded;
 
+        auto conversations_result = state.scan_conversations(std::numeric_limits<std::size_t>::max());
+        if (!conversations_result) return std::unexpected(conversations_result.error());
+        for (const auto& conv : *conversations_result) {
+            if (conv.parent.has_value()) {
+                auto parent_entry = state.entry(conv.parent->at);
+                if (!parent_entry || !parent_entry->has_value()) {
+                    return std::unexpected(corrupt("Fork parent entry does not exist"));
+                }
+            }
+        }
+
         loaded = load_rows(
                 std::format("SELECT id,kind,created_at,retired_at,owner_id,record,scope_kind,family,key_value FROM "
                             "{} ORDER BY created_at,id",

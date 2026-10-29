@@ -86,11 +86,17 @@ private:
     };
 
     [[nodiscard]] support::Expected<TaskDefinition> build_definition();
+    [[nodiscard]] static std::vector<ai::Tool> offered_tool_declarations(
+            const Registry::Snapshot& snapshot, const chord::Json& model_tools);
     [[nodiscard]] PromptPlan plan_prompt(const Registry::Snapshot& snapshot,
             std::span<const ai::Tool> shown_tools,
             std::span<const ai::SystemMessageSection> shown_sections,
+            const chord::Json& model_tools,
             const Transaction::ContextView& view,
             std::int64_t timestamp);
+    /// Read the conversation's persisted model-tool selection (frozen
+    /// `AgentState.modelTools`); JSON null represents an unset selection.
+    [[nodiscard]] support::Expected<chord::Json> load_model_tools(ConversationId conversation_id);
     /// The preparation half of one request (frozen pi generation `prepare`):
     /// resume a finished compaction wait, plan the prompt baseline, decide
     /// the compaction threshold, and commit the `request` checkpoint.
@@ -111,8 +117,10 @@ private:
     /// the built-in `pi.tool` `beforeTool` hooks, execute with the arguments
     /// they leave, then let `afterTool` replace the result before it is
     /// committed (frozen pi `ToolTask.call`).
-    [[nodiscard]] support::Expected<ai::ToolResultMessage> execute_tool(
-            const ai::ToolCallContent& call, const Registry::Snapshot& snapshot, TaskRuntime& runtime);
+    [[nodiscard]] support::Expected<ai::ToolResultMessage> execute_tool(const ai::ToolCallContent& call,
+            const Registry::Snapshot& snapshot,
+            TaskRuntime& runtime,
+            bool require_offered = true);
     [[nodiscard]] support::Expected<bool> execute_tool_round(const TaskRecord& task,
             const Registry::Snapshot& snapshot,
             TaskRuntime& runtime,

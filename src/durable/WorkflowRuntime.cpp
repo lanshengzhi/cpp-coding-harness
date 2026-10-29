@@ -220,6 +220,15 @@ bool live_idle_checkpoint(const chord::Json& value, const chord::OpBatch&, std::
     return object == nullptr || object->find("run") == object->end();
 }
 
+DocumentDefinition agent_document() {
+    return detail::builtin_document(
+            "pi.agent:v1",
+            DocumentHistory::Rewindable,
+            DocumentFork::AsOf,
+            [] { return Json{Object{}}; },
+            always_checkpoint);
+}
+
 /// The definitions the root conversation seeds itself with (frozen pi
 /// `AgentDoc` / `InboxDoc` / `LiveDoc` / `ProviderDoc` / `UsageDoc`). Seeding
 /// reuses the same definitions the runtime reads with, so the stored record
@@ -1962,6 +1971,20 @@ bool WorkflowRuntime::model_available(std::string_view provider, std::string_vie
     return !model_.id.empty() && model_.id == model_id && model_.provider == provider;
 }
 
+support::Expected<Json> WorkflowRuntime::load_model_tools(ConversationId conversation_id) {
+    auto loaded = std::make_shared<Json>(Json{nullptr});
+    auto committed = await_result(session_.commit([conversation_id, loaded](Transaction& tx) -> support::ExpectedVoid {
+        auto document = tx.doc(agent_document(), DocumentAddress{.conversation_id = conversation_id});
+        if (!document) return std::unexpected(document.error());
+        auto value = document->get(chord::Path{chord::path_key("modelTools")});
+        if (!value) return std::unexpected(value.error());
+        if (value->has_value()) *loaded = **value;
+        return {};
+    }));
+    if (!committed) return std::unexpected(committed.error());
+    return std::move(*loaded);
+}
+
 support::Expected<SubmissionId> WorkflowRuntime::admit_compaction_summary(
         Transaction& tx, ConversationId conversation_id, const SubmissionDraft& draft, std::int64_t now) {
     // The ordinary admission path is the frozen `placeSummary` contract: a
@@ -2082,11 +2105,99 @@ std::vector<SectionPatch> plan_sections(
     return {std::move(patch)};
 }
 
+std::vector<std::string> string_array(const Json* value) {
+    std::vector<std::string> names;
+    if (value == nullptr) return names;
+    const auto* array = value->as_array();
+    if (array == nullptr) return names;
+    for (const auto& item : *array)
+        if (const auto* name = item.as_string()) names.push_back(*name);
+    return names;
+}
+
+/// Frozen `addTools`: record loads by name, without consulting the registry,
+/// preserving load order and lifting those names from `modelTools.remove`.
+support::ExpectedVoid add_model_tools(
+        Transaction& tx, ConversationId conversation_id, const std::vector<std::string>& added) {
+    auto document = tx.doc(agent_document(), DocumentAddress{.conversation_id = conversation_id});
+    if (!document) return std::unexpected(document.error());
+    const chord::Path path{chord::path_key("modelTools")};
+    auto current = document->get(path);
+    if (!current) return std::unexpected(current.error());
+    if (current->has_value() && (**current).as_array() != nullptr) {
+        Array names = *(**current).as_array();
+        for (const auto& name : added) {
+            if (!std::ranges::any_of(names, [&name](const Json& item) {
+                    const auto* existing = item.as_string();
+                    return existing && *existing == name;
+                }))
+                names.emplace_back(name);
+        }
+        return document->set(path, Json{std::move(names)});
+    }
+    Object next;
+    if (current->has_value()) {
+        if (const auto* object = (**current).as_object()) next = *object;
+    }
+    Array remove;
+    if (const auto found = next.find("remove"); found != next.end() && found->second.as_array())
+        remove = *found->second.as_array();
+    std::erase_if(remove, [&added](const Json& item) {
+        const auto* name = item.as_string();
+        return name && std::ranges::find(added, *name) != added.end();
+    });
+    Array add;
+    if (const auto found = next.find("add"); found != next.end() && found->second.as_array())
+        add = *found->second.as_array();
+    for (const auto& name : added) {
+        if (!std::ranges::any_of(add, [&name](const Json& item) {
+                const auto* existing = item.as_string();
+                return existing && *existing == name;
+            }))
+            add.emplace_back(name);
+    }
+    if (remove.empty())
+        next.erase("remove");
+    else
+        next.insert_or_assign("remove", Json{std::move(remove)});
+    next.insert_or_assign("add", Json{std::move(add)});
+    return document->set(path, Json{std::move(next)});
+}
+
 } // namespace
+
+/// Frozen `offeredTools`: ordinary enabled tools in registry order, followed
+/// by the deferred names in `modelTools.add` order. An explicit array names
+/// the exact offered sequence.
+std::vector<ai::Tool> WorkflowRuntime::offered_tool_declarations(
+        const Registry::Snapshot& snapshot, const chord::Json& model_tools) {
+    std::vector<ai::Tool> offered;
+    if (model_tools.as_array() != nullptr) {
+        for (const auto& name : string_array(&model_tools)) {
+            const auto found =
+                    std::ranges::find(snapshot.tools, name, [](const auto& tool) { return tool->declaration.name; });
+            if (found != snapshot.tools.end()) offered.push_back((*found)->declaration);
+        }
+        return offered;
+    }
+    const auto removed_names = string_array(member(model_tools, "remove"));
+    const std::set<std::string> removed{removed_names.begin(), removed_names.end()};
+    for (const auto& tool : snapshot.tools) {
+        if (!tool->deferred && !removed.contains(tool->declaration.name)) offered.push_back(tool->declaration);
+    }
+    for (const auto& name : string_array(member(model_tools, "add"))) {
+        const auto found =
+                std::ranges::find(snapshot.tools, name, [](const auto& tool) { return tool->declaration.name; });
+        if (found != snapshot.tools.end() && (*found)->deferred && !removed.contains(name))
+            offered.push_back((*found)->declaration);
+    }
+    return offered;
+}
 
 WorkflowRuntime::PromptPlan WorkflowRuntime::plan_prompt(const Registry::Snapshot& snapshot,
         std::span<const ai::Tool> shown_tools,
         std::span<const ai::SystemMessageSection> shown_sections,
+        const Json& model_tools,
         const Transaction::ContextView& view,
         std::int64_t timestamp) {
     PromptPlan plan;
@@ -2098,8 +2209,7 @@ WorkflowRuntime::PromptPlan WorkflowRuntime::plan_prompt(const Registry::Snapsho
         *plan.context.system_prompt += text;
         desired.push_back(ai::SystemMessageSection{.name = section.key, .text = text});
     }
-    for (const auto& tool : snapshot.tools)
-        plan.context.tools.push_back(tool->declaration);
+    plan.context.tools = offered_tool_declarations(snapshot, model_tools);
     const auto later_system = [&] {
         return view.head && std::ranges::any_of(view.entries, [&view](const EntryRecord& e) {
             return e.kind == "pi.system" && e.id.value > view.head->id.value;
@@ -2178,11 +2288,17 @@ support::Expected<std::optional<Json>> WorkflowRuntime::on_yield(
     return *continuation;
 }
 
-support::Expected<ai::ToolResultMessage> WorkflowRuntime::execute_tool(
-        const ai::ToolCallContent& call, const Registry::Snapshot& snapshot, TaskRuntime& runtime) {
+support::Expected<ai::ToolResultMessage> WorkflowRuntime::execute_tool(const ai::ToolCallContent& call,
+        const Registry::Snapshot& snapshot,
+        TaskRuntime& runtime,
+        bool require_offered) {
     ai::ToolResultMessage result{.tool_call_id = call.id, .tool_name = call.name, .timestamp = now()};
+    auto model_tools = load_model_tools(runtime.conversation_id());
+    if (!model_tools) return std::unexpected(model_tools.error());
+    const auto offered = offered_tool_declarations(snapshot, *model_tools);
     auto found = std::ranges::find_if(snapshot.tools, [&call](const auto& tool) { return tool->declaration.name == call.name; });
-    if (found == snapshot.tools.end()) {
+    const bool is_offered = std::ranges::find(offered, call.name, &ai::Tool::name) != offered.end();
+    if (found == snapshot.tools.end() || (require_offered && !is_offered)) {
         // A call to a tool the request did not offer settles before the tool
         // task, with no hook and no duration (frozen pi `startToolRound`).
         result.is_error = true;
@@ -2234,14 +2350,19 @@ support::Expected<ai::ToolResultMessage> WorkflowRuntime::execute_tool(
     const auto started = std::chrono::steady_clock::now();
     if ((*found)->execute_durable) {
         ToolExecutionContext context{.runtime = &runtime, .session = &session_, .call_id = call.id};
+        for (const auto& tool : offered)
+            context.offered_tools.push_back(tool.name);
         for (const auto& tool : snapshot.tools) {
             if (tool->declaration.name != call.name) context.tools.push_back(tool->declaration);
+            if (tool->deferred) context.deferred_tools.push_back(tool->declaration.name);
             if (tool->replay_safe) context.replay_safe_tools.push_back(tool->declaration.name);
         }
         // execute_durable returns before this request snapshot and runtime leave
-        // scope; nested calls use the same hooks and cancellation as the caller.
-        context.execute_tool = [this, &snapshot, &runtime](
-                                       ai::ToolCallContent nested) { return execute_tool(nested, snapshot, runtime); };
+        // scope; nested calls can reach deferred tools through the same hooks
+        // and cancellation without requiring a model-visible declaration.
+        context.execute_tool = [this, &snapshot, &runtime](ai::ToolCallContent nested) {
+            return execute_tool(nested, snapshot, runtime, false);
+        };
         auto output = (*found)->execute_durable(arguments.to_support(), std::move(context));
         if (!output) return std::unexpected(output.error());
         result.content = std::move(output->content);
@@ -2302,6 +2423,19 @@ support::Expected<ai::ToolResultMessage> WorkflowRuntime::execute_tool(
     return result;
 }
 
+std::vector<std::string> loaded_tool_names(const ai::ToolResultMessage& result) {
+    std::vector<std::string> loaded;
+    if (result.details && result.details->holds<support::JsonValue::object_t>()) {
+        const auto& obj = result.details->get_object();
+        if (const auto it = obj.find("loaded"); it != obj.end() && it->second.holds<support::JsonValue::array_t>()) {
+            for (const auto& item : it->second.get_array()) {
+                if (item.holds<std::string>()) loaded.push_back(item.get_string());
+            }
+        }
+    }
+    return loaded;
+}
+
 support::Expected<bool> WorkflowRuntime::execute_tool_round(const TaskRecord& task,
         const Registry::Snapshot& snapshot,
         TaskRuntime& runtime,
@@ -2310,9 +2444,14 @@ support::Expected<bool> WorkflowRuntime::execute_tool_round(const TaskRecord& ta
     for (const auto& call : pending_tool_calls(messages, recovery ? &snapshot.tools : nullptr)) {
         auto result = execute_tool(call, snapshot, runtime);
         if (!result) return std::unexpected(result.error());
-        auto saved = await_result(
-                runtime.commit([id = task.conversation_id, tid = task.id, result = *result](Transaction& tx,
-                                       const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+        auto loaded = loaded_tool_names(*result);
+        auto saved = await_result(runtime.commit(
+                [id = task.conversation_id, tid = task.id, result = *result, loaded = std::move(loaded)](
+                        Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    if (!loaded.empty()) {
+                        auto added = add_model_tools(tx, id, loaded);
+                        if (!added) return std::unexpected(added.error());
+                    }
                     auto message = tool_result_json(result);
                     auto entry = tx.append_entry(
                             id, "pi.tool-result", entry_data(message, tid), std::nullopt, {message}, tid);
@@ -2412,7 +2551,9 @@ support::ExpectedVoid WorkflowRuntime::prepare(const TaskRecord& task, TaskRunti
             }
         }
     }
-    auto plan = plan_prompt(registry_.snapshot(), replay.shown_tools, replay.shown_sections, view, now());
+    auto model_tools = load_model_tools(task.conversation_id);
+    if (!model_tools) return std::unexpected(model_tools.error());
+    auto plan = plan_prompt(registry_.snapshot(), replay.shown_tools, replay.shown_sections, *model_tools, view, now());
     std::vector<Json> planned;
     for (const auto& system : plan.systems)
         planned.push_back(system_json(system));
@@ -2596,7 +2737,9 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
             if (*ended) return {};
             continue;
         }
-        auto plan = plan_prompt(snapshot, replay.shown_tools, replay.shown_sections, view, now());
+        auto model_tools = load_model_tools(task.conversation_id);
+        if (!model_tools) return std::unexpected(model_tools.error());
+        auto plan = plan_prompt(snapshot, replay.shown_tools, replay.shown_sections, *model_tools, view, now());
         if (!plan.systems.empty()) {
             auto committed = await_result(runtime.commit(
                     [id = task.conversation_id, systems = plan.systems, edits = plan.edits](

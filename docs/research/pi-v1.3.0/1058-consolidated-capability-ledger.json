@@ -336,11 +336,11 @@
         "inputs": [
           {
             "path": "cmake/targets/Durable.cmake",
-            "sha256": "0eba28d6bf2d8c273478d62b110c0933accfa2fddf7c1ebdd6de3c84ca64e203"
+            "sha256": "f62d74aaaef8ee9301b6a2a08b9bafcc35ef366593d32e63a22a9910cb72cf39"
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "ed4cdf677cec0ed4b11712affaa8331c9b2e51afd069db564d9f75cf3141cbae"
+            "sha256": "02c55df3638dba2f28b7c76fe6c0cc36f1adbc04e9a1287aa583f234c627e9a6"
           },
           {
             "path": "docs/agents/architecture.md",
