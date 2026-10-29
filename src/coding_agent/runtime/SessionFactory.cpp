@@ -235,6 +235,10 @@ struct AssemblyPlan {
     /// CLI tool selection (spec #865, ticket #871): the resolved `--tools` /
     /// `--exclude-tools` intent applied to the discovered tool set at assembly.
     ToolSelection tool_selection;
+    /// Test-only MCP manager override (#1104): replaces the production-built
+    /// manager so a Session-level test can drive the manager's injected seams
+    /// (a gated connection factory) through the one assembly door.
+    std::shared_ptr<McpSessionManager> mcp_manager;
     /// Configured MCP streamable-http servers (spec #865, ticket #873).
     /// Assembly validates each URL at registration (`http`/`https` accepted;
     /// ADR 0054's TLS-only rule is superseded for MCP by ADR 0075),
@@ -1742,11 +1746,19 @@ struct PreparedAssemblyTarget final {
     // programmatic request seam above keeps #869's hard-fail).
     std::shared_ptr<McpSessionManager> mcp_manager;
     {
-        McpManagerDependencies mcp_dependencies;
-        mcp_dependencies.connections = std::make_shared<ProductionMcpConnectionFactory>(runtime->agent_dir());
-        mcp_dependencies.auth = std::make_shared<McpOAuthFlowSignInDriver>(runtime->agent_dir());
-        mcp_manager = std::make_shared<McpSessionManager>(
-                std::move(*mcp_config), runtime->agent_dir(), std::vector<std::string>{}, std::move(mcp_dependencies));
+        if (plan.mcp_manager) {
+            // Test-only override (#1104): the caller built the manager over
+            // scripted seams; assembly binds it like the production one.
+            mcp_manager = std::move(plan.mcp_manager);
+        } else {
+            McpManagerDependencies mcp_dependencies;
+            mcp_dependencies.connections = std::make_shared<ProductionMcpConnectionFactory>(runtime->agent_dir());
+            mcp_dependencies.auth = std::make_shared<McpOAuthFlowSignInDriver>(runtime->agent_dir());
+            mcp_manager = std::make_shared<McpSessionManager>(std::move(*mcp_config),
+                    runtime->agent_dir(),
+                    std::vector<std::string>{},
+                    std::move(mcp_dependencies));
+        }
     }
 
     // codemode (spec #882, ticket #885): pi's model-facing inline `codemode`
@@ -2242,13 +2254,16 @@ support::AsyncResult<coding_agent::CreateAgentSessionResult> SessionFactory::cre
                         plan->model_runtime_owned = false;
                         plan->cli_fake = overrides.cli_fake;
                     }
+                    plan->mcp_manager = std::move(overrides.mcp_manager);
                     co_return co_await finish_creation_async(
                             std::move(plan), snapshot, std::move(overrides.user_shell), stop_token);
                 }
-                co_return co_await finish_creation_async(normalize_cli(std::move(request), snapshot.manager),
-                        snapshot,
-                        std::move(overrides.user_shell),
-                        stop_token);
+                auto plan = normalize_cli(std::move(request), snapshot.manager);
+                if (plan) {
+                    plan->mcp_manager = std::move(overrides.mcp_manager);
+                }
+                co_return co_await finish_creation_async(
+                        std::move(plan), snapshot, std::move(overrides.user_shell), stop_token);
             });
 }
 

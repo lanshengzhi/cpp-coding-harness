@@ -22,6 +22,8 @@
 #include "support/RuntimeFixture.hpp"
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -31,6 +33,7 @@
 #include <boost/asio/executor_work_guard.hpp>
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -181,15 +184,29 @@ public:
 class TestFactory final : public McpConnectionFactory {
 public:
     std::map<std::string, std::shared_ptr<TestConnection>> outcomes;
+    /// #1104: per-server connect gates. A gated server's connect suspends
+    /// until the test opens the gate, modelling a slow handshake while the
+    /// management flow must stay live.
+    std::map<std::string, std::shared_ptr<std::atomic<bool>>> gates;
+
     [[nodiscard]] support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(
             const McpConfigEntry& entry) override {
-        const auto found = outcomes.find(entry.name);
-        if (found == outcomes.end()) {
-            return support::AsyncResult<std::shared_ptr<McpLiveConnection>>{
-                    std::unexpected(support::make_error(support::ErrorCode::Process, "no connection"))};
-        }
-        return support::AsyncResult<std::shared_ptr<McpLiveConnection>>{
-                std::shared_ptr<McpLiveConnection>{found->second}};
+        return support::detail::make_async_result(
+                [this, name = entry.name]()
+                        -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpLiveConnection>>> {
+                    const auto gate = gates.find(name);
+                    if (gate != gates.end()) {
+                        const auto executor = co_await boost::asio::this_coro::executor;
+                        while (!gate->second->load(std::memory_order_acquire)) {
+                            co_await boost::asio::post(executor, boost::asio::use_awaitable);
+                        }
+                    }
+                    const auto found = outcomes.find(name);
+                    if (found == outcomes.end()) {
+                        co_return std::unexpected(support::make_error(support::ErrorCode::Process, "no connection"));
+                    }
+                    co_return std::shared_ptr<McpLiveConnection>{found->second};
+                });
     }
 };
 
@@ -224,6 +241,8 @@ public:
     bool credentials_removed{false};
     int sign_in_calls{0};
     int sign_out_calls{0};
+    std::optional<std::string> stored_tokens_value{std::nullopt};
+    int stored_tokens_calls{0};
 
     [[nodiscard]] support::AsyncResult<std::optional<std::string>> sign_in(
             const McpConfigEntry&, const McpSignInPrompt& prompt) override {
@@ -247,6 +266,10 @@ public:
     [[nodiscard]] support::AsyncResult<bool> sign_out(const McpConfigEntry&) override {
         ++sign_out_calls;
         return support::AsyncResult<bool>{credentials_removed};
+    }
+    [[nodiscard]] support::AsyncResult<std::optional<std::string>> stored_tokens(const McpConfigEntry&) override {
+        ++stored_tokens_calls;
+        return support::AsyncResult<std::optional<std::string>>{stored_tokens_value};
     }
 };
 
@@ -370,7 +393,7 @@ struct FlowFixture {
     std::shared_ptr<TestFactory> factory = std::make_shared<TestFactory>();
     std::shared_ptr<TestSurface> surface = std::make_shared<TestSurface>();
     std::shared_ptr<TestAuth> auth = std::make_shared<TestAuth>();
-    std::unique_ptr<McpSessionManager> manager;
+    std::shared_ptr<McpSessionManager> manager;
     std::shared_ptr<coding_agent::tui::McpManagerFlow> flow;
     RecordingModalPresenter presenter;
     std::shared_ptr<void> host_lifetime = std::make_shared<int>(0);
@@ -391,20 +414,39 @@ struct FlowFixture {
 
     [[nodiscard]] static std::unique_ptr<FlowFixture> make(McpConfigLoad config,
             std::vector<std::pair<std::string, std::shared_ptr<TestConnection>>> connections,
-            bool auto_enable_codemode = true) {
+            bool auto_enable_codemode = true,
+            bool settle_connects = true,
+            std::map<std::string, std::shared_ptr<std::atomic<bool>>> gates = {}) {
         auto fixture = std::make_unique<FlowFixture>();
         config.auto_enable_codemode = auto_enable_codemode;
         McpManagerDependencies dependencies;
         dependencies.connections = fixture->factory;
         dependencies.tools = fixture->surface;
         dependencies.auth = fixture->auth;
-        fixture->manager = std::make_unique<McpSessionManager>(
+        fixture->manager = std::make_shared<McpSessionManager>(
                 std::move(config), "/home/u/.pi/agent", std::vector<std::string>{}, std::move(dependencies));
         for (auto& [name, connection] : connections) {
             connection->name = name;
             fixture->factory->outcomes[name] = std::move(connection);
         }
-        REQUIRE(fixture->runtime.run(fixture->manager->start()).has_value());
+        // Gates are installed before `start` launches the connects, so a gated
+        // server never races past its gate (#1104).
+        fixture->factory->gates = std::move(gates);
+        if (settle_connects) {
+            REQUIRE(fixture->runtime.run(fixture->manager->start()).has_value());
+            REQUIRE(fixture->runtime.run(fixture->manager->wait_for_pending_connects()).has_value());
+        } else {
+            // Tests modelling a pending connect (#1104) start the manager on
+            // the flow's serialized loop instead: the background connects and
+            // their gates stay observable and pumpable on flow_io.
+            auto manager = fixture->manager;
+            boost::asio::co_spawn(
+                    fixture->flow_io,
+                    [manager = std::move(manager)]() mutable -> boost::asio::awaitable<void> {
+                        (void)co_await support::detail::await_async_result(manager->start());
+                    },
+                    boost::asio::detached);
+        }
         fixture->pump = std::make_unique<std::thread>([&io = fixture->flow_io] { io.run(); });
 
         coding_agent::tui::McpFlowHostHooks hooks;
@@ -727,4 +769,61 @@ TEST_CASE("/mcp without a manager prints pi's non-TUI status report", "[coding_a
     CHECK(presenter.statuses.front().find("No MCP servers configured") != std::string::npos);
     CHECK(presenter.slot == nullptr);
     stop_pump();
+}
+
+TEST_CASE("/mcp panel stays live while a server connect is pending and subcommands await the settle",
+        "[coding_agent][tui][mcp][issue1104][spec]") {
+    // Frozen pi v1.3.0 (audit-1104): the manager panel opens without awaiting
+    // pending connects (pi `manage` never awaits), while the non-TUI
+    // subcommands (status/login/logout/reconnect) do await them. The gated
+    // "slow" server holds its connect in flight for the whole first act.
+    auto slow = std::make_shared<TestConnection>();
+    auto fast = std::make_shared<TestConnection>();
+    const auto gate = std::make_shared<std::atomic<bool>>(false);
+    auto fixture = FlowFixture::make(config_with({stdio_entry("slow"), stdio_entry("fast")}),
+            {{"slow", slow}, {"fast", fast}},
+            /*auto_enable_codemode*/ true,
+            /*settle_connects*/ false,
+            /*gates*/ {{"slow", gate}});
+    // Wait until the queued start flipped both servers to pending/connected:
+    // the assertions below read the states the management slice reports, not
+    // a creation-time snapshot.
+    REQUIRE(fixture->wait_until([&] { return fixture->manager->pending_start_count() == 1; }));
+
+    // The panel opens immediately: both servers are listed, the gated one
+    // still connecting, the ready one already connected.
+    fixture->flow->handle_command("");
+    REQUIRE(fixture->wait_until([&] { return fixture->view() != nullptr; }));
+    auto* panel = fixture->view();
+    REQUIRE(fixture->wait_until([&] { return screen_contains(screen_of(*panel), "connecting"); }));
+    const auto pending_screen = screen_of(*panel);
+    CHECK(screen_contains(pending_screen, "MCP servers"));
+    CHECK(screen_contains(pending_screen, "slow"));
+    CHECK(screen_contains(pending_screen, "fast"));
+    CHECK(screen_contains(pending_screen, "connected"));
+
+    // A management interaction stays live during the pending connect:
+    // opening the gated server's menu answers without waiting for the
+    // handshake (pi manage parity).
+    press(*panel, cch::tui::KeyEvent{.key = "enter"});
+    REQUIRE(fixture->wait_until([&] { return screen_contains(screen_of(*panel), "MCP server slow"); }));
+    press(*panel, cch::tui::KeyEvent{.key = "escape"});
+    REQUIRE(fixture->wait_until([&] { return screen_contains(screen_of(*panel), "MCP servers"); }));
+
+    // pi's subcommand parity: reconnect awaits the pending connects, so with
+    // the gate closed the action has not run yet...
+    fixture->flow->handle_command("reconnect slow");
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+    CHECK(slow->reconnect_calls == 0);
+    // ...and once the transport answers, the awaited subcommand lands.
+    gate->store(true);
+    REQUIRE(fixture->wait_until([&] { return slow->reconnect_calls == 1; }));
+    // The status line lands on the flow's next serialized pass.
+    REQUIRE(fixture->wait_until(
+            [&] { return fixture->presenter.status_contains("Reconnected to MCP server \"slow\""); }));
+
+    // The panel follows the settled state on its own.
+    REQUIRE(fixture->wait_until([&] { return screen_contains(screen_of(*panel), "connected"); }));
+    press(*panel, cch::tui::KeyEvent{.key = "escape"});
+    REQUIRE(fixture->wait_until([&] { return fixture->presenter.slot_restores == 1; }));
 }

@@ -171,6 +171,9 @@ public:
     [[nodiscard]] support::AsyncResult<bool> sign_out(const McpConfigEntry&) override {
         return support::AsyncResult<bool>{true};
     }
+    [[nodiscard]] support::AsyncResult<std::optional<std::string>> stored_tokens(const McpConfigEntry&) override {
+        return support::AsyncResult<std::optional<std::string>>{std::nullopt};
+    }
 };
 
 [[nodiscard]] McpConfigEntry stdio_entry(std::string name, bool enabled = true) {
@@ -189,7 +192,7 @@ struct Fixture {
     std::shared_ptr<TestFactory> factory = std::make_shared<TestFactory>();
     std::shared_ptr<TestSurface> surface = std::make_shared<TestSurface>();
     std::shared_ptr<TestAuth> auth = std::make_shared<TestAuth>();
-    std::unique_ptr<McpSessionManager> manager;
+    std::shared_ptr<McpSessionManager> manager;
     std::unique_ptr<coding_agent::tui::McpManagerPresenter> presenter;
     std::shared_ptr<TestConnection> connection;
 
@@ -229,7 +232,7 @@ private:
         dependencies.connections = fixture.factory;
         dependencies.tools = fixture.surface;
         dependencies.auth = fixture.auth;
-        fixture.manager = std::make_unique<McpSessionManager>(
+        fixture.manager = std::make_shared<McpSessionManager>(
                 std::move(load), std::move(agent_dir), std::vector<std::string>{}, std::move(dependencies));
         fixture.presenter = std::make_unique<coding_agent::tui::McpManagerPresenter>(*fixture.manager);
         fixture.connection = std::make_shared<TestConnection>();
@@ -254,6 +257,7 @@ TEST_CASE("McpManagerPresenter maps manager state onto the panel's server view",
 
     tests::RuntimeFixture runtime;
     REQUIRE(runtime.run(fixture.manager->start()).has_value());
+    REQUIRE(runtime.run(fixture.manager->wait_for_pending_connects()).has_value());
 
     const auto views = fixture.presenter->servers();
     REQUIRE(views.size() == 1);
@@ -279,6 +283,7 @@ TEST_CASE("McpManagerPresenter exposes the tools and exposure sub-menus", "[codi
 
     tests::RuntimeFixture runtime;
     REQUIRE(runtime.run(fixture.manager->start()).has_value());
+    REQUIRE(runtime.run(fixture.manager->wait_for_pending_connects()).has_value());
 
     auto tools = runtime.run(fixture.presenter->run_action("echo", coding_agent::tui::McpServerAction::Tools));
     REQUIRE(tools.has_value());
@@ -299,6 +304,7 @@ TEST_CASE(
 
     tests::RuntimeFixture runtime;
     REQUIRE(runtime.run(fixture.manager->start()).has_value());
+    REQUIRE(runtime.run(fixture.manager->wait_for_pending_connects()).has_value());
     CHECK(fixture.factory->connect_order.empty());
 
     auto outcome = runtime.run(fixture.presenter->run_action("off", coding_agent::tui::McpServerAction::Enable));

@@ -26,6 +26,8 @@ class RuntimeRoot;
 
 namespace cch::coding_agent::runtime {
 
+class McpSessionManager;
+
 /// Private test-support assembly seam carried as one value: an injected
 /// ModelRuntime built from scripted Provider Definitions and/or a Session-
 /// owned User Shell (User Bash overlap/cancellation tests). Production
@@ -34,6 +36,11 @@ struct AssemblyOverrides {
     std::shared_ptr<ModelRuntime> model_runtime;
     bool cli_fake{false};
     std::unique_ptr<AsyncUserShell> user_shell;
+    /// Test-only MCP manager: replaces the production-built manager so a
+    /// Session-level test can drive the manager's injected seams (a gated
+    /// connection factory) and prove session creation does not block on a
+    /// slow handshake (#1104, frozen pi v1.3.0).
+    std::shared_ptr<McpSessionManager> mcp_manager{};
 };
 
 /// Assembles one Agent Session (and its supporting services) from the

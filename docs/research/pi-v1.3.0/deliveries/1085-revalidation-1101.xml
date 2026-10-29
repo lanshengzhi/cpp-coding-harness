@@ -6,157 +6,157 @@
 	skipped="0"
 	hostname=""
 	time="0"
-	timestamp="2026-10-28T23:38:22"
+	timestamp="2026-10-30T04:22:53"
 	>
-	<testcase name="cch_mcp call_tool preserves actual wire object order for structuredContent" classname="cch_mcp call_tool preserves actual wire object order for structuredContent" time="0.365117" status="run">
+	<testcase name="cch_mcp call_tool preserves actual wire object order for structuredContent" classname="cch_mcp call_tool preserves actual wire object order for structuredContent" time="0.332963" status="run">
 		<properties>
 			<property name="cmake_labels" value="issue1101;mcp;owner;spec"/>
 		</properties>
 		<system-out>Filters: "cch_mcp call_tool preserves actual wire object order for structuredContent"
-Randomness seeded to: 3676064118
+Randomness seeded to: 3965855109
 ===============================================================================
 All tests passed (61 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="cch_mcp stdio client preserves every JSON structuredContent type from tools/call" classname="cch_mcp stdio client preserves every JSON structuredContent type from tools/call" time="0.107964" status="run">
+	<testcase name="cch_mcp stdio client preserves every JSON structuredContent type from tools/call" classname="cch_mcp stdio client preserves every JSON structuredContent type from tools/call" time="0.0760132" status="run">
 		<properties>
 			<property name="cmake_labels" value="issue1101;mcp;owner;spec"/>
 		</properties>
 		<system-out>Filters: "cch_mcp stdio client preserves every JSON structuredContent type from tools/call"
-Randomness seeded to: 984019726
+Randomness seeded to: 2810393972
 ===============================================================================
 All tests passed (55 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="MCP structured results match every original frozen audit obligation through real public callers" classname="MCP structured results match every original frozen audit obligation through real public callers" time="0.0896053" status="run">
+	<testcase name="MCP structured results match every original frozen audit obligation through real public callers" classname="MCP structured results match every original frozen audit obligation through real public callers" time="0.0732437" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "MCP structured results match every original frozen audit obligation through real public callers"
-Randomness seeded to: 2838253157
+Randomness seeded to: 462944899
 ===============================================================================
 All tests passed (94 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP HTTP tools/call preserves actual wire structuredContent order" classname="an MCP HTTP tools/call preserves actual wire structuredContent order" time="0.633423" status="run">
+	<testcase name="an MCP HTTP tools/call preserves actual wire structuredContent order" classname="an MCP HTTP tools/call preserves actual wire structuredContent order" time="0.639576" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;issue873;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP HTTP tools/call preserves actual wire structuredContent order"
-Randomness seeded to: 4059950455
+Randomness seeded to: 2281846856
 ===============================================================================
 All tests passed (22 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP tools/call distinguishes missing structuredContent from JSON null" classname="an MCP tools/call distinguishes missing structuredContent from JSON null" time="0.0499986" status="run">
+	<testcase name="an MCP tools/call distinguishes missing structuredContent from JSON null" classname="an MCP tools/call distinguishes missing structuredContent from JSON null" time="0.0397444" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP tools/call distinguishes missing structuredContent from JSON null"
-Randomness seeded to: 1709697552
+Randomness seeded to: 1498818350
 ===============================================================================
 All tests passed (26 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP tools/call falls back for empty content and adds pi&apos;s isError text" classname="an MCP tools/call falls back for empty content and adds pi&apos;s isError text" time="0.0544793" status="run">
+	<testcase name="an MCP tools/call falls back for empty content and adds pi&apos;s isError text" classname="an MCP tools/call falls back for empty content and adds pi&apos;s isError text" time="0.043592" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP tools/call falls back for empty content and adds pi's isError text"
-Randomness seeded to: 990007124
+Randomness seeded to: 527824420
 ===============================================================================
 All tests passed (42 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP tools/call keeps non-empty content separate from structuredContent" classname="an MCP tools/call keeps non-empty content separate from structuredContent" time="0.0471097" status="run">
+	<testcase name="an MCP tools/call keeps non-empty content separate from structuredContent" classname="an MCP tools/call keeps non-empty content separate from structuredContent" time="0.0414528" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP tools/call keeps non-empty content separate from structuredContent"
-Randomness seeded to: 3220791251
+Randomness seeded to: 1447731908
 ===============================================================================
 All tests passed (21 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP tools/call object structuredContent survives conversion with content absent" classname="an MCP tools/call object structuredContent survives conversion with content absent" time="0.0455548" status="run">
+	<testcase name="an MCP tools/call object structuredContent survives conversion with content absent" classname="an MCP tools/call object structuredContent survives conversion with content absent" time="0.0387128" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP tools/call object structuredContent survives conversion with content absent"
-Randomness seeded to: 937207209
+Randomness seeded to: 3938760047
 ===============================================================================
 All tests passed (16 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects" classname="an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects" time="0.0513007" status="run">
+	<testcase name="an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects" classname="an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects" time="0.0404783" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP tools/call preserves actual wire order for reverse\, nested and integer-key objects"
-Randomness seeded to: 1707654704
+Randomness seeded to: 296833760
 ===============================================================================
 All tests passed (37 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP tools/call preserves every primitive and array structuredContent when content is absent" classname="an MCP tools/call preserves every primitive and array structuredContent when content is absent" time="0.0481818" status="run">
+	<testcase name="an MCP tools/call preserves every primitive and array structuredContent when content is absent" classname="an MCP tools/call preserves every primitive and array structuredContent when content is absent" time="0.0436576" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP tools/call preserves every primitive and array structuredContent when content is absent"
-Randomness seeded to: 2813067769
+Randomness seeded to: 3424210296
 ===============================================================================
 All tests passed (70 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP tools/call rejects wrong content and malformed results at the public caller" classname="an MCP tools/call rejects wrong content and malformed results at the public caller" time="0.0498826" status="run">
+	<testcase name="an MCP tools/call rejects wrong content and malformed results at the public caller" classname="an MCP tools/call rejects wrong content and malformed results at the public caller" time="0.0388195" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP tools/call rejects wrong content and malformed results at the public caller"
-Randomness seeded to: 3637834577
+Randomness seeded to: 2393875342
 ===============================================================================
 All tests passed (28 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP tools/call renders every JSON number shape exactly as JSON.stringify" classname="an MCP tools/call renders every JSON number shape exactly as JSON.stringify" time="0.0580504" status="run">
+	<testcase name="an MCP tools/call renders every JSON number shape exactly as JSON.stringify" classname="an MCP tools/call renders every JSON number shape exactly as JSON.stringify" time="0.0387921" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP tools/call renders every JSON number shape exactly as JSON.stringify"
-Randomness seeded to: 77172944
+Randomness seeded to: 2833175757
 ===============================================================================
 All tests passed (14 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an MCP tools/call renders structuredContent numbers exactly as JSON.stringify" classname="an MCP tools/call renders structuredContent numbers exactly as JSON.stringify" time="0.0476569" status="run">
+	<testcase name="an MCP tools/call renders structuredContent numbers exactly as JSON.stringify" classname="an MCP tools/call renders structuredContent numbers exactly as JSON.stringify" time="0.0401812" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "an MCP tools/call renders structuredContent numbers exactly as JSON.stringify"
-Randomness seeded to: 3069395121
+Randomness seeded to: 3610341706
 ===============================================================================
 All tests passed (14 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the frozen review artifact matches every actual fixture observation" classname="the frozen review artifact matches every actual fixture observation" time="0.0765256" status="run">
+	<testcase name="the frozen review artifact matches every actual fixture observation" classname="the frozen review artifact matches every actual fixture observation" time="0.0659892" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "the frozen review artifact matches every actual fixture observation"
-Randomness seeded to: 3013643914
+Randomness seeded to: 2490227216
 ===============================================================================
 All tests passed (218 assertions in 1 test case)
 

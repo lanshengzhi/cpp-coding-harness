@@ -161,8 +161,14 @@ public:
     [[nodiscard]] support::AsyncResult<std::optional<std::string>> sign_in(
             const mcp::McpConfigEntry& entry, const McpSignInPrompt& prompt) override;
     [[nodiscard]] support::AsyncResult<bool> sign_out(const mcp::McpConfigEntry& entry) override;
+    [[nodiscard]] support::AsyncResult<std::optional<std::string>> stored_tokens(
+            const mcp::McpConfigEntry& entry) override;
 
 private:
+    /// pi `credentials`: one lazily opened store per driver; the sign-in,
+    /// sign-out and token-read paths all share it.
+    [[nodiscard]] std::shared_ptr<mcp::McpAuthStore> ensure_store();
+
     std::filesystem::path agent_dir_;
     mutable std::shared_ptr<mcp::McpAuthStore> auth_store_;
 };

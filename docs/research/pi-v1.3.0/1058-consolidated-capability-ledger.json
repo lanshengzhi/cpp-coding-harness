@@ -140,19 +140,19 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "64a6bb8e1706bf13e4b1c450397bcad256db432b6a5f2df383651bc7161cfbbd"
+            "sha256": "d7daf8bd8a1c70e2962819666dd4921d59eb2356993bbfa32b0b42405a8a18b4"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "de212ea0d9fc091c3c8421c21f1721441feac879fc46923d1e593a7b4251c902"
+            "sha256": "dd613f58906acd99b3f149b84d338365e8f0c391dbc88f0597602cfd8c35ec2e"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "942efcd3fac8e8513e921a66b63a2f71b7d80e5901cd2ad9edb1d20c73a2ad24"
+            "sha256": "13d4ccac208a6f0bd84d029d2c14b07b231b3487a5a3b65150f71c790a354309"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "ac149e62751e6f471ed06e388dd39e0eeebc6049c11d4054d74a3dfce38466da"
+            "sha256": "4a4d3788f4b7d026387988f818b0028ac4115bb04fb89a862600c9126ece01e9"
           },
           {
             "path": "src/support/Json.cpp",
@@ -257,14 +257,14 @@
             "issue1101",
             "--output-on-failure",
             "--output-junit",
-            "/tmp/cch-1085-revalidation-1101.xml"
+            "/tmp/cch-1104-revalidation-1101.xml"
           ],
-          "testedRevision": "875099ba918384744a5e88cf1eff7e19cf7b1dbf",
-          "recordedAt": "2026-10-28T14:38:36Z",
+          "testedRevision": "adcaaa809b163d4bf84f6208fd652b7aad8f6b9e",
+          "recordedAt": "2026-10-29T19:40:00Z",
           "selected": 14,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1085-revalidation-1101.xml",
-            "sha256": "ac6037f30160895143c7e7fa5b57157cea93eeaa102e2e355f288e189d46226c"
+            "sha256": "70c59818de944024b9f5d781e7b5657d24848cfcc1b343665fb020f52154f27e"
           }
         },
         "rows": [
@@ -352,7 +352,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
-            "sha256": "0a05aa8c81a19f1f98c6a2baa093375d72bb1ae58d9e9611599c8f212583d540"
+            "sha256": "60b709b65b25777be151e0f912d80623d9c17bdf2b5b14652f8738d31db3806c"
           },
           {
             "path": "docs/research/pi-v1.3.0/1090-durable-images.md",
@@ -376,7 +376,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "63113e1c182c3916886fefbf0cb45fc5ebd1ab6177f2ee3e0978f897be0cefba"
+            "sha256": "5e1dd1d6c09bab48f2ba9e7a787c8262b070128fe6424f15d1fa04a23ab28467"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -606,6 +606,241 @@
             }
           }
         }
+      },
+      {
+        "id": "1104-management-during-connection",
+        "ticket": "1104",
+        "implementationCommits": [
+          "adcaaa809b163d4bf84f6208fd652b7aad8f6b9e"
+        ],
+        "report": "docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md",
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/targets/CodingAgent.cmake",
+            "sha256": "cb10e310289020b91f5060836cad25ce0b5d3f46b53dede8f2800579e14fb4f3"
+          },
+          {
+            "path": "cmake/targets/Mcp.cmake",
+            "sha256": "589e3411f006490b201b7f9f758374bd4fe96617c74c29d411f275cc28c25e04"
+          },
+          {
+            "path": "cmake/targets/Tui.cmake",
+            "sha256": "eb37a3d846e3303f159dc7ca194982c33b403ddc178c93cbfc5b91a914d6cadb"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "cmake/tests/CodingAgentTests.cmake",
+            "sha256": "a3f5681b1d9eb49f18ba33e10a1d927d8e26afbe281efc7a1755de30eef7edb8"
+          },
+          {
+            "path": "src/coding_agent/AgentSession.cpp",
+            "sha256": "4b92949611c4843e713fc740c65f8809e718567a57403c12ac5b5efefce2ac46"
+          },
+          {
+            "path": "src/coding_agent/AgentSessionExecution.cpp",
+            "sha256": "fdc1d1ee137754a23c554a2191898e1edde27b69c35baa4f147676f818e03746"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "sha256": "d7daf8bd8a1c70e2962819666dd4921d59eb2356993bbfa32b0b42405a8a18b4"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
+            "sha256": "dd613f58906acd99b3f149b84d338365e8f0c391dbc88f0597602cfd8c35ec2e"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpSessionManager.cpp",
+            "sha256": "13d4ccac208a6f0bd84d029d2c14b07b231b3487a5a3b65150f71c790a354309"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpSessionManager.hpp",
+            "sha256": "4a4d3788f4b7d026387988f818b0028ac4115bb04fb89a862600c9126ece01e9"
+          },
+          {
+            "path": "src/coding_agent/runtime/SessionFactory.cpp",
+            "sha256": "979b056e3589fa2195c564830bafb65a2031d80e75ea0876c6d32f272a54d03e"
+          },
+          {
+            "path": "src/coding_agent/runtime/SessionFactory.hpp",
+            "sha256": "fd0ea220dddb44aabb9066c5c17e1cbe5142a6c72b986918e14decceeed453a9"
+          },
+          {
+            "path": "src/coding_agent/tui/McpManagerFlow.cpp",
+            "sha256": "677ae1e665f463dac9e314c88fe93a6a52971e4491924c73d51231645b07296c"
+          },
+          {
+            "path": "src/coding_agent/tui/McpManagerFlow.hpp",
+            "sha256": "4d1cd6bbb496adcb0de7d94c0ba66c4d0a39a48501b067aa4508630831e45424"
+          },
+          {
+            "path": "src/support/AsyncResultBridge.hpp",
+            "sha256": "a8df9d396854060a9b5f9586de2d853c97633201a3fb797a49284dbcf3d110dc"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/support/RuntimeFixture.hpp",
+            "sha256": "bd441349fa9473da544f544b9edc451fc8fb548ea14d3b5bf11a3d3b16aba1c0"
+          },
+          {
+            "path": "tests/support/McpTestKit.hpp",
+            "sha256": "06ab36bb65c056096a599f696cbe416003ede98f2567f87d30f5118c33d20f1d"
+          },
+          {
+            "path": "tests/support/ModelsFixture.hpp",
+            "sha256": "e3a1015be6e69f31203ab7c90c48bedda450a51efb71f11666592d23f0644bd6"
+          },
+          {
+            "path": "tests/support/RuntimeLoopDriver.hpp",
+            "sha256": "d555cca1c9ea98d50c4998ebb2f43dc0b7474404c0ba176ea1a404e78c46c7fa"
+          },
+          {
+            "path": "tests/support/TempWorkspace.hpp",
+            "sha256": "4c3811b22c3abae96d3261a54d401899033ffb80fcc325a5ac5dd2c9f8f75140"
+          },
+          {
+            "path": "tests/support/JsonCompare.hpp",
+            "sha256": "54599aa9c9ed5551ddbcff2bb39dae0027f2a9b7f513313de78bcf0ccdd5a9ae"
+          },
+          {
+            "path": "tests/support/EnvVarGuard.hpp",
+            "sha256": "5eacc743ff5f28688ebb430a99353133617c0156d3fe462fced37c0f239eb945"
+          },
+          {
+            "path": "tests/coding_agent/McpFailureIsolationTest.cpp",
+            "sha256": "3509a60d835b82ba73c9e3159be17f3fc4e8ce4761b859d9249b3dc80c78e76f"
+          },
+          {
+            "path": "tests/coding_agent/McpServerManagementTest.cpp",
+            "sha256": "46ffcacd1b6bafea69bf6cce5a12c9b3611d41119476f0c9bc78a60cf09a9af8"
+          },
+          {
+            "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
+            "sha256": "b4bf2f82a06931ed75c60a135ecc5ef265e9b4fcf04e23d867896afb01322293"
+          },
+          {
+            "path": "tests/coding_agent/McpSessionManagerTest.cpp",
+            "sha256": "1775c113a3abd2bc94d23b79912c58b3eafa240ea807557493a57e5e5d02e197"
+          },
+          {
+            "path": "tests/coding_agent/tui/McpManagerFlowTest.cpp",
+            "sha256": "30f00f165192415f5eebae44bdc908f19fc18cbae586f1ff6f925a63f562992e"
+          },
+          {
+            "path": "tests/coding_agent/tui/McpManagerPresenterTest.cpp",
+            "sha256": "64fdcc9887548ab38aec242ed7d520984a92bce50e35691d362985fea5b2d0cd"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/baselines.json",
+            "sha256": "5e1dd1d6c09bab48f2ba9e7a787c8262b070128fe6424f15d1fa04a23ab28467"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
+            "sha256": "745601cb118b1cce404087260e1205a1e504ae5282e9c598ed751faa8be14831"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1104/fixtures.mts",
+            "sha256": "986525ff66bdfac10c5b6a91678ab26747a70cae718e0bdf481faa57605667bd"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1104/pi.mts",
+            "sha256": "5699cb2ef400ef8c070b10dcc54eea060c53846f5f1c42dd79bae6953a2abffe"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1104/scenarios.mts",
+            "sha256": "b06b3f57ba4335985a5290990ea6ee186f2e2b37cf9f5d7558ceaa8a5323758e"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1104/manifest.json",
+            "sha256": "a296b43eebec48c5c10512c4fa05e9c0e249bb3c5d74508bb5b671f7aa1d86d8"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
+            "sha256": "af4058e65f92bb637e5a48e5af5ffac42baa2f7db1f49619613a0abeadf9fa7f"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "983dc1e522eb3dd51d7128964b7b0316754e87f8d3ba26e567a6c5685f4e8477"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          }
+        ],
+        "rows": [
+          {
+            "id": "cch_coding_agent:mcp-management-ui",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1104/management-during-connection.json",
+                "scenario": "the /mcp manager lists connecting servers and completes a sign-in while another server connects",
+                "test": "/mcp panel stays live while a server connect is pending and subcommands await the settle",
+                "testSource": "tests/coding_agent/tui/McpManagerFlowTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "sign-in completes for one server while another is still connecting",
+              "testSource": "tests/coding_agent/McpSessionManagerTest.cpp",
+              "reason": "One server's connect is held open on a gate while the OAuth server signs in: the manager reports the gated server connecting, the panel stays interactive and the sign-in completes. A design that awaited the handshakes before publishing the snapshot, or before dispatching a subcommand, fails this case."
+            }
+          },
+          {
+            "id": "cch_coding_agent:mcp-external-signin-pickup",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1104/management-during-connection.json",
+                "scenario": "a sign-in performed outside the session is picked up on the next turn",
+                "test": "on_turn_start reconnects a server signed in through another process",
+                "testSource": "tests/coding_agent/McpSessionManagerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged",
+              "testSource": "tests/coding_agent/McpSessionManagerTest.cpp",
+              "reason": "The unchanged-fingerprint turn keeps the server needs-auth and reconnects zero times, while a store mutated from a second owner changes the fingerprint, reconnects exactly once and exposes the tool. An unconditional per-turn reconnect and a no-pickup design both fail this pair."
+            }
+          }
+        ],
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-j2",
+            "-L",
+            "issue1104",
+            "--output-on-failure",
+            "--output-junit",
+            "/tmp/cch-1104-delivery.xml"
+          ],
+          "testedRevision": "adcaaa809b163d4bf84f6208fd652b7aad8f6b9e",
+          "recordedAt": "2026-10-29T19:40:00Z",
+          "selected": 12,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml",
+            "sha256": "c3638f749f0404f1717a308b3770f077ce5b113e2c1b774e2953b51e25d108e8"
+          }
+        },
+        "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27"
       }
     ]
   },
@@ -860,8 +1095,8 @@
         "partial": 4
       },
       "cch_coding_agent": {
-        "implemented": 75,
-        "missing": 21,
+        "implemented": 76,
+        "missing": 20,
         "not-applicable": 6,
         "partial": 57
       },
@@ -888,31 +1123,31 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1022,
-      "missing": 214,
+      "implemented": 1023,
+      "missing": 213,
       "not-applicable": 18,
       "partial": 210
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1018,
+      "unverified": 1016,
       "upstream-captured": 413,
-      "verified": 5
+      "verified": 7
     },
     "evidenceRoute": {
-      "captured": 418,
+      "captured": 420,
       "artifact-only": 0,
       "related-captured": 23,
       "declared-comparison": 31,
       "cpp-regression-only": 10,
-      "unobserved": 54,
+      "unobserved": 52,
       "unobserved-static": 0,
       "historical-v1.0.4": 858,
       "not-audited": 42,
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1018,
+    "unobservedSupported": 1016,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -945,11 +1180,11 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1018,
+    "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 551,
-      "scenarioNamed": 358,
-      "artifactCovered": 56,
+      "scenarios": 555,
+      "scenarioNamed": 360,
+      "artifactCovered": 58,
       "orphaned": [
         "audit-1157/environment.json:output exceeding the window",
         "audit-1157/environment.json:output within the window",
@@ -17312,28 +17547,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "`createMcpExtension` `turn_start`/`reconnectSignedIn`, `McpServerConnection`, `mcp-auth.json`.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
-      "scenario": null,
-      "comparisonScenarios": [],
+      "implementation_ticket": "#1104",
+      "scenario": "a sign-in performed outside the session is picked up on the next turn",
+      "comparisonScenarios": [
+        "a sign-in performed outside the session is picked up on the next turn"
+      ],
       "evidence": {
-        "route": "unobserved",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
-        "result": null
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
+        "scenarioMatch": "direct",
+        "capturedScenarios": [
+          "a sign-in performed outside the session is picked up on the next turn"
+        ],
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md"
       },
-      "missingObservation": "no frozen capture recorded for this row; source-only audit",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "no frozen capture recorded for this row; source-only audit",
-      "notes": "Recommendation: Add a per-turn token fingerprint check on the manager and reconnect a server whose stored tokens changed. Test with an in-memory store mutated from a second handle.",
+      "remainingWork": null,
+      "notes": "Delivered by #1104; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -17346,7 +17585,26 @@
           "verification": "unverified",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "a sign-in performed outside the session is picked up on the next turn"
+          ],
+          "result": null
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": "Recommendation: Add a per-turn token fingerprint check on the manager and reconnect a server whose stored tokens changed. Test with an in-memory store mutated from a second handle."
+      },
+      "delivery": "1104-management-during-connection"
     },
     {
       "id": "cch_coding_agent:mcp-management-ui",
@@ -17359,27 +17617,31 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "TUI `McpManagerFlow`/`McpManagerPresenter`; CLI `mcp` commands; the live `McpSessionManager`.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
-      "scenario": null,
-      "comparisonScenarios": [],
+      "implementation_ticket": "#1104",
+      "scenario": "the /mcp manager lists connecting servers and completes a sign-in while another server connects",
+      "comparisonScenarios": [
+        "the /mcp manager lists connecting servers and completes a sign-in while another server connects"
+      ],
       "evidence": {
-        "route": "unobserved",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
-        "result": null
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
+        "scenarioMatch": "direct",
+        "capturedScenarios": [
+          "the /mcp manager lists connecting servers and completes a sign-in while another server connects"
+        ],
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md"
       },
-      "missingObservation": "no frozen capture recorded for this row; source-only audit",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "no frozen capture recorded for this row; source-only audit",
-      "notes": "Recommendation: Keep the panel; add differential cases for status while connecting, stale sign-in/reconnect outcomes and the `enable-project`/`disable-project` actions. Multi-candidate sign-in selection remains the known interaction gap.",
+      "remainingWork": null,
+      "notes": "Delivered by #1104; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [
@@ -17394,7 +17656,26 @@
           "verification": "unverified",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "implemented",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "the /mcp manager lists connecting servers and completes a sign-in while another server connects"
+          ],
+          "result": null
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": "Recommendation: Keep the panel; add differential cases for status while connecting, stale sign-in/reconnect outcomes and the `enable-project`/`disable-project` actions. Multi-candidate sign-in selection remains the known interaction gap."
+      },
+      "delivery": "1104-management-during-connection"
     },
     {
       "id": "cch_coding_agent:mcp-oauth-persistence",

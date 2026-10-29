@@ -28,9 +28,12 @@
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
 
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -256,6 +259,13 @@ public:
     /// Remove the server's stored credentials (pi `credentials.remove`).
     /// Returns whether any credential was stored.
     [[nodiscard]] virtual support::AsyncResult<bool> sign_out(const mcp::McpConfigEntry& entry) = 0;
+    /// pi `credentials.tokens(server)`: a fingerprint of the server's stored
+    /// tokens (the fields the pickup compares), or `std::nullopt` when none
+    /// are stored. The manager snapshots this when a connection enters
+    /// `needs-auth` and re-checks it at `turn_start` to notice an external
+    /// sign-in (another process writing `mcp-auth.json`).
+    [[nodiscard]] virtual support::AsyncResult<std::optional<std::string>> stored_tokens(
+            const mcp::McpConfigEntry& entry) = 0;
 };
 
 /// One snapshot of a connection as the panel reads it (pi `connection`).
@@ -291,11 +301,22 @@ struct McpManagerDependencies {
     /// recorded on the manager (`warnings()`), so a host without a UI seam
     /// still surfaces it through the panel or the session.
     std::function<void(std::string_view message)> notify_warning;
+    /// pi `ctx.ui.notify(..., "info")` for the first-prompt startup notice
+    /// (`waitForDirectServers`' timeout). Optional; the session without a TUI
+    /// simply does not surface the notice.
+    std::function<void(std::string_view message)> notify_info;
 };
 
 /// The session-level MCP server manager (pi `createMcpExtension`'s `servers`
 /// list and its `/mcp` manager half).
-class McpSessionManager {
+///
+/// `session_start` fires every enabled server's connect in the background (pi
+/// starts each `createConnection` without awaiting and tracks it in
+/// `backgroundActions`), so session creation never blocks on a slow
+/// handshake; the management surface stays live the whole time. The manager
+/// is therefore always owned by `shared_ptr` (the detached connect tasks hold
+/// a weak handle and drop their late connection when the manager is gone).
+class McpSessionManager final : public std::enable_shared_from_this<McpSessionManager> {
 public:
     /// Build a manager over an already-loaded `mcp.json` (pi `session_start`).
     /// `overridden` are the registered-server override notices (pi
@@ -329,12 +350,45 @@ public:
     /// installation. Optional: an empty function clears the sink.
     void set_notify_warning_sink(std::function<void(std::string_view message)> sink);
 
-    /// Connect every enabled server (pi `session_start`'s background connect).
-    /// Each connection's state reflects the outcome; a failed server does not
-    /// veto the others.
+    /// Kick off every enabled server's connect in the background and return
+    /// once the launches are queued (pi `session_start`: the `Promise.all`
+    /// settle is tracked, not awaited). Each connection's state reflects its
+    /// outcome when it lands; a failed server does not veto the others. A
+    /// factory-level error is recorded as the server's `message` (pi surfaces
+    /// it through the panel), never as a veto on the session.
     [[nodiscard]] support::AsyncResult<void> start();
 
-    /// pi `session_end`: close every live connection. Idempotent.
+    /// pi `waitForPendingConnections`: settle every connect `start()` (or an
+    /// action) has launched but not completed. A plain `/mcp` status read and
+    /// the login/logout/reconnect subcommands await this before reading
+    /// server states, so their answer reflects settled connections.
+    [[nodiscard]] support::AsyncResult<void> wait_for_pending_connects();
+
+    /// pi `waitForDirectServers` (`before_agent_start`): on the first prompt
+    /// only (latched, pi `waitedForStartup`), wait for the enabled servers
+    /// with `direct` exposure to finish connecting, bounded by `bound`. On
+    /// expiry the still-connecting servers keep connecting and the info sink
+    /// receives pi's notice. Completes with whether every direct server
+    /// settled within the bound.
+    [[nodiscard]] support::AsyncResult<bool> wait_for_direct_servers(std::chrono::milliseconds bound);
+
+    /// pi `turn_start`: pick up servers signed in through another process.
+    /// Every `needs-auth` connection snapshots its stored tokens when it
+    /// enters that state (pi `onConnectionChange`'s `tokensAtSignIn`); when
+    /// the snapshot and the current store disagree, the server is reconnected
+    /// (pi `reconnectSignedIn`). A status read alone never runs this — only
+    /// the turn seam does.
+    [[nodiscard]] support::AsyncResult<void> on_turn_start();
+
+    /// pi `backgroundActions.size`: how many connects are in flight. Test and
+    /// predicate seam over the same counter `wait_for_pending_connects`
+    /// settles.
+    [[nodiscard]] std::size_t pending_start_count() const noexcept { return pending_starts_; }
+
+    /// pi `session_end`: close every live connection and drop any connect
+    /// that is still in flight when it lands. Does not await the pending
+    /// connects (pi's shutdown does not await `backgroundActions`).
+    /// Idempotent.
     void close() noexcept;
 
     /// The servers as the panel reads them, in configuration order.
@@ -403,11 +457,37 @@ private:
         std::optional<std::string> scope;
         std::shared_ptr<McpLiveConnection> connection;
         std::optional<std::string> message;
+        /// The connect `start()` launched is still in flight (pi's connection
+        /// while its factory promise is unsettled). A `servers()` snapshot
+        /// stays `connection == std::nullopt`, which every reader (panel,
+        /// status report, session diagnostics) renders as "connecting".
+        bool start_pending{false};
+        /// Bumped whenever an action invalidates an in-flight connect's
+        /// target (disable, close): the late completion compares against its
+        /// launch-time generation and drops the connection.
+        std::uint64_t generation{0};
     };
 
     [[nodiscard]] ManagedServer* find(std::string_view server);
     [[nodiscard]] const ManagedServer* find(std::string_view server) const;
-    [[nodiscard]] support::AsyncResult<void> start_connection(std::string_view server);
+    /// Connect one server and bind its tools to the session surface. A
+    /// `launch_start` caller passes its generation: a connect that lands
+    /// after the manager closed (or the server was disabled) drops the late
+    /// connection instead of touching the released Agent (#1104).
+    [[nodiscard]] support::AsyncResult<void> start_connection(
+            std::string_view server, std::uint64_t expected_generation = 0);
+    /// Launch one server's connect as a detached background task on
+    /// `executor` (pi's unawaited `createConnection`, tracked in
+    /// `backgroundActions`). Guards the double-launch and the closed manager.
+    void launch_start(const boost::asio::any_io_executor& executor, std::string_view server);
+    /// pi `onConnectionChange`'s `tokensAtSignIn` half: drop the snapshot when
+    /// the connection is not `needs-auth`; take it (from the auth seam) the
+    /// first time the state is observed.
+    [[nodiscard]] boost::asio::awaitable<void> sync_sign_in_snapshot(ManagedServer& server);
+    /// pi `reconnectSignedIn` (the `turn_start` pickup): reconnect every
+    /// `needs-auth` connection whose stored tokens changed since its snapshot.
+    /// Errors stay on the server (pi `Promise.allSettled`).
+    [[nodiscard]] boost::asio::awaitable<void> reconnect_signed_in();
     /// pi `saveConfig`: persist `enabled`/`exposure` through the write half and
     /// update the in-memory entry. Returns pi's failure message on a write
     /// failure.
@@ -433,6 +513,17 @@ private:
     std::optional<mcp::McpExposure> resource_tools_exposure_;
     /// pi `warnedUnreachable`: latch so the reachability warning fires once.
     bool warned_unreachable_{false};
+    /// pi `backgroundActions`: enabled-server connects `start()` launched and
+    /// the actions below have not yet completed.
+    std::size_t pending_starts_{0};
+    /// pi `closed`: `session_end` ran. In-flight connects drop their late
+    /// connection; every new launch is a no-op.
+    bool closed_{false};
+    /// pi `waitedForStartup`: `wait_for_direct_servers` ran once.
+    bool waited_for_startup_{false};
+    /// pi `tokensAtSignIn`: the stored-token snapshot taken when each
+    /// `needs-auth` connection was first observed, keyed by server name.
+    std::map<std::string, std::optional<std::string>> tokens_at_sign_in_;
     /// The recorded warning texts (see `warnings()`).
     std::vector<std::string> warnings_;
     std::function<void()> change_listener_;

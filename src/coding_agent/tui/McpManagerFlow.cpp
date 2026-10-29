@@ -267,7 +267,9 @@ void McpManagerFlow::open_manager() {
         return;
     }
     if (manager() == nullptr || presenter_ == nullptr) {
-        // pi's non-TUI branch: the plain status report.
+        // pi's non-TUI branch: the plain status report (pi's print-mode slash
+        // commands never reach this flow; a live host without a manager is
+        // the reachable case here).
         print_status_report();
         return;
     }
@@ -653,9 +655,39 @@ std::optional<std::string> McpManagerFlow::pick_server(const std::string& name, 
 }
 
 void McpManagerFlow::run_login(std::string name) {
-    if (manager() == nullptr) {
+    // pi `registerCommand("mcp")`: `await pending` before the subcommand
+    // dispatch, so a server still connecting is picked from its settled
+    // state (a needs-auth OAuth server only appears once its connect
+    // answered).
+    run_after_settle("/mcp login", [this, name = std::move(name)] { login_after_settle(name); });
+}
+
+void McpManagerFlow::run_after_settle(std::string label, std::function<void()> action) {
+    if (manager() == nullptr || hooks_.spawn_flow == nullptr) {
         return;
     }
+    auto self = shared_from_this();
+    auto host_lifetime = host_lifetime_.lock();
+    if (host_lifetime == nullptr) {
+        return;
+    }
+    hooks_.spawn_flow(
+            [self,
+                    host_lifetime = std::move(host_lifetime),
+                    action = std::move(action)]() mutable -> boost::asio::awaitable<void> {
+                auto* running = self->manager();
+                if (running == nullptr) {
+                    co_return;
+                }
+                (void)co_await support::detail::await_async_result(running->wait_for_pending_connects());
+                // `self` stays alive across the call, so an `action` that
+                // captures this flow stays valid.
+                action();
+            },
+            std::move(label));
+}
+
+void McpManagerFlow::login_after_settle(const std::string& name) {
     const auto oauth = [](const McpServerView& view) { return view.connection.has_value() && view.connection->oauth; };
     const auto needs_auth = [](const McpServerView& view) {
         return view.connection.has_value() && view.connection->state == McpServerViewState::NeedsAuth;
@@ -666,6 +698,9 @@ void McpManagerFlow::run_login(std::string name) {
         // candidates; one uses it directly, several list with the
         // `run /mcp login <name>` line.
         auto* current = manager();
+        if (current == nullptr) {
+            return;
+        }
         const auto servers = McpManagerPresenter(*current).servers();
         std::vector<McpServerView> auth_needed;
         std::vector<McpServerView> eligible;
@@ -710,6 +745,11 @@ void McpManagerFlow::run_login(std::string name) {
 }
 
 void McpManagerFlow::run_logout(std::string name) {
+    // pi `registerCommand("mcp")`: `await pending` before the pick.
+    run_after_settle("/mcp logout", [this, name = std::move(name)] { logout_after_settle(name); });
+}
+
+void McpManagerFlow::logout_after_settle(const std::string& name) {
     auto* current = manager();
     if (current == nullptr) {
         return;
@@ -728,28 +768,34 @@ void McpManagerFlow::run_logout(std::string name) {
     if (host_lifetime == nullptr || hooks_.spawn_flow == nullptr) {
         return;
     }
+    const std::string target = *picked;
     hooks_.spawn_flow(
-            [self, host_lifetime = std::move(host_lifetime), name = *picked]() mutable -> boost::asio::awaitable<void> {
+            [self, host_lifetime = std::move(host_lifetime), target]() mutable -> boost::asio::awaitable<void> {
                 auto* running = self->manager();
                 if (running == nullptr) {
                     co_return;
                 }
-                const auto removed = co_await support::detail::await_async_result(running->sign_out(name));
+                const auto removed = co_await support::detail::await_async_result(running->sign_out(target));
                 if (!removed) {
                     self->show_error(removed.error().message);
                     co_return;
                 }
                 // pi's two verbatim outcomes.
                 if (*removed) {
-                    self->show_status(std::format("Signed out of MCP server \"{}\".", name));
+                    self->show_status(std::format("Signed out of MCP server \"{}\".", target));
                 } else {
-                    self->show_status(std::format("No stored credentials for MCP server \"{}\".", name));
+                    self->show_status(std::format("No stored credentials for MCP server \"{}\".", target));
                 }
             },
             "/mcp logout");
 }
 
 void McpManagerFlow::run_reconnect(std::string name) {
+    // pi `registerCommand("mcp")`: `await pending` before the pick.
+    run_after_settle("/mcp reconnect", [this, name = std::move(name)] { reconnect_after_settle(name); });
+}
+
+void McpManagerFlow::reconnect_after_settle(const std::string& name) {
     auto* current = manager();
     if (current == nullptr) {
         return;
@@ -773,13 +819,14 @@ void McpManagerFlow::run_reconnect(std::string name) {
     if (host_lifetime == nullptr || hooks_.spawn_flow == nullptr) {
         return;
     }
+    const std::string target = *picked;
     hooks_.spawn_flow(
-            [self, host_lifetime = std::move(host_lifetime), name = *picked]() mutable -> boost::asio::awaitable<void> {
+            [self, host_lifetime = std::move(host_lifetime), target]() mutable -> boost::asio::awaitable<void> {
                 auto* running = self->manager();
                 if (running == nullptr) {
                     co_return;
                 }
-                const auto failure = co_await support::detail::await_async_result(running->reconnect(name));
+                const auto failure = co_await support::detail::await_async_result(running->reconnect(target));
                 if (!failure) {
                     self->show_error(failure.error().message);
                     co_return;
@@ -791,11 +838,11 @@ void McpManagerFlow::run_reconnect(std::string name) {
                 // pi's success line with the described state.
                 std::string described = "connected";
                 for (const auto& view : McpManagerPresenter(*running).servers()) {
-                    if (view.entry.name == name) {
+                    if (view.entry.name == target) {
                         described = mcp_describe_state(view);
                     }
                 }
-                self->show_status(std::format("Reconnected to MCP server \"{}\" ({}).", name, described));
+                self->show_status(std::format("Reconnected to MCP server \"{}\" ({}).", target, described));
             },
             "/mcp reconnect");
 }
