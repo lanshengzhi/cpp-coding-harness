@@ -19,49 +19,53 @@ support::Error image_error(std::string text) {
 Result failure(std::string text) { return std::unexpected(tool_error(std::move(text))); }
 Result text_result(std::string text) { return std::vector<ai::Content>{ai::text_content(std::move(text))}; }
 
-PreparedResult prepare_with_processor(std::string_view path,
-        std::span<const std::uint8_t> bytes,
-        std::string_view mime_type,
-        const CodingToolOptions& options) {
-    auto prepared = options.images->prepare(bytes, mime_type, options.limits);
+/// An image the read tool found in a file: its path for diagnostics, its
+/// bytes and their detected MIME type.
+struct ReadImage {
+    std::string_view path;
+    std::span<const std::uint8_t> bytes;
+    std::string_view mime_type;
+};
+
+PreparedResult prepare_with_processor(const ReadImage& image, const CodingToolOptions& options) {
+    auto prepared = options.images->prepare(image.bytes, image.mime_type, options.limits);
     if (!prepared) {
-        return std::unexpected(
-                image_error(std::format("{} is an image ({}) that cannot be prepared for the model", path, mime_type)));
+        return std::unexpected(image_error(
+                std::format("{} is an image ({}) that cannot be prepared for the model", image.path, image.mime_type)));
     }
     return std::move(*prepared);
 }
 
-PreparedResult prepare_without_processor(std::string_view path,
-        std::span<const std::uint8_t> bytes,
-        std::string_view mime_type,
-        const CodingToolOptions& options) {
-    if (!is_inline_image_type(mime_type)) {
-        return std::unexpected(image_error(std::format(
-                "{} is an image ({}) that needs converting, and no image processor is configured", path, mime_type)));
+PreparedResult prepare_without_processor(const ReadImage& image, const CodingToolOptions& options) {
+    if (!is_inline_image_type(image.mime_type)) {
+        return std::unexpected(image_error(
+                std::format("{} is an image ({}) that needs converting, and no image processor is configured",
+                        image.path,
+                        image.mime_type)));
     }
-    if (base64_encoded_length(bytes.size()) > options.limits.max_base64_bytes) {
+    if (base64_encoded_length(image.bytes.size()) > options.limits.max_base64_bytes) {
         return std::unexpected(image_error(std::format("{} is an image ({}) of {}, too large to send, "
                                                        "and no image processor is configured to shrink it",
-                path,
-                mime_type,
-                support::format_output_size(bytes.size()))));
+                image.path,
+                image.mime_type,
+                support::format_output_size(image.bytes.size()))));
     }
-    const auto dimensions = image_dimensions(bytes, mime_type);
+    const auto dimensions = image_dimensions(image.bytes, image.mime_type);
     if (!dimensions) {
         return std::unexpected(
-                image_error(std::format("{} is an image ({}) whose size cannot be read", path, mime_type)));
+                image_error(std::format("{} is an image ({}) whose size cannot be read", image.path, image.mime_type)));
     }
     if (dimensions->width > options.limits.max_width || dimensions->height > options.limits.max_height) {
         return std::unexpected(image_error(std::format("{} is an image ({}) of {}x{}, larger than {}x{}, "
                                                        "and no image processor is configured to shrink it",
-                path,
-                mime_type,
+                image.path,
+                image.mime_type,
                 dimensions->width,
                 dimensions->height,
                 options.limits.max_width,
                 options.limits.max_height)));
     }
-    return PreparedImage{.data = encode_base64(bytes), .mime_type = std::string{mime_type}};
+    return PreparedImage{.data = encode_base64(image.bytes), .mime_type = std::string{image.mime_type}};
 }
 
 std::vector<std::string> image_notes(const PreparedImage& image, bool vision) {
@@ -97,8 +101,8 @@ Result read_path(std::string_view path, Environment& env, const CodingToolOption
     const auto mime_type = detect_image_mime_type(bytes);
     if (!mime_type) return text_result(std::move(*content));
 
-    auto prepared = options.images ? prepare_with_processor(path, bytes, *mime_type, options)
-                                   : prepare_without_processor(path, bytes, *mime_type, options);
+    const ReadImage image{.path = path, .bytes = bytes, .mime_type = *mime_type};
+    auto prepared = options.images ? prepare_with_processor(image, options) : prepare_without_processor(image, options);
     if (!prepared) return std::unexpected(prepared.error());
     return image_result(std::move(*prepared), options.vision);
 }

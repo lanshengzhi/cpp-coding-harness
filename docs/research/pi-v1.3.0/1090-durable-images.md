@@ -4,7 +4,10 @@
 
 `cch_durable` owns image detection, preparation and the read-tool image branch. The durable Owner
 does not depend on `cch_coding_agent`, and classifier or image-generation Provider execution stays
-excluded. Observations were compared with frozen pi v1.3.0 at
+excluded. The ticket title's image read/write narrows to the read path: no frozen observation in
+this baseline writes image bytes through the durable write tool (upstream `write` takes text
+content), and the #1058 ledger carries no image-write row, so the slice delivers no write
+capability. Observations were compared with frozen pi v1.3.0 at
 `71023aec1546d6d677a65669c5665c0927ce0dd0`; the registered capture lives in
 `fixtures/pi-v1.3.0/audit-1090/`.
 

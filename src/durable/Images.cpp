@@ -420,7 +420,7 @@ struct EncodedImage {
         return !encoded.empty() && base64_encoded_length(encoded.size()) <= max_base64_bytes;
     };
     const auto jpegs_fit = [&]() -> std::optional<EncodedImage> {
-        for (const auto quality : kJpegQualities) {
+        for (const auto& quality : kJpegQualities) {
             auto encoded = encode_jpeg(rgba, dimensions, quality);
             if (fits(encoded)) return EncodedImage{.data = encode_base64(encoded), .mime_type = "image/jpeg"};
         }
