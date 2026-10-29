@@ -289,18 +289,18 @@
         "command": [
           "ctest",
           "--preset",
-          "dev-fast",
+          "vcpkg",
           "-L",
           "issue1090",
           "--output-junit",
-          "/home/lansy/.herdr/worktrees/cpp-coding-harness/durable-store/docs/research/pi-v1.3.0/deliveries/1090-revalidation-1168.xml"
+          "docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml"
         ],
-        "testedRevision": "e3165d3bc0b008e5f838e70a523ecc07d5121141",
-        "recordedAt": "2026-10-29T14:52:10Z",
+        "testedRevision": "c1f412b1bbfc2868e41c1607a44d8ab5ee333502",
+        "recordedAt": "2026-10-29T23:19:27Z",
         "selected": 10,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1168.xml",
-          "sha256": "21d1b95dc082131c277eccffa430b3e1b3f7b9a455bb10ae4ca1605827192320"
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml",
+          "sha256": "7a749b92a354bd58ed96f24b5893597faf59c427559118c3b1ddefb202989380"
         }
       },
       "inputs": [
@@ -795,19 +795,17 @@
           "ctest",
           "--preset",
           "vcpkg",
-          "-j2",
           "-L",
           "issue1104",
-          "--output-on-failure",
           "--output-junit",
-          "/tmp/cch-1104-delivery.xml"
+          "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml"
         ],
-        "testedRevision": "adcaaa809b163d4bf84f6208fd652b7aad8f6b9e",
-        "recordedAt": "2026-10-29T19:40:00Z",
+        "testedRevision": "c1f412b1bbfc2868e41c1607a44d8ab5ee333502",
+        "recordedAt": "2026-10-29T23:19:27Z",
         "selected": 12,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml",
-          "sha256": "c3638f749f0404f1717a308b3770f077ce5b113e2c1b774e2953b51e25d108e8"
+          "sha256": "ee7412be14e9cb5b0624f5b0d0db1cab4dfc452d6b6565c045bfec18e2b5c049"
         }
       },
       "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27"
