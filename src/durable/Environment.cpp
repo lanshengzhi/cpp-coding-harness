@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstring>
 #include <filesystem>
+#include <map>
 #include <format>
 #include <fcntl.h>
 #include <poll.h>
@@ -34,30 +35,134 @@ support::Error system_failure(std::string_view operation) {
 }
 support::Error cancelled() { return failure("aborted", support::ErrorCode::Cancelled); }
 
+constexpr std::size_t kWatchMaxDirectories = 10000;
+constexpr uint32_t kWatchMask = IN_CREATE | IN_MODIFY | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB;
+
 class NativeWatch final : public FileWatch {
 public:
-    // The worker borrows this until close() joins it, before any members are
-    // destroyed. The change sink itself is owned by that worker.
-    NativeWatch(int fd, FileChangeSink callback)
-        : fd_(fd), worker_([this, callback = std::move(callback)](std::stop_token stop) mutable {
-              std::array<char, 8192> buffer{};
-              while (!stop.stop_requested()) {
-                  pollfd descriptor{fd_.get(), POLLIN, 0};
-                  if (::poll(&descriptor, 1, 50) > 0 && ::read(fd_.get(), buffer.data(), buffer.size()) > 0 &&
-                          !stop.stop_requested())
-                      callback();
-              }
-          }) {}
+    NativeWatch(support::UniqueFd fd, WatchChangeSink callback, const WatchOptions& options)
+        : fd_(std::move(fd)), sink_(std::move(callback)), recursive_(options.recursive),
+          exclude_hidden_(options.exclude_hidden), excluded_names_(options.excluded_names) {}
     ~NativeWatch() override { close(); }
-    void close() override {
-        if (!worker_.joinable()) return;
-        worker_.request_stop();
-        worker_.join();
-        fd_.reset();
+
+    // Establish coverage before the worker starts; watch() must not resolve
+    // until every directory that can change is covered (frozen pi contract).
+    // A directory target is covered at itself (recursively when asked); a file
+    // or not-yet-existing target is covered at its parent, so creating it is a
+    // change. Only the target file's own name is reported below a file target.
+    bool establish(const fs::path& target, bool target_is_directory) {
+        std::error_code ec;
+        if (target_is_directory) return add_directory_tree(target, recursive_, ec);
+        target_file_ = target.filename().string();
+        return watch_directory(target.parent_path()) >= 0;
     }
 
+    // Starts delivery; only called after coverage succeeded. The worker borrows
+    // this until close() (or the destructor) joins it, so no member outlives the
+    // callback delivery it serves.
+    void start() {
+        worker_ = std::jthread([this](std::stop_token stop) mutable { run(std::move(stop)); });
+    }
+    void close() override {
+        if (worker_.joinable()) {
+            worker_.request_stop();
+            worker_.join();
+        }
+        fd_.reset();
+    }
+    std::string_view mode() const override { return "native"; }
+
 private:
+    bool excluded(std::string_view name) const {
+        return (exclude_hidden_ && !name.empty() && name.front() == '.') ||
+               std::ranges::find(excluded_names_, name) != excluded_names_.end();
+    }
+
+    int watch_directory(const fs::path& directory) {
+        const int wd = ::inotify_add_watch(fd_.get(), directory.c_str(), kWatchMask | IN_ONLYDIR);
+        if (wd >= 0) directory_prefixes_.emplace(wd, directory.string() + '/');
+        return wd;
+    }
+
+    // Add `directory` and, when `descend`, every descendant directory.
+    // Symlinks are never followed. Returns false on watch errors or budget.
+    bool add_directory_tree(const fs::path& directory, bool descend, std::error_code& ec) {
+        std::error_code type_ec;
+        if (fs::is_symlink(directory, type_ec)) return true;
+        if (watch_directory(directory) < 0) return false;
+        if (++directory_count_ > kWatchMaxDirectories) return false;
+        if (!descend) return true;
+        fs::directory_iterator it(directory, fs::directory_options::skip_permission_denied, ec), end;
+        while (!ec && it != end) {
+            if (it->is_directory(ec) && !excluded(it->path().filename().string()) &&
+                    !add_directory_tree(it->path(), true, ec))
+                return false;
+            it.increment(ec);
+        }
+        return !ec;
+    }
+
+    // A directory created or moved in later gets the same coverage before its
+    // own changes can be reported; failure shrinks coverage, so it is terminal.
+    void run(std::stop_token stop) {
+        std::array<char, 65536> buffer{};
+        while (!stop.stop_requested()) {
+            pollfd descriptor{fd_.get(), POLLIN, 0};
+            if (::poll(&descriptor, 1, 50) <= 0 || (descriptor.revents & POLLIN) == 0) continue;
+            const ssize_t n = ::read(fd_.get(), buffer.data(), buffer.size());
+            if (n <= 0) {
+                if (errno == EAGAIN || errno == EINTR) continue;
+                if (!stop.stop_requested())
+                    sink_(WatchChange{.terminal_error = true, .error = system_failure("inotify read")});
+                return;
+            }
+            std::vector<std::pair<int, std::string>> created_directories;
+            for (const char* cursor = buffer.data(); cursor < buffer.data() + n;) {
+                const auto& event = *reinterpret_cast<const inotify_event*>(cursor);
+                cursor += sizeof(inotify_event) + event.len;
+                if (event.mask & IN_Q_OVERFLOW) {
+                    sink_(WatchChange{.overflow = true});
+                    continue;
+                }
+                if (event.mask & IN_IGNORED || event.mask & IN_UNMOUNT) {
+                    sink_(WatchChange{
+                            .terminal_error = true, .error = failure("watched directory became unavailable")});
+                    return;
+                }
+                const auto prefix = directory_prefixes_.find(event.wd);
+                if (prefix == directory_prefixes_.end()) continue;
+                const std::string_view name = event.len > 0 ? std::string_view{event.name} : std::string_view{};
+                if (target_file_ && name != std::string_view{*target_file_}) continue;
+                if (!name.empty() && excluded(name)) continue;
+                const std::string path = prefix->second + std::string{name};
+                if (!name.empty() && recursive_ && (event.mask & (IN_CREATE | IN_MOVED_TO)) != 0 &&
+                        (event.mask & IN_ISDIR) != 0)
+                    created_directories.emplace_back(event.wd, std::string{name});
+                sink_(WatchChange{.paths = {path}});
+            }
+            for (const auto& [wd, name] : created_directories) {
+                if (stop.stop_requested()) return;
+                const auto prefix = directory_prefixes_.find(wd);
+                if (prefix == directory_prefixes_.end()) continue;
+                std::error_code ec;
+                if (!add_directory_tree(fs::path{prefix->second} / name, recursive_, ec)) {
+                    sink_(WatchChange{.terminal_error = true,
+                            .error = failure("watched tree exceeds the directory limit or cannot be watched",
+                                    support::ErrorCode::Validation)});
+                    return;
+                }
+            }
+        }
+    }
+
     support::UniqueFd fd_;
+    WatchChangeSink sink_;
+    bool recursive_;
+    bool exclude_hidden_;
+    std::vector<std::string> excluded_names_;
+    std::map<int, std::string> directory_prefixes_;
+    std::optional<std::string> target_file_;
+    std::size_t directory_count_{};
     std::jthread worker_;
 };
 
@@ -175,20 +280,18 @@ public:
             std::stop_token stop,
             ShellOutputWindow window) override;
     support::Expected<std::unique_ptr<FileWatch>> watch(
-            std::string_view path, FileChangeSink callback, bool recursive) override {
-        if (recursive)
-            return std::unexpected(failure("recursive watch is not implemented", support::ErrorCode::Validation));
+            std::string_view path, WatchChangeSink on_change, WatchOptions options) override {
         auto target = resolve(path);
+        std::error_code ec;
+        const bool target_is_directory = fs::is_directory(target, ec) && !fs::is_symlink(target, ec);
         support::UniqueFd fd{::inotify_init1(IN_CLOEXEC | IN_NONBLOCK)};
         if (!fd) return std::unexpected(system_failure("inotify_init"));
-        std::error_code ec;
-        auto watched = fs::is_directory(target, ec) ? target : target.parent_path();
-        if (::inotify_add_watch(fd.get(),
-                    watched.c_str(),
-                    IN_CREATE | IN_MODIFY | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB) < 0) {
-            return std::unexpected(system_failure("inotify_add_watch"));
-        }
-        return std::unique_ptr<FileWatch>{std::make_unique<NativeWatch>(fd.release(), std::move(callback))};
+        auto watch = std::make_unique<NativeWatch>(std::move(fd), std::move(on_change), options);
+        if (!watch->establish(target, target_is_directory))
+            return std::unexpected(failure(
+                    "watched tree exceeds the directory limit or cannot be watched", support::ErrorCode::Validation));
+        watch->start();
+        return std::unique_ptr<FileWatch>{std::move(watch)};
     }
 
 private:

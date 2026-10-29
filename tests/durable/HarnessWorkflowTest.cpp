@@ -131,8 +131,8 @@ public:
         return inner_->exec(command, timeout, std::move(output), stop, window);
     }
     support::Expected<std::unique_ptr<FileWatch>> watch(
-            std::string_view path, FileChangeSink callback, bool recursive) override {
-        return inner_->watch(path, std::move(callback), recursive);
+            std::string_view path, WatchChangeSink on_change, WatchOptions options) override {
+        return inner_->watch(path, std::move(on_change), std::move(options));
     }
     std::atomic_int writes{0};
 
@@ -371,19 +371,24 @@ TEST_CASE("Durable local environment reports file process and watch outcomes", "
     REQUIRE(aborted);
     REQUIRE_FALSE(*aborted);
     CHECK(aborted->error().code == support::ErrorCode::Cancelled);
-    auto recursive = env->watch("file.txt", [] {}, true);
-    REQUIRE_FALSE(recursive);
-    CHECK(recursive.error().code == support::ErrorCode::Validation);
     std::atomic_int calls{0};
     std::counting_semaphore<> changed{0};
     // close() joins delivery before these borrowed locals leave scope.
-    auto watch = env->watch("watched.txt", [count = std::make_unique<int>(0), &calls, &changed] {
+    auto watch = env->watch("watched.txt", [count = std::make_unique<int>(0), &calls, &changed](const WatchChange&) {
         calls = ++*count;
         changed.release();
     });
     REQUIRE(watch);
+    CHECK((*watch)->mode() == "native");
     workspace.write("watched.txt", "first");
     REQUIRE(changed.try_acquire_for(5s));
+    // Creating and writing the file can deliver more than one event; drain the
+    // permits so the next checks observe exactly their own writes.
+    while (changed.try_acquire()) {
+    }
+    // A sibling in the watched parent directory is not the target: no event.
+    workspace.write("sibling.txt", "other");
+    CHECK_FALSE(changed.try_acquire_for(250ms));
     (*watch)->close();
     while (changed.try_acquire()) {
     }
@@ -392,11 +397,101 @@ TEST_CASE("Durable local environment reports file process and watch outcomes", "
     CHECK_FALSE(changed.try_acquire_for(250ms));
     CHECK(calls == at_close);
     std::counting_semaphore<> directory_changed{0};
-    auto directory_watch = env->watch(".", [&] { directory_changed.release(); });
+    auto directory_watch = env->watch(".", [&directory_changed](const WatchChange&) { directory_changed.release(); });
     REQUIRE(directory_watch);
     workspace.write("new-child", "content");
     CHECK(directory_changed.try_acquire_for(5s));
     (*directory_watch)->close();
+}
+
+TEST_CASE("Durable recursive watch covers nested and later-created directories", "[durable][environment][issue1156]") {
+    using namespace std::chrono_literals;
+    tests::TempWorkspace workspace;
+    namespace fs = std::filesystem;
+    auto env = local_environment(workspace.path().string());
+    fs::create_directories(workspace.path() / "tree" / "nested");
+    std::vector<WatchChange> changes;
+    std::mutex changes_mutex;
+    std::counting_semaphore<> changed{0};
+    // close() joins delivery before these borrowed locals leave scope.
+    auto watch = env->watch(
+            "tree",
+            [&changes, &changes_mutex, &changed](const WatchChange& change) {
+                std::lock_guard lock{changes_mutex};
+                changes.push_back(change);
+                changed.release();
+            },
+            WatchOptions{.recursive = true});
+    REQUIRE(watch);
+    CHECK((*watch)->mode() == "native");
+    workspace.write("tree/nested/file", "first");
+    REQUIRE(changed.try_acquire_for(5s));
+    {
+        std::lock_guard lock{changes_mutex};
+        REQUIRE_FALSE(changes.empty());
+        CHECK_FALSE(changes.back().terminal_error);
+    }
+    // A subdirectory created after the watch starts is covered before its own
+    // changes can be reported.
+    fs::create_directories(workspace.path() / "tree" / "new");
+    std::this_thread::sleep_for(100ms);
+    changes.clear();
+    workspace.write("tree/new/file", "second");
+    REQUIRE(changed.try_acquire_for(5s));
+    (*watch)->close();
+}
+
+TEST_CASE("Durable recursive watch honours subtree exclusions without following symlinks",
+        "[durable][environment][issue1156]") {
+    using namespace std::chrono_literals;
+    tests::TempWorkspace workspace;
+    namespace fs = std::filesystem;
+    auto env = local_environment(workspace.path().string());
+    fs::create_directories(workspace.path() / "tree" / "nested");
+    fs::create_directories(workspace.path() / "tree" / "node_modules" / "pkg");
+    fs::create_directories(workspace.path() / "outside");
+    fs::create_symlink(workspace.path() / "outside", workspace.path() / "tree" / "link");
+    std::vector<std::string> reported;
+    std::mutex mutex;
+    std::counting_semaphore<> changed{0};
+    auto watch = env->watch(
+            "tree",
+            [&reported, &mutex, &changed](const WatchChange& change) {
+                if (!change.paths.empty()) {
+                    std::lock_guard lock{mutex};
+                    reported.push_back(change.paths.front());
+                }
+                changed.release();
+            },
+            WatchOptions{.recursive = true, .exclude_hidden = true, .excluded_names = {"node_modules"}});
+    REQUIRE(watch);
+    workspace.write("tree/nested/.hidden", "secret");
+    workspace.write("tree/node_modules/pkg/index.js", "code");
+    workspace.write("outside/file", "out");
+    workspace.write("tree/nested/visible", "shown");
+    REQUIRE(changed.try_acquire_for(5s));
+    std::this_thread::sleep_for(200ms);
+    (*watch)->close();
+    std::lock_guard lock{mutex};
+    // Only the visible file is reported: hidden and excluded names at depth are
+    // neither watched nor reported, the symlink below the target is not
+    // followed, and changes outside the watched tree never arrive. Creating
+    // and writing the file is two events for the one path.
+    std::ranges::sort(reported);
+    reported.erase(std::ranges::unique(reported).begin(), reported.end());
+    REQUIRE(reported.size() == 1);
+    CHECK(fs::path{reported.front()}.filename() == "visible");
+}
+
+TEST_CASE("Durable recursive watch refuses a tree past the directory budget", "[durable][environment][issue1156]") {
+    tests::TempWorkspace workspace;
+    namespace fs = std::filesystem;
+    auto env = local_environment(workspace.path().string());
+    for (int i = 0; i < 10001; ++i)
+        fs::create_directories(workspace.path() / "tree" / std::to_string(i));
+    auto watch = env->watch("tree", [](const WatchChange&) {}, WatchOptions{.recursive = true});
+    REQUIRE_FALSE(watch);
+    CHECK(watch.error().code == support::ErrorCode::Validation);
 }
 
 TEST_CASE("compaction tool text follows frozen UTF-16 limits through the model request",
