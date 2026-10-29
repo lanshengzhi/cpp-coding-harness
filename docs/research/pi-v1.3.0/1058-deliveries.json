@@ -280,7 +280,8 @@
       "id": "1090-durable-images",
       "ticket": "1090",
       "implementationCommits": [
-        "ef61a59ff5032c5436dc9413e4533d8c71727393"
+        "ef61a59ff5032c5436dc9413e4533d8c71727393",
+        "09598c6a41246609d3c24c1e97418d151df6b72b"
       ],
       "report": "docs/research/pi-v1.3.0/1090-durable-images.md",
       "validation": {
@@ -294,12 +295,12 @@
           "--output-junit",
           "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-focused.xml"
         ],
-        "testedRevision": "ef61a59ff5032c5436dc9413e4533d8c71727393",
-        "recordedAt": "2026-10-29T07:48:24Z",
+        "testedRevision": "09598c6a41246609d3c24c1e97418d151df6b72b",
+        "recordedAt": "2026-10-29T08:25:46Z",
         "selected": 10,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1090-focused.xml",
-          "sha256": "d2b96cbab7dc3aa7d305be2d1ca4447cb4dfcff724caa4d02912844e4eb7abaf"
+          "sha256": "b0dc96829f1679d6bdac85b42b3d95befbcecef63250d1cca933797074ce4dfd"
         }
       },
       "inputs": [
@@ -325,11 +326,11 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/1090-durable-images.md",
-          "sha256": "d0d7c8011a8a1c8a62a616b90286bdc7aad18e4778b1d2032d2d560a4c294563"
+          "sha256": "3efd4a3631e3f067bb8cbc6659dd91c4989797d401b2b4b91f71ad4700fec4ae"
         },
         {
           "path": "docs/research/pi-v1.3.0/deliveries/1090-focused.xml",
-          "sha256": "d2b96cbab7dc3aa7d305be2d1ca4447cb4dfcff724caa4d02912844e4eb7abaf"
+          "sha256": "b0dc96829f1679d6bdac85b42b3d95befbcecef63250d1cca933797074ce4dfd"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1090/capture-1090.mts",
@@ -349,11 +350,11 @@
         },
         {
           "path": "src/durable/CodingTools.cpp",
-          "sha256": "753b7f6be6162da9a5ef0391e44ea69d896661d73bfca0d5a12390d2d438c1a5"
+          "sha256": "6395c680148bcbb274dc85f9453f7eecf2dcfde500bd996c959ba170200ccf32"
         },
         {
           "path": "src/durable/Images.cpp",
-          "sha256": "d05d8b5129f5dab3ce2a73cb143e7654cf55a1b69f75e52761e81c9b5910f497"
+          "sha256": "ef014e97edce57fde9ef906dca2316096ae3bd548a6e51a1d93210ccda00fc59"
         },
         {
           "path": "src/durable/include/cch/durable/Environment.hpp",

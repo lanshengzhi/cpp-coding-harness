@@ -58,6 +58,15 @@ Full CTest selected 3956: 3955 passed, 0 failed, 1 skipped. The skipped case was
 differential capture. A timing-sensitive fullscreen scroll-indicator case failed in two batch runs
 and passed five isolated reruns and the final full run.
 
+Review follow-up at `09598c6a4`: a §9.8 range-for fix, an internal `ReadImage` parameter bundle and
+the read-path scoping note above. No behavior or test change. Focused `[issue1090]` re-ran 10
+selected, 10 passed (pinned JUnit refreshed); the consolidation check and its 42-case boundary
+audit pass against the re-pinned record; format check is clean. Full CTest on this machine
+selected 3956: 3948 passed, 1 failed, 7 skipped. The failure is `cch_pi_v130_named_evidence`'s
+real-capture cases, which need the external frozen pi checkout — its `node_modules` currently lack
+`@esbuild/linux-x64`, so tsx cannot start; the same failure reproduces with every local change
+stashed, and the six newly skipped pi-differential cases skip for the same environmental reason.
+
 ## Capability status
 
 The `image-processor`, `read-image`, `image-capability-absent` and `image-orientation-conversion`
