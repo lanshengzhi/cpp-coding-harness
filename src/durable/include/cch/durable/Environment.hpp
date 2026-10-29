@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/durable/Images.hpp>
 #include <cch/durable/Workflow.hpp>
 #include <cch/support/Error.hpp>
 
@@ -78,7 +79,20 @@ public:
 /// Construct the durable-owned Linux environment rooted at cwd.
 [[nodiscard]] std::shared_ptr<Environment> local_environment(std::string cwd);
 
+/// Image capability the coding tools expose to the read tool. Without an
+/// `images` processor, inline images within the limits pass through and other
+/// images are explicit unsupported-image results.
+struct CodingToolOptions {
+    std::unique_ptr<ImageProcessor> images{};
+    /// Whether the conversation model takes images. Callers set this from the
+    /// conversation model; the fail-closed default assumes no image input. A
+    /// model without vision still receives the image block and a note
+    /// (frozen pi).
+    bool vision{false};
+    ImageLimits limits{};
+};
+
 /// Construct the explicit coding-tools extension; no automatic installation.
-[[nodiscard]] Extension coding_tools(std::shared_ptr<Environment> environment);
+[[nodiscard]] Extension coding_tools(std::shared_ptr<Environment> environment, CodingToolOptions options = {});
 
 } // namespace cch::durable

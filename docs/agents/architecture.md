@@ -73,7 +73,7 @@ Data crossing Owner Interfaces is passive value state. Use aggregate-friendly `s
 
 ## Capability seams
 
-Physical capabilities cross explicit seams. Chat clients, stream transports, execution environments, session stores, and tools use narrow interfaces or dependency-heavy implementations hidden behind Owner Interfaces.
+Physical capabilities cross explicit seams. Chat clients, stream transports, execution environments, session stores, and tools use narrow interfaces or dependency-heavy implementations hidden behind Owner Interfaces. The durable runtime's image processor is a caller-supplied `ImageProcessor` in `CodingToolOptions`; when it is absent, the read tool returns the frozen explicit unsupported-image outcome and never contacts an AI provider.
 
 ## Connection strength
 

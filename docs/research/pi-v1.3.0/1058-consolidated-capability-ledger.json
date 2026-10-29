@@ -565,10 +565,10 @@
         "partial": 57
       },
       "cch_durable": {
-        "implemented": 2,
+        "implemented": 6,
         "missing": 121,
         "not-applicable": 2,
-        "partial": 87
+        "partial": 83
       },
       "cch_mcp": {
         "implemented": 6,
@@ -587,31 +587,31 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1018,
+      "implemented": 1022,
       "missing": 214,
       "not-applicable": 18,
-      "partial": 214
+      "partial": 210
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1019,
-      "upstream-captured": 416,
+      "unverified": 1018,
+      "upstream-captured": 417,
       "verified": 1
     },
     "evidenceRoute": {
-      "captured": 417,
+      "captured": 418,
       "artifact-only": 0,
       "related-captured": 23,
       "declared-comparison": 31,
       "cpp-regression-only": 10,
-      "unobserved": 55,
+      "unobserved": 54,
       "unobserved-static": 0,
       "historical-v1.0.4": 858,
       "not-audited": 42,
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1019,
+    "unobservedSupported": 1018,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -644,11 +644,11 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1019,
+    "missingObservationRows": 1018,
     "scenarioCoverage": {
-      "scenarios": 518,
-      "scenarioNamed": 347,
-      "artifactCovered": 55,
+      "scenarios": 530,
+      "scenarioNamed": 358,
+      "artifactCovered": 56,
       "orphaned": [
         "audit-1157/environment.json:output exceeding the window",
         "audit-1157/environment.json:output within the window",
@@ -27267,7 +27267,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_durable",
       "consumer": "Durable read tool and capability-gated callers.",
@@ -27276,23 +27276,26 @@
       ],
       "boundary": null,
       "implementation_ticket": null,
-      "scenario": "reading a BMP without an image processor is an explicit unsupported-image result",
+      "scenario": "a model without image input gets the image and the frozen placeholder note",
       "comparisonScenarios": [
+        "a model without image input gets the image and the frozen placeholder note",
+        "an inline image larger than the limits cannot be shrunk",
+        "an inline image above the byte limit cannot be shrunk",
+        "an image whose header cannot be read is an explicit error",
+        "an image the processor cannot decode is an explicit error",
         "reading a BMP without an image processor is an explicit unsupported-image result"
       ],
       "evidence": {
         "route": "captured",
-        "artifact": "fixtures/pi-v1.3.0/audit-1056/environment.json",
+        "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "reading a BMP without an image processor is an explicit unsupported-image result"
+          "a model without image input gets the image and the frozen placeholder note"
         ],
         "result": null
       },
       "missingObservation": null,
-      "gaps": [
-        "no durable capability-absent image result"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Model capability absence and processor absence as explicit typed outcomes in the durable read/image contract; never infer success from an unavailable provider.",
       "lane": "1056",
@@ -27303,7 +27306,7 @@
           "ticket": "1056",
           "rowId": "image-capability-absent",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_durable"
         }
@@ -27318,8 +27321,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_durable",
       "consumer": "Durable read tool and model image input.",
       "consumerOwners": [
@@ -27327,20 +27330,23 @@
       ],
       "boundary": null,
       "implementation_ticket": null,
-      "scenario": null,
-      "comparisonScenarios": [],
+      "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
+      "comparisonScenarios": [
+        "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
+        "frozen image sniffing rejects animated PNG and JPEG byte 3 0xf7"
+      ],
       "evidence": {
-        "route": "unobserved",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
+        "scenarioMatch": "direct-global",
+        "capturedScenarios": [
+          "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata"
+        ],
         "result": null
       },
-      "missingObservation": "no frozen capture recorded for this row; source-only audit",
-      "gaps": [
-        "no durable orientation/conversion scenario"
-      ],
-      "remainingWork": "no frozen capture recorded for this row; source-only audit",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Implement orientation/conversion in the durable ImageProcessor and capture one oriented image, one converted format and one animated-PNG rejection.",
       "lane": "1056",
       "frozenSymbolsSource": null,
@@ -27350,8 +27356,8 @@
           "ticket": "1056",
           "rowId": "image-orientation-conversion",
           "membership": "supported",
-          "implementation": "partial",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_durable"
         }
       ]
@@ -27365,7 +27371,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_durable",
       "consumer": "Read tool, image input and durable callers.",
@@ -27374,23 +27380,22 @@
       ],
       "boundary": null,
       "implementation_ticket": null,
-      "scenario": "the Photon image processor passes an upright inline image through and resizes one over the limits",
+      "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
       "comparisonScenarios": [
+        "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
         "the Photon image processor passes an upright inline image through and resizes one over the limits"
       ],
       "evidence": {
         "route": "captured",
-        "artifact": "fixtures/pi-v1.3.0/audit-1056/environment.json",
+        "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "the Photon image processor passes an upright inline image through and resizes one over the limits"
+          "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata"
         ],
         "result": null
       },
       "missingObservation": null,
-      "gaps": [
-        "no durable ImageProcessor interface"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Implement the durable ImageProcessor contract with local Linux decoding; keep model/provider image execution limited to the retained Magpie capabilities.",
       "lane": "1056",
@@ -27401,7 +27406,7 @@
           "ticket": "1056",
           "rowId": "image-processor",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_durable"
         }
@@ -28172,7 +28177,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_durable",
       "consumer": "Durable read tool and vision-capable callers.",
@@ -28181,24 +28186,24 @@
       ],
       "boundary": null,
       "implementation_ticket": null,
-      "scenario": "the read tool returns a resized image content block with its coordinate-mapping diagnostic",
+      "scenario": "an EXIF-oriented JPEG is made upright before its resized diagnostic",
       "comparisonScenarios": [
+        "an EXIF-oriented JPEG is made upright before its resized diagnostic",
+        "a BMP read through the processor converts to PNG and says so",
         "the read tool returns a resized image content block with its coordinate-mapping diagnostic",
         "an inline image within the limits passes through unchanged without a processor"
       ],
       "evidence": {
         "route": "captured",
-        "artifact": "fixtures/pi-v1.3.0/audit-1056/environment.json",
+        "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "the read tool returns a resized image content block with its coordinate-mapping diagnostic"
+          "an EXIF-oriented JPEG is made upright before its resized diagnostic"
         ],
         "result": null
       },
       "missingObservation": null,
-      "gaps": [
-        "no durable read image tool"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Implement the durable read image branch over the durable filesystem/processor and prove the content/diagnostic pair.",
       "lane": "1056",
@@ -28209,7 +28214,7 @@
           "ticket": "1056",
           "rowId": "read-image",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_durable"
         }

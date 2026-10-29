@@ -1171,26 +1171,25 @@
       "consumer": "Read tool, image input and durable callers.",
       "owner": "cch_durable",
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "boundary": null,
       "dependencies": [],
-      "implementationTicket": null,
+      "implementationTicket": "#1090",
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/images/node.ts:createNodePhotonImages",
           "packages/durable/src/images/index.ts:createPhotonImages"
         ],
         "scenarios": [
+          "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
           "the Photon image processor passes an upright inline image through and resizes one over the limits"
         ]
       },
-      "cppSeam": "`src/coding_agent/ImageInput.*` processes image input with STB/WebP decode, EXIF orientation and coordinate hints; it is application-owned and uses different decoding mechanics.",
-      "cppEvidence": "`ImageInputTest.cpp` covers resizing/orientation/coordinate hints and invalid WebP omission; no durable ImageProcessor interface or Photon parity.",
+      "cppSeam": "`src/durable/Images.*` owns the durable `ImageProcessor`, stb/WebP decoding, EXIF orientation, resizing and encoding; `src/durable/CodingTools.cpp` consumes it behind `CodingToolOptions`.",
+      "cppEvidence": "`tests/durable/ImagesTest.cpp` covers pass-through, limits, orientation, conversion, resize traversal and invalid data; `tests/durable/HarnessImagesTest.cpp` drives the public Harness and `fixtures/pi-v1.3.0/audit-1090` captures the frozen Photon metadata.",
       "recommendation": "Implement the durable ImageProcessor contract with local Linux decoding; keep model/provider image execution limited to the retained Magpie capabilities.",
-      "blockers": [
-        "no durable ImageProcessor interface"
-      ]
+      "blockers": []
     },
     {
       "id": "read-image",
@@ -1199,27 +1198,27 @@
       "consumer": "Durable read tool and vision-capable callers.",
       "owner": "cch_durable",
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "boundary": null,
       "dependencies": [],
-      "implementationTicket": null,
+      "implementationTicket": "#1090",
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/tools/read.ts:readImage",
           "packages/durable/src/tools/image.ts:detectSupportedImageMimeType,imageDimensions"
         ],
         "scenarios": [
+          "an EXIF-oriented JPEG is made upright before its resized diagnostic",
+          "a BMP read through the processor converts to PNG and says so",
           "the read tool returns a resized image content block with its coordinate-mapping diagnostic",
           "an inline image within the limits passes through unchanged without a processor"
         ]
       },
-      "cppSeam": "Application read tool/image input emits application image content and diagnostics. There is no durable read tool result with the upstream image diagnostic text.",
-      "cppEvidence": "`ImageInputTest.cpp` covers image hints; tool result image content tests are application-level. No durable read image scenario in C++.",
+      "cppSeam": "`src/durable/CodingTools.cpp` owns the durable read image branch and emits the image block before the frozen `<harness>` info diagnostic; `CodingToolOptions` supplies the processor, vision flag and limits.",
+      "cppEvidence": "`tests/durable/HarnessImagesTest.cpp` drives read through the public Harness for resized, converted, vision-absent and unsupported outcomes; `fixtures/pi-v1.3.0/audit-1090/images.json` is the frozen comparison.",
       "recommendation": "Implement the durable read image branch over the durable filesystem/processor and prove the content/diagnostic pair.",
-      "blockers": [
-        "no durable read image tool"
-      ]
+      "blockers": []
     },
     {
       "id": "image-capability-absent",
@@ -1228,26 +1227,29 @@
       "consumer": "Durable read tool and capability-gated callers.",
       "owner": "cch_durable",
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "boundary": null,
       "dependencies": [],
-      "implementationTicket": null,
+      "implementationTicket": "#1090",
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/tools/read.ts:readImage",
           "packages/durable/src/tools/image.ts:detectSupportedImageMimeType"
         ],
         "scenarios": [
+          "a model without image input gets the image and the frozen placeholder note",
+          "an inline image larger than the limits cannot be shrunk",
+          "an inline image above the byte limit cannot be shrunk",
+          "an image whose header cannot be read is an explicit error",
+          "an image the processor cannot decode is an explicit error",
           "reading a BMP without an image processor is an explicit unsupported-image result"
         ]
       },
-      "cppSeam": "Application ImageInput omits invalid WebP data; the read tool and durable processor-absent outcome are not represented as durable result semantics.",
-      "cppEvidence": "`ImageInputTest.cpp` covers invalid WebP omission. No C++ test for a supported-but-needs-conversion format with no processor.",
+      "cppSeam": "`src/durable/CodingTools.cpp` reports a wrapped `<harness>` error with `isError` for processor absence, over-limit and unreadable-header images; it never contacts an AI provider to classify or generate an image.",
+      "cppEvidence": "`tests/durable/HarnessImagesTest.cpp` asserts the exact frozen errors, `isError`, and that the model request count stays at two; `fixtures/pi-v1.3.0/audit-1090/images.json` captures the outcomes.",
       "recommendation": "Model capability absence and processor absence as explicit typed outcomes in the durable read/image contract; never infer success from an unavailable provider.",
-      "blockers": [
-        "no durable capability-absent image result"
-      ]
+      "blockers": []
     },
     {
       "id": "codemode-script",
@@ -1843,24 +1845,25 @@
       "consumer": "Durable read tool and model image input.",
       "owner": "cch_durable",
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "boundary": null,
       "dependencies": [],
-      "implementationTicket": null,
+      "implementationTicket": "#1090",
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/images/index.ts:prepare,exifOrientation",
           "packages/durable/src/tools/image.ts:detectSupportedImageMimeType"
         ],
-        "scenarios": []
+        "scenarios": [
+          "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
+          "frozen image sniffing rejects animated PNG and JPEG byte 3 0xf7"
+        ]
       },
-      "cppSeam": "`src/coding_agent/ImageInput.cpp` applies EXIF orientation and decodes JPEG/WebP via STB/WebP for application image input, but there is no durable ImageProcessor conversion contract or APNG/animated-PNG policy.",
-      "cppEvidence": "`ImageInputTest.cpp` covers resizing/orientation/invalid WebP. No durable conversion or APNG test.",
+      "cppSeam": "`src/durable/Images.cpp` applies EXIF orientation before bounds and conversion, reports `convertedFrom`/`resized`, and rejects animated PNG and JPEG byte 3 `0xf7` in detection.",
+      "cppEvidence": "`tests/durable/ImagesTest.cpp` covers orientation, BMP conversion and sniffing rejection; `fixtures/pi-v1.3.0/audit-1090/images.json` records the frozen processor metadata and detector results.",
       "recommendation": "Implement orientation/conversion in the durable ImageProcessor and capture one oriented image, one converted format and one animated-PNG rejection.",
-      "blockers": [
-        "no durable orientation/conversion scenario"
-      ]
+      "blockers": []
     },
     {
       "id": "codemode-limits",

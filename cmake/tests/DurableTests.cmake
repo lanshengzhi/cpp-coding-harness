@@ -27,8 +27,12 @@ include_guard(GLOBAL)
         tests/durable/HarnessOwnershipTest.cpp
         tests/durable/HarnessFailureLifecycleTest.cpp
         tests/durable/HarnessObservationTest.cpp
+        tests/durable/HarnessImagesTest.cpp
+        tests/durable/ImagesTest.cpp
+        tests/support/ImagePixels.cpp
 )
     target_include_directories(cch_tests_durable PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
+    target_include_directories(cch_tests_durable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
     target_link_libraries(cch_tests_durable
         PRIVATE
             cch_durable

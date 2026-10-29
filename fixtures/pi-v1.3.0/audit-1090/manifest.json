@@ -1,0 +1,401 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1090",
+  "family": "audit-1090",
+  "capturedAt": "2026-10-29T07:14:13.327Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1090/capture-1090.mts",
+    "sha256": "ec43e17bc9623f07de8b1f90f5577bb57696ba02e4e7b9f434648a80268b060d",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1090/capture-1090.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1090/capture-1090.mts",
+        "sha256": "ec43e17bc9623f07de8b1f90f5577bb57696ba02e4e7b9f434648a80268b060d"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "images.json",
+      "family": "audit-1090",
+      "bytes": 12807,
+      "sha256": "f44bfbc4dfd861f8b8c2aabbd7f4a6dd6532bb349aa6119cc97e105e6504815d",
+      "sourceEndpoints": [
+        "packages/durable/src/tools/read.ts:createReadTool,readImage,imageModel",
+        "packages/durable/src/tools/image.ts:detectSupportedImageMimeType,imageDimensions",
+        "packages/durable/src/images/index.ts:createPhotonImages"
+      ],
+      "scenarios": [
+        {
+          "name": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
+          "source": "packages/durable/src/images/index.ts:createPhotonImages;packages/durable/src/tools/image.ts:imageDimensions",
+          "inputs": {
+            "jpeg": "16x8 EXIF orientation 6",
+            "webp": "3x2 EXIF orientation 6",
+            "bmp": "2x2 24-bit"
+          },
+          "expected": {
+            "jpeg": {
+              "mimeType": "image/jpeg",
+              "convertedFrom": null,
+              "resized": null,
+              "dimensions": {
+                "width": 8,
+                "height": 16
+              },
+              "quadrantSamples": [
+                {
+                  "x": 2,
+                  "y": 4,
+                  "rgba": [
+                    0,
+                    0,
+                    251,
+                    255
+                  ]
+                },
+                {
+                  "x": 6,
+                  "y": 4,
+                  "rgba": [
+                    251,
+                    0,
+                    2,
+                    255
+                  ]
+                },
+                {
+                  "x": 2,
+                  "y": 12,
+                  "rgba": [
+                    254,
+                    255,
+                    3,
+                    255
+                  ]
+                },
+                {
+                  "x": 6,
+                  "y": 12,
+                  "rgba": [
+                    4,
+                    253,
+                    1,
+                    255
+                  ]
+                }
+              ]
+            },
+            "webp": {
+              "mimeType": "image/png",
+              "convertedFrom": "image/webp",
+              "resized": null,
+              "dimensions": {
+                "width": 2,
+                "height": 3
+              }
+            },
+            "bmp": {
+              "mimeType": "image/png",
+              "convertedFrom": "image/bmp",
+              "resized": null,
+              "dimensions": {
+                "width": 2,
+                "height": 2
+              },
+              "pixelsBase64": "AAAA//8A////AAD/AP8A/w=="
+            }
+          }
+        },
+        {
+          "name": "an EXIF-oriented JPEG is made upright before its resized diagnostic",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage",
+          "inputs": {
+            "file": "photo.jpg",
+            "limit": {
+              "maxWidth": 1,
+              "maxHeight": 1,
+              "maxBytes": 1048576
+            }
+          },
+          "expected": {
+            "isError": false,
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/jpeg",
+                "data": "/9j/4AAQSkZJRgABAgAAAQABAAD/wAARCAABAAEDAREAAhEBAxEB/9sAQwAGBAUGBQQGBgUGBwcGCAoQCgoJCQoUDg8MEBcUGBgXFBYWGh0lHxobIxwWFiAsICMmJykqKRkfLTAtKDAlKCko/9sAQwEHBwcKCAoTCgoTKBoWGigoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgo/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCpXzRqf//Z",
+                "base64Length": 840,
+                "dimensions": {
+                  "width": 1,
+                  "height": 1
+                }
+              },
+              {
+                "type": "text",
+                "text": "<harness>\n[info] Read image file [image/jpeg]. Resized from 8x16 to 1x1. Multiply coordinates by 8.00 to map them to the original.\n</harness>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "a BMP read through the processor converts to PNG and says so",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage",
+          "inputs": {
+            "file": "image.bmp",
+            "limit": {
+              "maxWidth": 2000,
+              "maxHeight": 2000,
+              "maxBytes": 4718592
+            }
+          },
+          "expected": {
+            "isError": false,
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAHUlEQVR4AQESAO3/AAAAAP//AP//AP8AAP8A/wD/QNEH+fBNBOcAAAAASUVORK5CYII=",
+                "base64Length": 116,
+                "dimensions": {
+                  "width": 2,
+                  "height": 2
+                },
+                "pixelsBase64": "AAAA//8A////AAD/AP8A/w=="
+              },
+              {
+                "type": "text",
+                "text": "<harness>\n[info] Read image file [image/png]. Converted from image/bmp to image/png.\n</harness>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "an image the processor cannot decode is an explicit error",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage",
+          "inputs": {
+            "file": "broken.png",
+            "limit": {
+              "maxWidth": 2000,
+              "maxHeight": 2000,
+              "maxBytes": 4718592
+            }
+          },
+          "expected": {
+            "isError": true,
+            "content": [
+              {
+                "type": "text",
+                "text": "<harness>\n[error] broken.png is an image (image/png) that cannot be prepared for the model\n</harness>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "a model without image input gets the image and the frozen placeholder note",
+          "source": "packages/durable/src/tools/read.ts:readImage,imageModel",
+          "inputs": {
+            "file": "2x2 PNG",
+            "modelInput": [
+              "text"
+            ],
+            "processor": "none"
+          },
+          "expected": {
+            "isError": false,
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQMAAABIeJ9nAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGUExURf8AAP///0EdNBEAAAABYktHRAH/Ai3eAAAAB3RJTUUH6gEOADM5Ddoh/wAAAAxJREFUCNdjYGBgAAAABAABJzQnCgAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wMS0xNFQwMDo1MTo1NyswMDowMOnKzHgAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjYtMDEtMTRUMDA6NTE6NTcrMDA6MDCYl3TEAAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTAxLTE0VDAwOjUxOjU3KzAwOjAwz4JVGwAAAABJRU5ErkJggg==",
+                "base64Length": 420,
+                "dimensions": {
+                  "width": 2,
+                  "height": 2
+                },
+                "pixelsBase64": "/wAA//8AAP//AAD//wAA/w=="
+              },
+              {
+                "type": "text",
+                "text": "<harness>\n[info] Read image file [image/png]. The current model does not support images; it sees a placeholder instead.\n</harness>"
+              }
+            ],
+            "originalBase64Length": 420
+          }
+        },
+        {
+          "name": "an inline image within the limits passes through unchanged without a processor",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image.ts:imageDimensions",
+          "inputs": {
+            "file": "plain.png",
+            "processor": "none"
+          },
+          "expected": {
+            "isError": false,
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQMAAABIeJ9nAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGUExURf8AAP///0EdNBEAAAABYktHRAH/Ai3eAAAAB3RJTUUH6gEOADM5Ddoh/wAAAAxJREFUCNdjYGBgAAAABAABJzQnCgAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wMS0xNFQwMDo1MTo1NyswMDowMOnKzHgAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjYtMDEtMTRUMDA6NTE6NTcrMDA6MDCYl3TEAAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTAxLTE0VDAwOjUxOjU3KzAwOjAwz4JVGwAAAABJRU5ErkJggg==",
+                "base64Length": 420,
+                "dimensions": {
+                  "width": 2,
+                  "height": 2
+                },
+                "pixelsBase64": "/wAA//8AAP//AAD//wAA/w=="
+              },
+              {
+                "type": "text",
+                "text": "<harness>\n[info] Read image file [image/png].\n</harness>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reading a BMP without an image processor is an explicit unsupported-image result",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image.ts:imageDimensions",
+          "inputs": {
+            "file": "image.bmp",
+            "processor": "none"
+          },
+          "expected": {
+            "isError": true,
+            "content": [
+              {
+                "type": "text",
+                "text": "<harness>\n[error] image.bmp is an image (image/bmp) that needs converting, and no image processor is configured\n</harness>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "an inline GIF passes through unchanged without a processor",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image.ts:imageDimensions",
+          "inputs": {
+            "file": "plain.gif",
+            "processor": "none"
+          },
+          "expected": {
+            "isError": false,
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/gif",
+                "data": "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+                "base64Length": 48,
+                "dimensions": {
+                  "width": 1,
+                  "height": 1
+                }
+              },
+              {
+                "type": "text",
+                "text": "<harness>\n[info] Read image file [image/gif].\n</harness>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "an inline image larger than the limits cannot be shrunk",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image.ts:imageDimensions",
+          "inputs": {
+            "file": "wide.png",
+            "processor": "none"
+          },
+          "expected": {
+            "isError": true,
+            "content": [
+              {
+                "type": "text",
+                "text": "<harness>\n[error] wide.png is an image (image/png) of 2001x2, larger than 2000x2000, and no image processor is configured to shrink it\n</harness>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "an inline image above the byte limit cannot be shrunk",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image.ts:imageDimensions",
+          "inputs": {
+            "file": "huge.png",
+            "processor": "none"
+          },
+          "expected": {
+            "isError": true,
+            "content": [
+              {
+                "type": "text",
+                "text": "<harness>\n[error] huge.png is an image (image/png) of 3.5MB, too large to send, and no image processor is configured to shrink it\n</harness>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "an image whose header cannot be read is an explicit error",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image.ts:imageDimensions",
+          "inputs": {
+            "file": "truncated.png",
+            "processor": "none"
+          },
+          "expected": {
+            "isError": true,
+            "content": [
+              {
+                "type": "text",
+                "text": "<harness>\n[error] truncated.png is an image (image/png) whose size cannot be read\n</harness>"
+              }
+            ]
+          }
+        },
+        {
+          "name": "frozen image sniffing rejects animated PNG and JPEG byte 3 0xf7",
+          "source": "packages/durable/src/tools/image.ts:detectSupportedImageMimeType",
+          "inputs": {
+            "animatedPng": "2x2 PNG with acTL before IDAT",
+            "jpeg": "SOI SOI 0xf7",
+            "staticPng": "2x2 RGBA PNG",
+            "tinyJpeg": "2x2 baseline JPEG",
+            "gif": "1x1 GIF89a",
+            "webp": "2x2 lossless WebP",
+            "bmp": "2x2 24-bit BMP"
+          },
+          "expected": {
+            "animatedPng": null,
+            "jpeg": null,
+            "staticPng": "image/png",
+            "tinyJpeg": "image/jpeg",
+            "gif": "image/gif",
+            "webp": "image/webp",
+            "bmp": "image/bmp",
+            "staticPngDimensions": {
+              "width": 2,
+              "height": 2
+            },
+            "tinyJpegDimensions": {
+              "width": 2,
+              "height": 2
+            },
+            "gifDimensions": {
+              "width": 1,
+              "height": 1
+            },
+            "webpDimensions": {
+              "width": 2,
+              "height": 2
+            },
+            "bmpDimensions": null
+          }
+        }
+      ]
+    }
+  ]
+}

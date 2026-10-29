@@ -21,6 +21,7 @@ cch_parity_declare_target(
         src/durable/CodingTools.cpp
         src/durable/CommittedContext.cpp
         src/durable/Environment.cpp
+        src/durable/Images.cpp
         src/durable/Compaction.cpp
         src/durable/Harness.cpp
         src/durable/JsonlStorage.cpp
@@ -38,9 +39,13 @@ cch_parity_declare_target(
         cch_chord
         cch_support
         unofficial::sqlite3::sqlite3@sqlite3
+        WebP::webpdecoder@webp
     INTERFACE_DEPENDS
         cch_ai
         cch_chord
         cch_support
 )
 cch_owner_include_roots(cch_durable src/durable/include)
+# Vendored stb headers sit outside the project warning contract (ADR 0044);
+# diagnostics they trigger are silenced at the inclusion site.
+target_include_directories(cch_durable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
