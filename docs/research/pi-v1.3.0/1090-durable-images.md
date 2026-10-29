@@ -58,10 +58,11 @@ and passed five isolated reruns and the final full run.
 ## Capability status
 
 The `image-processor`, `read-image`, `image-capability-absent` and `image-orientation-conversion`
-rows in `1056-durable-harness-workflows.json` are `implemented` with `upstream-captured`
-verification and `implementationTicket: "#1090"`. The generated consolidated ledger does not
-propagate that camelCase field for the 1056 lane and keeps `implementation_ticket: null`; the
-source rows, not that derived field, carry the ticket. No row is promoted to `verified`.
+rows in `1056-durable-harness-workflows.json` are `implemented` with `verified` verification and
+`implementationTicket: "#1090"`. The whole-row delivery receipt `1090-durable-images` in
+`1058-deliveries.json` pins the focused JUnit result and this report; the generated consolidated
+ledger resolves all four rows to `implementation_ticket: "#1090"`, `verification: verified` and no
+remaining work.
 
 ## Remaining boundary
 

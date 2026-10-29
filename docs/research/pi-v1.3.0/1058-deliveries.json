@@ -275,6 +275,250 @@
         }
       ],
       "routingSha256": "e75e524b807c4a6dbc4a3a92f0ec2bf4942b82999ab4afdee3c66292dff25b42"
+    },
+    {
+      "id": "1090-durable-images",
+      "ticket": "1090",
+      "implementationCommits": [
+        "ef61a59ff5032c5436dc9413e4533d8c71727393"
+      ],
+      "report": "docs/research/pi-v1.3.0/1090-durable-images.md",
+      "validation": {
+        "command": [
+          "ctest",
+          "--preset",
+          "vcpkg",
+          "-L",
+          "issue1090",
+          "--output-on-failure",
+          "--output-junit",
+          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-focused.xml"
+        ],
+        "testedRevision": "ef61a59ff5032c5436dc9413e4533d8c71727393",
+        "recordedAt": "2026-10-29T07:48:24Z",
+        "selected": 10,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-focused.xml",
+          "sha256": "d2b96cbab7dc3aa7d305be2d1ca4447cb4dfcff724caa4d02912844e4eb7abaf"
+        }
+      },
+      "inputs": [
+        {
+          "path": "cmake/targets/Durable.cmake",
+          "sha256": "380bf742f1c729a382862c1e368ae43ed3353588300ba21d3936973975129c0b"
+        },
+        {
+          "path": "cmake/tests/DurableTests.cmake",
+          "sha256": "11371c2ff20d599e51ece049fc62db07fe9a8710731e5088995b4daf30d0b6d7"
+        },
+        {
+          "path": "docs/agents/architecture.md",
+          "sha256": "3642af5826324e791d31cae60389f8776c2f4b2dda41dafdb9f50e5ecd72d845"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
+          "sha256": "f7ef0d18893f14bc5f4d95f629ed59ab16cf90abb928e43358a44a2fee000769"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
+          "sha256": "6d632fc4207b0d6d32d69e193cdc4c5dc503c5663b4f1043c07e03dada98dc1b"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/1090-durable-images.md",
+          "sha256": "d0d7c8011a8a1c8a62a616b90286bdc7aad18e4778b1d2032d2d560a4c294563"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-focused.xml",
+          "sha256": "d2b96cbab7dc3aa7d305be2d1ca4447cb4dfcff724caa4d02912844e4eb7abaf"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1090/capture-1090.mts",
+          "sha256": "ec43e17bc9623f07de8b1f90f5577bb57696ba02e4e7b9f434648a80268b060d"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1090/images.json",
+          "sha256": "f44bfbc4dfd861f8b8c2aabbd7f4a6dd6532bb349aa6119cc97e105e6504815d"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1090/manifest.json",
+          "sha256": "c971eaf7333748348509e9b5dc9f6abe102b5b5d553cc7f426c130892bc11c2e"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/baselines.json",
+          "sha256": "782fc4e76a14b75c7353ee232937fcc54398faccf5b5c8dd344e14d01fe02de4"
+        },
+        {
+          "path": "src/durable/CodingTools.cpp",
+          "sha256": "753b7f6be6162da9a5ef0391e44ea69d896661d73bfca0d5a12390d2d438c1a5"
+        },
+        {
+          "path": "src/durable/Images.cpp",
+          "sha256": "d05d8b5129f5dab3ce2a73cb143e7654cf55a1b69f75e52761e81c9b5910f497"
+        },
+        {
+          "path": "src/durable/include/cch/durable/Environment.hpp",
+          "sha256": "71c195acdf31d7067564489fb3accbb9b1da53f072f364ca5ff756d07f8d101b"
+        },
+        {
+          "path": "src/durable/include/cch/durable/Images.hpp",
+          "sha256": "e3d40ee658aef1e1fad2530bbe2c6a256f4a0d51a4e13157b5e45f341022fde8"
+        },
+        {
+          "path": "tests/durable/HarnessImagesTest.cpp",
+          "sha256": "44db6c58b5975311f474a04b208eac13f1c2e340903fc81829b40d2811f0ed93"
+        },
+        {
+          "path": "tests/durable/ImageExpectation.hpp",
+          "sha256": "b7cc0d3f647dc617847501eb81ed61e9430e21fd49b3e3b8d8f303faf3762aae"
+        },
+        {
+          "path": "tests/durable/ImagesTest.cpp",
+          "sha256": "bdd8aab60815f3528605bc0f4e673af723648da4edc286eac35e047edf9bc9f2"
+        },
+        {
+          "path": "tests/support/ImageFixture.hpp",
+          "sha256": "2e9e130c6b6f2cd8a24a1307e5b274d4ffb63793e2b9e2d2aaf3af7217921bdf"
+        },
+        {
+          "path": "tests/support/ImagePixels.cpp",
+          "sha256": "7791aa1fbfbaec0a73c4b9f0d3772656fb3cd61fb6416a60be5b1d7a195586b4"
+        },
+        {
+          "path": "tests/support/ImagePixels.hpp",
+          "sha256": "3362ad8688dff3278a9cffe8c60e6dade5bceaac6cd66c25cae4c0ef27bf083c"
+        }
+      ],
+      "rows": [
+        {
+          "id": "cch_durable:image-processor",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
+              "test": "The local image processor orients, resizes, and converts like the frozen processor",
+              "testSource": "tests/durable/ImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1056/environment.json",
+              "scenario": "the Photon image processor passes an upright inline image through and resizes one over the limits",
+              "test": "The local image processor passes through an upright inline image within the limits",
+              "testSource": "tests/durable/ImagesTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "The local image processor passes through an upright inline image within the limits",
+            "testSource": "tests/durable/ImagesTest.cpp",
+            "reason": "The pass-through section keeps the exact base64, the limit section shrinks 2x2 to 1x1 with resized metadata, and the impossible limit prepares nothing; a no-op or an unconditional resizer fails."
+          }
+        },
+        {
+          "id": "cch_durable:read-image",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "an EXIF-oriented JPEG is made upright before its resized diagnostic",
+              "test": "Read returns a prepared image and the frozen diagnostic through the public Harness",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "a BMP read through the processor converts to PNG and says so",
+              "test": "Read converts BMP to PNG through the configured processor",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1056/environment.json",
+              "scenario": "the read tool returns a resized image content block with its coordinate-mapping diagnostic",
+              "test": "Read returns a prepared image and the frozen diagnostic through the public Harness",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "an inline image within the limits passes through unchanged without a processor",
+              "test": "Capability-absent image reads fail explicitly without another model turn",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "Read returns a prepared image and the frozen diagnostic through the public Harness",
+            "testSource": "tests/durable/HarnessImagesTest.cpp",
+            "reason": "The public Harness returns an image block and the exact resize diagnostic; a text-only read or an unmodified payload plus no diagnostic cannot satisfy both."
+          }
+        },
+        {
+          "id": "cch_durable:image-capability-absent",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "a model without image input gets the image and the frozen placeholder note",
+              "test": "A model without vision gets the image and the frozen placeholder note",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "an inline image larger than the limits cannot be shrunk",
+              "test": "Capability-absent image reads fail explicitly without another model turn",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "an inline image above the byte limit cannot be shrunk",
+              "test": "Capability-absent image reads fail explicitly without another model turn",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "an image whose header cannot be read is an explicit error",
+              "test": "Capability-absent image reads fail explicitly without another model turn",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "an image the processor cannot decode is an explicit error",
+              "test": "An image the processor cannot decode is an explicit error",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "reading a BMP without an image processor is an explicit unsupported-image result",
+              "test": "Capability-absent image reads fail explicitly without another model turn",
+              "testSource": "tests/durable/HarnessImagesTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "Capability-absent image reads fail explicitly without another model turn",
+            "testSource": "tests/durable/HarnessImagesTest.cpp",
+            "reason": "Without a processor, BMP, over-limit and unreadable-header reads return wrapped errors while an inline image still passes; the same test rejects an extra model turn."
+          }
+        },
+        {
+          "id": "cch_durable:image-orientation-conversion",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
+              "test": "The local image processor orients, resizes, and converts like the frozen processor",
+              "testSource": "tests/durable/ImagesTest.cpp"
+            },
+            {
+              "artifact": "audit-1090/images.json",
+              "scenario": "frozen image sniffing rejects animated PNG and JPEG byte 3 0xf7",
+              "test": "Image detection accepts exactly the provider inline formats plus BMP",
+              "testSource": "tests/durable/ImagesTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "The local image processor orients, resizes, and converts like the frozen processor",
+            "testSource": "tests/durable/ImagesTest.cpp",
+            "reason": "The EXIF-6 patterned JPEG is checked at four upright quadrant samples and BMP is compared as exact RGBA, so skipped orientation or a raw BMP passthrough fails."
+          }
+        }
+      ],
+      "routingSha256": "86be75c1c591af6ccc48241625a752bfbc681f9b54caf95a5a347e22846654f3"
     }
   ]
 }
