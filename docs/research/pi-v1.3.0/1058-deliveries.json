@@ -281,26 +281,26 @@
       "ticket": "1090",
       "implementationCommits": [
         "ef61a59ff5032c5436dc9413e4533d8c71727393",
-        "09598c6a41246609d3c24c1e97418d151df6b72b"
+        "09598c6a41246609d3c24c1e97418d151df6b72b",
+        "e3165d3bc0b008e5f838e70a523ecc07d5121141"
       ],
       "report": "docs/research/pi-v1.3.0/1090-durable-images.md",
       "validation": {
         "command": [
           "ctest",
           "--preset",
-          "vcpkg",
+          "dev-fast",
           "-L",
           "issue1090",
-          "--output-on-failure",
           "--output-junit",
-          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-revalidation-1094.xml"
+          "/home/lansy/.herdr/worktrees/cpp-coding-harness/durable-store/docs/research/pi-v1.3.0/deliveries/1090-revalidation-1168.xml"
         ],
-        "testedRevision": "64c0f19d14cc772cf7e99bef8b2d2311ed8704c6",
-        "recordedAt": "2026-10-29T10:39:53Z",
+        "testedRevision": "e3165d3bc0b008e5f838e70a523ecc07d5121141",
+        "recordedAt": "2026-10-29T14:52:10Z",
         "selected": 10,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1094.xml",
-          "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1168.xml",
+          "sha256": "21d1b95dc082131c277eccffa430b3e1b3f7b9a455bb10ae4ca1605827192320"
         }
       },
       "inputs": [
@@ -310,7 +310,7 @@
         },
         {
           "path": "cmake/tests/DurableTests.cmake",
-          "sha256": "02c55df3638dba2f28b7c76fe6c0cc36f1adbc04e9a1287aa583f234c627e9a6"
+          "sha256": "f0f9abb90523f3631a2d3aea859f9df3a508dfcc0548c8390bb893cf5986806f"
         },
         {
           "path": "docs/agents/architecture.md",
@@ -322,7 +322,7 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
-          "sha256": "138825ab7461b7e5f648a2d523c8340d6e2bc6b9b7565db48d416367095c6985"
+          "sha256": "0a05aa8c81a19f1f98c6a2baa093375d72bb1ae58d9e9611599c8f212583d540"
         },
         {
           "path": "docs/research/pi-v1.3.0/1090-durable-images.md",
@@ -346,7 +346,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "15aeaa2b127a4a5a835d58b82fcee955ca8c0e67cdeebaa04b5a2cbb9fc0ee68"
+          "sha256": "63113e1c182c3916886fefbf0cb45fc5ebd1ab6177f2ee3e0978f897be0cefba"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -546,6 +546,33 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1090-focused.xml",
             "sha256": "b0dc96829f1679d6bdac85b42b3d95befbcecef63250d1cca933797074ce4dfd"
+          }
+        }
+      },
+      "revalidation1168": {
+        "reason": "Issue #1168 registered the audit-1168 frozen-evidence family and added a durable shard test source, changing two shared pinned inputs. The durable-images scenario routing, production image implementation, and its 10-case selection are unchanged; issue1090 was rebuilt and its exact selection passed at the #1168 revision.",
+        "changedInputs": [
+          "cmake/tests/DurableTests.cmake",
+          "fixtures/pi-v1.3.0/baselines.json",
+          "docs/research/pi-v1.3.0/1058-implementation-frontier.json"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1090",
+            "--output-on-failure",
+            "--output-junit",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-revalidation-1094.xml"
+          ],
+          "testedRevision": "64c0f19d14cc772cf7e99bef8b2d2311ed8704c6",
+          "recordedAt": "2026-10-29T10:39:53Z",
+          "selected": 10,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1094.xml",
+            "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
           }
         }
       }
