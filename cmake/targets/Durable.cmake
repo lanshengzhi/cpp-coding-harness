@@ -18,6 +18,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_durable
     SOURCES
+        src/durable/Codemode.cpp
         src/durable/CodingTools.cpp
         src/durable/CommittedContext.cpp
         src/durable/Environment.cpp
@@ -37,12 +38,14 @@ cch_parity_declare_target(
         Boost::headers@boost
         cch_ai
         cch_chord
+        cch_codemode
         cch_support
         unofficial::sqlite3::sqlite3@sqlite3
         WebP::webpdecoder@webp
     INTERFACE_DEPENDS
         cch_ai
         cch_chord
+        cch_codemode
         cch_support
 )
 cch_owner_include_roots(cch_durable src/durable/include)

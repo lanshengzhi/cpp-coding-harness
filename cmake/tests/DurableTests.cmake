@@ -28,6 +28,7 @@ include_guard(GLOBAL)
         tests/durable/HarnessFailureLifecycleTest.cpp
         tests/durable/HarnessObservationTest.cpp
         tests/durable/HarnessImagesTest.cpp
+        tests/durable/HarnessCodemodeTest.cpp
         tests/durable/ImagesTest.cpp
         tests/support/ImagePixels.cpp
 )
@@ -44,7 +45,8 @@ include_guard(GLOBAL)
     target_compile_options(cch_tests_durable PRIVATE ${CCH_WARNING_OPTIONS})
     # Bound the whole live continuation process, including Harness operations whose
     # completion or cleanup cannot be interrupted by a waiter's stop token.
-    catch_discover_tests(cch_tests_durable TEST_SPEC "~[issue1086live]~[issue1084]" ADD_TAGS_AS_LABELS)
+    catch_discover_tests(cch_tests_durable TEST_SPEC "~[issue1086live]~[issue1084]~[issue1094]" ADD_TAGS_AS_LABELS)
+    catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1094]" PROPERTIES TIMEOUT 30 ADD_TAGS_AS_LABELS)
     catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1084]" PROPERTIES TIMEOUT 90 ADD_TAGS_AS_LABELS)
     catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1086live]" PROPERTIES TIMEOUT 90 ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_durable ${CCH_PARITY_BUILD_GATE_TARGET})

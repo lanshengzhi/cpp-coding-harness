@@ -1,6 +1,8 @@
 #include "StorageEncoding.hpp"
 #include "WorkflowRuntime.hpp"
 
+#include "durable/AwaitResult.hpp"
+#include "durable/CodemodeExecution.hpp"
 #include "durable/CommittedContext.hpp"
 #include "durable/Compaction.hpp"
 #include "support/Json.hpp"
@@ -27,23 +29,6 @@
 
 namespace cch::durable {
 namespace {
-
-// Only the existing Harness execution thread waits here. Public admission and
-// root operations remain callback based; no additional execution domain is created.
-template <typename T> support::Expected<T> await_result(support::AsyncResult<T> operation) {
-    std::mutex mutex;
-    std::condition_variable ready;
-    std::optional<support::Expected<T>> outcome;
-    // The wait below keeps these locals alive until completion returns.
-    std::move(operation).start([&mutex, &ready, &outcome](support::Expected<T> result) noexcept {
-        std::lock_guard lock(mutex);
-        outcome.emplace(std::move(result));
-        ready.notify_one();
-    });
-    std::unique_lock lock(mutex);
-    ready.wait(lock, [&outcome] { return outcome.has_value(); });
-    return std::move(*outcome);
-}
 
 using Json = chord::Json;
 using Object = Json::Object;
@@ -148,6 +133,8 @@ Json tool_result_json(const ai::ToolResultMessage& message) {
             {"content", blocks_json(message.content)}, {"isError", message.is_error},
             {"timestamp", numeric(message.timestamp)}};
     if (message.duration_ms) result.emplace("durationMs", numeric(*message.duration_ms));
+    if (message.details) result.emplace("details", *Json::from_support(*message.details));
+    if (message.nested_calls) result.emplace("nestedCalls", *Json::from_support(*message.nested_calls));
     return Json{std::move(result)};
 }
 
@@ -159,6 +146,30 @@ Json entry_data(Json message, std::optional<TaskId> task = std::nullopt) {
 
 chord::Json as_chord(Json json) {
     return chord::Json::from_support(json.to_support()).value();
+}
+
+std::vector<ai::ToolCallContent> pending_tool_calls(const std::vector<ai::MessageVariant>& messages,
+        const std::vector<std::shared_ptr<ToolRegistration>>* replay_tools = nullptr) {
+    std::set<std::string> answered;
+    for (auto entry = messages.rbegin(); entry != messages.rend(); ++entry) {
+        if (const auto* result = std::get_if<ai::ToolResultMessage>(&*entry)) answered.insert(result->tool_call_id);
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&*entry)) {
+            std::vector<ai::ToolCallContent> pending;
+            if (assistant->stop_reason != ai::AssistantStopReason::ToolUse) return pending;
+            for (const auto& content : assistant->content) {
+                if (const auto* call = std::get_if<ai::ToolCallContent>(&content);
+                        call && !answered.contains(call->id)) {
+                    if (replay_tools && !std::ranges::any_of(*replay_tools, [call](const auto& tool) {
+                            return tool->declaration.name == call->name && tool->replay_safe;
+                        }))
+                        continue;
+                    pending.push_back(*call);
+                }
+            }
+            return pending;
+        }
+    }
+    return {};
 }
 
 support::Expected<EntryRecord> append_assistant(
@@ -469,6 +480,11 @@ std::optional<ai::MessageVariant> message_from_json(const Json& message) {
                                      ? *tool_name->second.as_string()
                                      : std::string{},
                 .content = blocks,
+                .details = member(message, "details") ? std::optional{member(message, "details")->to_support()}
+                                                      : std::nullopt,
+                .nested_calls = member(message, "nestedCalls")
+                                        ? std::optional{member(message, "nestedCalls")->to_support()}
+                                        : std::nullopt,
                 .is_error = is_error != object->end() && is_error->second.as_boolean() != nullptr &&
                             *is_error->second.as_boolean(),
                 .timestamp = timestamp}};
@@ -488,11 +504,27 @@ std::optional<ai::MessageVariant> message_from_json(const Json& message) {
             result.model = *found->second.as_string();
         if (const auto found = object->find("errorMessage"); found != object->end() && found->second.as_string())
             result.error_message = *found->second.as_string();
-        for (const auto& block : blocks) {
-            if (const auto* text = std::get_if<ai::TextContent>(&block))
-                result.content.emplace_back(*text);
-            else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block))
-                result.content.emplace_back(*thinking);
+        if (content != object->end() && content->second.as_array()) {
+            for (const auto& block : *content->second.as_array()) {
+                const auto* type = member(block, "type");
+                if (!type || !type->as_string()) continue;
+                if (*type->as_string() == "toolCall") {
+                    const auto* id = member(block, "id");
+                    const auto* name = member(block, "name");
+                    const auto* arguments = member(block, "arguments");
+                    if (!id || !id->as_string() || !name || !name->as_string()) continue;
+                    result.content.emplace_back(ai::ToolCallContent{.id = *id->as_string(),
+                            .name = *name->as_string(),
+                            .arguments = arguments ? std::optional{arguments->to_support()} : std::nullopt});
+                } else if (*type->as_string() == "text") {
+                    const auto* text = member(block, "text");
+                    if (text && text->as_string()) result.content.emplace_back(ai::text_content(*text->as_string()));
+                } else if (*type->as_string() == "thinking") {
+                    const auto* thinking = member(block, "thinking");
+                    if (thinking && thinking->as_string())
+                        result.content.emplace_back(ai::thinking_content(*thinking->as_string()));
+                }
+            }
         }
         return ai::MessageVariant{std::move(result)};
     }
@@ -1192,7 +1224,7 @@ support::ExpectedVoid Registry::install(Extension extension) {
     {
         std::vector<std::string> tool_names;
         for (const auto& tool : extension.tools) {
-            if (tool.declaration.name.empty() || !tool.execute ||
+            if (tool.declaration.name.empty() || (!tool.execute && !tool.execute_durable) ||
                     std::ranges::find(tool_names, tool.declaration.name) != tool_names.end()) {
                 return std::unexpected(validation("Tool name must be non-empty, unique and executable"));
             }
@@ -1713,7 +1745,19 @@ support::Expected<Boundary> WorkflowRuntime::prepare_boundary(
 
 support::AsyncResult<void> WorkflowRuntime::abort_run(const TaskRecord& task, TaskRuntime& runtime) {
     return runtime.commit([task](Transaction& tx,
-                                  const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                                  const TaskRecord& current) -> support::Expected<std::optional<NextTaskState>> {
+        auto cancelled = aborted_codemode_result(tx, current);
+        if (!cancelled) return std::unexpected(cancelled.error());
+        if (cancelled->has_value()) {
+            auto message = tool_result_json(**cancelled);
+            auto appended = tx.append_entry(task.conversation_id,
+                    "pi.tool-result",
+                    entry_data(message, task.id),
+                    std::nullopt,
+                    {message},
+                    task.id);
+            if (!appended) return std::unexpected(appended.error());
+        }
         auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
         if (!live) {
             return std::unexpected(live.error());
@@ -2188,14 +2232,38 @@ support::Expected<ai::ToolResultMessage> WorkflowRuntime::execute_tool(
         return result;
     }
     const auto started = std::chrono::steady_clock::now();
-    auto output = await_result((*found)->execute(arguments.to_support(), runtime.stop_token()));
+    if ((*found)->execute_durable) {
+        ToolExecutionContext context{.runtime = &runtime, .session = &session_, .call_id = call.id};
+        for (const auto& tool : snapshot.tools) {
+            if (tool->declaration.name != call.name) context.tools.push_back(tool->declaration);
+            if (tool->replay_safe) context.replay_safe_tools.push_back(tool->declaration.name);
+        }
+        // execute_durable returns before this request snapshot and runtime leave
+        // scope; nested calls use the same hooks and cancellation as the caller.
+        context.execute_tool = [this, &snapshot, &runtime](
+                                       ai::ToolCallContent nested) { return execute_tool(nested, snapshot, runtime); };
+        auto output = (*found)->execute_durable(arguments.to_support(), std::move(context));
+        if (!output) return std::unexpected(output.error());
+        result.content = std::move(output->content);
+        result.details = std::move(output->details);
+        result.nested_calls = std::move(output->nested_calls);
+        result.is_error = output->is_error;
+    } else {
+        auto output = await_result((*found)->execute(arguments.to_support(), runtime.stop_token()));
+        if (!output && output.error().code == support::ErrorCode::Cancelled && runtime.stop_token().stop_requested())
+            return std::unexpected(output.error());
+        result.is_error = !output.has_value();
+        result.content =
+                output ? std::move(*output) : std::vector<ai::Content>{ai::text_content(output.error().message)};
+    }
     result.duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
-    result.is_error = !output.has_value();
-    result.content = output ? std::move(*output) : std::vector<ai::Content>{ai::text_content(output.error().message)};
     // afterTool: every replacement becomes the next handler's result and the
     // committed entry carries the last one (frozen pi `finalResult`); ordinary
     // handler errors stay isolated.
-    Json final_result = Json{Object{{"output", blocks_json(result.content)}, {"isError", result.is_error}}};
+    Object final_fields{{"output", blocks_json(result.content)}, {"isError", result.is_error}};
+    if (result.details) final_fields.emplace("details", *Json::from_support(*result.details));
+    if (result.nested_calls) final_fields.emplace("nestedCalls", *Json::from_support(*result.nested_calls));
+    Json final_result{std::move(final_fields)};
     auto hooked = await_result(each_kind_hook(snapshot.hooks,
             kToolTaskKind,
             "afterTool",
@@ -2226,7 +2294,36 @@ support::Expected<ai::ToolResultMessage> WorkflowRuntime::execute_tool(
             is_error != nullptr && is_error->as_boolean() != nullptr) {
         result.is_error = *is_error->as_boolean();
     }
+    result.details = member(final_result, "details") ? std::optional{member(final_result, "details")->to_support()}
+                                                     : std::nullopt;
+    result.nested_calls = member(final_result, "nestedCalls")
+                                  ? std::optional{member(final_result, "nestedCalls")->to_support()}
+                                  : std::nullopt;
     return result;
+}
+
+support::Expected<bool> WorkflowRuntime::execute_tool_round(const TaskRecord& task,
+        const Registry::Snapshot& snapshot,
+        TaskRuntime& runtime,
+        std::vector<ai::MessageVariant>& messages,
+        bool recovery) {
+    for (const auto& call : pending_tool_calls(messages, recovery ? &snapshot.tools : nullptr)) {
+        auto result = execute_tool(call, snapshot, runtime);
+        if (!result) return std::unexpected(result.error());
+        auto saved = await_result(
+                runtime.commit([id = task.conversation_id, tid = task.id, result = *result](Transaction& tx,
+                                       const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    auto message = tool_result_json(result);
+                    auto entry = tx.append_entry(
+                            id, "pi.tool-result", entry_data(message, tid), std::nullopt, {message}, tid);
+                    if (!entry) return std::unexpected(entry.error());
+                    return std::nullopt;
+                }));
+        if (!saved) return std::unexpected(validation("Tool result commit failed: " + saved.error().message));
+        messages.push_back(std::move(*result));
+    }
+    if (runtime.stop_token().stop_requested()) return false;
+    return await_result(apply_post_tools_boundary(task, runtime));
 }
 
 support::ExpectedVoid WorkflowRuntime::prepare(const TaskRecord& task, TaskRuntime& runtime) {
@@ -2485,6 +2582,20 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
         const auto snapshot = registry_.snapshot();
         auto loaded = load_view();
         if (!loaded) return std::unexpected(loaded.error());
+        // Context messages synthesize missing tool results for the provider.
+        // Recovery must inspect the committed contributions before that repair.
+        std::vector<ai::MessageVariant> committed_messages;
+        for (const auto& contribution : view.contributions) {
+            for (const auto& message : contribution) {
+                if (auto parsed = message_from_json(message)) committed_messages.push_back(std::move(*parsed));
+            }
+        }
+        if (!pending_tool_calls(committed_messages, &snapshot.tools).empty()) {
+            auto ended = execute_tool_round(task, snapshot, runtime, committed_messages, true);
+            if (!ended) return std::unexpected(ended.error());
+            if (*ended) return {};
+            continue;
+        }
         auto plan = plan_prompt(snapshot, replay.shown_tools, replay.shown_sections, view, now());
         if (!plan.systems.empty()) {
             auto committed = await_result(runtime.commit(
@@ -2580,42 +2691,9 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                     }));
             if (!committed) return committed;
             replay.messages.push_back(*response);
-            for (const auto& content : response->content) {
-                const auto* call = std::get_if<ai::ToolCallContent>(&content);
-                if (call == nullptr) continue;
-                auto result = execute_tool(*call, snapshot, runtime);
-                if (!result) return std::unexpected(result.error());
-                auto saved = await_result(
-                        runtime.commit([id = task.conversation_id, tid = task.id, result = *result](Transaction& tx,
-                                               const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                            auto entry = tx.append_entry(id,
-                                    "pi.tool-result",
-                                    entry_data(tool_result_json(result), tid),
-                                    std::nullopt,
-                                    std::vector<chord::Json>{as_chord(tool_result_json(result))},
-                                    tid);
-                            if (!entry) return std::unexpected(entry.error());
-                            return std::nullopt;
-                        }));
-                if (!saved) {
-                    return std::unexpected(validation("Tool result commit failed: " + saved.error().message));
-                }
-                replay.messages.push_back(std::move(*result));
-            }
-            if (runtime.stop_token().stop_requested()) {
-                // The abort invocation settles the run (frozen pi generation
-                // `abort`); this loop only unwinds.
-                break;
-            }
-            auto ended_here = await_result(apply_post_tools_boundary(task, runtime));
-            if (!ended_here) {
-                return std::unexpected(ended_here.error());
-            }
-            if (*ended_here) {
-                // A queued reset ended the run at the postTools boundary;
-                // the placed users start the next run.
-                return {};
-            }
+            auto ended_here = execute_tool_round(task, snapshot, runtime, replay.messages);
+            if (!ended_here) return std::unexpected(ended_here.error());
+            if (*ended_here) return {};
             continue;
         }
         // Overflow recovery: a context-overflow terminal error compacts the

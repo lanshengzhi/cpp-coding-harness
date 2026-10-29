@@ -1,5 +1,6 @@
 #include "durable/Compaction.hpp"
 
+#include "durable/AwaitResult.hpp"
 #include "durable/CommittedContext.hpp"
 #include "WorkflowRuntime.hpp"
 
@@ -58,23 +59,6 @@ const Json* member(const Json& value, std::string_view key) {
 std::string_view json_string(const Json& value) {
     const std::string* string = value.as_string();
     return string == nullptr ? std::string_view{} : std::string_view{*string};
-}
-
-/// Wait for one asynchronous value on this thread. Every Harness task phase
-/// runs on its own execution thread, so blocking until completion is the
-/// frozen `await`-shaped contract; `runtime.commit` publishes progress.
-template <typename T> support::Expected<T> await_result(support::AsyncResult<T> operation) {
-    std::mutex mutex;
-    std::condition_variable ready;
-    std::optional<support::Expected<T>> outcome;
-    std::move(operation).start([&mutex, &ready, &outcome](support::Expected<T> result) noexcept {
-        std::lock_guard lock(mutex);
-        outcome.emplace(std::move(result));
-        ready.notify_one();
-    });
-    std::unique_lock lock(mutex);
-    ready.wait(lock, [&outcome] { return outcome.has_value(); });
-    return std::move(*outcome);
 }
 
 /// Sleep until `until` milliseconds on the Harness clock, waking early on

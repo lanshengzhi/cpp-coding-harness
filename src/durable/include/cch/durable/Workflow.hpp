@@ -25,9 +25,32 @@ namespace cch::durable {
 using ToolExecuteHook = std::move_only_function<support::AsyncResult<std::vector<ai::Content>>(
         support::JsonValue, std::stop_token)>;
 
+/// Durable execution context (frozen pi `ToolExecutionApi`). The Harness and
+/// request snapshot keep every borrowed capability alive until execution returns.
+struct ToolExecutionContext {
+    TaskRuntime* runtime{nullptr}; // Harness keeps it alive until execution returns
+    /// Completed results commit on the Session line even after the task's stop
+    /// signal. The Harness retains this Session until execution returns.
+    Session* session{nullptr};
+    std::string call_id{};
+    std::vector<ai::Tool> tools{};
+    std::vector<std::string> replay_safe_tools{};
+    /// Executes through the same tool hooks as a model-issued call.
+    std::move_only_function<support::Expected<ai::ToolResultMessage>(ai::ToolCallContent)> execute_tool{};
+};
+
+using DurableToolExecuteHook =
+        std::move_only_function<support::Expected<ai::ToolResultMessage>(support::JsonValue, ToolExecutionContext)>;
+
 struct ToolRegistration {
     ai::Tool declaration{};
     ToolExecuteHook execute{};
+    /// A context-aware tool uses this instead of `execute`; it runs on the
+    /// Harness execution thread and may await physical operations there.
+    DurableToolExecuteHook execute_durable{};
+    /// Frozen pi `replay: "safe"`: an interrupted invocation may run again.
+    /// The default refuses re-execution of an admitted, unfinished operation.
+    bool replay_safe{false};
 };
 
 /// A constant prompt section (frozen pi `section`). Dynamic renderers and

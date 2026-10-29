@@ -323,28 +323,28 @@
             "issue1090",
             "--output-on-failure",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-focused.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-revalidation-1094.xml"
           ],
-          "testedRevision": "09598c6a41246609d3c24c1e97418d151df6b72b",
-          "recordedAt": "2026-10-29T08:25:46Z",
+          "testedRevision": "64c0f19d14cc772cf7e99bef8b2d2311ed8704c6",
+          "recordedAt": "2026-10-29T10:39:53Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1090-focused.xml",
-            "sha256": "b0dc96829f1679d6bdac85b42b3d95befbcecef63250d1cca933797074ce4dfd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1094.xml",
+            "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
           }
         },
         "inputs": [
           {
             "path": "cmake/targets/Durable.cmake",
-            "sha256": "380bf742f1c729a382862c1e368ae43ed3353588300ba21d3936973975129c0b"
+            "sha256": "0eba28d6bf2d8c273478d62b110c0933accfa2fddf7c1ebdd6de3c84ca64e203"
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "11371c2ff20d599e51ece049fc62db07fe9a8710731e5088995b4daf30d0b6d7"
+            "sha256": "ed4cdf677cec0ed4b11712affaa8331c9b2e51afd069db564d9f75cf3141cbae"
           },
           {
             "path": "docs/agents/architecture.md",
-            "sha256": "3642af5826324e791d31cae60389f8776c2f4b2dda41dafdb9f50e5ecd72d845"
+            "sha256": "65daa628e02110f365a6cfd3fbca52559675aaf412c806173323b1c996977dd2"
           },
           {
             "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
@@ -352,7 +352,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
-            "sha256": "6d632fc4207b0d6d32d69e193cdc4c5dc503c5663b4f1043c07e03dada98dc1b"
+            "sha256": "ab803d5962698e355cc6637af5d5d3fa6ff2a16d0174e06aeb91254870d45da3"
           },
           {
             "path": "docs/research/pi-v1.3.0/1090-durable-images.md",
@@ -376,7 +376,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "782fc4e76a14b75c7353ee232937fcc54398faccf5b5c8dd344e14d01fe02de4"
+            "sha256": "15aeaa2b127a4a5a835d58b82fcee955ca8c0e67cdeebaa04b5a2cbb9fc0ee68"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -549,7 +549,36 @@
             }
           }
         ],
-        "routingSha256": "86be75c1c591af6ccc48241625a752bfbc681f9b54caf95a5a347e22846654f3"
+        "routingSha256": "86be75c1c591af6ccc48241625a752bfbc681f9b54caf95a5a347e22846654f3",
+        "revalidation1094": {
+          "reason": "Direct codemode dependency and durable test registration changed shared build inputs. The prior image scenario routing and production image implementation are unchanged; issue1090 was rebuilt and its exact 10-case selection passed.",
+          "changedInputs": [
+            "cmake/targets/Durable.cmake",
+            "cmake/tests/DurableTests.cmake",
+            "docs/agents/architecture.md",
+            "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1090",
+              "--output-on-failure",
+              "--output-junit",
+              "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-focused.xml"
+            ],
+            "testedRevision": "09598c6a41246609d3c24c1e97418d151df6b72b",
+            "recordedAt": "2026-10-29T08:25:46Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1090-focused.xml",
+              "sha256": "b0dc96829f1679d6bdac85b42b3d95befbcecef63250d1cca933797074ce4dfd"
+            }
+          }
+        }
       }
     ]
   },
@@ -891,7 +920,7 @@
     ],
     "missingObservationRows": 1018,
     "scenarioCoverage": {
-      "scenarios": 530,
+      "scenarios": 533,
       "scenarioNamed": 358,
       "artifactCovered": 56,
       "orphaned": [
@@ -1010,7 +1039,10 @@
         "audit-1085/harness.json:pi JSONL Harness resumes a pending checkpoint after close and reopen",
         "audit-1086/interchange.json:pi creates a SQLite store with an unfinished task, document and checkpoint",
         "audit-1086/interchange.json:C++ creates a SQLite store that pi reopens, indexes and advances",
-        "audit-1085-replay/harness.json:pi JSONL Harness resumes a pending checkpoint after close and reopen"
+        "audit-1085-replay/harness.json:pi JSONL Harness resumes a pending checkpoint after close and reopen",
+        "audit-1094/codemode.json:durable codemode returns ordered text image console and value output",
+        "audit-1094/codemode.json:durable codemode reopens with the same clock seed and recorded nested answer",
+        "audit-1094/codemode.json:durable codemode refuses to repeat an unsafe interrupted nested call"
       ],
       "uncovered": []
     }
@@ -4354,6 +4386,38 @@
         "cch_durable:task-recovery"
       ],
       "disposition": "Compared by tests/durable/JsonlStorageTest.cpp and docs/research/pi-v1.3.0/1085-jsonl-continuation.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1094",
+      "artifact": "codemode.json",
+      "scenario": "durable codemode returns ordered text image console and value output",
+      "reason": "Captured by #1094 after consolidation; the bounded no-environment output comparison does not cover output spilling or image files.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/HarnessCodemodeTest.cpp; full output capability remains partial. See docs/research/pi-v1.3.0/1094-durable-codemode.md."
+    },
+    {
+      "family": "audit-1094",
+      "artifact": "codemode.json",
+      "scenario": "durable codemode reopens with the same clock seed and recorded nested answer",
+      "reason": "Captured by #1094 after consolidation; bounded native restart does not verify independent nested task identity or pi/C++ interrupted-journal continuation.",
+      "rows": [
+        "cch_durable:codemode-replay",
+        "cch_durable:codemode-store"
+      ],
+      "disposition": "Compared after SIGKILL on both SQLite and JSONL through public Harness in tests/durable/HarnessCodemodeTest.cpp; no whole-row replay promotion."
+    },
+    {
+      "family": "audit-1094",
+      "artifact": "codemode.json",
+      "scenario": "durable codemode refuses to repeat an unsafe interrupted nested call",
+      "reason": "Captured by #1094 after consolidation to separate safe replay from unsafe interrupted effects.",
+      "rows": [
+        "cch_durable:codemode-replay",
+        "cch_durable:codemode-failure"
+      ],
+      "disposition": "Compared after SIGKILL on both SQLite and JSONL through public Harness in tests/durable/HarnessCodemodeTest.cpp; the previously completed nested answer remains in failure history."
     }
   ],
   "correctionsIndex": [

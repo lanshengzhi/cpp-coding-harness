@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="14"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="10"
+	timestamp="2026-10-29T19:38:08"
+	>
+	<testcase name="A nested result completed during durable abort retains its successful history" classname="A nested result completed during durable abort retains its successful history" time="1.49875" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "A nested result completed during durable abort retains its successful history"
+Randomness seeded to: 2906889391
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Cancelling durable codemode retains completed and cancelled nested calls" classname="Cancelling durable codemode retains completed and cancelled nested calls" time="1.29106" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Cancelling durable codemode retains completed and cancelled nested calls"
+Randomness seeded to: 1111139601
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode calls a real nested tool and retains its store across turns" classname="Durable codemode calls a real nested tool and retains its store across turns" time="2.66815" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode calls a real nested tool and retains its store across turns"
+Randomness seeded to: 783519882
+===============================================================================
+All tests passed (33 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode catches a nested failure and retains its error row" classname="Durable codemode catches a nested failure and retains its error row" time="1.299" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode catches a nested failure and retains its error row"
+Randomness seeded to: 1357403004
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode nested tools use the request tool hooks" classname="Durable codemode nested tools use the request tool hooks" time="1.33994" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode nested tools use the request tool hooks"
+Randomness seeded to: 2153452274
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode preserves successful nested history and discards failed store writes" classname="Durable codemode preserves successful nested history and discards failed store writes" time="3.96275" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode preserves successful nested history and discards failed store writes"
+Randomness seeded to: 2153210424
+===============================================================================
+All tests passed (33 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode replays committed answers after SIGKILL on SQLite and JSONL" classname="Durable codemode replays committed answers after SIGKILL on SQLite and JSONL" time="10.561" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode replays committed answers after SIGKILL on SQLite and JSONL"
+Randomness seeded to: 4234453547
+===============================================================================
+All tests passed (100 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode resumes recorded nested answers after reopening SQLite" classname="Durable codemode resumes recorded nested answers after reopening SQLite" time="2.66405" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode resumes recorded nested answers after reopening SQLite"
+Randomness seeded to: 2110311948
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode returns the frozen failure text and nested history" classname="Durable codemode returns the frozen failure text and nested history" time="1.31494" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode returns the frozen failure text and nested history"
+Randomness seeded to: 1752395653
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode returns the frozen mixed output through Harness" classname="Durable codemode returns the frozen mixed output through Harness" time="1.32999" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode returns the frozen mixed output through Harness"
+Randomness seeded to: 3550232586
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode runs real write edit read and bash tools" classname="Durable codemode runs real write edit read and bash tools" time="1.36525" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode runs real write edit read and bash tools"
+Randomness seeded to: 3492165276
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode store forks as of the selected answer and supports deletion" classname="Durable codemode store forks as of the selected answer and supports deletion" time="5.52808" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable codemode store forks as of the selected answer and supports deletion"
+Randomness seeded to: 3379519147
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable recovery does not re-execute an unsafe ordinary tool" classname="Durable recovery does not re-execute an unsafe ordinary tool" time="0.0319536" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Durable recovery does not re-execute an unsafe ordinary tool"
+Randomness seeded to: 2745274570
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Invalid durable codemode source settles as a tool error" classname="Invalid durable codemode source settles as a tool error" time="0.0442997" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1094"/>
+		</properties>
+		<system-out>Filters: "Invalid durable codemode source settles as a tool error"
+Randomness seeded to: 1051667894
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

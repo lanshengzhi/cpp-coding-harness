@@ -2073,7 +2073,10 @@
           "fixtures/pi-v1.3.0/audit-1056/environment.json: the built-in read, write, edit and bash tools run over a real injected local environment",
           "fixtures/pi-v1.3.0/audit-1056/codemode-toolsearch.json: tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
           "fixtures/pi-v1.3.0/audit-1056/environment.json: the read tool returns a resized image content block with its coordinate-mapping diagnostic",
-          "fixtures/pi-v1.3.0/audit-1090/images.json: the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata"
+          "fixtures/pi-v1.3.0/audit-1090/images.json: the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
+          "fixtures/pi-v1.3.0/audit-1094/codemode.json: durable codemode returns ordered text image console and value output",
+          "fixtures/pi-v1.3.0/audit-1094/codemode.json: durable codemode reopens with the same clock seed and recorded nested answer",
+          "fixtures/pi-v1.3.0/audit-1094/codemode.json: durable codemode refuses to repeat an unsafe interrupted nested call"
         ],
         "comparison": "Compare real filesystem/shell observations, image content/MIME/dimensions and diagnostics, script results and tool-search outcomes.",
         "missing": "toolsearch-persistence and some environment limits were not captured."
@@ -2337,13 +2340,13 @@
       "cch_chord, cch_codemode, cch_mcp and cch_durable are configured libraries with real public callers. Durable has memory, transactional JSONL, SQLite and the #1076/#1077 task execution, definition versioning/replacement and phase-hook slices.",
       "#1071 reconciles the already merged retirement of the unused agent-side SQLite/TaskStore/TaskScheduler subsystem. The preserved SessionStore and independent transcript export caller have current regression and dependency-closure evidence in 1071-legacy-retirement.md.",
       "#1101 preserves arbitrary structured JSON through real MCP clients and application conversion. Its whole-row frozen comparison receipt is in 1058-deliveries.json and its delivery report is 1101-structured-content.md.",
-      "Codemode Inline (#1097), worker lifetime (#1096) and the Remote exchange/Linux host (#1098) are implemented. #1093 delivered deterministic local execution but is reopened for its explicitly unaccepted outcome/settlement ordering clause; Remote replay (#1099) and durable integration (#1094) remain open.",
+      "Codemode Inline (#1097), worker lifetime (#1096) and the Remote exchange/Linux host (#1098) are implemented. #1093 delivered deterministic local execution but is reopened for its explicitly unaccepted outcome/settlement ordering clause. #1094 adds bounded durable script/store/failure integration and SIGKILL replay on SQLite and JSONL; independent nested task identity, parallel execution and bidirectional interrupted codemode journal continuation remain partial (1094-durable-codemode.md). Remote replay (#1099) remains open.",
       "Session ownership #1068 -> #1069 -> #1070, live Session consumers #1072 and application environments/tools #1073 are delivered. The bounded #1079 memory Harness runs real injected tools independently of AgentSession; see the owning delivery reports.",
       "Six historical TUI residual tickets remain closed. #831 and #1035 are reopened for their dated terminal acceptance gaps, retaining their delivered byte/frame comparisons. PTY comparisons exist, including #1123 and #1125; they do not establish emulator rendering."
     ],
     "specifiedOnly": [
       "The original 32 drafts are planning records; native dependencies on the 76 implementation issues determine the live frontier. See 1044-delivery-reconciliation-2026-10-26.md for the reviewed tracker corrections and acceptance mappings.",
-      "Durable ownership/join/wait cancellation (#1078), submissions/inbox (#1080), dynamic workflow/tool hooks (#1087), document lifecycle and integrations remain incomplete beyond the bounded #1076/#1077/#1079 slices. #1095 is reopened: its application AgentSession tool_search delivery does not accept the required durable Harness behavior, and #1094 remains its blocker.",
+      "Durable ownership/join/wait cancellation (#1078), submissions/inbox (#1080), dynamic workflow/tool hooks (#1087), document lifecycle and integrations remain incomplete beyond the bounded #1076/#1077/#1079 slices. #1095 is reopened: its application AgentSession tool_search delivery does not accept the required durable Harness behavior. #1094 now supplies the bounded durable codemode context and nested-tool binding; durable tool_search remains an implementation gap.",
       "Durable bidirectional JSONL/SQLite continued operation (#1085/#1086), crash/recovery integration (#1084) and additional durability guarantees remain unverified.",
       "#812 delivered execute-only recorded tool duration through persistence and rendering. #1106 remains open for its remaining monotonic-clock discrimination and complete frozen comparison; reuse #812 instead of implementing the same propagation again. Agent queue/default/lifecycle/tool-selection behavior, native extensions and MCP cancellation/issuer/transport/management still have open work.",
       "Other delivered slices, including #1074/#1075/#1076/#1077 and TUI program status, retain their delivery reports and tests. Their broader composite capability rows need complete per-row receipts before ledger verification can advance."

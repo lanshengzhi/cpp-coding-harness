@@ -113,6 +113,11 @@ private:
     /// committed (frozen pi `ToolTask.call`).
     [[nodiscard]] support::Expected<ai::ToolResultMessage> execute_tool(
             const ai::ToolCallContent& call, const Registry::Snapshot& snapshot, TaskRuntime& runtime);
+    [[nodiscard]] support::Expected<bool> execute_tool_round(const TaskRecord& task,
+            const Registry::Snapshot& snapshot,
+            TaskRuntime& runtime,
+            std::vector<ai::MessageVariant>& messages,
+            bool recovery = false);
     /// Both halves of the built-in generation definition, dispatched by the
     /// checkpoint's `phase` (frozen pi generation `prepare`/`request`).
     [[nodiscard]] support::AsyncResult<void> dispatch(const TaskRecord& task, TaskRuntime& runtime);

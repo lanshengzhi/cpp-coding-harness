@@ -1,0 +1,124 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1094",
+  "family": "audit-1094",
+  "capturedAt": "2026-10-29T10:28:50.199Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1094/capture-1094.mts",
+    "sha256": "8c251e63aa750dc1ab46f09f6043606c0cf53c9e1169c298c487f92f24bc5d66",
+    "command": "PI_CHECKOUT=<frozen-checkout> PI_BASELINE=pi-v1.3.0 <frozen-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1094/capture-1094.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1094/capture-1094.mts",
+        "sha256": "8c251e63aa750dc1ab46f09f6043606c0cf53c9e1169c298c487f92f24bc5d66"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/pi.mts",
+        "sha256": "45123d51d4d3b281fb7e908bd7f8ee61043ac815d3ae5078c78264d981fe26a2"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/support.mts",
+        "sha256": "6761d8f97de85f6821f77ecb9e33e2aa1dd6ccfb87ea5d6841bcce61da4e349c"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "codemode.json",
+      "family": "audit-1094",
+      "bytes": 3201,
+      "sha256": "edb7d0c90f714199bb4e6c4b9f6d9ba6b0f074bd1e14851b3f831efdb3636305",
+      "sourceEndpoints": [
+        "packages/durable/src/codemode/codemode.ts:CodemodeCall,CodemodeStoreDoc",
+        "packages/durable/src/codemode/output.ts:formatResult",
+        "packages/durable/test/codemode.test.ts:code mode"
+      ],
+      "scenarios": [
+        {
+          "name": "durable codemode returns ordered text image console and value output",
+          "inputs": {
+            "source": "text(\"alpha\"); image(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8kUAAAAASUVORK5CYII=\"); console.log(\"console\"); return \"omega\";"
+          },
+          "expected": {
+            "isError": false,
+            "content": [
+              {
+                "type": "text",
+                "text": "Script completed\nWall time <seconds>\nOutput:\n"
+              },
+              {
+                "type": "text",
+                "text": "==> text 1/2 <==\nalpha\n[Image (image/png, 68 bytes) could not be saved: no execution environment]"
+              },
+              {
+                "type": "image",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8kUAAAAASUVORK5CYII=",
+                "mimeType": "image/png"
+              },
+              {
+                "type": "text",
+                "text": "==> text 2/2 <==\nomega\n<console_output>\nconsole\n</console_output>"
+              }
+            ],
+            "calls": []
+          },
+          "normalizations": [
+            "wall time replaced by <seconds>; nested durations recorded as presence"
+          ]
+        },
+        {
+          "name": "durable codemode reopens with the same clock seed and recorded nested answer",
+          "inputs": {
+            "source": "record clock and random; effect; pause; store and return stamp",
+            "replay": "safe",
+            "interruptedAt": "SIGKILL after pause entered and effect answer committed"
+          },
+          "expected": {
+            "effectCalls": 1,
+            "isError": false,
+            "outputMatchesOriginalStamp": true,
+            "storeMatchesOriginalStamp": true,
+            "statuses": [
+              "ok",
+              "ok"
+            ]
+          },
+          "normalizations": [
+            "clock and random stamp compared to the first admitted effect argument, not emitted"
+          ]
+        },
+        {
+          "name": "durable codemode refuses to repeat an unsafe interrupted nested call",
+          "inputs": {
+            "source": "record clock and random; effect; pause; store and return stamp",
+            "replay": "never",
+            "interruptedAt": "SIGKILL after pause entered and effect answer committed"
+          },
+          "expected": {
+            "effectCalls": 1,
+            "isError": true,
+            "outputMatchesOriginalStamp": false,
+            "storeMatchesOriginalStamp": false,
+            "statuses": [
+              "ok",
+              "error"
+            ]
+          },
+          "normalizations": [
+            "clock and random stamp compared to the first admitted effect argument, not emitted"
+          ]
+        }
+      ]
+    }
+  ]
+}

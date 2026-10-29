@@ -167,7 +167,7 @@
       "role": "owner",
       "root": "src/durable",
       "interface_root": "src/durable/include/cch/durable",
-      "legal_owner_dependencies": ["cch_chord", "cch_ai"]
+      "legal_owner_dependencies": ["cch_chord", "cch_ai", "cch_codemode"]
     },
     "cch_support": {
       "role": "support",

@@ -1945,6 +1945,30 @@
       "reason": "Captured by #1085 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness continuation tests consume the observation.",
       "rows": ["cch_durable:task-recovery"],
       "disposition": "Compared by tests/durable/JsonlStorageTest.cpp and docs/research/pi-v1.3.0/1085-jsonl-continuation.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1094",
+      "artifact": "codemode.json",
+      "scenario": "durable codemode returns ordered text image console and value output",
+      "reason": "Captured by #1094 after consolidation; the bounded no-environment output comparison does not cover output spilling or image files.",
+      "rows": ["cch_durable:codemode-output"],
+      "disposition": "Compared through public Harness in tests/durable/HarnessCodemodeTest.cpp; full output capability remains partial. See docs/research/pi-v1.3.0/1094-durable-codemode.md."
+    },
+    {
+      "family": "audit-1094",
+      "artifact": "codemode.json",
+      "scenario": "durable codemode reopens with the same clock seed and recorded nested answer",
+      "reason": "Captured by #1094 after consolidation; bounded native restart does not verify independent nested task identity or pi/C++ interrupted-journal continuation.",
+      "rows": ["cch_durable:codemode-replay", "cch_durable:codemode-store"],
+      "disposition": "Compared after SIGKILL on both SQLite and JSONL through public Harness in tests/durable/HarnessCodemodeTest.cpp; no whole-row replay promotion."
+    },
+    {
+      "family": "audit-1094",
+      "artifact": "codemode.json",
+      "scenario": "durable codemode refuses to repeat an unsafe interrupted nested call",
+      "reason": "Captured by #1094 after consolidation to separate safe replay from unsafe interrupted effects.",
+      "rows": ["cch_durable:codemode-replay", "cch_durable:codemode-failure"],
+      "disposition": "Compared after SIGKILL on both SQLite and JSONL through public Harness in tests/durable/HarnessCodemodeTest.cpp; the previously completed nested answer remains in failure history."
     }
   ],
   "groups": [
