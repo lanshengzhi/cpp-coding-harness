@@ -424,12 +424,15 @@ struct StorageState::Impl {
                             support::make_error(support::ErrorCode::Validation, "Task write has no record"));
                 }
                 const TaskRecord& record = *write.task;
+                // Every task write replaces the record wholesale, terminal
+                // status included: one batch may carry terminal then live
+                // writes and the last write wins (frozen pi
+                // `MemoryStorage.prepareCommit` task case, issue #1168). The
+                // terminal-replace invariant is a Session transaction rule
+                // (frozen pi `session/transaction.ts` `#assemble`), not a
+                // Storage rule.
                 const auto existing = next_tasks.find(record.id.value);
                 if (existing != next_tasks.end()) {
-                    if (existing->second.state.status == "terminal") {
-                        return std::unexpected(
-                                support::make_error(support::ErrorCode::Validation, "Task is already terminal"));
-                    }
                     if (existing->second.conversation_id != record.conversation_id) {
                         return std::unexpected(support::make_error(
                                 support::ErrorCode::Validation, "Task cannot change conversations"));

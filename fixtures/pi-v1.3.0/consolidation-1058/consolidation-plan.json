@@ -1969,6 +1969,186 @@
       "reason": "Captured by #1094 after consolidation to separate safe replay from unsafe interrupted effects.",
       "rows": ["cch_durable:codemode-replay", "cch_durable:codemode-failure"],
       "disposition": "Compared after SIGKILL on both SQLite and JSONL through public Harness in tests/durable/HarnessCodemodeTest.cpp; the previously completed nested answer remains in failure history."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "memory storage settles a new task terminal then live in one batch with the last write",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:memory-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "memory storage settles a new task live then terminal in one batch with the last write",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:memory-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "memory storage accepts terminal then live for an already-live task",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:memory-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "memory storage revives an existing terminal task with one live write",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:memory-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "memory storage rejects a mixed invalid batch atomically and consumes no sequence",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:memory-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "jsonl storage settles a new task terminal then live in one batch with the last write",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:jsonl-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "jsonl storage settles a new task live then terminal in one batch with the last write",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:jsonl-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "jsonl storage accepts terminal then live for an already-live task",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:jsonl-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "jsonl storage revives an existing terminal task with one live write",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:jsonl-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "jsonl storage rejects a mixed invalid batch atomically and consumes no sequence",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:jsonl-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "sqlite storage settles a new task terminal then live in one batch with the last write",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:sqlite-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "sqlite storage settles a new task live then terminal in one batch with the last write",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:sqlite-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "sqlite storage accepts terminal then live for an already-live task",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:sqlite-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "sqlite storage revives an existing terminal task with one live write",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:sqlite-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "terminal-live.json",
+      "scenario": "sqlite storage rejects a mixed invalid batch atomically and consumes no sequence",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The terminal/live public Storage batch reconciliation consumes the observation.",
+      "rows": [
+        "cch_durable:sqlite-storage"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "interchange.json",
+      "scenario": "frozen pi jsonl store with a terminal then live task batch reopens with the pending task",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The frozen-store reopen comparison for terminal/live batches consumes the observation.",
+      "rows": [
+        "cch_durable:Interchange:jsonl-pi-create"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "interchange.json",
+      "scenario": "frozen pi jsonl store with a live then terminal task batch reopens with the terminal task and a reclaimed sidecar",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The frozen-store reopen comparison for terminal/live batches consumes the observation.",
+      "rows": [
+        "cch_durable:Interchange:jsonl-pi-create"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1168",
+      "artifact": "interchange.json",
+      "scenario": "frozen pi jsonl store with a revived terminal task reopens with the pending task",
+      "reason": "Captured by #1168 after the consolidated ledger; no #1056 source row routes to this artifact. The frozen-store reopen comparison for terminal/live batches consumes the observation.",
+      "rows": [
+        "cch_durable:Interchange:jsonl-pi-create"
+      ],
+      "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
     }
   ],
   "groups": [

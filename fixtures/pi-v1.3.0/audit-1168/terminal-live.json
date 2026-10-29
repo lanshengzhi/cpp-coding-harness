@@ -1,0 +1,1127 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1168",
+  "family": "audit-1168",
+  "capturedAt": "2026-10-29T13:13:03.231Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/storage/memory.ts:MemoryStorage.prepareCommit,MemoryStorage.commit",
+    "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.commit,JsonlStorage.recover,JsonlStorage.planReclamations",
+    "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.commit",
+    "packages/durable/src/session/transaction.ts:Transaction.#assemble",
+    "packages/durable/test/memory-storage.test.ts:MemoryStorage conformance",
+    "packages/durable/test/jsonl-storage.test.ts:Pico JsonlStorage publication and recovery",
+    "packages/durable/test/sqlite-storage.test.ts:SqliteStorage conformance across reopen"
+  ],
+  "scenarios": [
+    {
+      "name": "memory storage settles a new task terminal then live in one batch with the last write",
+      "inputs": {
+        "backend": "memory",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "again"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "seq": 1,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        },
+        "reopen": null,
+        "nextCommitSeq": 2
+      },
+      "normalizations": []
+    },
+    {
+      "name": "memory storage settles a new task live then terminal in one batch with the last write",
+      "inputs": {
+        "backend": "memory",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "first"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "seq": 1,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "terminal",
+            "outcome": {
+              "status": "completed"
+            }
+          }
+        },
+        "reopen": null,
+        "nextCommitSeq": 2
+      },
+      "normalizations": []
+    },
+    {
+      "name": "memory storage accepts terminal then live for an already-live task",
+      "inputs": {
+        "backend": "memory",
+        "firstCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "original"
+                }
+              }
+            }
+          }
+        ],
+        "secondCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "again"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "firstSeq": 1,
+        "secondSeq": 2,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        },
+        "reopen": null
+      },
+      "normalizations": []
+    },
+    {
+      "name": "memory storage revives an existing terminal task with one live write",
+      "inputs": {
+        "backend": "memory",
+        "terminalCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          }
+        ],
+        "reviveCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "revived"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "terminalSeq": 1,
+        "reviveSeq": 2,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "revived"
+            }
+          }
+        },
+        "reopen": null
+      },
+      "normalizations": []
+    },
+    {
+      "name": "memory storage rejects a mixed invalid batch atomically and consumes no sequence",
+      "inputs": {
+        "backend": "memory",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "document.change",
+            "id": 99,
+            "content": {
+              "kind": "base",
+              "version": 1,
+              "value": {}
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rejected": true,
+        "error": "Unknown document: 99",
+        "taskAfter": null,
+        "nextEmptyCommitSeq": 1
+      },
+      "normalizations": []
+    },
+    {
+      "name": "jsonl storage settles a new task terminal then live in one batch with the last write",
+      "inputs": {
+        "backend": "jsonl",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "again"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "seq": 1,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        },
+        "files": [
+          "main.jsonl",
+          "task-2.jsonl"
+        ],
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        },
+        "nextCommitSeq": 2
+      },
+      "normalizations": []
+    },
+    {
+      "name": "jsonl storage settles a new task live then terminal in one batch with the last write",
+      "inputs": {
+        "backend": "jsonl",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "first"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "seq": 1,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "terminal",
+            "outcome": {
+              "status": "completed"
+            }
+          }
+        },
+        "files": [
+          "main.jsonl"
+        ],
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "terminal",
+            "outcome": {
+              "status": "completed"
+            }
+          }
+        },
+        "nextCommitSeq": 2
+      },
+      "normalizations": []
+    },
+    {
+      "name": "jsonl storage accepts terminal then live for an already-live task",
+      "inputs": {
+        "backend": "jsonl",
+        "firstCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "original"
+                }
+              }
+            }
+          }
+        ],
+        "secondCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "again"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "firstSeq": 1,
+        "secondSeq": 2,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        },
+        "files": [
+          "main.jsonl",
+          "task-2.jsonl"
+        ],
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "jsonl storage revives an existing terminal task with one live write",
+      "inputs": {
+        "backend": "jsonl",
+        "terminalCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          }
+        ],
+        "reviveCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "revived"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "terminalSeq": 1,
+        "files": [
+          "main.jsonl",
+          "task-2.jsonl"
+        ],
+        "reviveSeq": 2,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "revived"
+            }
+          }
+        },
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "revived"
+            }
+          }
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "jsonl storage rejects a mixed invalid batch atomically and consumes no sequence",
+      "inputs": {
+        "backend": "jsonl",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "document.change",
+            "id": 99,
+            "content": {
+              "kind": "base",
+              "version": 1,
+              "value": {}
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rejected": true,
+        "error": "Unknown document: 99",
+        "taskAfter": null,
+        "files": [],
+        "nextEmptyCommitSeq": 1
+      },
+      "normalizations": []
+    },
+    {
+      "name": "sqlite storage settles a new task terminal then live in one batch with the last write",
+      "inputs": {
+        "backend": "sqlite",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "again"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "seq": 1,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        },
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        },
+        "nextCommitSeq": 2
+      },
+      "normalizations": []
+    },
+    {
+      "name": "sqlite storage settles a new task live then terminal in one batch with the last write",
+      "inputs": {
+        "backend": "sqlite",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "first"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "seq": 1,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "terminal",
+            "outcome": {
+              "status": "completed"
+            }
+          }
+        },
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "terminal",
+            "outcome": {
+              "status": "completed"
+            }
+          }
+        },
+        "nextCommitSeq": 2
+      },
+      "normalizations": []
+    },
+    {
+      "name": "sqlite storage accepts terminal then live for an already-live task",
+      "inputs": {
+        "backend": "sqlite",
+        "firstCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "original"
+                }
+              }
+            }
+          }
+        ],
+        "secondCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "again"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "firstSeq": 1,
+        "secondSeq": 2,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        },
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "sqlite storage revives an existing terminal task with one live write",
+      "inputs": {
+        "backend": "sqlite",
+        "terminalCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          }
+        ],
+        "reviveCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "revived"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "terminalSeq": 1,
+        "reviveSeq": 2,
+        "immediate": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "revived"
+            }
+          }
+        },
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "revived"
+            }
+          }
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "sqlite storage rejects a mixed invalid batch atomically and consumes no sequence",
+      "inputs": {
+        "backend": "sqlite",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "document.change",
+            "id": 99,
+            "content": {
+              "kind": "base",
+              "version": 1,
+              "value": {}
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rejected": true,
+        "error": "Unknown document: 99",
+        "taskAfter": null,
+        "nextEmptyCommitSeq": 1
+      },
+      "normalizations": []
+    }
+  ]
+}

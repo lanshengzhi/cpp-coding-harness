@@ -1,0 +1,409 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1168",
+  "family": "audit-1168",
+  "capturedAt": "2026-10-29T13:13:03.231Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.open,JsonlStorage.commit,JsonlStorage.recover",
+    "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage",
+    "packages/durable/test/jsonl-storage.test.ts:Pico JsonlStorage publication and recovery"
+  ],
+  "scenarios": [
+    {
+      "name": "frozen pi jsonl store with a terminal then live task batch reopens with the pending task",
+      "inputs": {
+        "backend": "jsonl",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "again"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "seq": 1,
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "again"
+            }
+          }
+        },
+        "nextCommitSeq": 2,
+        "files": [
+          {
+            "name": "main.jsonl",
+            "bytes": 285,
+            "sha256": "6fba1b3835a7a8c8b9f84525b4da15c558fd71ba6317ffbe4b146b2d8c48770c",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"terminal\",\"outcome\":{\"status\":\"completed\"}}}},{\"type\":\"task.sidecar\",\"id\":2,\"ordinal\":0}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "task",
+                    "value": {
+                      "id": 2,
+                      "conversationId": 1,
+                      "kind": "work",
+                      "version": 1,
+                      "input": {},
+                      "background": false,
+                      "abortRequested": false,
+                      "state": {
+                        "status": "terminal",
+                        "outcome": {
+                          "status": "completed"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "task.sidecar",
+                    "id": 2,
+                    "ordinal": 0
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "task-2.jsonl",
+            "bytes": 250,
+            "sha256": "28672b54a92d33f04452d7a4cf8d474db892e19d3dc47a4c64ddaefe7bd2841e",
+            "text": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"again\"}}}}}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 1,
+                "ordinal": 0,
+                "payload": {
+                  "type": "task",
+                  "value": {
+                    "id": 2,
+                    "conversationId": 1,
+                    "kind": "work",
+                    "version": 1,
+                    "input": {},
+                    "background": false,
+                    "abortRequested": false,
+                    "state": {
+                      "status": "pending",
+                      "checkpoint": {
+                        "phase": "again"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "frozen pi jsonl store with a live then terminal task batch reopens with the terminal task and a reclaimed sidecar",
+      "inputs": {
+        "backend": "jsonl",
+        "writes": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "first"
+                }
+              }
+            }
+          },
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "seq": 1,
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "terminal",
+            "outcome": {
+              "status": "completed"
+            }
+          }
+        },
+        "nextCommitSeq": 2,
+        "files": [
+          {
+            "name": "main.jsonl",
+            "bytes": 285,
+            "sha256": "1d39ac97cd0446de0e3ea8031b8bf51415e4934c02e56311afd2137719584bcd",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"task.sidecar\",\"id\":2,\"ordinal\":0},{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"terminal\",\"outcome\":{\"status\":\"completed\"}}}}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "task.sidecar",
+                    "id": 2,
+                    "ordinal": 0
+                  },
+                  {
+                    "type": "task",
+                    "value": {
+                      "id": 2,
+                      "conversationId": 1,
+                      "kind": "work",
+                      "version": 1,
+                      "input": {},
+                      "background": false,
+                      "abortRequested": false,
+                      "state": {
+                        "status": "terminal",
+                        "outcome": {
+                          "status": "completed"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "frozen pi jsonl store with a revived terminal task reopens with the pending task",
+      "inputs": {
+        "backend": "jsonl",
+        "terminalCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "terminal",
+                "outcome": {
+                  "status": "completed"
+                }
+              }
+            }
+          }
+        ],
+        "reviveCommit": [
+          {
+            "type": "task",
+            "value": {
+              "id": 2,
+              "conversationId": 1,
+              "kind": "work",
+              "version": 1,
+              "input": {},
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "revived"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "terminalSeq": 1,
+        "reviveSeq": 2,
+        "reopen": {
+          "id": 2,
+          "conversationId": 1,
+          "kind": "work",
+          "version": 1,
+          "input": {},
+          "background": false,
+          "abortRequested": false,
+          "state": {
+            "status": "pending",
+            "checkpoint": {
+              "phase": "revived"
+            }
+          }
+        },
+        "nextCommitSeq": 3,
+        "files": [
+          {
+            "name": "main.jsonl",
+            "bytes": 333,
+            "sha256": "63341e1fd1a8aaafb7d0b45af3ded8e31bfe925d94e5d1093e9e448b8251399a",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"terminal\",\"outcome\":{\"status\":\"completed\"}}}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"task.sidecar\",\"id\":2,\"ordinal\":0}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "task",
+                    "value": {
+                      "id": 2,
+                      "conversationId": 1,
+                      "kind": "work",
+                      "version": 1,
+                      "input": {},
+                      "background": false,
+                      "abortRequested": false,
+                      "state": {
+                        "status": "terminal",
+                        "outcome": {
+                          "status": "completed"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 2,
+                "writes": [
+                  {
+                    "type": "task.sidecar",
+                    "id": 2,
+                    "ordinal": 0
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "task-2.jsonl",
+            "bytes": 252,
+            "sha256": "7968bbb2e80f852a0015f7154bf641aed8afdc37555d0c864aa257d3bc494389",
+            "text": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":0,\"payload\":{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"revived\"}}}}}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 2,
+                "ordinal": 0,
+                "payload": {
+                  "type": "task",
+                  "value": {
+                    "id": 2,
+                    "conversationId": 1,
+                    "kind": "work",
+                    "version": 1,
+                    "input": {},
+                    "background": false,
+                    "abortRequested": false,
+                    "state": {
+                      "status": "pending",
+                      "checkpoint": {
+                        "phase": "revived"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "normalizations": []
+    }
+  ]
+}
