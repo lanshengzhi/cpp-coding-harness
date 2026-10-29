@@ -1,4 +1,5 @@
 #include <cch/durable/Environment.hpp>
+
 #include <cch/chord/Output.hpp>
 
 #include "support/UniqueFd.hpp"
@@ -289,7 +290,8 @@ void retain_tail(
 }
 
 void finish_tail(std::string& text, std::optional<ShellOutputSkip>& skipped, ShellOutputWindow window) {
-    const auto slice = chord::bound_output(text, {window.max_bytes, window.max_lines, chord::OutputRetention::Tail});
+    const auto slice = chord::bound_output(text,
+            {.max_bytes = window.max_bytes, .max_lines = window.max_lines, .retain = chord::OutputRetention::Tail});
     if (slice.dropped_bytes == 0) return;
     const std::string_view omitted{text.data(), slice.dropped_bytes};
     if (!skipped) skipped.emplace();

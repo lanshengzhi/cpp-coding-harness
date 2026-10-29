@@ -303,6 +303,18 @@ TEST_CASE("Durable shell retains bounded tails and reports omitted output", "[du
     CHECK(invalid->output == "\xef\xbf\xbdx");
     REQUIRE(invalid->skipped);
     CHECK(invalid->skipped->bytes == 3);
+    std::string streamed;
+    auto by_lines = env->exec(
+            "printf 'one\\ntwo\\nthree\\nfour\\n'",
+            {},
+            [&streamed](std::string_view chunk, bool) { streamed += chunk; },
+            {},
+            ShellOutputWindow{.max_bytes = 100, .max_lines = 2});
+    REQUIRE(by_lines);
+    CHECK(by_lines->output == "three\nfour\n");
+    REQUIRE(by_lines->skipped);
+    CHECK(by_lines->skipped->newlines == 2);
+    CHECK(streamed == "one\ntwo\nthree\nfour\n");
 }
 
 TEST_CASE("Durable local environment reports file process and watch outcomes", "[durable][environment][issue1089]") {
