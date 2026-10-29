@@ -869,7 +869,12 @@ TEST_CASE("a JSONL batch preserves ordered task updates and terminal reclamation
     REQUIRE((*final_storage)->close());
 }
 
-TEST_CASE("a terminal then live task batch is rejected without publication", "[durable][jsonl][issue1085]") {
+TEST_CASE("a terminal then live task batch is accepted with the last write winning",
+        "[durable][jsonl][issue1085][issue1168]") {
+    // Issue #1168: frozen pi v1.3.0 public Storage accepts a terminal then
+    // live task batch with the last write winning (frozen `audit-1168`); the
+    // terminal-replace invariant lives in the frozen Session transaction,
+    // not in Storage. This is the JSONL end of that contract.
     TempWorkspace workspace;
     auto storage = JsonlStorage::open(workspace.path());
     REQUIRE(storage);
@@ -882,20 +887,21 @@ TEST_CASE("a terminal then live task batch is rejected without publication", "[d
     const std::vector<StorageWrite> writes{
             StorageWrite{.type = "task", .task = terminal}, StorageWrite{.type = "task", .task = live}};
     auto result = consume((*storage)->commit(writes));
-    REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().message == "Task is already terminal");
+    REQUIRE(result.has_value());
     auto task = (*storage)->task(live.id);
     REQUIRE(task);
-    CHECK_FALSE(task->has_value());
+    REQUIRE(task->has_value());
+    CHECK((*task)->state.status == "pending");
     std::error_code error;
-    CHECK_FALSE(std::filesystem::exists(workspace.path() / "task-2.jsonl", error));
+    REQUIRE(std::filesystem::exists(workspace.path() / "task-2.jsonl", error));
     REQUIRE_FALSE(error);
     REQUIRE((*storage)->close());
     auto reopened = JsonlStorage::open(workspace.path());
     REQUIRE(reopened);
     auto recovered = (*reopened)->task(live.id);
     REQUIRE(recovered);
-    CHECK_FALSE(recovered->has_value());
+    REQUIRE(recovered->has_value());
+    CHECK((*recovered)->state.status == "pending");
     REQUIRE((*reopened)->close());
 }
 

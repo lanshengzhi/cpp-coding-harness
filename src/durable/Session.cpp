@@ -2160,6 +2160,26 @@ support::AsyncResult<void> Session::Impl::commit_now(
         transaction.impl_->writes.push_back(StorageWrite{.type = "submission", .submission = record});
     }
 
+    // A transaction may not replace a committed terminal task (frozen pi
+    // `session/transaction.ts` `#assemble`, issue #1168). This is a Session
+    // invariant: the public Storage below still settles the same batch with
+    // the last write winning (frozen pi `MemoryStorage.prepareCommit`), so
+    // Session-level unreachability is not Storage equivalence. A task created
+    // and settled by this transaction is a create, not a replace.
+    for (const auto& [id, candidate] : transaction.impl_->staged_tasks) {
+        if (transaction.impl_->created_tasks.contains(id)) {
+            continue;
+        }
+        auto committed = storage->task(TaskId{.value = id});
+        if (!committed) {
+            return reject_assembly(std::move(committed.error()));
+        }
+        if ((*committed) && (*committed)->state.status == "terminal") {
+            return reject_assembly(support::make_error(support::ErrorCode::Validation,
+                    std::string{"Task "} + std::to_string(id) + " is already terminal"));
+        }
+    }
+
     // New owned work needs a live owner judged on the owner's final candidate
     // in this commit: a task cannot take a child task or a task-owned
     // conversation in the commit that settles it (frozen pi `Tx.#validateOwners`

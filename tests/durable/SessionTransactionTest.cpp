@@ -1545,3 +1545,109 @@ TEST_CASE("context token estimates anchor on the newest assistant with usage aft
             duplicate.messages.push_back(value);
     CHECK(estimate_context_tokens(duplicate) == 20 + trailing);
 }
+
+// Issue #1168: the terminal-replace invariant is a Session transaction rule
+// (frozen pi `session/transaction.ts` `#assemble`, `Task ${id} is already
+// terminal`), not a public Storage rule. The frozen `audit-1168` family pins
+// the Storage contract; these cases pin the Session layer above it.
+TEST_CASE("a transaction that replaces a terminal task is rejected at assembly and publishes nothing",
+        "[durable][session][issue1168][spec]") {
+    MemoryStorage storage;
+    auto session = Session::create(storage);
+    const ConversationId conversation_id = create_conversation(*session);
+    const TaskId task_id{.value = 103};
+    const auto stage = [&](std::string_view status) -> Outcome<void> {
+        return run_commit(*session, [conversation_id, task_id, status](Transaction& transaction) {
+            TaskRecord record{};
+            record.id = task_id;
+            record.conversation_id = conversation_id;
+            record.kind = "1168.task";
+            record.state.status = std::string{status};
+            if (status == "terminal") {
+                record.state.outcome = TaskOutcome{.status = "completed"};
+            } else {
+                record.state.checkpoint = chord::Json{chord::Json::Object{{"phase", std::string{"run"}}}};
+            }
+            return transaction.set_task(record);
+        });
+    };
+    REQUIRE(stage("running").has_value());
+    REQUIRE(stage("terminal").has_value());
+
+    // The Session transaction rejects the replace with the frozen message.
+    auto rejected = run_commit(*session, [conversation_id, task_id](Transaction& transaction) {
+        TaskRecord revived{};
+        revived.id = task_id;
+        revived.conversation_id = conversation_id;
+        revived.kind = "1168.task";
+        revived.state.status = "pending";
+        revived.state.checkpoint = chord::Json{chord::Json::Object{{"phase", std::string{"again"}}}};
+        return transaction.set_task(revived);
+    });
+    REQUIRE_FALSE(rejected.has_value());
+    CHECK(rejected.error().message == "Task 103 is already terminal");
+
+    // The rejection published nothing: the task stays terminal.
+    auto still = run_commit(*session, [task_id](Transaction& transaction) -> support::Expected<void> {
+        auto task = transaction.task(task_id);
+        if (!task) {
+            return std::unexpected(std::move(task.error()));
+        }
+        REQUIRE(task->has_value());
+        CHECK((*task)->state.status == "terminal");
+        return {};
+    });
+    REQUIRE(still.has_value());
+
+    // The public Storage below the Session still accepts the same write: the
+    // Session invariant is not a Storage equivalence (issue #1168).
+    TaskRecord direct{};
+    direct.id = task_id;
+    direct.conversation_id = conversation_id;
+    direct.kind = "1168.task";
+    direct.state.status = "pending";
+    direct.state.checkpoint = chord::Json{chord::Json::Object{{"phase", std::string{"direct"}}}};
+    const std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = direct}};
+    const Outcome<Seq> published = consume(storage.commit(writes));
+    REQUIRE(published.has_value());
+    auto after = run_commit(*session, [task_id](Transaction& transaction) -> support::Expected<void> {
+        auto task = transaction.task(task_id);
+        if (!task) {
+            return std::unexpected(std::move(task.error()));
+        }
+        REQUIRE(task->has_value());
+        CHECK((*task)->state.status == "pending");
+        return {};
+    });
+    REQUIRE(after.has_value());
+}
+
+TEST_CASE("a transaction that creates and settles a task in one commit is not a terminal replace",
+        "[durable][session][issue1168][spec]") {
+    MemoryStorage storage;
+    auto session = Session::create(storage);
+    const ConversationId conversation_id = create_conversation(*session);
+    const TaskId task_id{.value = 104};
+    auto outcome =
+            run_commit(*session, [conversation_id, task_id](Transaction& transaction) -> support::Expected<void> {
+                TaskRecord live{};
+                live.id = task_id;
+                live.conversation_id = conversation_id;
+                live.kind = "1168.task";
+                live.state.status = "running";
+                live.state.checkpoint = chord::Json{chord::Json::Object{{"phase", std::string{"run"}}}};
+                if (auto set = transaction.set_task(live); !set) {
+                    return std::unexpected(std::move(set.error()));
+                }
+                TaskRecord terminal = live;
+                terminal.state.status = "terminal";
+                terminal.state.checkpoint = std::nullopt;
+                terminal.state.outcome = TaskOutcome{.status = "completed"};
+                return transaction.set_task(terminal);
+            });
+    REQUIRE(outcome.has_value());
+    const auto task = storage.task(task_id);
+    REQUIRE(task);
+    REQUIRE(task->has_value());
+    CHECK((*task)->state.status == "terminal");
+}
