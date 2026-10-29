@@ -6,6 +6,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -21,11 +22,25 @@ struct FileInfo {
     std::uintmax_t size{};
 };
 
+struct ShellOutputWindow {
+    std::size_t max_bytes{50000};
+    std::size_t max_lines{2000};
+};
+
+struct ShellOutputSkip {
+    std::size_t bytes{};
+    std::size_t newlines{};
+    bool ends_with_newline{};
+};
+
 struct ShellResult {
     int exit_code{};
     std::string output;
     std::string standard_output;
     std::string standard_error;
+    std::optional<ShellOutputSkip> skipped;
+    std::optional<ShellOutputSkip> standard_output_skipped;
+    std::optional<ShellOutputSkip> standard_error_skipped;
 };
 
 using ShellCommand = std::variant<std::string, std::vector<std::string>>;
@@ -48,8 +63,13 @@ public:
     virtual support::ExpectedVoid append(std::string_view path, std::string_view content, std::stop_token stop) = 0;
     virtual support::Expected<FileInfo> stat(std::string_view path, std::stop_token stop) = 0;
     virtual support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) = 0;
-    virtual support::Expected<ShellResult>
-    exec(const ShellCommand& command, std::chrono::milliseconds timeout, OutputSink output, std::stop_token stop) = 0;
+    /// The callback receives decoded output as it arrives; retained result fields
+    /// are independently bounded. No spill file is created.
+    virtual support::Expected<ShellResult> exec(const ShellCommand& command,
+            std::chrono::milliseconds timeout,
+            OutputSink output,
+            std::stop_token stop,
+            ShellOutputWindow window = {}) = 0;
     /// Recursive watching is not implemented by the local adapter and is rejected.
     virtual support::Expected<std::unique_ptr<FileWatch>> watch(
             std::string_view path, FileChangeSink on_change, bool recursive = false) = 0;

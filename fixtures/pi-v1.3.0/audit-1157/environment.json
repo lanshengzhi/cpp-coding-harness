@@ -1,0 +1,62 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1157",
+  "family": "audit-1157",
+  "capturedAt": "2026-10-29T04:17:12.054Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/env/node.ts:NodeExecutionEnv.exec",
+    "packages/durable/src/env/index.ts:ShellOutputWindow,ShellOutputSkip"
+  ],
+  "scenarios": [
+    {
+      "name": "output within the window",
+      "inputs": {
+        "input": "abc",
+        "window": {
+          "maxBytes": 4,
+          "maxLines": 1,
+          "minIntervalMs": 0,
+          "bytesPerSecond": 100000
+        }
+      },
+      "expected": {
+        "text": "abc",
+        "skips": [],
+        "exitCode": 0
+      },
+      "normalizations": [
+        "chunk boundaries omitted"
+      ]
+    },
+    {
+      "name": "output exceeding the window",
+      "inputs": {
+        "input": "1234567890abcdef",
+        "window": {
+          "maxBytes": 4,
+          "maxLines": 1,
+          "minIntervalMs": 0,
+          "bytesPerSecond": 100000
+        }
+      },
+      "expected": {
+        "text": "1234567890abcdef",
+        "skips": [],
+        "exitCode": 0
+      },
+      "normalizations": [
+        "chunk boundaries omitted"
+      ]
+    }
+  ]
+}

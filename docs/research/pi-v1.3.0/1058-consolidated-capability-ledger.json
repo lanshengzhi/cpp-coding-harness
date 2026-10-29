@@ -646,10 +646,12 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 516,
+      "scenarios": 518,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
+        "audit-1157/environment.json:output exceeding the window",
+        "audit-1157/environment.json:output within the window",
         "audit-1089/environment.json:watch covers creation after return and stops callbacks after close",
         "audit-1089/environment.json:normal exit cancellation and timeout have distinct shell outcomes",
         "audit-1050/input-standalone.json:input-placeholder-reversal-and-custom-styling",
@@ -2900,6 +2902,26 @@
     }
   ],
   "orphanScenarios": [
+    {
+      "family": "audit-1157",
+      "artifact": "environment.json",
+      "scenario": "output exceeding the window",
+      "reason": "Captured after the #1058 ledger; frozen Node emits all output without a skip.",
+      "rows": [
+        "cch_durable:node-exec"
+      ],
+      "disposition": "The #1157 record describes the approved bounded-result behavior without promoting this row."
+    },
+    {
+      "family": "audit-1157",
+      "artifact": "environment.json",
+      "scenario": "output within the window",
+      "reason": "Captured after the #1058 ledger to contrast the over-window case.",
+      "rows": [
+        "cch_durable:node-exec"
+      ],
+      "disposition": "The #1157 record describes the observation without promoting this row."
+    },
     {
       "family": "audit-1089",
       "artifact": "environment.json",

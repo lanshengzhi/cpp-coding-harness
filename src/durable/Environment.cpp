@@ -1,4 +1,5 @@
 #include <cch/durable/Environment.hpp>
+#include <cch/chord/Output.hpp>
 
 #include "support/UniqueFd.hpp"
 
@@ -170,7 +171,8 @@ public:
     support::Expected<ShellResult> exec(const ShellCommand& command,
             std::chrono::milliseconds timeout,
             OutputSink output,
-            std::stop_token stop) override;
+            std::stop_token stop,
+            ShellOutputWindow window) override;
     support::Expected<std::unique_ptr<FileWatch>> watch(
             std::string_view path, FileChangeSink callback, bool recursive) override {
         if (recursive)
@@ -220,8 +222,88 @@ bool secret_name(std::string name) {
     return false;
 }
 
-support::Expected<ShellResult> LocalEnvironment::exec(
-        const ShellCommand& command, std::chrono::milliseconds timeout, OutputSink output, std::stop_token stop) {
+class Utf8Decoder {
+public:
+    std::string decode(std::string_view chunk, bool finish = false) {
+        pending_.append(chunk);
+        std::string result;
+        std::size_t i = 0;
+        while (i < pending_.size()) {
+            auto lead = static_cast<unsigned char>(pending_[i]);
+            if (lead < 0x80) {
+                result.push_back(pending_[i++]);
+                continue;
+            }
+            std::size_t length = lead >= 0xc2 && lead <= 0xdf   ? 2
+                                 : lead >= 0xe0 && lead <= 0xef ? 3
+                                 : lead >= 0xf0 && lead <= 0xf4 ? 4
+                                                                : 0;
+            if (length == 0) {
+                result += "\xef\xbf\xbd";
+                ++i;
+                continue;
+            }
+            std::size_t valid = 1;
+            while (valid < length && i + valid < pending_.size()) {
+                auto byte = static_cast<unsigned char>(pending_[i + valid]);
+                if (byte < 0x80 || byte > 0xbf ||
+                        (valid == 1 && ((lead == 0xe0 && byte < 0xa0) || (lead == 0xed && byte > 0x9f) ||
+                                               (lead == 0xf0 && byte < 0x90) || (lead == 0xf4 && byte > 0x8f))))
+                    break;
+                ++valid;
+            }
+            if (valid == length) {
+                result.append(pending_, i, length);
+                i += length;
+            } else if (i + valid == pending_.size() && !finish) {
+                break;
+            } else {
+                result += "\xef\xbf\xbd";
+                i += valid;
+            }
+        }
+        pending_.erase(0, i);
+        return result;
+    }
+
+private:
+    std::string pending_;
+};
+
+void retain_tail(
+        std::string& text, std::optional<ShellOutputSkip>& skipped, std::string_view chunk, ShellOutputWindow window) {
+    text.append(chunk);
+    // Keep a small UTF-8 margin so the final line/byte window can be chosen
+    // after subsequent chunks complete the current line.
+    if (text.size() <= window.max_bytes || text.size() - window.max_bytes <= 4) return;
+    auto cut = text.size() - window.max_bytes - 4;
+    while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xc0) == 0x80)
+        --cut;
+    if (cut == 0) return;
+    const std::string_view omitted{text.data(), cut};
+    if (!skipped) skipped.emplace();
+    skipped->bytes += omitted.size();
+    skipped->newlines += static_cast<std::size_t>(std::ranges::count(omitted, '\n'));
+    skipped->ends_with_newline = omitted.back() == '\n';
+    text.erase(0, cut);
+}
+
+void finish_tail(std::string& text, std::optional<ShellOutputSkip>& skipped, ShellOutputWindow window) {
+    const auto slice = chord::bound_output(text, {window.max_bytes, window.max_lines, chord::OutputRetention::Tail});
+    if (slice.dropped_bytes == 0) return;
+    const std::string_view omitted{text.data(), slice.dropped_bytes};
+    if (!skipped) skipped.emplace();
+    skipped->bytes += omitted.size();
+    skipped->newlines += static_cast<std::size_t>(std::ranges::count(omitted, '\n'));
+    skipped->ends_with_newline = omitted.back() == '\n';
+    text = slice.text;
+}
+
+support::Expected<ShellResult> LocalEnvironment::exec(const ShellCommand& command,
+        std::chrono::milliseconds timeout,
+        OutputSink output,
+        std::stop_token stop,
+        ShellOutputWindow window) {
     if (stop.stop_requested()) return std::unexpected(cancelled());
     std::vector<std::string> args;
     if (const auto* text = std::get_if<std::string>(&command))
@@ -268,6 +350,15 @@ support::Expected<ShellResult> LocalEnvironment::exec(
     ::fcntl(out[0], F_SETFL, O_NONBLOCK);
     ::fcntl(err[0], F_SETFL, O_NONBLOCK);
     ShellResult result;
+    Utf8Decoder decoders[2];
+    auto accept = [&](std::string_view chunk, int stream) {
+        retain_tail(result.output, result.skipped, chunk, window);
+        if (stream == 0)
+            retain_tail(result.standard_output, result.standard_output_skipped, chunk, window);
+        else
+            retain_tail(result.standard_error, result.standard_error_skipped, chunk, window);
+        if (output && !chunk.empty()) output(chunk, stream == 1);
+    };
     const auto start = std::chrono::steady_clock::now();
     // Frozen pi NodeExecutionEnv's EXIT_STDIO_GRACE_MS: a descendant may keep
     // inherited pipes open after the command exits. Each output chunk restarts
@@ -292,10 +383,7 @@ support::Expected<ShellResult> LocalEnvironment::exec(
                 const ssize_t n = ::read(fds[i].fd, buf.data(), buf.size());
                 if (n > 0) {
                     last_output = std::chrono::steady_clock::now();
-                    std::string_view chunk{buf.data(), static_cast<std::size_t>(n)};
-                    result.output.append(chunk);
-                    (i == 0 ? result.standard_output : result.standard_error).append(chunk);
-                    if (output) output(chunk, i == 1);
+                    accept(decoders[i].decode({buf.data(), static_cast<std::size_t>(n)}), i);
                 }
                 if (n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR)) {
                     (i == 0 ? out_read : err_read).reset();
@@ -313,6 +401,11 @@ support::Expected<ShellResult> LocalEnvironment::exec(
     if (timed)
         return std::unexpected(failure(
                 std::format("timeout:{}", static_cast<double>(timeout.count()) / 1000.0), support::ErrorCode::Timeout));
+    accept(decoders[0].decode({}, true), 0);
+    accept(decoders[1].decode({}, true), 1);
+    finish_tail(result.output, result.skipped, window);
+    finish_tail(result.standard_output, result.standard_output_skipped, window);
+    finish_tail(result.standard_error, result.standard_error_skipped, window);
     result.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
     return result;
 }

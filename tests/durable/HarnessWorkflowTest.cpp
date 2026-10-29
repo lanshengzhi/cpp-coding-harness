@@ -126,8 +126,9 @@ public:
     support::Expected<ShellResult> exec(const ShellCommand& command,
             std::chrono::milliseconds timeout,
             OutputSink output,
-            std::stop_token stop) override {
-        return inner_->exec(command, timeout, std::move(output), stop);
+            std::stop_token stop,
+            ShellOutputWindow window) override {
+        return inner_->exec(command, timeout, std::move(output), stop, window);
     }
     support::Expected<std::unique_ptr<FileWatch>> watch(
             std::string_view path, FileChangeSink callback, bool recursive) override {
@@ -264,6 +265,44 @@ TEST_CASE("Durable writes remain anchored when paths are swapped", "[durable][en
         CHECK_FALSE(env->append("safe/link", "new", {}));
         CHECK(workspace.read("outside/file") == "protected");
     }
+}
+
+TEST_CASE("Durable shell retains bounded tails and reports omitted output", "[durable][environment][issue1157]") {
+    tests::TempWorkspace workspace;
+    auto env = local_environment(workspace.path().string());
+    ShellOutputWindow window{.max_bytes = 8, .max_lines = 2};
+    auto small = env->exec("printf 'ok\\n'", {}, {}, {}, window);
+    REQUIRE(small);
+    CHECK(small->output == "ok\n");
+    CHECK_FALSE(small->skipped);
+    auto large = env->exec("printf 'one\\ntwo\\nthree\\n'", {}, {}, {}, window);
+    REQUIRE(large);
+    CHECK(large->output == "three\n");
+    REQUIRE(large->skipped);
+    CHECK(large->skipped->bytes == 8);
+    CHECK(large->skipped->newlines == 2);
+    CHECK(large->skipped->ends_with_newline);
+    CHECK(large->standard_output == "three\n");
+    CHECK(large->standard_error.empty());
+    auto split = env->exec("printf 'abcdefghij'; printf 'uvwxyz' >&2", {}, {}, {}, window);
+    REQUIRE(split);
+    CHECK(split->standard_output == "cdefghij");
+    CHECK(split->standard_error == "uvwxyz");
+    REQUIRE(split->standard_output_skipped);
+    CHECK(split->standard_output_skipped->bytes == 2);
+    CHECK_FALSE(split->standard_error_skipped);
+    auto noisy = env->exec("head -c 10485760 /dev/zero | tr '\\000' x", {}, {}, {}, window);
+    REQUIRE(noisy);
+    CHECK(noisy->output == "xxxxxxxx");
+    REQUIRE(noisy->skipped);
+    CHECK(noisy->skipped->bytes == 10485752);
+    CHECK(noisy->skipped->newlines == 0);
+    CHECK_FALSE(noisy->skipped->ends_with_newline);
+    auto invalid = env->exec("printf '\\377\\377x'", {}, {}, {}, ShellOutputWindow{.max_bytes = 4, .max_lines = 1});
+    REQUIRE(invalid);
+    CHECK(invalid->output == "\xef\xbf\xbdx");
+    REQUIRE(invalid->skipped);
+    CHECK(invalid->skipped->bytes == 3);
 }
 
 TEST_CASE("Durable local environment reports file process and watch outcomes", "[durable][environment][issue1089]") {
