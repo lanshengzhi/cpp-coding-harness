@@ -12,6 +12,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 
 namespace cch::mcp {
 
@@ -67,6 +68,15 @@ public:
 
     /// pi `initialize` result `instructions`, when the server sent them.
     [[nodiscard]] virtual const std::optional<std::string>& server_instructions() const noexcept = 0;
+
+    /// One server-to-client notification, delivered on the client's serialized
+    /// execution domain even while no request is pending. Close the client to
+    /// end this observation and release its transport.
+    using NotificationSink = std::move_only_function<void(std::string_view, const support::JsonValue&)>;
+    virtual void set_notification_listener(NotificationSink listener) = 0;
+
+    /// The capabilities advertised by the validated initialize response.
+    [[nodiscard]] virtual const support::JsonValue& server_capabilities() const noexcept = 0;
 
     /// Stop the transport and release its resources. Idempotent; a client is
     /// not reusable after close.

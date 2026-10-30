@@ -54,19 +54,19 @@
         },
         {
           "path": "src/mcp/StdioClient.cpp",
-          "sha256": "c703a9f47dae23664b1c64578bd07592d3fb70c6c7cb620cded91eef3617314a"
+          "sha256": "b0bb7fe2d60ac6ddd6b611cef08a9c7cd3cc2373a57e34ef2340c7f9dd3a2924"
         },
         {
           "path": "src/mcp/StdioClientImpl.hpp",
-          "sha256": "5aa24edfb6ca3b30993f185eff2d4c272e33a8e94d66914e800edd3549b80757"
+          "sha256": "f989d17e3d4b17ca418b0499788a7f1cab40ab026037559c18349f6ad2b1d0b9"
         },
         {
           "path": "src/mcp/HttpClient.cpp",
-          "sha256": "29f5c989b544efeb98c86b6e70f6fe358455c5d89d0b1138203289715521273e"
+          "sha256": "408a5bf01b8d79c7bfc1ce3ffff10faafa2c4bdb5e7b651e7ddd0ff41938ab6e"
         },
         {
           "path": "src/mcp/HttpClientImpl.hpp",
-          "sha256": "0d1faef3099a1fc18f90af20c5f77431c662dcb51691f2cc0b888283fe8ac999"
+          "sha256": "ec16586184ec08a708c4d5bea04782badad3dfad712f3d5c7adc530a7f6bc194"
         },
         {
           "path": "src/mcp/ProtocolInternal.hpp",
@@ -74,7 +74,7 @@
         },
         {
           "path": "src/mcp/include/cch/mcp/Client.hpp",
-          "sha256": "7fe1dc6a7685b7447f3ed6d66950d05c1555765f6244ebdea407382fbbed7b2e"
+          "sha256": "fdd40dfdf031afd19c4f3ff40626d05b5d8cc9488efa1d3526794b5cc427451d"
         },
         {
           "path": "src/mcp/include/cch/mcp/Protocol.hpp",
@@ -90,7 +90,7 @@
         },
         {
           "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
-          "sha256": "03c6c8ba29a0219658346b8fc18799235ef9d62a7860dd213b1c92c2add677c2"
+          "sha256": "d23ca1776ffc928fe0fe8fac24ffd621d2cbdac7f804dd5f1f480115b95af822"
         },
         {
           "path": "src/mcp/include/cch/mcp/HttpServerConfig.hpp",
@@ -110,11 +110,11 @@
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-          "sha256": "aa41f10315d4062b6ed2b417a45809143f5d38ef21122f5e40f44c332680dc49"
+          "sha256": "6f5cc6cc4164631ec908901958f38e9ac679e37a8b8dcc356b4cb744b447dd97"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-          "sha256": "dd613f58906acd99b3f149b84d338365e8f0c391dbc88f0597602cfd8c35ec2e"
+          "sha256": "b34b23fda48b16d231d448f890f4d8233cb2990b8e17e17af442a3ea569730d8"
         },
         {
           "path": "src/coding_agent/runtime/McpSessionManager.cpp",
@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "638fdece07f91dd48ae1700c45f6792b578c1382fdde5b506587c3add7e0aa6f"
+          "sha256": "f2b6069ac38fcf3c99e797acd5a0f601bf67e9aa98e80a6866662553a9a89caf"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -227,17 +227,17 @@
           "--preset",
           "vcpkg",
           "-L",
-          "issue1101",
+          "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1093-registration-1101.xml"
+          "/tmp/1105-existing-revalidation.xml"
         ],
-        "testedRevision": "6cc1aa2bcc7520fda25c5370da2b2cc45fe24797",
-        "recordedAt": "2026-10-30T04:56:13Z",
-        "selected": 14,
+        "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
+        "recordedAt": "2026-10-30T13:11:22Z",
+        "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1093-registration-1101.xml",
-          "sha256": "1b8d4f7cd31a1222576cfc3ea4c0e14c8f1be35d13cdb2f308061de5a755b2ea"
+          "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+          "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
         }
       },
       "rows": [
@@ -277,7 +277,15 @@
           }
         }
       ],
-      "routingSha256": "e75e524b807c4a6dbc4a3a92f0ec2bf4942b82999ab4afdee3c66292dff25b42"
+      "routingSha256": "e75e524b807c4a6dbc4a3a92f0ec2bf4942b82999ab4afdee3c66292dff25b42",
+      "revalidation1099": {
+        "reason": "#1099 registered the audit-1099 frozen-evidence family, which appends a bundle record to the shared baseline registry and changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
+      }
     },
     {
       "id": "1090-durable-images",
@@ -294,17 +302,17 @@
           "--preset",
           "vcpkg",
           "-L",
-          "issue1090",
+          "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml"
+          "/tmp/1105-existing-revalidation.xml"
         ],
-        "testedRevision": "6cc1aa2bcc7520fda25c5370da2b2cc45fe24797",
-        "recordedAt": "2026-10-30T04:56:13Z",
-        "selected": 10,
+        "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
+        "recordedAt": "2026-10-30T13:11:22Z",
+        "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml",
-          "sha256": "46b3e44e3e9e0466f20c1cbee4045089d5502ae8d1077e370d1ebc315acac992"
+          "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+          "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
         }
       },
       "inputs": [
@@ -350,7 +358,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "3eda52d4780723a334684ce9e5826d0af64e6a097dbe72c4a61e20ec88c8ea84"
+          "sha256": "3416ef812c4c0e9fe79dfc52a0ea00ea1a51d93c435caf5fe57ee75eb0218be3"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -639,11 +647,11 @@
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-          "sha256": "aa41f10315d4062b6ed2b417a45809143f5d38ef21122f5e40f44c332680dc49"
+          "sha256": "6f5cc6cc4164631ec908901958f38e9ac679e37a8b8dcc356b4cb744b447dd97"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-          "sha256": "dd613f58906acd99b3f149b84d338365e8f0c391dbc88f0597602cfd8c35ec2e"
+          "sha256": "b34b23fda48b16d231d448f890f4d8233cb2990b8e17e17af442a3ea569730d8"
         },
         {
           "path": "src/coding_agent/runtime/McpSessionManager.cpp",
@@ -715,7 +723,7 @@
         },
         {
           "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-          "sha256": "958f78808cb556dca6f8a325eb174e9a71355e0df8988bd1ed2a4d7931fd96bb"
+          "sha256": "3db9f497c8dd5ab66a8b5127eb064e1ee11ff9d2ac475aa7e48743abac10340e"
         },
         {
           "path": "tests/coding_agent/McpSessionManagerTest.cpp",
@@ -731,7 +739,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "3eda52d4780723a334684ce9e5826d0af64e6a097dbe72c4a61e20ec88c8ea84"
+          "sha256": "3416ef812c4c0e9fe79dfc52a0ea00ea1a51d93c435caf5fe57ee75eb0218be3"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -816,17 +824,17 @@
           "--preset",
           "vcpkg",
           "-L",
-          "issue1104",
+          "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml"
+          "/tmp/1105-existing-revalidation.xml"
         ],
-        "testedRevision": "6cc1aa2bcc7520fda25c5370da2b2cc45fe24797",
-        "recordedAt": "2026-10-30T04:56:13Z",
-        "selected": 12,
+        "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
+        "recordedAt": "2026-10-30T13:11:22Z",
+        "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml",
-          "sha256": "73d70e8d76997922368d94a45e73885108ced1ae36125daf1c2be825567686ac"
+          "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+          "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
         }
       },
       "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",

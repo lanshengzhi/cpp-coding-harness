@@ -763,6 +763,38 @@
   ],
   "orphanScenarios": [
     {
+      "family": "audit-1105",
+      "artifact": "session-binding.json",
+      "scenario": "real Session reads resources on demand and binds a late tool",
+      "reason": "Captured by #1105 through the real frozen Agent Session after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_coding_agent:mcp-application-resource-init",
+        "cch_mcp:mcp-resources-list-read"
+      ],
+      "disposition": "#1105 compares this slice; #1177 owns the application receipt follow-up. This observation does not promote a whole capability row."
+    },
+    {
+      "family": "audit-1105",
+      "artifact": "session-binding.json",
+      "scenario": "real Session calls tools after resources/list fails and binds a late tool",
+      "reason": "Captured by #1105 through the real frozen Agent Session after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_coding_agent:mcp-application-resource-init",
+        "cch_mcp:mcp-resources-list-read"
+      ],
+      "disposition": "#1105 compares this slice; #1177 owns the application receipt follow-up. This observation does not promote a whole capability row."
+    },
+    {
+      "family": "audit-1105",
+      "artifact": "session-binding.json",
+      "scenario": "real Session replaces MCP callable schemas after a tool-list change",
+      "reason": "Captured by #1105 through the real frozen Agent Session after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_coding_agent:mcp-reconnect-tools-changed"
+      ],
+      "disposition": "#1105 compares this slice; #1177 owns the application receipt follow-up. This observation does not promote a whole capability row."
+    },
+    {
       "family": "audit-1157",
       "artifact": "environment.json",
       "scenario": "output exceeding the window",

@@ -46,21 +46,22 @@ struct ConnectedMcpTransport {
 };
 
 /// The production `McpLiveConnection` over one landed transport client: pi
-/// runtime's `McpServerConnection` (state vocabulary, the listed tools, the
-/// connected-time resource snapshot, the OAuth challenge state). The
-/// transport, the tool listing, and the resource snapshot arrive from the
-/// factory at connect; `reconnect()` re-runs the factory's connect source (pi
+/// runtime's `McpServerConnection` (state vocabulary, the listed tools,
+/// capability-based resource availability, the OAuth challenge state). The
+/// factory supplies the initialized transport; resources remain on demand.
+/// `reconnect()` re-runs the factory's connect source (pi
 /// `connection.reconnect()`: stdio restarts the process, HTTP reconnects and
 /// refreshes `tools/list`).
-class ProductionMcpConnection final : public McpLiveConnection {
+class ProductionMcpConnection final : public McpLiveConnection,
+                                      public std::enable_shared_from_this<ProductionMcpConnection> {
 public:
     /// The factory's connect operation: one fresh transport with handshake.
     using ConnectSource = std::function<boost::asio::awaitable<support::Expected<ConnectedMcpTransport>>()>;
 
     /// `connected` carries the fresh transport, when the connect succeeded;
     /// the connection starts in `Connecting` and the factory runs `refresh()`
-    /// (pi runtime `getClient()`: `tools/list` + the resource snapshot) before
-    /// handing it to the manager.
+    /// to list tools before handing it to the manager. No resource request
+    /// is issued during setup.
     ProductionMcpConnection(std::string server_name,
             ConnectSource connect_source,
             ConnectedMcpTransport connected,
@@ -94,9 +95,8 @@ public:
     [[nodiscard]] support::AsyncResult<support::JsonValue> read_resource(
             std::string uri, std::stop_token stop_token) override;
 
-    /// pi `connection.reconnect()`: fresh transport through the connect
-    /// source, then `tools/list` and the resource snapshot again. Also the
-    /// factory's post-connect step, so both paths share one implementation.
+    /// Finish tool discovery on the supplied transport, or connect a fresh one
+    /// if absent. Resource availability comes from initialize capabilities.
     [[nodiscard]] support::AsyncResult<void> refresh();
 
     [[nodiscard]] support::AsyncResult<void> reconnect() override;
@@ -107,6 +107,7 @@ public:
     void set_resources_changed_listener(ResourcesChangedListener listener) override;
 
 private:
+    void listen_for_tool_changes(boost::asio::any_io_executor executor);
     [[nodiscard]] support::AsyncResult<support::JsonValue> request(
             std::string method, std::optional<support::JsonValue> params, cch::mcp::Client::RequestOptions options);
 

@@ -69,35 +69,37 @@ namespace {
 
 } // namespace
 
-support::Expected<support::JsonValue> prepare_tool_arguments(
-    const ai::Tool& tool,
-    const ai::ToolCallContent& call) {
-    auto arguments = parse_and_clone_arguments(tool, call);
+support::Expected<support::JsonValue> prepare_tool_arguments(const Tool& tool, const ai::ToolCallContent& call) {
+    auto arguments = parse_and_clone_arguments(tool.definition, call);
     if (!arguments) {
         return std::unexpected(arguments.error());
     }
 
+    if (tool.prepare_arguments) {
+        *arguments = tool.prepare_arguments(*arguments);
+    }
+
     CompilationState compilation_state;
-    auto schema = compile_schema(
-        tool.parameters,
-        "schema",
-        0,
-        compilation_state,
-        CompilationContext{});
+    auto schema = compile_schema(tool.definition.parameters, "schema", 0, compilation_state, CompilationContext{});
     if (!schema) {
-        return std::unexpected(preparation_error(tool.name, schema.error().detail));
+        return std::unexpected(preparation_error(tool.definition.name, schema.error().detail));
     }
 
     coerce_value(*arguments, *schema);
     std::vector<ValidationFailure> failures;
     validate_value(*arguments, *schema, "root", failures);
     if (!failures.empty()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "tool arguments do not satisfy their contract",
-            validation_diagnostic(tool.name, failures)));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "tool arguments do not satisfy their contract",
+                validation_diagnostic(tool.definition.name, failures)));
     }
     return arguments;
+}
+
+support::Expected<support::JsonValue> prepare_tool_arguments(const ai::Tool& tool, const ai::ToolCallContent& call) {
+    Tool dummy;
+    dummy.definition = tool;
+    return prepare_tool_arguments(dummy, call);
 }
 
 } // namespace cch::agent

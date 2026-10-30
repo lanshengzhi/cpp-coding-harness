@@ -7,6 +7,7 @@
 #include "support/Json.hpp"
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/NestedToolCalls.hpp>
+#include <cch/agent/RunToolCall.hpp>
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Context.hpp>
@@ -2828,4 +2829,566 @@ TEST_CASE("unified single tool call lifecycle preserves execution semantics acro
     CHECK_FALSE(run.result->results[0].is_error);
     CHECK(run.result->results[1].is_error);
     CHECK_FALSE(run.result->terminate_batch);
+}
+
+// ---------------------------------------------------------------------------
+// Issue #1109: public run_tool_call, argument preparation, hook mutation,
+// parallel event/result ordering, and duration discrimination.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+agent::AgentToolCallOutcome run_single_tool(ai::ToolCallContent tool_call, agent::RunToolCallOptions options) {
+    boost::asio::thread_pool pool{2};
+    std::optional<agent::AgentToolCallOutcome> outcome;
+    boost::asio::co_spawn(
+            pool,
+            [&outcome,
+                    tool_call = std::move(tool_call),
+                    options = std::move(options)]() mutable -> boost::asio::awaitable<void> {
+                auto awaited = co_await support::detail::await_async_result(
+                        agent::run_tool_call(std::move(tool_call), std::move(options)));
+                if (awaited) {
+                    outcome = std::move(*awaited);
+                }
+                co_return;
+            },
+            boost::asio::detached);
+    pool.join();
+    return outcome.value_or(agent::AgentToolCallOutcome{});
+}
+
+} // namespace
+
+TEST_CASE("run_tool_call executes successfully and records execute-only duration",
+        "[agent][tool-executor][run-tool-call][issue1109][spec]") {
+    // audit-1047 scenario 5: "runToolCall runs the hooks and reports execute-only duration"
+    agent::ToolRegistry registry;
+    int before_calls = 0;
+    int after_calls = 0;
+    int execute_calls = 0;
+
+    auto tool = tests::make_fake_tool(ai::Tool{"echo", "Echo", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            [&execute_calls](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                ++execute_calls;
+                agent::AsyncToolExecutionResult res;
+                res.content.push_back(ai::text_content("hi"));
+                co_return res;
+            });
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::BeforeToolCallHook before_hook = [&before_calls](agent::BeforeToolCallContext, std::stop_token) {
+        ++before_calls;
+        return support::AsyncResult<agent::BeforeToolCallResult>{agent::BeforeToolCallResult{}};
+    };
+    agent::AfterToolCallHook after_hook = [&after_calls](agent::AfterToolCallContext, std::stop_token) {
+        ++after_calls;
+        return support::AsyncResult<agent::AfterToolCallResult>{agent::AfterToolCallResult{}};
+    };
+
+    agent::RunToolCallOptions options{registry};
+    options.before_tool_call = &before_hook;
+    options.after_tool_call = &after_hook;
+
+    auto call = make_call("call-1", "echo", R"({"msg":"hello"})");
+    auto outcome = run_single_tool(std::move(call), std::move(options));
+
+    CHECK_FALSE(outcome.is_error);
+    CHECK(outcome.result.content.size() == 1);
+    CHECK(outcome.duration_ms.has_value());
+    CHECK(before_calls == 1);
+    CHECK(execute_calls == 1);
+    CHECK(after_calls == 1);
+}
+
+TEST_CASE("run_tool_call returns error outcome without running hooks for unknown tool or validation failure",
+        "[agent][tool-executor][run-tool-call][issue1109][spec]") {
+    agent::ToolRegistry registry;
+    auto tool = tests::make_fake_tool(ai::Tool{"echo", "Echo", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                agent::AsyncToolExecutionResult res;
+                co_return res;
+            });
+    REQUIRE(registry.add(std::move(tool)));
+
+    int before_calls = 0;
+    int after_calls = 0;
+    agent::BeforeToolCallHook before_hook = [&before_calls](agent::BeforeToolCallContext, std::stop_token) {
+        ++before_calls;
+        return support::AsyncResult<agent::BeforeToolCallResult>{agent::BeforeToolCallResult{}};
+    };
+    agent::AfterToolCallHook after_hook = [&after_calls](agent::AfterToolCallContext, std::stop_token) {
+        ++after_calls;
+        return support::AsyncResult<agent::AfterToolCallResult>{agent::AfterToolCallResult{}};
+    };
+
+    // 1. Unknown tool
+    {
+        agent::RunToolCallOptions options{registry};
+        options.before_tool_call = &before_hook;
+        options.after_tool_call = &after_hook;
+        auto call = make_call("call-missing", "missing", "{}");
+        auto outcome = run_single_tool(std::move(call), std::move(options));
+
+        CHECK(outcome.is_error);
+        CHECK_FALSE(outcome.duration_ms.has_value());
+        CHECK(before_calls == 0);
+        CHECK(after_calls == 0);
+        REQUIRE(outcome.result.content.size() == 1);
+        const auto* text = std::get_if<ai::TextContent>(&outcome.result.content[0]);
+        REQUIRE(text != nullptr);
+        CHECK(text->text == "Tool missing not found");
+    }
+
+    // 2. Validation failure: raw arguments are malformed JSON
+    {
+        agent::RunToolCallOptions options{registry};
+        options.before_tool_call = &before_hook;
+        options.after_tool_call = &after_hook;
+        ai::ToolCallContent call{
+                .id = "call-bad-json",
+                .name = "echo",
+                .arguments = std::nullopt,
+                .raw_arguments = "{not_json}",
+                .arguments_valid = false,
+        };
+        auto outcome = run_single_tool(std::move(call), std::move(options));
+
+        CHECK(outcome.is_error);
+        CHECK_FALSE(outcome.duration_ms.has_value());
+        CHECK(before_calls == 0);
+        CHECK(after_calls == 0);
+    }
+}
+
+TEST_CASE("run_tool_call returns error outcome for blocked tool call without executing",
+        "[agent][tool-executor][run-tool-call][issue1109][spec]") {
+    agent::ToolRegistry registry;
+    int execute_calls = 0;
+    auto tool = tests::make_fake_tool(ai::Tool{"echo", "Echo", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            [&execute_calls](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                ++execute_calls;
+                agent::AsyncToolExecutionResult res;
+                co_return res;
+            });
+    REQUIRE(registry.add(std::move(tool)));
+
+    int after_calls = 0;
+    agent::BeforeToolCallHook before_hook = [](agent::BeforeToolCallContext, std::stop_token) {
+        agent::BeforeToolCallResult res{
+                .block = true,
+                .reason = "denied by policy",
+                .terminate = true,
+        };
+        return support::AsyncResult<agent::BeforeToolCallResult>{std::move(res)};
+    };
+    agent::AfterToolCallHook after_hook = [&after_calls](agent::AfterToolCallContext, std::stop_token) {
+        ++after_calls;
+        return support::AsyncResult<agent::AfterToolCallResult>{agent::AfterToolCallResult{}};
+    };
+
+    agent::RunToolCallOptions options{registry};
+    options.before_tool_call = &before_hook;
+    options.after_tool_call = &after_hook;
+
+    auto call = make_call("call-blocked", "echo", R"({"msg":"hello"})");
+    auto outcome = run_single_tool(std::move(call), std::move(options));
+
+    CHECK(outcome.is_error);
+    CHECK_FALSE(outcome.duration_ms.has_value());
+    CHECK(execute_calls == 0);
+    CHECK(after_calls == 0);
+    CHECK(outcome.result.terminate);
+    REQUIRE(outcome.result.content.size() == 1);
+    const auto* text = std::get_if<ai::TextContent>(&outcome.result.content[0]);
+    REQUIRE(text != nullptr);
+    CHECK(text->text == "denied by policy");
+}
+
+TEST_CASE("run_tool_call preserves duration on tool execution failure and after hook failure",
+        "[agent][tool-executor][run-tool-call][issue1109][spec]") {
+    agent::ToolRegistry registry;
+    auto failing_tool =
+            tests::make_fake_tool(ai::Tool{"failing", "Failing", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        agent::AsyncToolExecutionResult res{
+                                .content = {ai::text_content("command failed")},
+                                .details = support::read_json(R"({"partial":true})").value(),
+                                .is_error = true,
+                        };
+                        co_return res;
+                    });
+    REQUIRE(registry.add(std::move(failing_tool)));
+
+    // 1. Tool execution failure preserves duration
+    {
+        agent::RunToolCallOptions options{registry};
+        auto call = make_call("call-fail", "failing", "{}");
+        auto outcome = run_single_tool(std::move(call), std::move(options));
+
+        CHECK(outcome.is_error);
+        CHECK(outcome.duration_ms.has_value());
+        CHECK(outcome.result.details.has_value());
+    }
+
+    // 2. Tool succeeds but after hook fails: result becomes error but duration is preserved
+    {
+        agent::ToolRegistry reg2;
+        auto ok_tool = tests::make_fake_tool(ai::Tool{"ok", "OK", test::permissive_object_tool_argument_contract()},
+                agent::ToolConcurrency::ParallelSafe,
+                [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                        -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                    agent::AsyncToolExecutionResult res{
+                            .content = {ai::text_content("ok")},
+                            .is_error = false,
+                    };
+                    co_return res;
+                });
+        REQUIRE(reg2.add(std::move(ok_tool)));
+
+        agent::AfterToolCallHook failing_after_hook = [](agent::AfterToolCallContext, std::stop_token) {
+            return support::AsyncResult<agent::AfterToolCallResult>{
+                    std::unexpected(support::make_error(support::ErrorCode::Tool, "after hook crash"))};
+        };
+        agent::RunToolCallOptions options{reg2};
+        options.after_tool_call = &failing_after_hook;
+        auto call = make_call("call-after-fail", "ok", "{}");
+        auto outcome = run_single_tool(std::move(call), std::move(options));
+
+        CHECK(outcome.is_error);
+        CHECK(outcome.duration_ms.has_value());
+    }
+}
+
+TEST_CASE("prepareArguments runs before validation and normalizes invalid raw arguments",
+        "[agent][tool-executor][run-tool-call][issue1109][spec]") {
+    // audit-1047 scenario 2 (part 1): "prepareArguments runs before validation"
+    // Tool schema requires: { "value": string } (required: ["value"])
+    ai::Tool definition{
+            .name = "prep_tool",
+            .description = "Prep tool",
+            .parameters = support::read_json(
+                    R"({"type":"object","properties":{"value":{"type":"string"}},"required":["value"]})")
+                    .value(),
+    };
+
+    std::string received_value;
+    auto tool = tests::make_fake_tool(definition,
+            agent::ToolConcurrency::ParallelSafe,
+            [&received_value](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                if (invocation.arguments.holds<support::JsonValue::object_t>() &&
+                        invocation.arguments.get_object().contains("value")) {
+                    received_value = invocation.arguments.at("value").get_string();
+                }
+                agent::AsyncToolExecutionResult res{
+                        .content = {ai::text_content("normalized: " + received_value)},
+                        .is_error = false,
+                };
+                co_return res;
+            });
+
+    // Provide prepare_arguments: merges "oldText" and "newText" into "value"
+    tool.prepare_arguments = [](const support::JsonValue& args) -> support::JsonValue {
+        if (args.holds<support::JsonValue::object_t>()) {
+            const auto& obj = args.get_object();
+            std::string combined;
+            if (auto it = obj.find("oldText"); it != obj.end() && it->second.holds<std::string>()) {
+                combined += it->second.get_string();
+            }
+            if (auto it = obj.find("newText"); it != obj.end() && it->second.holds<std::string>()) {
+                combined += it->second.get_string();
+            }
+            return support::read_json(std::format(R"({{"value":"{}"}})", combined)).value();
+        }
+        return args;
+    };
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+
+    // Raw arguments have oldText and newText, but NOT value.
+    // Without prepare_arguments this would be rejected as invalid.
+    auto call = make_call("call-prep", "prep_tool", R"({"oldText":"before","newText":"after"})");
+    agent::RunToolCallOptions options{registry};
+    auto outcome = run_single_tool(std::move(call), std::move(options));
+
+    CHECK_FALSE(outcome.is_error);
+    CHECK(outcome.duration_ms.has_value());
+    CHECK(received_value == "beforeafter");
+
+    // Discriminating failure case: same input on a tool WITHOUT prepare_arguments fails validation
+    agent::ToolRegistry unadorned_registry;
+    auto plain_tool = tests::make_fake_tool(definition,
+            agent::ToolConcurrency::ParallelSafe,
+            [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                agent::AsyncToolExecutionResult res;
+                co_return res;
+            });
+    REQUIRE(unadorned_registry.add(std::move(plain_tool)));
+    auto unadorned_call = make_call("call-prep-fail", "prep_tool", R"({"oldText":"before","newText":"after"})");
+    agent::RunToolCallOptions unadorned_options{unadorned_registry};
+    auto fail_outcome = run_single_tool(std::move(unadorned_call), std::move(unadorned_options));
+
+    CHECK(fail_outcome.is_error);
+    CHECK_FALSE(fail_outcome.duration_ms.has_value());
+}
+
+TEST_CASE("beforeToolCall mutation executes without revalidation",
+        "[agent][tool-executor][run-tool-call][issue1109][spec]") {
+    // audit-1047 scenario 2 (part 2): "beforeToolCall mutations execute without revalidation"
+    // Tool schema requires: { "value": string } (required: ["value"])
+    ai::Tool definition{
+            .name = "mutate_tool",
+            .description = "Mutate tool",
+            .parameters = support::read_json(
+                    R"({"type":"object","properties":{"value":{"type":"string"}},"required":["value"]})")
+                    .value(),
+    };
+
+    std::optional<support::JsonValue> executed_args;
+    auto tool = tests::make_fake_tool(definition,
+            agent::ToolConcurrency::ParallelSafe,
+            [&executed_args](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                executed_args = invocation.arguments;
+                agent::AsyncToolExecutionResult res{
+                        .content = {ai::text_content("executed")},
+                        .is_error = false,
+                };
+                co_return res;
+            });
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+
+    // Hook mutates args to { "value": 123 }, replacing string with number.
+    // If revalidated, schema validation would fail.
+    agent::BeforeToolCallHook mutator_hook = [](agent::BeforeToolCallContext, std::stop_token) {
+        agent::BeforeToolCallResult res;
+        res.args = support::read_json(R"({"value":123})").value();
+        return support::AsyncResult<agent::BeforeToolCallResult>{std::move(res)};
+    };
+
+    // Test through run_tool_call
+    {
+        agent::RunToolCallOptions options{registry};
+        options.before_tool_call = &mutator_hook;
+        auto call = make_call("call-mut", "mutate_tool", R"({"value":"initial"})");
+        auto outcome = run_single_tool(std::move(call), std::move(options));
+
+        CHECK_FALSE(outcome.is_error);
+        CHECK(outcome.duration_ms.has_value());
+        REQUIRE(executed_args.has_value());
+        REQUIRE(executed_args->holds<support::JsonValue::object_t>());
+        REQUIRE(executed_args->get_object().contains("value"));
+        CHECK(executed_args->at("value").holds<double>());
+        CHECK(executed_args->at("value").get_number() == 123.0);
+    }
+
+    // Also test through ToolCallExecutor / Agent batch execution
+    {
+        executed_args.reset();
+        agent::ToolCallExecutorOptions executor_options{
+                .before_tool_call = &mutator_hook,
+                .after_tool_call = nullptr,
+                .stop_token = {},
+                .execution = agent::BoundedParallelToolExecution{},
+        };
+        agent::ToolCallExecutor executor{registry, std::move(executor_options)};
+
+        auto assistant = assistant_with_calls({make_call("call-mut-batch", "mutate_tool", R"({"value":"initial"})")});
+        auto run = run_executor(executor, assistant);
+
+        REQUIRE(run.result);
+        REQUIRE(run.result->results.size() == 1);
+        CHECK_FALSE(run.result->results[0].is_error);
+        CHECK(run.result->results[0].duration_ms.has_value());
+        REQUIRE(executed_args.has_value());
+        REQUIRE(executed_args->holds<support::JsonValue::object_t>());
+        REQUIRE(executed_args->get_object().contains("value"));
+        CHECK(executed_args->at("value").holds<double>());
+        CHECK(executed_args->at("value").get_number() == 123.0);
+    }
+}
+
+TEST_CASE("parallel tool ends follow completion order while result messages keep source order",
+        "[agent][tool-executor][issue1109][spec]") {
+    // audit-1047 scenario 4: "parallel tool ends follow completion order while result messages keep source order"
+    agent::ToolRegistry registry;
+
+    // slow: 40ms, source index 0
+    auto slow_tool = tests::make_fake_tool(ai::Tool{"slow", "Slow", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                auto executor = co_await boost::asio::this_coro::executor;
+                boost::asio::steady_timer timer{executor, std::chrono::milliseconds{40}};
+                co_await timer.async_wait(boost::asio::use_awaitable);
+                agent::AsyncToolExecutionResult res{.content = {ai::text_content("slow result")}};
+                co_return res;
+            });
+    REQUIRE(registry.add(std::move(slow_tool)));
+
+    // fast: 5ms, source index 1
+    auto fast_tool = tests::make_fake_tool(ai::Tool{"fast", "Fast", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                auto executor = co_await boost::asio::this_coro::executor;
+                boost::asio::steady_timer timer{executor, std::chrono::milliseconds{5}};
+                co_await timer.async_wait(boost::asio::use_awaitable);
+                agent::AsyncToolExecutionResult res{.content = {ai::text_content("fast result")}};
+                co_return res;
+            });
+    REQUIRE(registry.add(std::move(fast_tool)));
+
+    agent::ToolCallExecutorOptions options{
+            .before_tool_call = nullptr,
+            .after_tool_call = nullptr,
+            .stop_token = {},
+            .execution = agent::BoundedParallelToolExecution{.max_in_flight = 2},
+    };
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+
+    auto assistant = assistant_with_calls({
+            make_call("call-slow", "slow", "{}"),
+            make_call("call-fast", "fast", "{}"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 2);
+
+    // Source order for result messages
+    CHECK(run.result->results[0].tool_call_id == "call-slow");
+    CHECK(run.result->results[1].tool_call_id == "call-fast");
+
+    // Completion order for tool execution end events: fast finishes before slow
+    std::vector<std::string> end_event_ids;
+    std::vector<std::string> start_event_ids;
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::ToolExecutionStartEvent>(&event)) {
+            start_event_ids.push_back(start->tool_call_id);
+        } else if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            end_event_ids.push_back(end->tool_call_id);
+            CHECK(end->duration_ms.has_value());
+        }
+    }
+
+    REQUIRE(start_event_ids.size() == 2);
+    CHECK(start_event_ids[0] == "call-slow");
+    CHECK(start_event_ids[1] == "call-fast");
+
+    REQUIRE(end_event_ids.size() == 2);
+    CHECK(end_event_ids[0] == "call-fast");
+    CHECK(end_event_ids[1] == "call-slow");
+}
+
+TEST_CASE("parallel batch distinguishes duration presence across ok, thrown, blocked, and unknown calls",
+        "[agent][tool-executor][issue1109][spec]") {
+    // audit-1047 scenario 1: "executed success, thrown failure, blocked and unknown calls keep distinct duration
+    // presence"
+    agent::ToolRegistry registry;
+
+    auto ok_tool = tests::make_fake_tool(ai::Tool{"tool_ok", "OK", test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::ParallelSafe,
+            [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                agent::AsyncToolExecutionResult res{.content = {ai::text_content("ok result")}};
+                co_return res;
+            });
+    REQUIRE(registry.add(std::move(ok_tool)));
+
+    auto thrown_tool =
+            tests::make_fake_tool(ai::Tool{"tool_thrown", "Thrown", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        co_return std::unexpected(support::make_error(support::ErrorCode::Tool, "command crashed"));
+                    });
+    REQUIRE(registry.add(std::move(thrown_tool)));
+
+    auto blocked_tool =
+            tests::make_fake_tool(ai::Tool{"tool_blocked", "Blocked", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::ParallelSafe,
+                    [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        agent::AsyncToolExecutionResult res;
+                        co_return res;
+                    });
+    REQUIRE(registry.add(std::move(blocked_tool)));
+
+    agent::BeforeToolCallHook before_hook = [](agent::BeforeToolCallContext context, std::stop_token) {
+        if (context.tool_call.name == "tool_blocked") {
+            agent::BeforeToolCallResult res{.block = true, .reason = "denied by policy"};
+            return support::AsyncResult<agent::BeforeToolCallResult>{std::move(res)};
+        }
+        return support::AsyncResult<agent::BeforeToolCallResult>{agent::BeforeToolCallResult{}};
+    };
+
+    agent::ToolCallExecutorOptions options{
+            .before_tool_call = &before_hook,
+            .after_tool_call = nullptr,
+            .stop_token = {},
+            .execution = agent::BoundedParallelToolExecution{.max_in_flight = 4},
+    };
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+
+    auto assistant = assistant_with_calls({
+            make_call("c-ok", "tool_ok", "{}"),
+            make_call("c-thrown", "tool_thrown", "{}"),
+            make_call("c-blocked", "tool_blocked", "{}"),
+            make_call("c-missing", "tool_missing", "{}"),
+    });
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 4);
+
+    // Source order preserved for all 4 results
+    CHECK(run.result->results[0].tool_call_id == "c-ok");
+    CHECK(run.result->results[1].tool_call_id == "c-thrown");
+    CHECK(run.result->results[2].tool_call_id == "c-blocked");
+    CHECK(run.result->results[3].tool_call_id == "c-missing");
+
+    // Success vs Error
+    CHECK_FALSE(run.result->results[0].is_error);
+    CHECK(run.result->results[1].is_error);
+    CHECK(run.result->results[2].is_error);
+    CHECK(run.result->results[3].is_error);
+
+    // Duration presence on results:
+    // ok: present
+    // thrown: present
+    // blocked: absent
+    // unknown/missing: absent
+    CHECK(run.result->results[0].duration_ms.has_value());
+    CHECK(run.result->results[1].duration_ms.has_value());
+    CHECK_FALSE(run.result->results[2].duration_ms.has_value());
+    CHECK_FALSE(run.result->results[3].duration_ms.has_value());
+
+    // Check duration presence on ToolExecutionEndEvent
+    std::map<std::string, const agent::ToolExecutionEndEvent*> end_events;
+    for (const auto& event : run.events) {
+        if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            end_events[end->tool_call_id] = end;
+        }
+    }
+    REQUIRE(end_events.size() == 4);
+    CHECK(end_events["c-ok"]->duration_ms.has_value());
+    CHECK(end_events["c-thrown"]->duration_ms.has_value());
+    CHECK_FALSE(end_events["c-blocked"]->duration_ms.has_value());
+    CHECK_FALSE(end_events["c-missing"]->duration_ms.has_value());
 }

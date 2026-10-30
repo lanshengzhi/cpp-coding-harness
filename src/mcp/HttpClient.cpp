@@ -588,6 +588,8 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpC
         }
     }
     client->server_instructions_ = detail::initialize_instructions(*initialized);
+    // validate_initialize_result guarantees an object-valued capabilities member.
+    client->server_capabilities_ = initialized->get_object().find("capabilities")->second;
     // pi sends `notifications/initialized` and only then opens the
     // server-to-client GET stream (`send` awaits the POST, then
     // `startGetStream`). The stream carries server-initiated requests and
@@ -1047,7 +1049,7 @@ boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> Ht
     co_return co_await resolve_headers(request_headers(), stop_token, RequestAuthPurpose::Operation);
 }
 
-void HttpClientImpl::set_notification_listener(NotificationListener listener) {
+void HttpClientImpl::set_notification_listener(NotificationSink listener) {
     notification_listener_ = std::move(listener);
 }
 

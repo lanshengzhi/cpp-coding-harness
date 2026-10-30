@@ -1,0 +1,159 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1105",
+  "family": "audit-1105",
+  "capturedAt": "2026-10-30T12:37:22.905Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1105/capture-1105.mts",
+    "sha256": "1b4725ac2f6420c846ab4a0c6e47b266d6ac0db75e6f32f2eee39491631a0429",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1105/capture-1105.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1105/capture-1105.mts",
+        "sha256": "1b4725ac2f6420c846ab4a0c6e47b266d6ac0db75e6f32f2eee39491631a0429"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "session-binding.json",
+      "family": "audit-1105",
+      "bytes": 3907,
+      "sha256": "e4af131f3d66451425ced602e4c73662494e84046184437efa861be27b951e0c",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/agent-session.ts:prompt,getCallableToolNames",
+        "packages/coding-agent/src/extensions/mcp/runtime.ts:connectOnce,refreshTools",
+        "packages/coding-agent/src/extensions/mcp/index.ts:registerTools,syncResourceTools",
+        "packages/coding-agent/test/suite/harness.ts:createHarness"
+      ],
+      "scenarios": [
+        {
+          "name": "real Session reads resources on demand and binds a late tool",
+          "inputs": {
+            "exposure": "direct",
+            "resourcesList": "success"
+          },
+          "expected": {
+            "startupMethods": [
+              "initialize",
+              "tools/list"
+            ],
+            "resourceText": "{\"server\":\"echo\",\"resources\":[{\"server\":\"echo\",\"uri\":\"docs://intro\",\"name\":\"intro\"}]}",
+            "resourceIsError": false,
+            "echoes": [
+              "echo after resources",
+              "echo after resources"
+            ],
+            "callableAfterChange": [
+              "mcp__echo__echo",
+              "mcp__echo__late"
+            ],
+            "lateText": "late after resources",
+            "methods": [
+              "initialize",
+              "tools/list",
+              "resources/list",
+              "tools/call",
+              "tools/call",
+              "tools/list",
+              "tools/call"
+            ]
+          },
+          "normalizations": [
+            "notifications/initialized omitted from request-only method trace",
+            "non-MCP callable tools omitted"
+          ]
+        },
+        {
+          "name": "real Session calls tools after resources/list fails and binds a late tool",
+          "inputs": {
+            "exposure": "direct",
+            "resourcesList": "JSON-RPC error"
+          },
+          "expected": {
+            "startupMethods": [
+              "initialize",
+              "tools/list"
+            ],
+            "resourceText": "resource boom",
+            "resourceIsError": true,
+            "echoes": [
+              "echo after resources",
+              "echo after resources"
+            ],
+            "callableAfterChange": [
+              "mcp__echo__echo",
+              "mcp__echo__late"
+            ],
+            "lateText": "late after resources",
+            "methods": [
+              "initialize",
+              "tools/list",
+              "resources/list",
+              "tools/call",
+              "tools/call",
+              "tools/list",
+              "tools/call"
+            ]
+          },
+          "normalizations": [
+            "notifications/initialized omitted from request-only method trace",
+            "non-MCP callable tools omitted"
+          ]
+        },
+        {
+          "name": "real Session replaces MCP callable schemas after a tool-list change",
+          "inputs": {
+            "exposure": "direct",
+            "initialRequiredArgument": "text",
+            "updatedRequiredArgument": "message",
+            "additionalProperties": false,
+            "updatedServerOrder": [
+              "late",
+              "echo"
+            ]
+          },
+          "expected": {
+            "startupMethods": [
+              "initialize",
+              "tools/list"
+            ],
+            "firstEchoText": "echo:first",
+            "callableAfterChange": [
+              "mcp__echo__echo",
+              "mcp__echo__late"
+            ],
+            "lateText": "late:bound",
+            "updatedEchoText": "echo:second",
+            "descriptionsAfterChange": [
+              "updated",
+              "updated"
+            ],
+            "methods": [
+              "initialize",
+              "tools/list",
+              "tools/call",
+              "tools/list",
+              "tools/call",
+              "tools/call"
+            ]
+          },
+          "normalizations": [
+            "notifications/initialized omitted from request-only method trace",
+            "non-MCP callable tools omitted"
+          ]
+        }
+      ]
+    }
+  ]
+}

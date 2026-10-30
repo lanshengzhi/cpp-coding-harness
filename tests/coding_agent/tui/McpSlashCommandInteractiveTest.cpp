@@ -9,6 +9,7 @@
 #include "support/AgentRootFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/McpTestKit.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
@@ -165,21 +166,33 @@ TEST_CASE("/mcp opens the servers menu and Escape closes it", "[coding_agent][tu
     finish_interactive(running);
 }
 
-TEST_CASE("/mcp reconnect prints pi's server status line", "[coding_agent][tui][mcp][e2e][issue884][spec]") {
+TEST_CASE("/mcp reconnect reports the connected tool state without eager resource discovery",
+        "[coding_agent][tui][mcp][e2e][issue884][issue1105][spec]") {
     Fixture fixture;
+    const auto trace = fixture.workspace.path() / "reconnect-trace";
+    const tests::EnvVarGuard trace_environment{"PIKE_MCP_TRACE", trace.string()};
     Running running;
     start_interactive(fixture, running);
 
     // The first Enter accepts the exact server-name completion; the second
-    // submits the command through the slash router.
-    REQUIRE(running.terminal.inject_input("/mcp reconnect echo\r\r"));
-    // pi's describeState appends the resource count (the echo fixture
-    // advertises two resources alongside its five tools).
-    constexpr std::string_view expected = "Reconnected to MCP server \"echo\" (connected · 5 tools · 2 resources).";
-    REQUIRE(wait_for_text(running, expected));
-    CHECK(visible_screen(running.terminal).find(expected) != std::string::npos);
-
+    // submits the command through the slash router. Resource counts are no
+    // longer populated at connect; #1118 owns the remaining status presentation.
+    const auto injected = running.terminal.inject_input("/mcp reconnect echo\r\r");
+    constexpr std::string_view expected = "Reconnected to MCP server \"echo\" (connected · 5 tools).";
+    const bool reconnected = injected.has_value() && wait_for_text(running, expected);
+    const auto screen = visible_screen(running.terminal);
     finish_interactive(running);
+    fixture.session.reset();
+    fixture.runtime_driver.reset();
+    fixture.runtime.close();
+
+    CHECK(injected.has_value());
+    CHECK(reconnected);
+    CHECK(screen.find(expected) != std::string::npos);
+    CHECK(tests::trace_line_count(trace, "recv initialize") >= 2);
+    CHECK(tests::trace_contains(trace, "recv tools/list"));
+    CHECK_FALSE(tests::trace_contains(trace, "recv resources/list"));
+    CHECK_FALSE(tests::trace_contains(trace, "recv resources/templates/list"));
 }
 
 TEST_CASE("/mcp reports pi's usage warning for an unknown action", "[coding_agent][tui][mcp][e2e][issue884][spec]") {

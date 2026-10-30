@@ -3428,7 +3428,7 @@ TEST_CASE("bounded parallel after-hook failure finalizes only its call", "[agent
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 }
 
-TEST_CASE("bounded parallel execution emits end events in completion order", "[agent][async][u8][spec]") {
+TEST_CASE("bounded parallel execution emits end events in completion order", "[agent][async][u8][spec][issue1109]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(two_tool_call_response());
     client->responses.push_back(ai::assistant_text_message("done"));
@@ -3478,6 +3478,130 @@ TEST_CASE("bounded parallel execution emits end events in completion order", "[a
     CHECK(message_order[1] == "beta");
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
+}
+
+TEST_CASE("Agent prompt normalizes invalid raw arguments with prepareArguments before validation",
+        "[agent][async][issue1109][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    ai::AssistantMessage tool_call_msg;
+    tool_call_msg.content.push_back(ai::ToolCallContent{
+            .id = "call-prep",
+            .name = "prep_tool",
+            .arguments = std::nullopt,
+            .raw_arguments = R"({"oldText":"before","newText":"after"})",
+    });
+    client->responses.push_back(std::move(tool_call_msg));
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    ai::Tool definition{
+            .name = "prep_tool",
+            .description = "Prep tool",
+            .parameters = support::read_json(
+                    R"({"type":"object","properties":{"value":{"type":"string"}},"required":["value"]})")
+                    .value(),
+    };
+
+    std::string received_value;
+    auto tool = tests::make_fake_tool(definition,
+            agent::ToolConcurrency::ParallelSafe,
+            [&received_value](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                if (invocation.arguments.holds<support::JsonValue::object_t>() &&
+                        invocation.arguments.get_object().contains("value")) {
+                    received_value = invocation.arguments.at("value").get_string();
+                }
+                agent::AsyncToolExecutionResult res{
+                        .content = {ai::text_content("normalized: " + received_value)},
+                        .is_error = false,
+                };
+                co_return res;
+            });
+
+    tool.prepare_arguments = [](const support::JsonValue& args) -> support::JsonValue {
+        if (args.holds<support::JsonValue::object_t>()) {
+            const auto& obj = args.get_object();
+            std::string combined;
+            if (auto it = obj.find("oldText"); it != obj.end() && it->second.holds<std::string>()) {
+                combined += it->second.get_string();
+            }
+            if (auto it = obj.find("newText"); it != obj.end() && it->second.holds<std::string>()) {
+                combined += it->second.get_string();
+            }
+            return support::read_json(std::format(R"({{"value":"{}"}})", combined)).value();
+        }
+        return args;
+    };
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "execute");
+
+    CHECK(run.result);
+    CHECK(received_value == "beforeafter");
+}
+
+TEST_CASE("Agent prompt executes mutated beforeToolCall args without revalidation", "[agent][async][issue1109][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    ai::AssistantMessage tool_call_msg;
+    tool_call_msg.content.push_back(ai::ToolCallContent{
+            .id = "call-mut",
+            .name = "mutate_tool",
+            .arguments = std::nullopt,
+            .raw_arguments = R"({"value":"initial"})",
+    });
+    client->responses.push_back(std::move(tool_call_msg));
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    ai::Tool definition{
+            .name = "mutate_tool",
+            .description = "Mutate tool",
+            .parameters = support::read_json(
+                    R"({"type":"object","properties":{"value":{"type":"string"}},"required":["value"]})")
+                    .value(),
+    };
+
+    std::optional<support::JsonValue> executed_args;
+    auto tool = tests::make_fake_tool(definition,
+            agent::ToolConcurrency::ParallelSafe,
+            [&executed_args](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                executed_args = invocation.arguments;
+                agent::AsyncToolExecutionResult res{
+                        .content = {ai::text_content("executed")},
+                        .is_error = false,
+                };
+                co_return res;
+            });
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(std::move(tool)));
+
+    agent::BeforeToolCallHook mutator_hook = [](agent::BeforeToolCallContext, std::stop_token) {
+        agent::BeforeToolCallResult res;
+        res.args = support::read_json(R"({"value":123})").value();
+        return support::AsyncResult<agent::BeforeToolCallResult>{std::move(res)};
+    };
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.before_tool_call = std::move(mutator_hook);
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent_on_pool(subject, "execute");
+
+    CHECK(run.result);
+    REQUIRE(executed_args.has_value());
+    REQUIRE(executed_args->holds<support::JsonValue::object_t>());
+    REQUIRE(executed_args->get_object().contains("value"));
+    CHECK(executed_args->at("value").holds<double>());
+    CHECK(executed_args->at("value").get_number() == 123.0);
 }
 
 TEST_CASE("length-truncated tool calls emit errors without crossing the executor seam", "[agent][async][u8][spec]") {
