@@ -50,4 +50,19 @@ inline constexpr std::string_view kBridgeName = "bridge";
 /// A validation error for a rejected sandbox construction or run option.
 [[nodiscard]] support::Error sandbox_error(std::string message, std::string detail = {});
 
+/// pi `start`'s option validation, shared by the local sandbox and the Remote
+/// caller so both refuse the same option sets with the same text before any VM
+/// exists.
+[[nodiscard]] support::ExpectedVoid validate_run_options(const CodemodeRunOptions& options);
+
+/// pi `CodemodeRun.deliver`'s admission checks, shared by the local run and the
+/// Remote caller. `sequence_used` and `call_waiting` come from the caller's own
+/// registry, so each run reports its refusals from its own state.
+[[nodiscard]] std::optional<CodemodeDeliveryRejection> delivery_rejection(std::int64_t seq,
+        double now,
+        std::int64_t id,
+        const CodemodeOutcome& outcome,
+        bool sequence_used,
+        bool call_waiting);
+
 } // namespace cch::codemode::detail

@@ -148,58 +148,93 @@ namespace {
     return outcome;
 }
 
-/// Waits for `count` calls to reach the caller, or fails the case at the bound.
-[[nodiscard]] bool wait_for_calls(
-        std::vector<codemode::CodemodeHostCall>& calls, std::mutex& mutex, std::size_t count) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
-    while (std::chrono::steady_clock::now() < deadline) {
-        {
-            std::lock_guard lock(mutex);
-            if (calls.size() >= count) return true;
+} // namespace
+
+namespace {
+
+/// The caller-side records one deterministic Remote run reports. Heap-owned and
+/// shared by value with every callback, so a failed assertion that abandons the
+/// test frame leaves the still-running remote writing into live storage
+/// (CODING_STANDARDS.md §11.10).
+struct DeterministicRecorder {
+    std::mutex mutex;
+    std::vector<codemode::CodemodeHostCall> calls;
+    std::vector<std::pair<std::int64_t, std::int64_t>> idles;
+    std::string fingerprint;
+
+    /// Waits for `count` calls to reach the caller, or returns false at the bound.
+    [[nodiscard]] bool wait_for_calls(std::size_t count) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+        while (std::chrono::steady_clock::now() < deadline) {
+            {
+                std::lock_guard lock(mutex);
+                if (calls.size() >= count) return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds{2});
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+        return false;
     }
-    return false;
+
+    [[nodiscard]] codemode::CodemodeHostCall call(std::size_t index) {
+        std::lock_guard lock(mutex);
+        return calls.at(index);
+    }
+
+    [[nodiscard]] std::vector<std::pair<std::int64_t, std::int64_t>> idle_list() {
+        std::lock_guard lock(mutex);
+        return idles;
+    }
+};
+
+/// One Remote sandbox over a recording host.
+[[nodiscard]] std::unique_ptr<codemode::RemoteCodemodeSandbox> make_remote_sandbox() {
+    auto remote = std::make_shared<RecordingRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(created.has_value());
+    return std::move(*created);
+}
+
+/// The deterministic options every case shares: the frozen start, seed, tool
+/// surface and deadline, plus the caller's recording callbacks.
+[[nodiscard]] codemode::CodemodeRunOptions recording_options(std::shared_ptr<DeterministicRecorder> recorder) {
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+            {.name = "add", .js_name = "add", .description = "Add one."},
+    };
+    options.timeout = std::chrono::seconds{20};
+    options.callbacks.on_started = [recorder](std::string_view value) {
+        std::lock_guard lock(recorder->mutex);
+        recorder->fingerprint = std::string{value};
+    };
+    options.callbacks.on_call = [recorder](const codemode::CodemodeHostCall& call) {
+        std::lock_guard lock(recorder->mutex);
+        recorder->calls.push_back(call);
+    };
+    options.callbacks.on_idle = [recorder](std::int64_t seq, std::int64_t issued) {
+        std::lock_guard lock(recorder->mutex);
+        recorder->idles.emplace_back(seq, issued);
+    };
+    return options;
 }
 
 } // namespace
 
 TEST_CASE("Remote deterministic execution runs the script remotely and answers through deliver",
         "[codemode][remote][deterministic][issue1099]") {
-    auto remote = std::make_shared<RecordingRemote>();
-    codemode::RemoteCodemodeSandboxOptions options;
-    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
-    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
-    REQUIRE(created.has_value());
-
-    std::string fingerprint;
-    std::mutex mutex;
-    std::vector<codemode::CodemodeHostCall> calls;
-    std::vector<std::pair<std::int64_t, std::int64_t>> idles;
-    codemode::CodemodeRunOptions run_options;
-    run_options.started_at = 1768471200000;
-    run_options.seed = 1;
-    run_options.tools = {{.name = "add", .js_name = "add", .description = "Add one."}};
-    run_options.timeout = std::chrono::seconds{20};
-    run_options.callbacks.on_started = [&fingerprint](std::string_view value) { fingerprint = value; };
-    run_options.callbacks.on_call = [&](const codemode::CodemodeHostCall& call) {
-        std::lock_guard lock(mutex);
-        calls.push_back(call);
-    };
-    run_options.callbacks.on_idle = [&](std::int64_t seq, std::int64_t issued) {
-        std::lock_guard lock(mutex);
-        idles.emplace_back(seq, issued);
-    };
-    auto started = (*created)->start("text('hi'); return await tools.add({ a: 1 })", std::move(run_options));
+    auto sandbox = make_remote_sandbox();
+    auto recorder = std::make_shared<DeterministicRecorder>();
+    auto started = sandbox->start("text('hi'); return await tools.add({ a: 1 })", recording_options(recorder));
     REQUIRE(started.has_value());
     auto run = std::move(*started);
 
-    REQUIRE(wait_for_calls(calls, mutex, 1));
-    codemode::CodemodeHostCall call;
-    {
-        std::lock_guard lock(mutex);
-        call = calls.front();
-    }
+    REQUIRE(recorder->wait_for_calls(1));
+    const auto call = recorder->call(0);
+    CHECK(call.name == "add");
     CHECK_FALSE(run.deliver(1, 1768471201000.0, call.id, ok_outcome("2")).has_value());
 
     auto result = run_async(run.result());
@@ -210,7 +245,7 @@ TEST_CASE("Remote deterministic execution runs the script remotely and answers t
     CHECK(result->output.front().data == "hi");
     REQUIRE(result->calls.size() == 1);
     CHECK(result->calls.front().name == "add");
-    CHECK_FALSE(fingerprint.empty());
+    CHECK_FALSE(recorder->fingerprint.empty());
     CHECK(run.finished());
 }
 
@@ -219,47 +254,20 @@ TEST_CASE("Remote deterministic execution applies reversed answers by result num
     // Frozen pi v1.3.0 (`remote-exchange.json`, "a deterministic start over a
     // transport that reorders replies still applies results in seq order"):
     // seq 2 arrives before seq 1 and the script still observes ["a", "b"].
-    auto remote = std::make_shared<RecordingRemote>();
-    codemode::RemoteCodemodeSandboxOptions options;
-    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
-    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
-    REQUIRE(created.has_value());
-
-    std::mutex mutex;
-    std::vector<codemode::CodemodeHostCall> calls;
-    std::vector<std::pair<std::int64_t, std::int64_t>> idles;
-    codemode::CodemodeRunOptions run_options;
-    run_options.started_at = 1768471200000;
-    run_options.seed = 1;
-    run_options.tools = {{.name = "wait", .js_name = "wait", .description = "Wait for the host."}};
-    run_options.timeout = std::chrono::seconds{20};
-    run_options.callbacks.on_call = [&](const codemode::CodemodeHostCall& call) {
-        std::lock_guard lock(mutex);
-        calls.push_back(call);
-    };
-    run_options.callbacks.on_idle = [&](std::int64_t seq, std::int64_t issued) {
-        std::lock_guard lock(mutex);
-        idles.emplace_back(seq, issued);
-    };
+    auto sandbox = make_remote_sandbox();
+    auto recorder = std::make_shared<DeterministicRecorder>();
     const std::string script = "const order = []; "
                                "await Promise.all([tools.wait(\"a\").then(() => order.push(\"a\")), "
                                "tools.wait(\"b\").then(() => order.push(\"b\"))]); return order;";
-    auto started = (*created)->start(script, std::move(run_options));
+    auto started = sandbox->start(script, recording_options(recorder));
     REQUIRE(started.has_value());
     auto run = std::move(*started);
 
     // Both calls must be outstanding at once, or the transport could not
     // reorder anything.
-    REQUIRE(wait_for_calls(calls, mutex, 2));
-    codemode::CodemodeHostCall a;
-    codemode::CodemodeHostCall b;
-    {
-        std::lock_guard lock(mutex);
-        a = calls[0];
-        b = calls[1];
-    }
-    CHECK(a.name == "wait");
-    CHECK(b.name == "wait");
+    REQUIRE(recorder->wait_for_calls(2));
+    const auto a = recorder->call(0);
+    const auto b = recorder->call(1);
     CHECK(a.id != b.id);
 
     // Result number 2 arrives first and waits for number 1.
@@ -270,45 +278,24 @@ TEST_CASE("Remote deterministic execution applies reversed answers by result num
     REQUIRE(result.has_value());
     REQUIRE_FALSE(result->error.has_value());
     CHECK(result->value_json == "[\"a\",\"b\"]");
-    {
-        std::lock_guard lock(mutex);
-        REQUIRE(idles.size() == 2);
-        CHECK(idles[0] == std::pair<std::int64_t, std::int64_t>{0, 2});
-        CHECK(idles[1] == std::pair<std::int64_t, std::int64_t>{1, 2});
-    }
+    const auto idles = recorder->idle_list();
+    REQUIRE(idles.size() == 2);
+    CHECK(idles[0] == std::pair<std::int64_t, std::int64_t>{0, 2});
+    CHECK(idles[1] == std::pair<std::int64_t, std::int64_t>{1, 2});
 }
 
 TEST_CASE("Remote deterministic execution rejects a reused result number and an unknown call",
         "[codemode][remote][deterministic][issue1099]") {
-    // Frozen pi v1.3.0: `deliver` refuses these synchronously, and the run
-    // stays open so a valid answer can still complete it.
-    auto remote = std::make_shared<RecordingRemote>();
-    codemode::RemoteCodemodeSandboxOptions options;
-    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
-    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
-    REQUIRE(created.has_value());
-
-    std::mutex mutex;
-    std::vector<codemode::CodemodeHostCall> calls;
-    codemode::CodemodeRunOptions run_options;
-    run_options.started_at = 1768471200000;
-    run_options.seed = 1;
-    run_options.tools = {{.name = "wait", .js_name = "wait", .description = "Wait for the host."}};
-    run_options.timeout = std::chrono::seconds{20};
-    run_options.callbacks.on_call = [&](const codemode::CodemodeHostCall& call) {
-        std::lock_guard lock(mutex);
-        calls.push_back(call);
-    };
-    auto started = (*created)->start("return await tools.wait(1)", std::move(run_options));
+    // Frozen pi v1.3.0 (`audit-1099`): `deliver` refuses these synchronously, and
+    // the run stays open so a valid answer can still complete it.
+    auto sandbox = make_remote_sandbox();
+    auto recorder = std::make_shared<DeterministicRecorder>();
+    auto started = sandbox->start("return await tools.wait(1)", recording_options(recorder));
     REQUIRE(started.has_value());
     auto run = std::move(*started);
 
-    REQUIRE(wait_for_calls(calls, mutex, 1));
-    codemode::CodemodeHostCall call;
-    {
-        std::lock_guard lock(mutex);
-        call = calls.front();
-    }
+    REQUIRE(recorder->wait_for_calls(1));
+    const auto call = recorder->call(0);
     const auto unknown = run.deliver(1, 1768471200000.0, 99, ok_outcome("null"));
     REQUIRE(unknown.has_value());
     CHECK(unknown->reason == codemode::CodemodeDeliveryRejection::Reason::UnknownCall);
@@ -329,45 +316,29 @@ TEST_CASE("Remote deterministic execution rejects a reused result number and an 
 TEST_CASE("Remote deterministic execution leaves a missing result pending until the caller cancels",
         "[codemode][remote][deterministic][issue1099]") {
     // Frozen pi v1.3.0 (`audit-1099`): with result 1 absent, an accepted
-    // result 2 does not finish the run; the caller must cancel, and that
-    // settles as aborted rather than as a successful replay.
-    auto remote = std::make_shared<RecordingRemote>();
-    codemode::RemoteCodemodeSandboxOptions options;
-    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
-    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
-    REQUIRE(created.has_value());
-
-    std::mutex mutex;
-    std::vector<codemode::CodemodeHostCall> calls;
+    // result 2 does not finish the run and only the first idle is reported; the
+    // caller must cancel, and that settles as aborted rather than as a
+    // successful replay.
+    auto sandbox = make_remote_sandbox();
+    auto recorder = std::make_shared<DeterministicRecorder>();
     std::stop_source stop;
-    codemode::CodemodeRunOptions run_options;
-    run_options.started_at = 1768471200000;
-    run_options.seed = 1;
-    run_options.tools = {
-            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
-    };
-    run_options.timeout = std::chrono::seconds{20};
+    auto run_options = recording_options(recorder);
     run_options.stop_token = stop.get_token();
     run_options.abort_message = "missing result";
-    run_options.callbacks.on_call = [&](const codemode::CodemodeHostCall& call) {
-        std::lock_guard lock(mutex);
-        calls.push_back(call);
-    };
     const std::string script = "const order = []; "
                                "await Promise.all([tools.wait(1), tools.wait(2)]); return order;";
-    auto started = (*created)->start(script, std::move(run_options));
+    auto started = sandbox->start(script, std::move(run_options));
     REQUIRE(started.has_value());
     auto run = std::move(*started);
 
-    REQUIRE(wait_for_calls(calls, mutex, 2));
-    codemode::CodemodeHostCall b;
-    {
-        std::lock_guard lock(mutex);
-        b = calls[1];
-    }
+    REQUIRE(recorder->wait_for_calls(2));
+    const auto b = recorder->call(1);
     CHECK_FALSE(run.deliver(2, 1768471202000.0, b.id, ok_outcome("null")).has_value());
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     CHECK_FALSE(run.finished());
+    const auto idles = recorder->idle_list();
+    REQUIRE(idles.size() == 1);
+    CHECK(idles[0] == std::pair<std::int64_t, std::int64_t>{0, 2});
 
     stop.request_stop();
     auto result = run_async(run.result());
@@ -375,6 +346,33 @@ TEST_CASE("Remote deterministic execution leaves a missing result pending until 
     REQUIRE(result->error.has_value());
     CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
     CHECK(result->error->message == "missing result");
+}
+
+TEST_CASE("Remote deterministic execution refuses a replay with a different seed or fingerprint",
+        "[codemode][remote][deterministic][issue1099]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`): a seed mismatch is refused
+    // before the VM exists, and a fingerprint mismatch settles as a sandbox
+    // error after the run reports the fingerprint it actually produced.
+    auto sandbox = make_remote_sandbox();
+    auto recorder = std::make_shared<DeterministicRecorder>();
+
+    auto seed_options = recording_options(recorder);
+    seed_options.seed = 2;
+    seed_options.expected_seed = 1;
+    auto seed_mismatch = sandbox->start("return 1", std::move(seed_options));
+    REQUIRE_FALSE(seed_mismatch.has_value());
+    CHECK(seed_mismatch.error().message == "Deterministic replay seed mismatch: expected 1, got 2");
+
+    auto fingerprint_options = recording_options(recorder);
+    fingerprint_options.expected_fingerprint = "not the VM's fingerprint";
+    auto started = sandbox->start("return 1", std::move(fingerprint_options));
+    REQUIRE(started.has_value());
+    auto result = run_async(started->result());
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Sandbox);
+    CHECK(result->error->message.starts_with("Deterministic replay fingerprint mismatch: expected"));
+    CHECK_FALSE(recorder->fingerprint.empty());
 }
 
 TEST_CASE("RemoteCodemodeSandbox runs tools in the caller and the script on the remote", "[codemode][remote]") {

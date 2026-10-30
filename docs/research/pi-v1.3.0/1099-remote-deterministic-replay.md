@@ -39,14 +39,20 @@ completion as replay success.
 ## Validation
 
 - Focused: `ctest --preset vcpkg -LE architecture -L codemode` →
-  **112/112 passed**. The `remote` label holds **13** cases; four are new
+  **113/113 passed**. The `remote` label holds **14** cases; five are new
   `[issue1099]` cases covering the normal deterministic exchange, reversed
-  answers applied by result number, the duplicate/unknown refusals, and a
-  missing result that stays pending until the caller cancels.
+  answers applied by result number, the duplicate/unknown refusals, a missing
+  result that stays pending until the caller cancels, and the seed/fingerprint
+  replay refusals.
 - Architecture: `ctest --preset vcpkg -L architecture` → **43/43 passed**,
   including `cch_warning_gate`, after reconfiguring for the new include set.
 - Full: `cmake --build --preset vcpkg && ctest --preset vcpkg` →
-  **4,025 selected, 4,018 passed, 7 skipped, 0 failed**.
+  **4,025 selected, 4,025 passed** before the review fix. After it, repeated
+  `-j 2` runs on the same host reported only pre-existing load-sensitive cases
+  (durable generation workflow, TUI terminal process, theme query timing,
+  projection cost, one `quarantine`-labelled cost bound); each failed case
+  passed when run alone, and the host load average was 5–19 from other work.
+  No bound was retuned and no test was quarantined.
 - Formatting: `scripts/format-check.sh origin/main` → clean.
 - Evidence: `python scripts/evidence/audit_evidence.py verify --baseline
   pi-v1.3.0` → **45 bundles, 101 artifacts, 562 scenarios**, including the new
@@ -55,11 +61,12 @@ completion as replay success.
   scenarios**, **141 explicit orphans** (the new one names the #1099 capture),
   zero uncovered.
 
-Two timing-sensitive cases in the codemode label (`A nested result completed
-during durable abort retains its successful history`, `codemode worker results
-settle before exit while admission stays bounded`) failed once under parallel
-load and passed both alone and in a repeated label run; neither is quarantined
-and no bound was changed.
+Review findings addressed in the same change: the test cases heap-own the state
+their remote callbacks write (`CODING_STANDARDS.md` §11.10); `start` option
+validation and `deliver` admission are shared with the local sandbox instead of
+duplicated; the serve loop batches `started` with the next call or idle, as the
+frozen capture shows; `execute` failures keep the `Remote sandbox failed: ...`
+taxonomy; and the poll and release-store sites carry their required comments.
 
 ## Capability status
 

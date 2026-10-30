@@ -376,46 +376,12 @@ void DeterministicRun::Impl::consume(support::AsyncCompletion<CodemodeRunResult,
 
 std::optional<CodemodeDeliveryRejection> DeterministicRun::Impl::deliver(
         std::int64_t seq, double now, std::int64_t id, CodemodeOutcome outcome) {
-    using Reason = CodemodeDeliveryRejection::Reason;
-    // pi `Execution.deliver` validates on the caller's side before posting
-    // anything, so a refused answer leaves the call waiting and the run
-    // unsettled; the caller can retry with a valid one. Keep its validation
-    // order because a message can violate more than one condition.
-    if (!std::isfinite(now)) {
-        std::lock_guard lock(shared.mutex);
-        if (shared.finished) return std::nullopt;
-        return CodemodeDeliveryRejection{
-                Reason::Clock, std::format("The clock value of result {} is not a finite number", seq)};
-    }
-
     std::lock_guard lock(shared.mutex);
     if (shared.finished) return std::nullopt; // a finished run ignores later answers
-    if (seq < 1 || shared.delivered.contains(seq)) {
-        return CodemodeDeliveryRejection{
-                Reason::ResultNumber, std::format("Result number {} is not a positive integer used once", seq)};
+    if (auto rejected = detail::delivery_rejection(
+                seq, now, id, outcome, shared.delivered.contains(seq), shared.waiting.contains(id))) {
+        return rejected;
     }
-    if (!shared.waiting.contains(id)) {
-        return CodemodeDeliveryRejection{Reason::UnknownCall, std::format("Call {} is not waiting for a result", id)};
-    }
-    if (!outcome.ok && outcome.properties_json.has_value()) {
-        const auto properties = support::read_json(*outcome.properties_json);
-        if (!properties.has_value() || !properties->holds<support::JsonValue::object_t>()) {
-            return CodemodeDeliveryRejection{
-                    Reason::Properties, std::format("The properties of result {} are not an object", seq)};
-        }
-    }
-
-    if (outcome.ok && !outcome.value_json.empty()) {
-        // pi serializes the value with `JSON.stringify` before recording
-        // anything: a value JSON cannot hold throws and leaves the call
-        // waiting for another answer. This API receives the text already, so
-        // the same refusal is text that is not a JSON value.
-        if (!support::read_json(outcome.value_json).has_value()) {
-            return CodemodeDeliveryRejection{
-                    Reason::Serialization, std::format("The value of result {} is not JSON", seq)};
-        }
-    }
-
     shared.delivered.insert(seq);
     shared.waiting.erase(id);
     shared.queued.push_back(QueuedResult{

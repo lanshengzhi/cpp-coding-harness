@@ -2,6 +2,11 @@
 
 #include "support/Json.hpp"
 
+#include <cch/codemode/Declarations.hpp>
+
+#include <cmath>
+#include <optional>
+
 #include <algorithm>
 #include <cstddef>
 #include <format>
@@ -128,6 +133,71 @@ CodemodeStoreWrites parse_store_writes(std::string_view payload) {
 
 support::Error sandbox_error(std::string message, std::string detail) {
     return support::make_error(support::ErrorCode::Validation, std::move(message), std::move(detail));
+}
+
+support::ExpectedVoid validate_run_options(const CodemodeRunOptions& options) {
+    if (options.started_at < 0) {
+        return std::unexpected(
+                sandbox_error("startedAt must be a non-negative number of milliseconds since the epoch"));
+    }
+    if (options.seed > 0xffffffffull) {
+        return std::unexpected(sandbox_error("seed must be a 32-bit unsigned integer"));
+    }
+    if (options.expected_seed.has_value() && *options.expected_seed != options.seed) {
+        return std::unexpected(sandbox_error(std::format(
+                "Deterministic replay seed mismatch: expected {}, got {}", *options.expected_seed, options.seed)));
+    }
+    std::set<std::string> names;
+    for (const auto& tool : options.tools) {
+        if (!names.insert(tool.name).second) return std::unexpected(sandbox_error("Tool names must be unique"));
+    }
+    std::set<std::string> script_names;
+    for (const auto& tool : options.tools) {
+        const std::string js_name = tool.js_name.empty() ? to_codemode_identifier(tool.name) : tool.js_name;
+        if (!script_names.insert(js_name).second) {
+            return std::unexpected(sandbox_error("Tool script names must be unique"));
+        }
+    }
+    return validate_globals(options.globals);
+}
+
+std::optional<CodemodeDeliveryRejection> delivery_rejection(std::int64_t seq,
+        double now,
+        std::int64_t id,
+        const CodemodeOutcome& outcome,
+        bool sequence_used,
+        bool call_waiting) {
+    using Reason = CodemodeDeliveryRejection::Reason;
+    // pi `Execution.deliver` validates on the caller's side before posting
+    // anything, so a refused answer leaves the call waiting and the run
+    // unsettled; the caller can retry with a valid one. The order matters
+    // because one answer can violate more than one condition.
+    if (!std::isfinite(now)) {
+        return CodemodeDeliveryRejection{
+                Reason::Clock, std::format("The clock value of result {} is not a finite number", seq)};
+    }
+    if (seq < 1 || sequence_used) {
+        return CodemodeDeliveryRejection{
+                Reason::ResultNumber, std::format("Result number {} is not a positive integer used once", seq)};
+    }
+    if (!call_waiting) {
+        return CodemodeDeliveryRejection{Reason::UnknownCall, std::format("Call {} is not waiting for a result", id)};
+    }
+    if (!outcome.ok && outcome.properties_json.has_value()) {
+        const auto properties = support::read_json(*outcome.properties_json);
+        if (!properties.has_value() || !properties->holds<support::JsonValue::object_t>()) {
+            return CodemodeDeliveryRejection{
+                    Reason::Properties, std::format("The properties of result {} are not an object", seq)};
+        }
+    }
+    if (outcome.ok && !outcome.value_json.empty() && !support::read_json(outcome.value_json).has_value()) {
+        // pi serializes the value with `JSON.stringify` before recording
+        // anything: a value JSON cannot hold throws and leaves the call
+        // waiting for another answer. This API receives the text already, so
+        // the same refusal is text that is not a JSON value.
+        return CodemodeDeliveryRejection{Reason::Serialization, std::format("The value of result {} is not JSON", seq)};
+    }
+    return std::nullopt;
 }
 
 } // namespace cch::codemode::detail

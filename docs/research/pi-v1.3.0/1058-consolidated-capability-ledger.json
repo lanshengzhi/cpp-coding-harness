@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "e7494365c2f2756d2cefd7f56bb143ba0e2049b64f7de8c56ffdafeb8d31c29e"
+            "sha256": "638fdece07f91dd48ae1700c45f6792b578c1382fdde5b506587c3add7e0aa6f"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -307,15 +307,7 @@
             }
           }
         ],
-        "routingSha256": "e75e524b807c4a6dbc4a3a92f0ec2bf4942b82999ab4afdee3c66292dff25b42",
-        "revalidation1099": {
-          "reason": "#1099 registered the audit-1099 frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json",
-            "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
-          ]
-        }
+        "routingSha256": "e75e524b807c4a6dbc4a3a92f0ec2bf4942b82999ab4afdee3c66292dff25b42"
       },
       {
         "id": "1090-durable-images",
@@ -562,6 +554,14 @@
           }
         ],
         "routingSha256": "86be75c1c591af6ccc48241625a752bfbc681f9b54caf95a5a347e22846654f3",
+        "revalidation1099": {
+          "reason": "#1099 registered the audit-1099 frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        },
         "revalidation1094": {
           "reason": "Direct codemode dependency and durable test registration changed shared build inputs. The prior image scenario routing and production image implementation are unchanged; issue1090 was rebuilt and its exact 10-case selection passed.",
           "changedInputs": [
@@ -617,14 +617,6 @@
               "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
             }
           }
-        },
-        "revalidation1099": {
-          "reason": "#1099 registered the audit-1099 frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The durable image rows, their scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json",
-            "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
-          ]
         }
       },
       {

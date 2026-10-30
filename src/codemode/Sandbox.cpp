@@ -1242,32 +1242,9 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::Run::result() {
 
 support::Expected<CodemodeSandbox::Run> CodemodeSandbox::start(std::string script, CodemodeRunOptions options) {
     // pi `start`'s validation, in its order, before any VM exists: a rejected
-    // option set never creates a worker.
-    if (options.started_at < 0) {
-        return std::unexpected(
-                sandbox_error("startedAt must be a non-negative number of milliseconds since the epoch"));
-    }
-    if (options.seed > 0xffffffffull) {
-        return std::unexpected(sandbox_error("seed must be a 32-bit unsigned integer"));
-    }
-    if (options.expected_seed.has_value() && *options.expected_seed != options.seed) {
-        return std::unexpected(sandbox_error(std::format(
-                "Deterministic replay seed mismatch: expected {}, got {}", *options.expected_seed, options.seed)));
-    }
-    {
-        std::set<std::string> names;
-        for (const auto& tool : options.tools) {
-            if (!names.insert(tool.name).second) return std::unexpected(sandbox_error("Tool names must be unique"));
-        }
-        std::set<std::string> script_names;
-        for (const auto& tool : options.tools) {
-            const std::string js_name = tool.js_name.empty() ? to_codemode_identifier(tool.name) : tool.js_name;
-            if (!script_names.insert(js_name).second) {
-                return std::unexpected(sandbox_error("Tool script names must be unique"));
-            }
-        }
-    }
-    if (auto valid = validate_globals(options.globals); !valid) {
+    // option set never creates a worker. The Remote caller shares this
+    // validator, so both paths refuse the same sets with the same text.
+    if (auto valid = detail::validate_run_options(options); !valid) {
         return std::unexpected(std::move(valid.error()));
     }
 
