@@ -1,0 +1,41 @@
+Core: cch_tests_durable, SIGSEGV, 2026-10-29 22:30 JST (systemd-coredump pid 161500).
+Reproduced with the frame-captured probe (storage and phase captures owned by the
+test frame) plus the rejected `LiveHarness` testCaseEnded cleanup listener.
+
+Program terminated with signal SIGSEGV, Segmentation fault.
+Current thread (LWP 161502, the harness scheduler worker):
+
+#0  pthread_mutex_lock () from /usr/lib/libc.so.6
+#1  __gthread_mutex_lock (__mutex=0xe84d8b48e0758b48)
+#2  __gthread_recursive_mutex_lock (__mutex=0xe84d8b48e0758b48)
+#3  std::recursive_mutex::lock (this=0xe84d8b48e0758b48)
+#4  std::lock_guard<std::recursive_mutex>::lock_guard (this=..., __m=...)
+#5  cch::durable::StorageState::scan_conversations (this=0x7f065e4b4b64, limit=1024)
+#6  cch::durable::MemoryStorage::scan_conversations (this=0x7fff048507a0, limit=1024)
+#7  cch::durable::Harness::Impl::reconcile (this=0x55bf7dd90710)
+#8  cch::durable::Harness::Impl::schedule_step (this=0x55bf7dd90710)
+#9  cch::durable::Harness::Impl::run_worker (this=0x55bf7dd90710, stop=...)
+#10 cch::durable::Harness::Impl::init()::lambda(std::stop_token)::operator()
+
+LWP 161500 (main thread), the listener teardown that is recursing on the same stack:
+
+#0  std::thread::join () from /usr/lib/libstdc++.so.6
+#1  std::jthread::join (this=0x55bf7dd909f8)
+#2  cch::durable::Harness::Impl::shutdown (this=0x55bf7dd90710)
+#3  cch::durable::Harness::~Harness (this=0x55bf7dd8eb90)
+#4  std::default_delete<cch::durable::Harness>::operator() (...)
+
+LWP 161503 (the probe's phase thread), still spinning in its yield loop:
+
+#0  sched_yield ()
+#1  std::this_thread::yield ()
+#2  operator() (__closure=0x55bf7dd7edd8, runtime=...)
+#3  ... CATCH2_INTERNAL_TEST_0()::lambda(const TaskRecord&, TaskRuntime&) ...
+
+Reading: the worker is inside a step that reads the test frame's MemoryStorage
+(`this=0x7fff048507a0` is main's stack; the StorageState pointer inside it,
+`0x7f065e4b4b64`, is a thread-stack address written over the frame by the
+listener's recursion). The mutex word `0xe84d8b48e0758b48` is x86-64
+instruction bytes, not a mutex. The guard's teardown runs while the abandoned
+frame is still live for the worker, so `testCaseEnded` cleanup does not
+establish the issue's safety property.

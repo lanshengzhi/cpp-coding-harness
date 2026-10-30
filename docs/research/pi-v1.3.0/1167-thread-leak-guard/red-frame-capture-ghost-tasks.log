@@ -1,0 +1,53 @@
+Filters: [issue1167]
+Randomness seeded to: 2030575515
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+a failing assertion with a live harness phase is cleaned up before the next
+case
+-------------------------------------------------------------------------------
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:90
+...............................................................................
+
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:129: FAILED:
+  REQUIRE( events == std::vector<std::string>{"phase-ran", "deliberate-red"} )
+with expansion:
+  { "phase-ran" }
+  ==
+  { "phase-ran", "deliberate-red" }
+
+[1167diag] testCaseEnded: 1 scope(s) still registered
+[1167diag] ~LiveHarness this=0x5572380f40d0
+[1167diag] shutdown enter this=0x5572380f37f0 closed=0
+[1167diag] shutdown exit this=0x5572380f37f0
+[1167diag] shutdown enter this=0x5572380f37f0 closed=1
+[1167diag] shutdown enter this=0x5572380f4840 closed=0
+[1167diag] shutdown exit this=0x5572380f4840
+[1167diag] ~LiveHarness this=0x5572380c05c0
+[1167diag] shutdown enter this=0x5572380f4840 closed=1
+[1167diag] shutdown enter this=0x5572380f4840 closed=1
+-------------------------------------------------------------------------------
+the case after a failed harness assertion runs with no leaked threads
+-------------------------------------------------------------------------------
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:142
+...............................................................................
+
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:181: warning:
+  surviving task: tid=203350 state=R starttime=37851646 main_starttime=37851646
+
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:181: warning:
+  surviving task: tid=203353 state=R starttime=37851648 main_starttime=37851646
+
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:185: FAILED:
+  REQUIRE( thread_count_from_proc() == g_threads_at_startup )
+with expansion:
+  2 == 1
+
+[1167diag] testCaseEnded: 0 scope(s) still registered
+===============================================================================
+test cases:  2 |  0 passed | 2 failed
+assertions: 12 | 10 passed | 2 failed
+

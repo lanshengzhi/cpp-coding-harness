@@ -121,6 +121,13 @@ struct Gate {
         std::unique_lock lock(mutex);
         return cv.wait(lock, token, [this] { return open; });
     }
+
+    /// Bounded variant for waits that have no stop token: a failed assertion
+    /// before the release must not hang the teardown join (§11.10).
+    [[nodiscard]] bool wait_for(std::chrono::seconds budget) {
+        std::unique_lock lock(mutex);
+        return cv.wait_for(lock, budget, [this] { return open; });
+    }
 };
 
 /// Park the current phase until the invocation is stopped. Mirrors the frozen
@@ -909,7 +916,12 @@ TEST_CASE("a stale reservation skips a task whose abort terminal already landed"
             [&migration_gate, &migration_entered](const chord::Json& input, const chord::Json& checkpoint, std::int64_t)
                     -> support::Expected<MigratedTaskState> {
                 migration_entered.store(true, std::memory_order_release);
-                (void)migration_gate.wait(std::stop_token{});
+                // Park the migration inside the stale reservation window.
+                // Liveness backstop (§11.10): this wait has no stop token, so
+                // a generous bound keeps a failed assertion before the release
+                // below from hanging the teardown join; an early unpark fails
+                // the discriminating assertions instead of hiding a hang.
+                static_cast<void>(migration_gate.wait_for(std::chrono::seconds(60)));
                 return MigratedTaskState{.input = input, .checkpoint = checkpoint};
             }));
     ext_v2.tasks.push_back(completed_terminal_task("audit.reservation-target", 1));
