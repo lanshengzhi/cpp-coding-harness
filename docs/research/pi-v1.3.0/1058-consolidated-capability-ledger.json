@@ -148,11 +148,11 @@
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "13d4ccac208a6f0bd84d029d2c14b07b231b3487a5a3b65150f71c790a354309"
+            "sha256": "24231c9c3ec4d7ef798839bb877540502077eb10427bfd2fbef5757cc2f24f45"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "4a4d3788f4b7d026387988f818b0028ac4115bb04fb89a862600c9126ece01e9"
+            "sha256": "3104e58364af5d3ded185227493e8330d0622e0eed959541cdde0419d6a93c54"
           },
           {
             "path": "src/support/Json.cpp",
@@ -259,8 +259,8 @@
             "--output-junit",
             "/tmp/cch-1104-revalidation-1101.xml"
           ],
-          "testedRevision": "adcaaa809b163d4bf84f6208fd652b7aad8f6b9e",
-          "recordedAt": "2026-10-29T19:40:00Z",
+          "testedRevision": "13b04ae6e3b25aa8f271a40f7a7265c54a1221ff",
+          "recordedAt": "2026-10-30T00:17:22Z",
           "selected": 14,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1085-revalidation-1101.xml",
@@ -653,7 +653,7 @@
           },
           {
             "path": "src/coding_agent/AgentSessionExecution.cpp",
-            "sha256": "fdc1d1ee137754a23c554a2191898e1edde27b69c35baa4f147676f818e03746"
+            "sha256": "5747f23c6ce0cc36dd8d08939bb2895e8d253c20b309e8ac8bbde5f7a8e108ed"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -665,11 +665,11 @@
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "13d4ccac208a6f0bd84d029d2c14b07b231b3487a5a3b65150f71c790a354309"
+            "sha256": "24231c9c3ec4d7ef798839bb877540502077eb10427bfd2fbef5757cc2f24f45"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "4a4d3788f4b7d026387988f818b0028ac4115bb04fb89a862600c9126ece01e9"
+            "sha256": "3104e58364af5d3ded185227493e8330d0622e0eed959541cdde0419d6a93c54"
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.cpp",
@@ -830,12 +830,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml"
           ],
-          "testedRevision": "c1f412b1bbfc2868e41c1607a44d8ab5ee333502",
-          "recordedAt": "2026-10-29T23:19:27Z",
+          "testedRevision": "13b04ae6e3b25aa8f271a40f7a7265c54a1221ff",
+          "recordedAt": "2026-10-30T00:16:54Z",
           "selected": 12,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml",
-            "sha256": "ee7412be14e9cb5b0624f5b0d0db1cab4dfc452d6b6565c045bfec18e2b5c049"
+            "sha256": "77c1d96dd757e6afb49ac2ec36a355baebeeec24011481d650454e1522b4c3f8"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27"

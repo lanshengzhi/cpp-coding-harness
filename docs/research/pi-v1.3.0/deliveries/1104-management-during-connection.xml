@@ -6,135 +6,135 @@
 	skipped="0"
 	hostname=""
 	time="0"
-	timestamp="2026-10-30T08:19:03"
+	timestamp="2026-10-30T09:16:54"
 	>
-	<testcase name="a factory error is recorded as the server message, never a veto on start" classname="a factory error is recorded as the server message, never a veto on start" time="0.0201011" status="run">
+	<testcase name="a factory error is recorded as the server message, never a veto on start" classname="a factory error is recorded as the server message, never a veto on start" time="0.0159169" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "a factory error is recorded as the server message\, never a veto on start"
-Randomness seeded to: 414569198
+Randomness seeded to: 1001957077
 ===============================================================================
 All tests passed (10 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="agent session creation returns while a gated MCP server connects and the manager stays manageable" classname="agent session creation returns while a gated MCP server connects and the manager stays manageable" time="0.0381766" status="run">
+	<testcase name="agent session creation returns while a gated MCP server connects and the manager stays manageable" classname="agent session creation returns while a gated MCP server connects and the manager stays manageable" time="0.0442255" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "agent session creation returns while a gated MCP server connects and the manager stays manageable"
-Randomness seeded to: 1618562874
+Randomness seeded to: 231911989
 ===============================================================================
 All tests passed (38 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="close during a pending connect returns promptly and drops the late connection" classname="close during a pending connect returns promptly and drops the late connection" time="0.0207654" status="run">
+	<testcase name="close during a pending connect returns promptly and drops the late connection" classname="close during a pending connect returns promptly and drops the late connection" time="0.0163969" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "close during a pending connect returns promptly and drops the late connection"
-Randomness seeded to: 2485961158
+Randomness seeded to: 2359401610
 ===============================================================================
 All tests passed (14 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="disabling a server while its connect is in flight drops the late connection" classname="disabling a server while its connect is in flight drops the late connection" time="0.0217405" status="run">
+	<testcase name="disabling a server while its connect is in flight drops the late connection" classname="disabling a server while its connect is in flight drops the late connection" time="0.0277677" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "disabling a server while its connect is in flight drops the late connection"
-Randomness seeded to: 3166526677
+Randomness seeded to: 1431408076
 ===============================================================================
 All tests passed (17 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="enabling a still-connecting server does not launch a second connect" classname="enabling a still-connecting server does not launch a second connect" time="0.0207901" status="run">
+	<testcase name="enabling a still-connecting server does not launch a second connect" classname="enabling a still-connecting server does not launch a second connect" time="0.0184447" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "enabling a still-connecting server does not launch a second connect"
-Randomness seeded to: 4189153325
+Randomness seeded to: 2268535884
 ===============================================================================
 All tests passed (17 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged" classname="on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged" time="0.0197498" status="run">
+	<testcase name="on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged" classname="on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged" time="0.0177567" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged"
-Randomness seeded to: 3553486526
+Randomness seeded to: 2801800115
 ===============================================================================
 All tests passed (13 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="on_turn_start reconnects a server signed in through another process" classname="on_turn_start reconnects a server signed in through another process" time="0.0213859" status="run">
+	<testcase name="on_turn_start reconnects a server signed in through another process" classname="on_turn_start reconnects a server signed in through another process" time="0.0183717" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "on_turn_start reconnects a server signed in through another process"
-Randomness seeded to: 226696123
+Randomness seeded to: 264456011
 ===============================================================================
 All tests passed (21 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="sign-in completes for one server while another is still connecting" classname="sign-in completes for one server while another is still connecting" time="0.0216655" status="run">
+	<testcase name="sign-in completes for one server while another is still connecting" classname="sign-in completes for one server while another is still connecting" time="0.0210868" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "sign-in completes for one server while another is still connecting"
-Randomness seeded to: 181731218
+Randomness seeded to: 2361496183
 ===============================================================================
 All tests passed (29 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="start returns while a gated server is still connecting" classname="start returns while a gated server is still connecting" time="0.0205895" status="run">
+	<testcase name="start returns while a gated server is still connecting" classname="start returns while a gated server is still connecting" time="0.0176849" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "start returns while a gated server is still connecting"
-Randomness seeded to: 595879395
+Randomness seeded to: 4246979511
 ===============================================================================
 All tests passed (18 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="wait_for_direct_servers waits only for direct exposure, bounded and latched" classname="wait_for_direct_servers waits only for direct exposure, bounded and latched" time="0.10033" status="run">
+	<testcase name="wait_for_direct_servers waits only for direct exposure, bounded and latched" classname="wait_for_direct_servers waits only for direct exposure, bounded and latched" time="0.104121" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "wait_for_direct_servers waits only for direct exposure\, bounded and latched"
-Randomness seeded to: 1973212913
+Randomness seeded to: 1491525833
 ===============================================================================
 All tests passed (29 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="wait_for_pending_connects blocks until the gated connect lands" classname="wait_for_pending_connects blocks until the gated connect lands" time="0.0174101" status="run">
+	<testcase name="wait_for_pending_connects blocks until the gated connect lands" classname="wait_for_pending_connects blocks until the gated connect lands" time="0.0182319" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "wait_for_pending_connects blocks until the gated connect lands"
-Randomness seeded to: 2945035533
+Randomness seeded to: 3012871364
 ===============================================================================
 All tests passed (10 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="/mcp panel stays live while a server connect is pending and subcommands await the settle" classname="/mcp panel stays live while a server connect is pending and subcommands await the settle" time="0.12181" status="run">
+	<testcase name="/mcp panel stays live while a server connect is pending and subcommands await the settle" classname="/mcp panel stays live while a server connect is pending and subcommands await the settle" time="0.135062" status="run">
 		<properties>
 			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec;tui"/>
 		</properties>
 		<system-out>Filters: "/mcp panel stays live while a server connect is pending and subcommands await the settle"
-Randomness seeded to: 1984071914
+Randomness seeded to: 3245605974
 ===============================================================================
 All tests passed (23 assertions in 1 test case)
 
