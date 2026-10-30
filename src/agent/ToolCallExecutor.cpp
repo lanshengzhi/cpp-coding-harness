@@ -312,8 +312,8 @@ struct SettledToolCall {
     const auto execution_started_at = std::chrono::steady_clock::now();
     auto executed = co_await execute_with_update_lifetime(
             tool, invocation, options.stop_token, std::move(update_sink), update_gate);
-    release_concurrency();
     const auto duration_ms = measured_duration_ms(execution_started_at);
+    release_concurrency();
 
     AsyncToolExecutionResult outcome;
     if (!executed) {
@@ -353,6 +353,7 @@ struct SettledToolCall {
                         permits.after_hook);
         if (!after_result) {
             settled.tool_result = error_tool_result(call, bounded_failure_text(after_result.error()));
+            settled.tool_result.duration_ms = duration_ms;
             settled.call_terminate = false;
         } else {
             apply_after_result(

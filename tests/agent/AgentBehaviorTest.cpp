@@ -3542,6 +3542,13 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
     const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
     CHECK(alpha_result.is_error);
     CHECK(beta_result.is_error);
+    CHECK_FALSE(alpha_result.duration_ms.has_value());
+    CHECK_FALSE(beta_result.duration_ms.has_value());
+    for (const auto& event : run.events) {
+        if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            CHECK_FALSE(end->duration_ms.has_value());
+        }
+    }
     CHECK(alpha_result.tool_name == "alpha");
     CHECK(beta_result.tool_name == "beta");
     CHECK(ai::text_from_content(alpha_result.content).find("output token limit") != std::string::npos);

@@ -513,6 +513,50 @@ TEST_CASE("an afterToolCall override keeps the recorded duration", "[agent][tool
     CHECK(*end->duration_ms == *run.result->results[0].duration_ms);
 }
 
+TEST_CASE("an unknown tool has no execution duration", "[agent][tool-executor][issue1106][spec]") {
+    agent::ToolRegistry registry;
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto run = run_executor(executor, assistant_with_calls({make_call("missing-1", "missing")}));
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(run.result->results[0].is_error);
+    CHECK_FALSE(run.result->results[0].duration_ms.has_value());
+    CHECK(count_events<agent::ToolExecutionEndEvent>(run.events) == 1);
+    for (const auto& event : run.events) {
+        if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            CHECK_FALSE(end->duration_ms.has_value());
+        }
+    }
+}
+
+TEST_CASE("a failing after hook retains the executed tool duration", "[agent][tool-executor][issue1106][spec]") {
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()});
+    REQUIRE(registry.add(std::move(tool.tool)));
+
+    agent::AfterToolCallHook after_hook = [](const agent::AfterToolCallContext&, std::stop_token) {
+        return support::AsyncResult<agent::AfterToolCallResult>{
+                std::unexpected(support::make_error(support::ErrorCode::Tool, "after hook failed"))};
+    };
+    agent::ToolCallExecutorOptions options;
+    options.after_tool_call = &after_hook;
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto run = run_executor(executor, assistant_with_calls({make_call("call-1", "read_file")}));
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    const auto& result = run.result->results[0];
+    CHECK(result.is_error);
+    CHECK(result.duration_ms.has_value());
+    const agent::ToolExecutionEndEvent* end = nullptr;
+    for (const auto& event : run.events) {
+        if (const auto* finished = std::get_if<agent::ToolExecutionEndEvent>(&event)) end = finished;
+    }
+    REQUIRE(end != nullptr);
+    CHECK(end->duration_ms == result.duration_ms);
+}
+
 TEST_CASE("a blocked call records no duration because it never executed", "[agent][tool-executor][issue812][spec]") {
     // audit-1047 `executed success, thrown failure, blocked and unknown calls
     // keep distinct duration presence`: a blocked call's result and end event
@@ -1506,6 +1550,12 @@ TEST_CASE("sequential cancellation during a hook does not start later calls",
     REQUIRE(execution.result->results.size() == 1);
     CHECK(execution.result->results[0].tool_call_id == "call-1");
     CHECK(execution.result->results[0].is_error);
+    CHECK_FALSE(execution.result->results[0].duration_ms.has_value());
+    for (const auto& event : execution.events) {
+        if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            CHECK_FALSE(end->duration_ms.has_value());
+        }
+    }
     CHECK(count_events<agent::ToolExecutionStartEvent>(execution.events) == 1);
     CHECK(count_events<agent::ToolExecutionEndEvent>(execution.events) == 1);
     check_tool_execution_events_strictly_paired(execution.events);
@@ -1547,6 +1597,13 @@ TEST_CASE("bounded parallel cancellation leaves queued tool capabilities unstart
         CHECK(execution.result->results[index].tool_call_id ==
               "call-" + std::to_string(index + 1));
         CHECK(execution.result->results[index].is_error);
+        CHECK(execution.result->results[index].duration_ms.has_value() == (index < 2));
+    }
+    for (const auto& event : execution.events) {
+        if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event)) {
+            const bool executed = end->tool_call_id == "call-1" || end->tool_call_id == "call-2";
+            CHECK(end->duration_ms.has_value() == executed);
+        }
     }
     check_tool_execution_events_strictly_paired(execution.events);
 }
