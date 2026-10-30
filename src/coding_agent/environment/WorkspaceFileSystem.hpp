@@ -49,6 +49,11 @@ public:
 
     // Pi-shaped filesystem operations.
     [[nodiscard]] std::expected<std::string, FileError> absolutePath(const std::string& path) const;
+    /// pi `resolveCliPaths` + `resolvePath(p, cwd, { trim: true })` for
+    /// explicit CLI resource paths (#1114): JavaScript trim, `~` expansion,
+    /// POSIX `file://` conversion, a preserved leading `@`, and no Unicode
+    /// space normalization. Relative paths resolve against the workspace root.
+    [[nodiscard]] std::expected<std::string, FileError> resolveResourcePath(const std::string& path) const;
     [[nodiscard]] std::expected<std::string, FileError> joinPath(const std::vector<std::string>& parts) const;
     [[nodiscard]] std::expected<std::string, FileError> readTextFile(
             const std::string& path, std::stop_token stop_token = {}) const;
@@ -104,7 +109,19 @@ private:
     /// against $HOME), then absolute paths are honored anywhere after lexical
     /// normalization; relative paths resolve against the workspace root with
     /// ".." handled by normalization rather than rejection. Does not require
-    /// the path to exist.
+    /// the path to exist. `PathResolutionOptions` selects the resource-flag
+    /// variant (#1114) without duplicating the resolution core.
+    struct PathResolutionOptions {
+        bool trim{false};
+        bool expand_tilde{true};
+        bool strip_at_prefix{true};
+        bool normalize_unicode_spaces{true};
+        bool convert_file_url{false};
+        bool allow_empty{false};
+    };
+
+    [[nodiscard]] support::Expected<std::filesystem::path> resolve_path(
+            const std::string& requested, const PathResolutionOptions& options) const;
     [[nodiscard]] support::Expected<std::filesystem::path> resolve_to_cwd(const std::string& requested) const;
 
     [[nodiscard]] support::Expected<support::UniqueFd> open_workspace_root() const;

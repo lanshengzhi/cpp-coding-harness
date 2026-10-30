@@ -260,7 +260,7 @@ struct ResolvedSymlinkTarget {
     // description to load.
     const bool is_declared_skill = std::filesystem::path{display_file_path}.filename() == "SKILL.md";
 
-    const auto read_path = async_read_path(fs, read_file_path);
+    const auto read_path = read_file_path;
     const auto absolute_path = async_absolute_path(fs, display_file_path);
     auto content = co_await std::move(fs.readTextFile(read_path, stop_token));
     if (!content) {
@@ -429,7 +429,7 @@ struct ResolvedSymlinkTarget {
         if (stop_token.stop_requested()) {
             co_return std::unexpected(async_aborted_error(path));
         }
-        auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, path), stop_token));
+        auto canonical = co_await std::move(fs.canonicalPath(path, stop_token));
         if (!canonical) {
             if (async_aborted(canonical.error())) {
                 co_return std::unexpected(std::move(canonical.error()));
@@ -449,7 +449,7 @@ struct ResolvedSymlinkTarget {
         if (entry.name != "SKILL.md") {
             continue;
         }
-        std::string actual_file_path = async_read_path(fs, entry.path);
+        std::string actual_file_path = entry.path;
         if (entry.kind == harness::FileKind::Symlink) {
             auto resolved = co_await std::move(to_async_result(resolve_symlink_target_task(
                     fs, std::move(actual_file_path), entry.path, result.diagnostics, stop_token)));
@@ -499,7 +499,7 @@ struct ResolvedSymlinkTarget {
             continue;
         }
         harness::FileKind kind = entry.kind;
-        std::string actual_entry_path = async_read_path(fs, entry.path);
+        std::string actual_entry_path = entry.path;
         if (kind == harness::FileKind::Symlink) {
             auto resolved = co_await std::move(to_async_result(resolve_symlink_target_task(
                     fs, std::move(actual_entry_path), entry.path, result.diagnostics, stop_token)));
@@ -571,7 +571,7 @@ struct ResolvedSymlinkTarget {
         // so an explicit path outside the workspace root passes through
         // unchanged rather than being skipped.
         const auto dir_path = async_read_path(fs, dir_spec.path);
-        auto info = co_await std::move(fs.fileInfo(dir_path, stop_token));
+        auto info = co_await std::move(fs.fileInfo(dir_spec.path, stop_token));
         if (!info) {
             if (async_aborted(info.error())) {
                 co_return std::unexpected(std::move(info.error()));
@@ -589,10 +589,10 @@ struct ResolvedSymlinkTarget {
         }
 
         harness::FileKind kind = info->kind;
-        std::string spec_path = dir_path;
+        std::string spec_path = dir_spec.path;
         if (kind == harness::FileKind::Symlink) {
-            auto resolved = co_await std::move(to_async_result(resolve_symlink_target_task(
-                    fs, async_read_path(fs, spec_path), dir_path, result.diagnostics, stop_token)));
+            auto resolved = co_await std::move(to_async_result(
+                    resolve_symlink_target_task(fs, spec_path, dir_path, result.diagnostics, stop_token)));
             if (!resolved) {
                 co_return std::unexpected(std::move(resolved.error()));
             }
@@ -620,7 +620,7 @@ struct ResolvedSymlinkTarget {
             if (!file_result) {
                 co_return std::unexpected(std::move(file_result.error()));
             }
-            auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, spec_path), stop_token));
+            auto canonical = co_await std::move(fs.canonicalPath(spec_path, stop_token));
             if (!canonical && async_aborted(canonical.error())) {
                 co_return std::unexpected(std::move(canonical.error()));
             }
@@ -646,7 +646,7 @@ struct ResolvedSymlinkTarget {
             co_return std::unexpected(std::move(dir_result.error()));
         }
         for (auto& skill : dir_result->skills) {
-            auto canonical = co_await std::move(fs.canonicalPath(async_read_path(fs, skill.filePath), stop_token));
+            auto canonical = co_await std::move(fs.canonicalPath(skill.filePath, stop_token));
             if (!canonical && async_aborted(canonical.error())) {
                 co_return std::unexpected(std::move(canonical.error()));
             }

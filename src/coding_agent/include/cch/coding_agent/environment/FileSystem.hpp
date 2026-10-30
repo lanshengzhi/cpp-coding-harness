@@ -127,6 +127,17 @@ public:
     [[nodiscard]] virtual support::AsyncResult<std::string, FileError> absolutePath(
             std::string path, std::stop_token stop_token) = 0;
 
+    /// Resolve an explicit CLI resource path as pi's `resolveCliPaths` and
+    /// `DefaultResourceLoader.resolveResourcePath` do (#1114): trim
+    /// leading/trailing JavaScript whitespace, expand `~`, convert a POSIX
+    /// `file://` URL, and preserve a leading `@` as a literal path character.
+    /// Unicode space variants are not normalized. Relative paths resolve
+    /// against the workspace root and absolute paths are honored after lexical
+    /// normalization. Unlike the tool `resolveToCwd` operation above, this is
+    /// the resource-flag modifier set, not the tool-path convention.
+    [[nodiscard]] virtual support::AsyncResult<std::string, FileError> resolveResourcePath(
+            std::string path, std::stop_token stop_token) = 0;
+
     /// Join path segments without requiring the result to exist.
     [[nodiscard]] virtual support::AsyncResult<std::string, FileError> joinPath(
             std::vector<std::string> parts, std::stop_token stop_token) = 0;

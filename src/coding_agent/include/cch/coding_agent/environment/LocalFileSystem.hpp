@@ -27,6 +27,8 @@ public:
 
     [[nodiscard]] support::AsyncResult<std::string, FileError> absolutePath(
             std::string path, std::stop_token stop_token) override;
+    [[nodiscard]] support::AsyncResult<std::string, FileError> resolveResourcePath(
+            std::string path, std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<std::string, FileError> joinPath(
             std::vector<std::string> parts, std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<std::string, FileError> readTextFile(

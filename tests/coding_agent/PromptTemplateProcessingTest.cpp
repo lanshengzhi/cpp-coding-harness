@@ -82,11 +82,44 @@ TEST_CASE("prompt expansion replaces out-of-range template positions with empty 
               {{"cmd", std::nullopt, "Arg: [$1][$2]", std::nullopt, "", {}}}) == "Arg: [one][]");
 }
 
+TEST_CASE("prompt expansion retains quoted empty positions from the frozen baseline",
+        "[coding_agent][prompt][expand][issue1114]") {
+    const std::vector<coding_agent::PromptTemplate> templates = {
+            {"review", std::nullopt, "Review $2. Focus: ${1:-correctness}.", std::nullopt, "", {}},
+    };
+    CHECK(process_template("/review \"\" src/index.ts", templates) == "Review src/index.ts. Focus: correctness.");
+    CHECK(process_template("/review '' src/index.ts", templates) == "Review src/index.ts. Focus: correctness.");
+}
+
+TEST_CASE("prompt expansion applies collection defaults to joined arguments",
+        "[coding_agent][prompt][expand][issue1114]") {
+    const std::vector<coding_agent::PromptTemplate> templates = {
+            {"args", std::nullopt, "${@:-fallback}|${ARGUMENTS:-fallback}", std::nullopt, "", {}},
+    };
+    CHECK(process_template("/args", templates) == "fallback|fallback");
+    CHECK(process_template("/args ''", templates) == "fallback|fallback");
+    CHECK(process_template("/args '' item", templates) == " item| item");
+}
+
 TEST_CASE("prompt expansion matches pi positional and slice edge cases", "[coding_agent][prompt][expand][spec]") {
-    CHECK(process_template(
-              "/args a b '' d e f g h i j ten",
-              {{"args", std::nullopt, "[$0][$10][${@:0}][${@:2:0}][${11:-fallback}]", std::nullopt, "", {}}}) ==
-          "[][ten][a b d e f g h i j ten][][fallback]");
+    CHECK(process_template("/args a b '' d e f g h i j ten",
+                  {{"args", std::nullopt, "[$0][$10][${@:0}][${@:2:0}][${11:-fallback}]", std::nullopt, "", {}}}) ==
+            "[][j][a b  d e f g h i j ten][][ten]");
+}
+
+TEST_CASE("prompt expansion matches the frozen positional collection and default composite",
+        "[coding_agent][prompt][expand][issue1114][spec]") {
+    // fixtures/pi-v1.3.0/audit-1049/prompt-expansion.json, scenario
+    // "positional, collection and default substitution forms".
+    CHECK(process_template("/args '' src/index.ts",
+                  {{"args",
+                          std::nullopt,
+                          "$1|$2|$@|$ARGUMENTS|${1:-x}|${2:-y}|${@:2}|${@:2:1}|${@:-z}|${ARGUMENTS:-z}",
+                          std::nullopt,
+                          "",
+                          {}}}) ==
+            "|src/index.ts| src/index.ts| src/index.ts|x|src/index.ts|src/index.ts|src/index.ts| "
+            "src/index.ts| src/index.ts");
 }
 
 TEST_CASE("prompt expansion treats mixed whitespace as template argument separators",

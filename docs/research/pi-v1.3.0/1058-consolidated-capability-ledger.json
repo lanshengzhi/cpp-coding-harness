@@ -356,7 +356,7 @@
           },
           {
             "path": "docs/agents/architecture.md",
-            "sha256": "65daa628e02110f365a6cfd3fbca52559675aaf412c806173323b1c996977dd2"
+            "sha256": "3b8fb4e49ea48f2de12a4531e7496cf852726cd1549c301a477a0f944653fd1d"
           },
           {
             "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
@@ -693,7 +693,7 @@
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.cpp",
-            "sha256": "979b056e3589fa2195c564830bafb65a2031d80e75ea0876c6d32f272a54d03e"
+            "sha256": "1b06c1b8d52d0efc08b53c15565dad013bd428704f1bfedc7834b889c0a0aa87"
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.hpp",
@@ -1130,10 +1130,10 @@
         "partial": 4
       },
       "cch_coding_agent": {
-        "implemented": 76,
-        "missing": 20,
+        "implemented": 80,
+        "missing": 19,
         "not-applicable": 6,
-        "partial": 57
+        "partial": 54
       },
       "cch_durable": {
         "implemented": 6,
@@ -1158,10 +1158,10 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1023,
-      "missing": 213,
+      "implemented": 1027,
+      "missing": 212,
       "not-applicable": 18,
-      "partial": 210
+      "partial": 207
     },
     "verification": {
       "not-applicable": 28,
@@ -16577,7 +16577,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "`resource-loader.ts:loadContextFileFromDir` and `loadProjectContextFiles`, consumed by `DefaultResourceLoader.getAgentsFiles` and the system-prompt project-context section.",
@@ -16611,7 +16611,7 @@
           "ticket": "1049",
           "rowId": "context-file-candidate-order",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
@@ -18961,7 +18961,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "`prompt-templates.ts:parseCommandArgs` and `expandPromptTemplate`; the session consumes the expansion in `AgentSession.prompt` before the model call.",
@@ -18997,7 +18997,7 @@
           "ticket": "1049",
           "rowId": "prompt-quoted-empty",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
@@ -19011,7 +19011,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "`prompt-templates.ts:substituteArgs`; the expanded text becomes the user message in `AgentSession.prompt`.",
@@ -19046,7 +19046,7 @@
           "ticket": "1049",
           "rowId": "prompt-substitution-forms",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
@@ -19588,7 +19588,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "`utils/paths.ts:resolvePath,isLocalPath` and `main.ts:resolveCliPaths` for `--extensions/--skills/--prompt-templates/--themes`; `InitialPrompt` separately handles `@file` and tilde expansion.",
@@ -19623,7 +19623,7 @@
           "ticket": "1049",
           "rowId": "resource-path-modifiers",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }

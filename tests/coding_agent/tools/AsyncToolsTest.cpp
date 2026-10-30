@@ -46,6 +46,10 @@ public:
     support::AsyncResult<std::string, harness::FileError> absolutePath(std::string path, std::stop_token) override {
         return ready_file(std::move(path));
     }
+    support::AsyncResult<std::string, harness::FileError> resolveResourcePath(
+            std::string path, std::stop_token) override {
+        return ready_file(std::move(path));
+    }
     support::AsyncResult<std::string, harness::FileError> joinPath(std::vector<std::string>, std::stop_token) override {
         return ready_file(std::string{});
     }
