@@ -1,0 +1,215 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1093",
+  "family": "audit-1093",
+  "capturedAt": "2026-10-27T05:47:01.309Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/types.ts:CodemodeRun.finished,CodemodeRun.result",
+    "packages/codemode/src/runtime/execution.ts:Execution.finish,CodemodeRun.finished,CodemodeRun.deliver",
+    "packages/codemode/test/deterministic.test.ts:ends with an error the script cannot catch when the caller aborts,is finished once it has its outcome"
+  ],
+  "scenarios": [
+    {
+      "name": "the outcome is visible before the result settles when the caller aborts",
+      "inputs": {
+        "script": "try { await tools.wait(1); } catch { text(\"caught\"); } text(\"after\");",
+        "cancellation": "after start, while the call waits",
+        "abortMessage": "diverged",
+        "lateAnswer": {
+          "seq": 1,
+          "now": 1768471200000,
+          "id": 1,
+          "outcome": {
+            "ok": true,
+            "value": null
+          }
+        }
+      },
+      "expected": {
+        "finishedWhileWaiting": false,
+        "finishedWhenAbortReturns": true,
+        "settleContinuationWhenAbortReturns": false,
+        "deliverAfterFinishThrew": false,
+        "deliverAfterFinishReturnedUndefined": true,
+        "finishedAfterLateAnswer": true,
+        "result": {
+          "ok": false,
+          "error": {
+            "kind": "aborted",
+            "message": "diverged"
+          },
+          "output": [],
+          "calls": [
+            {
+              "name": "wait",
+              "status": "cancelled",
+              "durationPresent": true
+            }
+          ]
+        }
+      },
+      "observed": {
+        "finishedWhileWaiting": false,
+        "finishedWhenAbortReturns": true,
+        "settleContinuationWhenAbortReturns": false,
+        "deliverAfterFinishThrew": false,
+        "deliverAfterFinishReturnedUndefined": true,
+        "finishedAfterLateAnswer": true,
+        "result": {
+          "ok": false,
+          "error": {
+            "kind": "aborted",
+            "message": "diverged"
+          },
+          "output": [],
+          "calls": [
+            {
+              "name": "wait",
+              "status": "cancelled",
+              "durationPresent": true
+            }
+          ]
+        }
+      },
+      "normalizations": [
+        "pi decides the outcome synchronously in the AbortSignal listener, on the thread that calls abort(); the contract pins the visibility ordering (finished strictly before the result settles), not the thread that decides — another caller may observe the decision on the run's own thread",
+        "the settle-continuation witness is a .then callback on the result promise; the promise may already be resolved while the callback has not run, so the witness records whether the caller's continuation ran, not whether the promise settled",
+        "wall-clock call durations are compared as a presence flag; the deterministic observations do not pin duration values",
+        "recorded output and error text are the scenario's own markers"
+      ]
+    },
+    {
+      "name": "a pre-aborted run is finished when start returns",
+      "inputs": {
+        "script": "await tools.wait(1);",
+        "cancellation": "the AbortSignal is already aborted when start runs",
+        "abortMessage": "diverged",
+        "lateAnswer": {
+          "seq": 1,
+          "now": 1768471200000,
+          "id": 1,
+          "outcome": {
+            "ok": true,
+            "value": null
+          }
+        }
+      },
+      "expected": {
+        "finishedAtStart": true,
+        "settleContinuationAtStart": false,
+        "deliverAfterFinishThrew": false,
+        "deliverAfterFinishReturnedUndefined": true,
+        "finishedAfterLateAnswer": true,
+        "result": {
+          "ok": false,
+          "error": {
+            "kind": "aborted",
+            "message": "diverged"
+          },
+          "output": [],
+          "calls": []
+        }
+      },
+      "observed": {
+        "finishedAtStart": true,
+        "settleContinuationAtStart": false,
+        "deliverAfterFinishThrew": false,
+        "deliverAfterFinishReturnedUndefined": true,
+        "finishedAfterLateAnswer": true,
+        "result": {
+          "ok": false,
+          "error": {
+            "kind": "aborted",
+            "message": "diverged"
+          },
+          "output": [],
+          "calls": []
+        }
+      },
+      "normalizations": [
+        "pi decides the outcome synchronously in the AbortSignal listener, on the thread that calls abort(); the contract pins the visibility ordering (finished strictly before the result settles), not the thread that decides — another caller may observe the decision on the run's own thread",
+        "the settle-continuation witness is a .then callback on the result promise; the promise may already be resolved while the callback has not run, so the witness records whether the caller's continuation ran, not whether the promise settled",
+        "wall-clock call durations are compared as a presence flag; the deterministic observations do not pin duration values",
+        "recorded output and error text are the scenario's own markers"
+      ]
+    },
+    {
+      "name": "finished reads false while a call waits and true when the result continuation runs",
+      "inputs": {
+        "script": "await tools.wait(1); return 2;",
+        "answer": {
+          "seq": 1,
+          "now": 1768471200000,
+          "id": 1,
+          "outcome": {
+            "ok": true,
+            "value": 2
+          }
+        },
+        "lateAnswer": {
+          "seq": 2,
+          "now": 1768471200000,
+          "id": 1,
+          "outcome": {
+            "ok": true,
+            "value": null
+          }
+        }
+      },
+      "expected": {
+        "finishedWhileWaiting": false,
+        "finishedAtSettleContinuation": true,
+        "deliverAfterFinishThrew": false,
+        "deliverAfterFinishReturnedUndefined": true,
+        "finishedAfterLateAnswer": true,
+        "result": {
+          "ok": true,
+          "error": null,
+          "output": [],
+          "calls": [
+            {
+              "name": "wait",
+              "status": "ok",
+              "durationPresent": true
+            }
+          ]
+        }
+      },
+      "observed": {
+        "finishedWhileWaiting": false,
+        "finishedAtSettleContinuation": true,
+        "deliverAfterFinishThrew": false,
+        "deliverAfterFinishReturnedUndefined": true,
+        "finishedAfterLateAnswer": true,
+        "result": {
+          "ok": true,
+          "error": null,
+          "output": [],
+          "calls": [
+            {
+              "name": "wait",
+              "status": "ok",
+              "durationPresent": true
+            }
+          ]
+        }
+      },
+      "normalizations": [
+        "pi decides the outcome synchronously in the AbortSignal listener, on the thread that calls abort(); the contract pins the visibility ordering (finished strictly before the result settles), not the thread that decides — another caller may observe the decision on the run's own thread",
+        "the settle-continuation witness is a .then callback on the result promise; the promise may already be resolved while the callback has not run, so the witness records whether the caller's continuation ran, not whether the promise settled",
+        "wall-clock call durations are compared as a presence flag; the deterministic observations do not pin duration values",
+        "recorded output and error text are the scenario's own markers"
+      ]
+    }
+  ]
+}

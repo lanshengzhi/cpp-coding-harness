@@ -173,6 +173,10 @@
           "sha256": "cc41501d1ae9156c801529245829286055a12cb0c58a45e769d5986625a39541"
         },
         {
+          "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "sha256": "ef64465cd243b17a870c2530dcf88ca88a43597ac0b93e97dfe8241b53d72886"
+        },
+        {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
           "sha256": "983dc1e522eb3dd51d7128964b7b0316754e87f8d3ba26e567a6c5685f4e8477"
         },
@@ -346,7 +350,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "5e1dd1d6c09bab48f2ba9e7a787c8262b070128fe6424f15d1fa04a23ab28467"
+          "sha256": "c91528681340e3eefe768baf7a0f8e9215abb655a43bf232f80d1353b1157d70"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -719,7 +723,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "5e1dd1d6c09bab48f2ba9e7a787c8262b070128fe6424f15d1fa04a23ab28467"
+          "sha256": "c91528681340e3eefe768baf7a0f8e9215abb655a43bf232f80d1353b1157d70"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",

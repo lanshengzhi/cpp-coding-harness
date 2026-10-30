@@ -328,6 +328,18 @@ DeterministicRun::Impl::Impl(
     // result number: the worker parks without a deadline and cannot poll the
     // token inside `condition_variable::wait`'s predicate without a notify.
     shared.stop_notify.emplace(start.stop_token, [&]() { shared.cv.notify_all(); });
+    if (start.stop_token.stop_requested()) {
+        // pi decides an already-requested abort during `start`, before the
+        // public run handle is returned or its result can be consumed.
+        terminal.emplace();
+        terminal->error = CodemodeError{
+                CodemodeError::Kind::Aborted, start.abort_message.value_or(std::string{"Execution aborted"})};
+        std::lock_guard lock(shared.mutex);
+        shared.finished = true;
+        shared.interrupted = true;
+        shared.outcome_ready = true;
+        return;
+    }
     worker = std::thread([this]() { drive(); });
 }
 

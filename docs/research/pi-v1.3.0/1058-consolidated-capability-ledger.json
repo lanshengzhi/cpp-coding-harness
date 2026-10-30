@@ -203,6 +203,10 @@
             "sha256": "cc41501d1ae9156c801529245829286055a12cb0c58a45e769d5986625a39541"
           },
           {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "sha256": "ef64465cd243b17a870c2530dcf88ca88a43597ac0b93e97dfe8241b53d72886"
+          },
+          {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
             "sha256": "983dc1e522eb3dd51d7128964b7b0316754e87f8d3ba26e567a6c5685f4e8477"
           },
@@ -376,7 +380,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "5e1dd1d6c09bab48f2ba9e7a787c8262b070128fe6424f15d1fa04a23ab28467"
+            "sha256": "c91528681340e3eefe768baf7a0f8e9215abb655a43bf232f80d1353b1157d70"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -749,7 +753,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "5e1dd1d6c09bab48f2ba9e7a787c8262b070128fe6424f15d1fa04a23ab28467"
+            "sha256": "c91528681340e3eefe768baf7a0f8e9215abb655a43bf232f80d1353b1157d70"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1180,7 +1184,7 @@
     ],
     "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 555,
+      "scenarios": 558,
       "scenarioNamed": 360,
       "artifactCovered": 58,
       "orphaned": [
@@ -1217,6 +1221,9 @@
         "audit-1101/structured-content.json:client rejects JSON null content instead of treating it as absent",
         "audit-1101/structured-content.json:client rejects non-array content instead of treating it as absent",
         "audit-1101/structured-content.json:client rejects a non-object tools/call result",
+        "audit-1093/outcome-settle.json:the outcome is visible before the result settles when the caller aborts",
+        "audit-1093/outcome-settle.json:a pre-aborted run is finished when start returns",
+        "audit-1093/outcome-settle.json:finished reads false while a call waits and true when the result continuation runs",
         "audit-1123/named-session-program-status.json:named-session-reports-working-and-done-message",
         "audit-1101/structured-content-order.json:client and conversion preserve the wire order of a reverse object structuredContent",
         "audit-1101/structured-content-order.json:client and conversion preserve insertion order for three reverse-sorted object members",
@@ -3786,6 +3793,36 @@
         "cch_mcp:mcp-tools-call-structured"
       ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement result validation"
+    },
+    {
+      "family": "audit-1093",
+      "artifact": "outcome-settle.json",
+      "scenario": "the outcome is visible before the result settles when the caller aborts",
+      "reason": "Captured by #1093 after the #1058 audit; no capability-ledger row routes to the outcome-settle artifact, and linking these observations would upgrade verification outside the scoped clause.",
+      "rows": [
+        "cch_codemode:codemode-deterministic-vs-execute"
+      ],
+      "disposition": "tests/codemode/CodemodeOwnerTest.cpp consumes this observation; keep it explicit while #1093 resolves the remaining outcome-before-settle clause"
+    },
+    {
+      "family": "audit-1093",
+      "artifact": "outcome-settle.json",
+      "scenario": "a pre-aborted run is finished when start returns",
+      "reason": "Captured by #1093 after the #1058 audit; no capability-ledger row routes to the outcome-settle artifact, and linking these observations would upgrade verification outside the scoped clause.",
+      "rows": [
+        "cch_codemode:codemode-deterministic-vs-execute"
+      ],
+      "disposition": "tests/codemode/CodemodeOwnerTest.cpp consumes this observation; keep the start-time finished state explicit while #1093 resolves the remaining outcome-before-settle clause"
+    },
+    {
+      "family": "audit-1093",
+      "artifact": "outcome-settle.json",
+      "scenario": "finished reads false while a call waits and true when the result continuation runs",
+      "reason": "Captured by #1093 after the #1058 audit; no capability-ledger row routes to the outcome-settle artifact, and linking these observations would upgrade verification outside the scoped clause.",
+      "rows": [
+        "cch_codemode:codemode-deterministic-vs-execute"
+      ],
+      "disposition": "tests/codemode/CodemodeOwnerTest.cpp consumes this observation; keep the normal-path finished transition explicit while #1093 resolves the remaining outcome-before-settle clause"
     },
     {
       "family": "audit-1123",

@@ -61,6 +61,10 @@ namespace {
     return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1053";
 }
 
+[[nodiscard]] std::filesystem::path audit_1093_root() {
+    return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1093";
+}
+
 [[nodiscard]] std::string read_text(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
@@ -72,12 +76,26 @@ namespace {
     return std::move(*parsed);
 }
 
+[[nodiscard]] support::JsonValue read_1093_artifact(std::string_view artifact) {
+    auto parsed = support::read_json(read_text(audit_1093_root() / artifact));
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
 [[nodiscard]] const support::JsonValue* find_scenario(const support::JsonValue& artifact, std::string_view name) {
     for (const auto& scenario : artifact.get_object().at("scenarios").get_array()) {
         if (scenario.get_object().at("name").get_string() == name) return &scenario;
     }
     return nullptr;
 }
+
+struct RunSettlementWitness {
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool continuation_ran{false};
+    bool finished_at_settlement{false};
+    std::optional<std::expected<codemode::CodemodeRunResult, support::Error>> result;
+};
 
 [[nodiscard]] const support::JsonValue& member(const support::JsonValue& object, std::string_view name) {
     const auto& fields = object.get_object();
@@ -2443,4 +2461,267 @@ TEST_CASE("a public codemode caller gets UTC and no WeakRef in a deterministic r
     REQUIRE(result.has_value());
     REQUIRE_FALSE(result->error.has_value());
     CHECK(result->value_json == "[1768471200000,0,0.34227450605335275,0,0,\"undefined\",\"undefined\"]");
+}
+
+TEST_CASE("a public codemode caller sees the outcome before the result settles when the caller aborts",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`audit-1093` `outcome-settle.json`, "the outcome is
+    // visible before the result settles when the caller aborts"; types.ts
+    // `CodemodeRun.finished`): the run's outcome is decided and `finished`
+    // reads true before the result completion is invoked, and a finished run
+    // ignores a later answer. The completion below observes the public
+    // `finished()` value synchronously at the exact settlement boundary.
+    const auto artifact = read_1093_artifact("outcome-settle.json");
+    const auto* scenario =
+            find_scenario(artifact, "the outcome is visible before the result settles when the caller aborts");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = member(*scenario, "expected");
+    const auto& expected_error = member(member(expected, "result"), "error");
+    const std::string abort_message = member(expected_error, "message").get_string();
+
+    auto sandbox = make_sandbox();
+    ConcurrentCalls calls;
+    std::stop_source cancel;
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+    };
+    options.timeout = std::chrono::seconds{20};
+    options.stop_token = cancel.get_token();
+    options.abort_message = abort_message;
+    options.callbacks.on_call = [&calls](const codemode::CodemodeHostCall& call) { calls.push_back(call); };
+    auto started = sandbox->start(
+            "try { await tools.wait(1); } catch { text(\"caught\"); } text(\"after\");", std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    auto settlement = std::make_shared<RunSettlementWitness>();
+    // `run` outlives this callback: the test waits for its completion, and the
+    // Run's destruction joins its worker before releasing the driver.
+    auto* run_ptr = &run;
+    auto result_operation = run.result();
+    std::move(result_operation)
+            .start([settlement, run_ptr](std::expected<codemode::CodemodeRunResult, support::Error> result) noexcept {
+                const bool finished = run_ptr->finished();
+                {
+                    std::lock_guard lock(settlement->mutex);
+                    settlement->finished_at_settlement = finished;
+                    settlement->result.emplace(std::move(result));
+                    settlement->continuation_ran = true;
+                }
+                settlement->cv.notify_one();
+            });
+
+    const auto called = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+    while (calls.empty() && std::chrono::steady_clock::now() < called) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+    }
+    REQUIRE(calls.size() == 1);
+    // Frozen `finishedWhileWaiting: false`.
+    CHECK_FALSE(run.finished());
+
+    cancel.request_stop();
+    {
+        std::unique_lock lock(settlement->mutex);
+        REQUIRE(settlement->cv.wait_for(lock, std::chrono::seconds{20}, [&] { return settlement->continuation_ran; }));
+        // Frozen `finishedWhenAbortReturns: true` and
+        // `settleContinuationWhenAbortReturns: false` normalize to the C++
+        // public completion boundary: finished is true by settlement.
+        CHECK(settlement->finished_at_settlement);
+    }
+    REQUIRE(run.finished());
+
+    // A late answer is ignored, exactly as frozen pi's `deliver` on a finished
+    // run returns undefined without throwing (frozen
+    // `deliverAfterFinishThrew: false`, `deliverAfterFinishReturnedUndefined:
+    // true`).
+    const auto late = run.deliver(1,
+            1768471200000.0,
+            calls[0].id,
+            codemode::CodemodeOutcome{
+                    .ok = true, .value_json = "null", .message = {}, .properties_json = std::nullopt});
+    CHECK_FALSE(late.has_value());
+    CHECK(run.finished());
+
+    REQUIRE(settlement->result.has_value());
+    auto result = std::move(*settlement->result);
+    REQUIRE(result.has_value());
+    // The settled outcome is the decided abort, not the late answer: frozen
+    // `result`.
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(result->error->message == abort_message);
+    CHECK(result->output.empty());
+    REQUIRE(result->calls.size() == 1);
+    CHECK(result->calls[0].name == "wait");
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Cancelled);
+    CHECK(result->calls[0].duration_ms.has_value());
+    CHECK(run.finished());
+}
+
+TEST_CASE("a public codemode caller sees finished track the outcome on the normal path and a finished run ignores a "
+          "late answer",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`audit-1093` `outcome-settle.json`, "finished reads
+    // false while a call waits and true when the result continuation runs"):
+    // on the normal path `finished` is false while a call waits and true when
+    // the result completion observes the outcome; an answer after that is
+    // ignored. The completion reads the public value at the exact settlement
+    // boundary, so this catches a result delivered before `finished` changes.
+    const auto artifact = read_1093_artifact("outcome-settle.json");
+    const auto* scenario = find_scenario(
+            artifact, "finished reads false while a call waits and true when the result continuation runs");
+    REQUIRE(scenario != nullptr);
+
+    auto sandbox = make_sandbox();
+    ConcurrentCalls calls;
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+    };
+    options.timeout = std::chrono::seconds{20};
+    options.callbacks.on_call = [&calls](const codemode::CodemodeHostCall& call) { calls.push_back(call); };
+    auto started = sandbox->start("await tools.wait(1); return 2;", std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    auto settlement = std::make_shared<RunSettlementWitness>();
+    // `run` outlives this callback: the test waits for its completion, and the
+    // Run's destruction joins its worker before releasing the driver.
+    auto* run_ptr = &run;
+    auto result_operation = run.result();
+    std::move(result_operation)
+            .start([settlement, run_ptr](std::expected<codemode::CodemodeRunResult, support::Error> result) noexcept {
+                const bool finished = run_ptr->finished();
+                {
+                    std::lock_guard lock(settlement->mutex);
+                    settlement->finished_at_settlement = finished;
+                    settlement->result.emplace(std::move(result));
+                    settlement->continuation_ran = true;
+                }
+                settlement->cv.notify_one();
+            });
+
+    const auto called = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+    while (calls.empty() && std::chrono::steady_clock::now() < called) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+    }
+    REQUIRE(calls.size() == 1);
+    // Frozen `finishedWhileWaiting: false`.
+    CHECK_FALSE(run.finished());
+
+    CHECK_FALSE(run.deliver(1,
+                           1768471200000.0,
+                           calls[0].id,
+                           codemode::CodemodeOutcome{
+                                   .ok = true, .value_json = "2", .message = {}, .properties_json = std::nullopt})
+                    .has_value());
+    {
+        std::unique_lock lock(settlement->mutex);
+        REQUIRE(settlement->cv.wait_for(lock, std::chrono::seconds{20}, [&] { return settlement->continuation_ran; }));
+        // Frozen `finishedAtSettleContinuation: true`.
+        CHECK(settlement->finished_at_settlement);
+    }
+    REQUIRE(run.finished());
+
+    REQUIRE(settlement->result.has_value());
+    auto result = std::move(*settlement->result);
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    CHECK(result->output.empty());
+    REQUIRE(result->calls.size() == 1);
+    CHECK(result->calls[0].name == "wait");
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Ok);
+    CHECK(result->calls[0].duration_ms.has_value());
+    CHECK(result->value_json == "2");
+
+    // A finished run ignores a late answer (frozen
+    // `deliverAfterFinishReturnedUndefined: true`).
+    const auto late = run.deliver(2,
+            1768471200000.0,
+            calls[0].id,
+            codemode::CodemodeOutcome{
+                    .ok = true, .value_json = "null", .message = {}, .properties_json = std::nullopt});
+    CHECK_FALSE(late.has_value());
+    CHECK(run.finished());
+}
+
+TEST_CASE("a pre-aborted public codemode run is finished when its result settles",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`audit-1093` `outcome-settle.json`, "a pre-aborted
+    // run is finished when start returns"): the abort decision exists before
+    // VM execution, no call or output is produced, and `finished` is visible
+    // by result settlement. C++ may observe the pre-requested stop on its
+    // worker after `start` returns, so this checks the frozen public ordering
+    // at the stable settlement boundary rather than pinning the decision's
+    // thread or start-return timing.
+    const auto artifact = read_1093_artifact("outcome-settle.json");
+    const auto* scenario = find_scenario(artifact, "a pre-aborted run is finished when start returns");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = member(*scenario, "expected");
+    const auto& expected_result = member(expected, "result");
+    const auto& expected_error = member(expected_result, "error");
+    const std::string abort_message = member(expected_error, "message").get_string();
+
+    auto sandbox = make_sandbox();
+    std::stop_source cancel;
+    cancel.request_stop();
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+    };
+    options.stop_token = cancel.get_token();
+    options.abort_message = abort_message;
+    auto started = sandbox->start("text(\"should not run\"); await tools.wait(1);", std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+    CHECK(run.finished() == member(expected, "finishedAtStart").get_boolean());
+
+    auto settlement = std::make_shared<RunSettlementWitness>();
+    // `run` outlives this callback: the test waits for its completion, and the
+    // Run's destruction joins its worker before releasing the driver.
+    auto* run_ptr = &run;
+    auto result_operation = run.result();
+    std::move(result_operation)
+            .start([settlement, run_ptr](std::expected<codemode::CodemodeRunResult, support::Error> result) noexcept {
+                const bool finished = run_ptr->finished();
+                {
+                    std::lock_guard lock(settlement->mutex);
+                    settlement->finished_at_settlement = finished;
+                    settlement->result.emplace(std::move(result));
+                    settlement->continuation_ran = true;
+                }
+                settlement->cv.notify_one();
+            });
+
+    {
+        std::unique_lock lock(settlement->mutex);
+        REQUIRE(settlement->cv.wait_for(lock, std::chrono::seconds{20}, [&] { return settlement->continuation_ran; }));
+        CHECK(settlement->finished_at_settlement);
+    }
+    REQUIRE(run.finished());
+    REQUIRE(settlement->result.has_value());
+    auto result = std::move(*settlement->result);
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(result->error->message == abort_message);
+    CHECK(result->output.empty());
+    CHECK(result->calls.empty());
+
+    // Frozen pi silently accepts no late answer after finish; with no waiting
+    // call, the public C++ API likewise returns no delivery rejection.
+    const auto late = run.deliver(1,
+            1768471200000.0,
+            1,
+            codemode::CodemodeOutcome{
+                    .ok = true, .value_json = "null", .message = {}, .properties_json = std::nullopt});
+    CHECK_FALSE(late.has_value());
+    CHECK(run.finished());
 }

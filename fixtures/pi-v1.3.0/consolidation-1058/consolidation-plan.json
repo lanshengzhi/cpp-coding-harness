@@ -1089,6 +1089,36 @@
       "disposition": "the MCP structured-content slices must consume this observation when they implement result validation"
     },
     {
+      "family": "audit-1093",
+      "artifact": "outcome-settle.json",
+      "scenario": "the outcome is visible before the result settles when the caller aborts",
+      "reason": "Captured by #1093 after the #1058 audit; no capability-ledger row routes to the outcome-settle artifact, and linking these observations would upgrade verification outside the scoped clause.",
+      "rows": [
+        "cch_codemode:codemode-deterministic-vs-execute"
+      ],
+      "disposition": "tests/codemode/CodemodeOwnerTest.cpp consumes this observation; keep it explicit while #1093 resolves the remaining outcome-before-settle clause"
+    },
+    {
+      "family": "audit-1093",
+      "artifact": "outcome-settle.json",
+      "scenario": "a pre-aborted run is finished when start returns",
+      "reason": "Captured by #1093 after the #1058 audit; no capability-ledger row routes to the outcome-settle artifact, and linking these observations would upgrade verification outside the scoped clause.",
+      "rows": [
+        "cch_codemode:codemode-deterministic-vs-execute"
+      ],
+      "disposition": "tests/codemode/CodemodeOwnerTest.cpp consumes this observation; keep the start-time finished state explicit while #1093 resolves the remaining outcome-before-settle clause"
+    },
+    {
+      "family": "audit-1093",
+      "artifact": "outcome-settle.json",
+      "scenario": "finished reads false while a call waits and true when the result continuation runs",
+      "reason": "Captured by #1093 after the #1058 audit; no capability-ledger row routes to the outcome-settle artifact, and linking these observations would upgrade verification outside the scoped clause.",
+      "rows": [
+        "cch_codemode:codemode-deterministic-vs-execute"
+      ],
+      "disposition": "tests/codemode/CodemodeOwnerTest.cpp consumes this observation; keep the normal-path finished transition explicit while #1093 resolves the remaining outcome-before-settle clause"
+    },
+    {
       "family": "audit-1123",
       "artifact": "named-session-program-status.json",
       "scenario": "named-session-reports-working-and-done-message",
