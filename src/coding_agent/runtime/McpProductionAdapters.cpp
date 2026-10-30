@@ -438,12 +438,12 @@ support::AsyncResult<bool> McpOAuthFlowSignInDriver::sign_out(const mcp::McpConf
 support::AsyncResult<std::optional<std::string>> McpOAuthFlowSignInDriver::stored_tokens(
         const mcp::McpConfigEntry& entry) {
     return support::detail::make_async_result(
-            [this, entry]() mutable -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
+            [store = ensure_store(),
+                    entry]() mutable -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
                 const auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config);
                 if (http == nullptr) {
                     co_return support::Expected<std::optional<std::string>>{std::optional<std::string>{}};
                 }
-                const std::shared_ptr<mcp::McpAuthStore> store = ensure_store();
                 // pi `credentials.tokens(server)`: the fingerprint the
                 // `turn_start` pickup compares. Any field change (a fresh
                 // access token, a new refresh token, a different type) reads

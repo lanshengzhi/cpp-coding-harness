@@ -662,7 +662,7 @@ void McpManagerFlow::run_login(std::string name) {
     run_after_settle("/mcp login", [this, name = std::move(name)] { login_after_settle(name); });
 }
 
-void McpManagerFlow::run_after_settle(std::string label, std::function<void()> action) {
+void McpManagerFlow::run_after_settle(std::string label, std::move_only_function<void()> action) {
     if (manager() == nullptr || hooks_.spawn_flow == nullptr) {
         return;
     }

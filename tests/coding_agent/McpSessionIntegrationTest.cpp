@@ -22,6 +22,7 @@
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include "support/ConnectionGate.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/ModelsFixture.hpp"
@@ -278,10 +279,10 @@ class GatedFactory final : public coding_agent::runtime::McpConnectionFactory,
                            public std::enable_shared_from_this<GatedFactory> {
 public:
     std::shared_ptr<GatedConnection> connection = std::make_shared<GatedConnection>();
-    std::atomic<bool> gate_open{false};
+    tests::ConnectionGate gate;
     int connect_calls{0};
 
-    void open() noexcept { gate_open.store(true, std::memory_order_release); }
+    void open() { gate.open(); }
 
     [[nodiscard]] support::AsyncResult<std::shared_ptr<coding_agent::runtime::McpLiveConnection>> connect(
             const coding_agent::mcp::McpConfigEntry& entry) override {
@@ -289,10 +290,7 @@ public:
         return support::detail::make_async_result([self = shared_from_this(), name = entry.name]
                 -> boost::asio::awaitable<
                         support::Expected<std::shared_ptr<coding_agent::runtime::McpLiveConnection>>> {
-            const auto executor = co_await boost::asio::this_coro::executor;
-            while (!self->gate_open.load(std::memory_order_acquire)) {
-                co_await boost::asio::post(executor, boost::asio::use_awaitable);
-            }
+            co_await self->gate.wait();
             self->connection->name = std::move(name);
             co_return std::shared_ptr<coding_agent::runtime::McpLiveConnection>{self->connection};
         });

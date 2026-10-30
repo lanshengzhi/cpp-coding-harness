@@ -412,33 +412,39 @@ TEST_CASE("Durable recursive watch covers nested and later-created directories",
     fs::create_directories(workspace.path() / "tree" / "nested");
     std::vector<WatchChange> changes;
     std::mutex changes_mutex;
-    std::counting_semaphore<> changed{0};
-    // close() joins delivery before these borrowed locals leave scope.
+    std::condition_variable changed;
+    // close() joins delivery before these borrowed locals leave scope. No
+    // discriminating assertion runs until delivery has been joined.
     auto watch = env->watch(
             "tree",
             [&changes, &changes_mutex, &changed](const WatchChange& change) {
                 std::lock_guard lock{changes_mutex};
                 changes.push_back(change);
-                changed.release();
+                changed.notify_all();
             },
             WatchOptions{.recursive = true});
     REQUIRE(watch);
-    CHECK((*watch)->mode() == "native");
+    const auto mode = std::string{(*watch)->mode()};
+    const auto wait_for_path = [&changes, &changes_mutex, &changed](const std::string& path) {
+        std::unique_lock lock{changes_mutex};
+        return changed.wait_for(lock, 5s, [&changes, &path] {
+            return std::ranges::any_of(changes, [&path](const WatchChange& change) {
+                return std::ranges::find(change.paths, path) != change.paths.end();
+            });
+        });
+    };
     workspace.write("tree/nested/file", "first");
-    REQUIRE(changed.try_acquire_for(5s));
-    {
-        std::lock_guard lock{changes_mutex};
-        REQUIRE_FALSE(changes.empty());
-        CHECK_FALSE(changes.back().terminal_error);
-    }
-    // A subdirectory created after the watch starts is covered before its own
-    // changes can be reported.
+    const bool nested = wait_for_path((workspace.path() / "tree/nested/file").string());
     fs::create_directories(workspace.path() / "tree" / "new");
-    std::this_thread::sleep_for(100ms);
-    changes.clear();
+    const bool created = wait_for_path((workspace.path() / "tree/new").string());
     workspace.write("tree/new/file", "second");
-    REQUIRE(changed.try_acquire_for(5s));
+    const bool later = wait_for_path((workspace.path() / "tree/new/file").string());
     (*watch)->close();
+    CHECK(mode == "native");
+    CHECK(nested);
+    CHECK(created);
+    CHECK(later);
+    CHECK(std::ranges::none_of(changes, [](const auto& change) { return change.terminal_error; }));
 }
 
 TEST_CASE("Durable recursive watch honours subtree exclusions without following symlinks",
@@ -453,15 +459,13 @@ TEST_CASE("Durable recursive watch honours subtree exclusions without following 
     fs::create_symlink(workspace.path() / "outside", workspace.path() / "tree" / "link");
     std::vector<std::string> reported;
     std::mutex mutex;
-    std::counting_semaphore<> changed{0};
+    std::condition_variable changed;
     auto watch = env->watch(
             "tree",
             [&reported, &mutex, &changed](const WatchChange& change) {
-                if (!change.paths.empty()) {
-                    std::lock_guard lock{mutex};
-                    reported.push_back(change.paths.front());
-                }
-                changed.release();
+                std::lock_guard lock{mutex};
+                reported.insert(reported.end(), change.paths.begin(), change.paths.end());
+                changed.notify_all();
             },
             WatchOptions{.recursive = true, .exclude_hidden = true, .excluded_names = {"node_modules"}});
     REQUIRE(watch);
@@ -469,10 +473,15 @@ TEST_CASE("Durable recursive watch honours subtree exclusions without following 
     workspace.write("tree/node_modules/pkg/index.js", "code");
     workspace.write("outside/file", "out");
     workspace.write("tree/nested/visible", "shown");
-    REQUIRE(changed.try_acquire_for(5s));
-    std::this_thread::sleep_for(200ms);
+    const auto visible = (workspace.path() / "tree/nested/visible").string();
+    bool observed;
+    {
+        std::unique_lock lock{mutex};
+        observed = changed.wait_for(
+                lock, 5s, [&reported, &visible] { return std::ranges::find(reported, visible) != reported.end(); });
+    }
     (*watch)->close();
-    std::lock_guard lock{mutex};
+    CHECK(observed);
     // Only the visible file is reported: hidden and excluded names at depth are
     // neither watched nor reported, the symlink below the target is not
     // followed, and changes outside the watched tree never arrive. Creating
@@ -481,6 +490,159 @@ TEST_CASE("Durable recursive watch honours subtree exclusions without following 
     reported.erase(std::ranges::unique(reported).begin(), reported.end());
     REQUIRE(reported.size() == 1);
     CHECK(fs::path{reported.front()}.filename() == "visible");
+}
+
+TEST_CASE("Durable recursive watch reports renamed descendants at their current paths",
+        "[durable][environment][issue1156]") {
+    using namespace std::chrono_literals;
+    tests::TempWorkspace workspace;
+    namespace fs = std::filesystem;
+    std::error_code error;
+    fs::create_directories(workspace.path() / "tree" / "original" / "nested", error);
+    REQUIRE_FALSE(error);
+    auto env = local_environment(workspace.path().string());
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::vector<std::string> paths;
+    bool terminal = false;
+    // close() joins every callback before the borrowed state leaves scope;
+    // every discriminating assertion follows close(), including on timeout.
+    auto watch = env->watch(
+            "tree",
+            [&mutex, &changed, &paths, &terminal](const WatchChange& change) {
+                std::lock_guard lock{mutex};
+                paths.insert(paths.end(), change.paths.begin(), change.paths.end());
+                terminal = terminal || change.terminal_error;
+                changed.notify_all();
+            },
+            WatchOptions{.recursive = true});
+    REQUIRE(watch);
+    const auto moved = (workspace.path() / "tree" / "renamed").string();
+    fs::rename(workspace.path() / "tree" / "original", moved, error);
+    bool observed_move;
+    {
+        std::unique_lock lock{mutex};
+        observed_move = changed.wait_for(lock, 5s, [&paths, &moved, &terminal] {
+            return terminal || std::ranges::find(paths, moved) != paths.end();
+        });
+    }
+    const auto file = (fs::path{moved} / "nested" / "file").string();
+    workspace.write("tree/renamed/nested/file", "current");
+    bool observed_file;
+    {
+        std::unique_lock lock{mutex};
+        observed_file = changed.wait_for(lock, 5s, [&paths, &file, &terminal] {
+            return terminal || std::ranges::find(paths, file) != paths.end();
+        });
+    }
+    (*watch)->close();
+    CHECK_FALSE(error);
+    CHECK(observed_move);
+    CHECK(observed_file);
+    CHECK_FALSE(terminal);
+    CHECK(std::ranges::find(paths, file) != paths.end());
+    CHECK(std::ranges::none_of(paths, [](const auto& path) { return path.ends_with("original/nested/file"); }));
+}
+
+TEST_CASE("Durable recursive watch drops descendants moved outside coverage or into exclusions",
+        "[durable][environment][issue1156]") {
+    using namespace std::chrono_literals;
+    tests::TempWorkspace workspace;
+    namespace fs = std::filesystem;
+    std::error_code error;
+    fs::create_directories(workspace.path() / "tree" / "visible" / "nested", error);
+    REQUIRE_FALSE(error);
+    fs::create_directory(workspace.path() / "outside", error);
+    REQUIRE_FALSE(error);
+    auto destination = workspace.path() / "tree" / ".hidden";
+    SECTION("hidden destination") {}
+    SECTION("excluded name destination") { destination = workspace.path() / "tree" / "node_modules"; }
+    SECTION("outside destination") { destination = workspace.path() / "outside" / "moved"; }
+    auto env = local_environment(workspace.path().string());
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::vector<std::string> paths;
+    bool terminal = false;
+    // Every wait is bounded and every assertion follows worker shutdown.
+    auto watch = env->watch(
+            "tree",
+            [&mutex, &changed, &paths, &terminal](const WatchChange& change) {
+                std::lock_guard lock{mutex};
+                paths.insert(paths.end(), change.paths.begin(), change.paths.end());
+                terminal = terminal || change.terminal_error;
+                changed.notify_all();
+            },
+            WatchOptions{.recursive = true, .exclude_hidden = true, .excluded_names = {"node_modules"}});
+    REQUIRE(watch);
+    const auto original = (workspace.path() / "tree" / "visible").string();
+    fs::rename(original, destination, error);
+    bool moved;
+    {
+        std::unique_lock lock{mutex};
+        moved = changed.wait_for(lock, 5s, [&paths, &original, &terminal] {
+            return terminal || std::ranges::find(paths, original) != paths.end();
+        });
+    }
+    std::ofstream(destination / "nested" / "secret") << "excluded";
+    workspace.write("tree/sentinel", "still covered");
+    const auto sentinel = (workspace.path() / "tree" / "sentinel").string();
+    bool drained;
+    {
+        std::unique_lock lock{mutex};
+        drained = changed.wait_for(lock, 5s, [&paths, &sentinel, &terminal] {
+            return terminal || std::ranges::find(paths, sentinel) != paths.end();
+        });
+    }
+    (*watch)->close();
+    CHECK_FALSE(error);
+    CHECK(moved);
+    CHECK(drained);
+    CHECK_FALSE(terminal);
+    CHECK(std::ranges::find(paths, sentinel) != paths.end());
+    CHECK(std::ranges::none_of(paths, [](const auto& path) { return path.ends_with("/secret"); }));
+}
+
+TEST_CASE("Durable recursive watch survives child deletion and terminates on root deletion",
+        "[durable][environment][issue1156]") {
+    using namespace std::chrono_literals;
+    tests::TempWorkspace workspace;
+    namespace fs = std::filesystem;
+    std::error_code error;
+    fs::create_directories(workspace.path() / "tree" / "child", error);
+    REQUIRE_FALSE(error);
+    bool remove_root = false;
+    SECTION("child deletion preserves root coverage") {}
+    SECTION("root deletion is terminal") { remove_root = true; }
+    auto env = local_environment(workspace.path().string());
+    std::mutex mutex;
+    std::condition_variable changed;
+    std::vector<std::string> paths;
+    bool terminal = false;
+    auto watch = env->watch(
+            "tree",
+            [&mutex, &changed, &paths, &terminal](const WatchChange& change) {
+                std::lock_guard lock{mutex};
+                paths.insert(paths.end(), change.paths.begin(), change.paths.end());
+                terminal = terminal || change.terminal_error;
+                changed.notify_all();
+            },
+            WatchOptions{.recursive = true});
+    REQUIRE(watch);
+    fs::remove_all(workspace.path() / (remove_root ? "tree" : "tree/child"), error);
+    if (!remove_root) workspace.write("tree/sentinel", "alive");
+    const auto sentinel = (workspace.path() / "tree" / "sentinel").string();
+    bool observed;
+    {
+        std::unique_lock lock{mutex};
+        observed = changed.wait_for(lock, 5s, [&paths, &sentinel, &terminal] {
+            return terminal || std::ranges::find(paths, sentinel) != paths.end();
+        });
+    }
+    (*watch)->close();
+    CHECK_FALSE(error);
+    CHECK(observed);
+    CHECK(terminal == remove_root);
+    if (!remove_root) CHECK(std::ranges::find(paths, sentinel) != paths.end());
 }
 
 TEST_CASE("Durable recursive watch refuses a tree past the directory budget", "[durable][environment][issue1156]") {

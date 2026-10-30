@@ -44,6 +44,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <fstream>
 #include <memory>
@@ -61,7 +62,14 @@ namespace {
     std::ifstream status("/proc/self/status");
     std::string line;
     while (std::getline(status, line)) {
-        if (line.starts_with("Threads:")) return std::stol(line.substr(line.find(':') + 1));
+        if (line.starts_with("Threads:")) {
+            const auto start = line.find_first_not_of(" \t", line.find(':') + 1);
+            if (start == std::string::npos) return -1;
+            long count{};
+            const auto [end, error] = std::from_chars(line.data() + start, line.data() + line.size(), count);
+            if (error == std::errc{} && end == line.data() + line.size()) return count;
+            return -1;
+        }
     }
     return -1;
 }

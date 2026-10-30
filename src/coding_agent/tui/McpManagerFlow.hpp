@@ -105,7 +105,7 @@ public:
     /// (pi `registerCommand("mcp")`'s `await pending`). The spawned coroutine
     /// keeps this flow alive through `action`; a host that cannot spawn or has
     /// gone away runs nothing.
-    void run_after_settle(std::string label, std::function<void()> action);
+    void run_after_settle(std::string label, std::move_only_function<void()> action);
 
     /// Rebuild the `/mcp` argument-completion snapshot, (re)subscribe to the
     /// manager's changes, install the warning sink, and drain the warnings

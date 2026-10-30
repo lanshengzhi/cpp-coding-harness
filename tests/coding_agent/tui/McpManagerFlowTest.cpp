@@ -19,6 +19,7 @@
 #include <cch/tui/Keybindings.hpp>
 
 #include "support/AsyncResultBridge.hpp"
+#include "support/ConnectionGate.hpp"
 #include "support/RuntimeFixture.hpp"
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
@@ -187,7 +188,7 @@ public:
     /// #1104: per-server connect gates. A gated server's connect suspends
     /// until the test opens the gate, modelling a slow handshake while the
     /// management flow must stay live.
-    std::map<std::string, std::shared_ptr<std::atomic<bool>>> gates;
+    std::map<std::string, std::shared_ptr<tests::ConnectionGate>> gates;
 
     [[nodiscard]] support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(
             const McpConfigEntry& entry) override {
@@ -196,10 +197,7 @@ public:
                         -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpLiveConnection>>> {
                     const auto gate = gates.find(name);
                     if (gate != gates.end()) {
-                        const auto executor = co_await boost::asio::this_coro::executor;
-                        while (!gate->second->load(std::memory_order_acquire)) {
-                            co_await boost::asio::post(executor, boost::asio::use_awaitable);
-                        }
+                        co_await gate->second->wait();
                     }
                     const auto found = outcomes.find(name);
                     if (found == outcomes.end()) {
@@ -416,7 +414,7 @@ struct FlowFixture {
             std::vector<std::pair<std::string, std::shared_ptr<TestConnection>>> connections,
             bool auto_enable_codemode = true,
             bool settle_connects = true,
-            std::map<std::string, std::shared_ptr<std::atomic<bool>>> gates = {}) {
+            std::map<std::string, std::shared_ptr<tests::ConnectionGate>> gates = {}) {
         auto fixture = std::make_unique<FlowFixture>();
         config.auto_enable_codemode = auto_enable_codemode;
         McpManagerDependencies dependencies;
@@ -779,7 +777,7 @@ TEST_CASE("/mcp panel stays live while a server connect is pending and subcomman
     // "slow" server holds its connect in flight for the whole first act.
     auto slow = std::make_shared<TestConnection>();
     auto fast = std::make_shared<TestConnection>();
-    const auto gate = std::make_shared<std::atomic<bool>>(false);
+    const auto gate = std::make_shared<tests::ConnectionGate>();
     auto fixture = FlowFixture::make(config_with({stdio_entry("slow"), stdio_entry("fast")}),
             {{"slow", slow}, {"fast", fast}},
             /*auto_enable_codemode*/ true,
@@ -816,7 +814,7 @@ TEST_CASE("/mcp panel stays live while a server connect is pending and subcomman
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
     CHECK(slow->reconnect_calls == 0);
     // ...and once the transport answers, the awaited subcommand lands.
-    gate->store(true);
+    boost::asio::post(fixture->flow_io, [gate] { gate->open(); });
     REQUIRE(fixture->wait_until([&] { return slow->reconnect_calls == 1; }));
     // The status line lands on the flow's next serialized pass.
     REQUIRE(fixture->wait_until(

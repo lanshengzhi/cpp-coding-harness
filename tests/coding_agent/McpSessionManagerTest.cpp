@@ -17,6 +17,7 @@
 #include "coding_agent/mcp/McpNamespace.hpp"
 #include "coding_agent/runtime/McpSessionManager.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include "support/ConnectionGate.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -180,13 +181,9 @@ public:
 
 class ScriptedFactory final : public McpConnectionFactory {
 public:
-    /// #1104 gating: a connect for a gated name suspends (a yielded post
-    /// loop on the connect's own executor) until the test opens it, keeping
-    /// the pump deterministic without a timer whose service registry could
-    /// outlive its io_context (#473).
-    struct ConnectGate {
-        bool open{false};
-    };
+    /// Per-server connection gates share the counted, latched ReleaseGate
+    /// wake-up; open them on the RuntimeFixture's serialized executor.
+    using ConnectGate = tests::ConnectionGate;
 
     std::map<std::string, std::shared_ptr<ScriptedConnection>> outcomes;
     std::map<std::string, std::shared_ptr<ConnectGate>> gates;
@@ -200,10 +197,7 @@ public:
                         -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpLiveConnection>>> {
                     const auto gate = gates.find(name);
                     if (gate != gates.end() && gate->second) {
-                        const auto executor = co_await boost::asio::this_coro::executor;
-                        while (!gate->second->open) {
-                            co_await boost::asio::post(executor, boost::asio::use_awaitable);
-                        }
+                        co_await gate->second->wait();
                     }
                     const auto found = outcomes.find(name);
                     if (found == outcomes.end()) {
@@ -215,15 +209,14 @@ public:
     }
 };
 
-/// Open one factory gate on the loop (the suspended connect's yielded post
-/// loop observes it on its next pass).
+/// Open one factory gate on the loop that owns its pending wait.
 void open_gate(tests::RuntimeFixture& runtime, ScriptedFactory& factory, std::string_view name) {
     REQUIRE(runtime
                     .run(support::detail::make_async_result(
                             [&factory, name = std::string{name}]() -> boost::asio::awaitable<support::ExpectedVoid> {
                                 const auto gate = factory.gates.find(name);
                                 if (gate != factory.gates.end() && gate->second) {
-                                    gate->second->open = true;
+                                    gate->second->open();
                                 }
                                 co_return support::ExpectedVoid{};
                             }))
@@ -940,7 +933,7 @@ TEST_CASE("wait_for_pending_connects blocks until the gated connect lands", "[co
                     opener_ran = true;
                     const auto gate = factory->gates.find("slow");
                     if (gate != factory->gates.end() && gate->second) {
-                        gate->second->open = true;
+                        gate->second->open();
                     }
                 },
                 boost::asio::detached);

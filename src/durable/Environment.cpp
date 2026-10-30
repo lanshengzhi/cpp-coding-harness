@@ -8,6 +8,7 @@
 #include <array>
 #include <cerrno>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <map>
@@ -36,7 +37,8 @@ support::Error system_failure(std::string_view operation) {
 support::Error cancelled() { return failure("aborted", support::ErrorCode::Cancelled); }
 
 constexpr std::size_t kWatchMaxDirectories = 10000;
-constexpr uint32_t kWatchMask = IN_CREATE | IN_MODIFY | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB;
+constexpr std::uint32_t kWatchMask =
+        IN_CREATE | IN_MODIFY | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_ATTRIB | IN_DELETE_SELF | IN_MOVE_SELF;
 
 class NativeWatch final : public FileWatch {
 public:
@@ -79,9 +81,26 @@ private:
     }
 
     int watch_directory(const fs::path& directory) {
-        const int wd = ::inotify_add_watch(fd_.get(), directory.c_str(), kWatchMask | IN_ONLYDIR);
-        if (wd >= 0) directory_prefixes_.emplace(wd, directory.string() + '/');
+        const int wd = ::inotify_add_watch(fd_.get(), directory.c_str(), kWatchMask | IN_ONLYDIR | IN_DONT_FOLLOW);
+        if (wd >= 0) {
+            directory_prefixes_.insert_or_assign(wd, directory.string() + '/');
+            if (!root_wd_) root_wd_ = wd;
+        }
         return wd;
+    }
+
+    void remove_directory_tree(const std::string& path) {
+        const auto prefix = path + '/';
+        for (auto it = directory_prefixes_.begin(); it != directory_prefixes_.end();) {
+            if (it->second.starts_with(prefix)) {
+                // Erase before the queued IN_IGNORED arrives. A child leaving
+                // coverage is ordinary churn, not loss of the watched root.
+                (void)::inotify_rm_watch(fd_.get(), it->first);
+                it = directory_prefixes_.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     // Add `directory` and, when `descend`, every descendant directory.
@@ -90,7 +109,7 @@ private:
         std::error_code type_ec;
         if (fs::is_symlink(directory, type_ec)) return true;
         if (watch_directory(directory) < 0) return false;
-        if (++directory_count_ > kWatchMaxDirectories) return false;
+        if (directory_prefixes_.size() > kWatchMaxDirectories) return false;
         if (!descend) return true;
         fs::directory_iterator it(directory, fs::directory_options::skip_permission_denied, ec), end;
         while (!ec && it != end) {
@@ -116,41 +135,61 @@ private:
                     sink_(WatchChange{.terminal_error = true, .error = system_failure("inotify read")});
                 return;
             }
-            std::vector<std::pair<int, std::string>> created_directories;
             for (const char* cursor = buffer.data(); cursor < buffer.data() + n;) {
                 const auto& event = *reinterpret_cast<const inotify_event*>(cursor);
                 cursor += sizeof(inotify_event) + event.len;
+                if (stop.stop_requested()) return;
                 if (event.mask & IN_Q_OVERFLOW) {
                     sink_(WatchChange{.overflow = true});
                     continue;
                 }
-                if (event.mask & IN_IGNORED || event.mask & IN_UNMOUNT) {
+                const auto prefix = directory_prefixes_.find(event.wd);
+                if (prefix == directory_prefixes_.end()) continue;
+                if ((event.mask & IN_UNMOUNT) != 0 ||
+                        (root_wd_ == event.wd && (event.mask & (IN_IGNORED | IN_DELETE_SELF | IN_MOVE_SELF)) != 0)) {
                     sink_(WatchChange{
                             .terminal_error = true, .error = failure("watched directory became unavailable")});
                     return;
                 }
-                const auto prefix = directory_prefixes_.find(event.wd);
-                if (prefix == directory_prefixes_.end()) continue;
+                if ((event.mask & (IN_IGNORED | IN_DELETE_SELF)) != 0) {
+                    const auto path = prefix->second.substr(0, prefix->second.size() - 1);
+                    remove_directory_tree(path);
+                    continue;
+                }
                 const std::string_view name = event.len > 0 ? std::string_view{event.name} : std::string_view{};
                 if (target_file_ && name != std::string_view{*target_file_}) continue;
                 if (!name.empty() && excluded(name)) continue;
                 const std::string path = prefix->second + std::string{name};
-                if (!name.empty() && recursive_ && (event.mask & (IN_CREATE | IN_MOVED_TO)) != 0 &&
-                        (event.mask & IN_ISDIR) != 0)
-                    created_directories.emplace_back(event.wd, std::string{name});
-                sink_(WatchChange{.paths = {path}});
-            }
-            for (const auto& [wd, name] : created_directories) {
-                if (stop.stop_requested()) return;
-                const auto prefix = directory_prefixes_.find(wd);
-                if (prefix == directory_prefixes_.end()) continue;
-                std::error_code ec;
-                if (!add_directory_tree(fs::path{prefix->second} / name, recursive_, ec)) {
-                    sink_(WatchChange{.terminal_error = true,
-                            .error = failure("watched tree exceeds the directory limit or cannot be watched",
-                                    support::ErrorCode::Validation)});
-                    return;
+                if (!name.empty() && recursive_ && (event.mask & IN_ISDIR) != 0) {
+                    if ((event.mask & (IN_DELETE | IN_MOVED_FROM)) != 0) {
+                        // Inotify follows the inode through moves. Drop the
+                        // entire old subtree even if its destination is hidden
+                        // or outside our root; MOVED_TO re-establishes coverage
+                        // under the current, non-excluded destination path.
+                        remove_directory_tree(path);
+                    }
+                    if ((event.mask & (IN_CREATE | IN_MOVED_TO)) != 0) {
+                        std::error_code ec;
+                        if (!add_directory_tree(path, true, ec)) {
+                            std::error_code exists_error;
+                            if (!fs::exists(path, exists_error) && !exists_error) {
+                                // It disappeared before the queued create was
+                                // read. Coverage was uncertain; ask for a rescan.
+                                sink_(WatchChange{.overflow = true});
+                                continue;
+                            }
+                            sink_(WatchChange{.terminal_error = true,
+                                    .error = failure("watched tree exceeds the directory limit or cannot be watched",
+                                            support::ErrorCode::Validation)});
+                            return;
+                        }
+                        // Writes before the watch was installed may have been
+                        // missed. Publish uncertainty and the directory change
+                        // only after its descendants are covered.
+                        sink_(WatchChange{.overflow = true});
+                    }
                 }
+                sink_(WatchChange{.paths = {path}});
             }
         }
     }
@@ -162,7 +201,7 @@ private:
     std::vector<std::string> excluded_names_;
     std::map<int, std::string> directory_prefixes_;
     std::optional<std::string> target_file_;
-    std::size_t directory_count_{};
+    std::optional<int> root_wd_;
     std::jthread worker_;
 };
 
