@@ -110,6 +110,7 @@ struct TemplateInvocation {
     std::vector<std::string> args;
     std::string current;
     char quote = '\0';
+    bool has_token = false;
 
     std::size_t index = 0;
     while (index < input.size()) {
@@ -125,22 +126,25 @@ struct TemplateInvocation {
             }
         } else if (ch == '\'' || ch == '"') {
             quote = ch;
+            has_token = true;
             ++index;
         } else if (const auto whitespace_length = whitespace_prefix_length(input.substr(index));
                    whitespace_length > 0) {
-            if (!current.empty()) {
+            if (has_token) {
                 args.push_back(std::move(current));
                 current.clear();
+                has_token = false;
             }
             index += whitespace_length;
         } else {
             const auto decoded = decode_first(input.substr(index));
             current.append(input.substr(index, decoded.length));
+            has_token = true;
             index += decoded.length;
         }
     }
 
-    if (!current.empty()) {
+    if (has_token) {
         args.push_back(std::move(current));
     }
     return args;
@@ -223,7 +227,15 @@ void append_joined(
                 const auto inner = content.substr(index + 2, close - index - 2);
                 const auto default_separator = inner.find(":-");
                 if (default_separator != std::string_view::npos) {
-                    const auto position = parse_unsigned(inner.substr(0, default_separator));
+                    const auto target = inner.substr(0, default_separator);
+                    if (target == "@" || target == "ARGUMENTS") {
+                        std::string joined;
+                        append_joined(joined, args, 0, args.size());
+                        output += joined.empty() ? std::string{inner.substr(default_separator + 2)} : joined;
+                        index = close + 1;
+                        continue;
+                    }
+                    const auto position = parse_unsigned(target);
                     if (position) {
                         const auto argument_index = *position >= 1 ? *position - 1 : args.size();
                         if (argument_index < args.size() && !args[argument_index].empty()) {
