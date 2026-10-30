@@ -26,6 +26,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/McpTestKit.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -40,9 +41,11 @@
 #include <boost/asio/use_awaitable.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -344,8 +347,18 @@ public:
     explicit SingleCallProvider(std::string name, support::JsonValue arguments, std::string raw)
         : ScriptedProvider("fake"), name_(std::move(name)), arguments_(std::move(arguments)), raw_(std::move(raw)) {}
 
+    void set_call(std::string name, support::JsonValue arguments, std::string raw) {
+        name_ = std::move(name);
+        arguments_ = std::move(arguments);
+        raw_ = std::move(raw);
+        request_count_ = 0;
+    }
+
+    std::vector<std::vector<ai::Tool>> offered_tools;
+
     [[nodiscard]] ai::ModelStream stream(
-            ai::Model model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions) override {
+        offered_tools.push_back(std::move(context.tools));
         const int request = request_count_++;
         return ai::detail::make_model_stream(
                 [this, model = std::move(model), request](ai::AssistantEventSink sink)
@@ -446,6 +459,165 @@ private:
 };
 
 } // namespace
+
+TEST_CASE("agent session lists MCP resources only on demand and can call tools after a resource failure",
+        "[coding_agent][mcp][issue1105][spec]") {
+    const bool fail_resources = GENERATE(false, true);
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    const auto trace = workspace.path() / "methods";
+    write_global_mcp_json(workspace,
+            "{\"mcpServers\":{\"echo\":{\"command\":\"python3\",\"args\":[\"" + fixture_dir() +
+                    "/resource_isolation_server.py\",\"" + trace.string() + "\",\"" + (fail_resources ? "fail" : "ok") +
+                    "\"],\"exposure\":\"direct\"}}}");
+    tests::RuntimeFixture runtime;
+    auto provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{
+            {"list_mcp_resources", support::JsonValue::object_t{{"server", "echo"}}},
+            {"mcp__echo__echo", support::JsonValue::object_t{}},
+            {"mcp__echo__echo", support::JsonValue::object_t{}},
+    });
+    auto attempt = make_persisted_session(runtime, workspace, provider);
+    const auto startup_methods = tests::read_text_if_present(trace);
+    const auto prompted = tests::run_awaitable(runtime, attempt.session->prompt("list resources then echo twice"));
+    const auto listed = tool_result_text(*attempt.session, "list_mcp_resources");
+    const auto resource_error = tool_result_is_error(*attempt.session, "list_mcp_resources");
+    const auto echoed = tool_result_texts(*attempt.session, "mcp__echo__echo");
+    auto* manager = coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*attempt.session);
+    const auto servers = manager->servers();
+    attempt.session->close();
+    attempt.session.reset();
+    runtime.close();
+
+    CHECK(startup_methods == "initialize\nnotifications/initialized\ntools/list\n");
+    CHECK(prompted.has_value());
+    CHECK(resource_error == fail_resources);
+    REQUIRE(listed.has_value());
+    CHECK(listed->find(fail_resources ? "resource boom" : "docs://intro") != std::string::npos);
+    CHECK(echoed == std::vector<std::string>{"echo after resources", "echo after resources"});
+    REQUIRE(servers.size() == 1);
+    REQUIRE(servers.front().connection.has_value());
+    CHECK(servers.front().connection->state == coding_agent::runtime::McpServerState::Connected);
+    CHECK(servers.front().connection->has_resources);
+    CHECK(tests::read_text_if_present(trace) == startup_methods + "resources/list\ntools/call\ntools/call\n");
+}
+
+TEST_CASE("agent session binds late MCP tools and replaces their callable schemas after an idle notification",
+        "[coding_agent][mcp][issue1105][spec]") {
+    const bool scripted = GENERATE(false, true);
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    const auto trace = workspace.path() / "methods";
+    write_global_mcp_json(workspace,
+            "{\"mcpServers\":{\"echo\":{\"command\":\"python3\",\"args\":[\"" + fixture_dir() +
+                    "/resource_isolation_server.py\",\"" + trace.string() + "\",\"change\"],\"exposure\":\"" +
+                    (scripted ? "codemode" : "direct") + "\"}}}");
+    tests::RuntimeFixture runtime;
+    auto provider = std::make_shared<SingleCallProvider>("", support::JsonValue{}, "");
+    const auto set_call = [provider, scripted](std::string name, std::string field, std::string value) {
+        support::JsonValue arguments{support::JsonValue::object_t{{field, value}}};
+        if (scripted) {
+            arguments = support::JsonValue::object_t{{"code",
+                    "const r = await tools." + name + "(" + support::write_json(arguments).value_or("{}") +
+                            "); text(r.content[0].text);"}};
+            name = "codemode";
+        }
+        const auto raw = support::write_json(arguments).value_or("{}");
+        provider->set_call(std::move(name), std::move(arguments), raw);
+    };
+    set_call("mcp__echo__echo", "text", "first");
+    auto attempt = make_persisted_session(runtime, workspace, provider);
+    auto* manager = coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*attempt.session);
+    const auto first = tests::run_awaitable(runtime, attempt.session->prompt("echo first"));
+    const auto late_registered = [manager] {
+        const auto servers = manager->servers();
+        return servers.size() == 1 && servers.front().connection && servers.front().connection->tools.size() == 2;
+    };
+    // The Session retains the manager until this bounded wait and all prompts settle.
+    const auto settled = runtime.run(
+            support::detail::make_async_result([late_registered]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                const auto executor = co_await boost::asio::this_coro::executor;
+                co_await tests::wait_for(executor, late_registered, std::chrono::seconds{2});
+                co_return support::ExpectedVoid{};
+            }));
+    const bool late_ready = late_registered();
+    set_call("mcp__echo__late", "message", "bound");
+    const auto second = tests::run_awaitable(runtime, attempt.session->prompt("call late tool"));
+    set_call("mcp__echo__echo", "message", "second");
+    const auto third = tests::run_awaitable(runtime, attempt.session->prompt("call updated echo"));
+    const auto late_results = tool_result_texts(*attempt.session, scripted ? "codemode" : "mcp__echo__late");
+    const auto echoes = tool_result_texts(*attempt.session, scripted ? "codemode" : "mcp__echo__echo");
+    const bool late_declared = exposes_tool(*attempt.session, "mcp__echo__late");
+    attempt.session->close();
+    attempt.session.reset();
+    runtime.close();
+
+    CHECK(first.has_value());
+    CHECK(settled.has_value());
+    CHECK(late_ready);
+    CHECK(second.has_value());
+    CHECK(third.has_value());
+    CHECK(late_declared == !scripted);
+    CHECK(std::ranges::any_of(
+            late_results, [](const auto& text) { return text.find("late:bound") != std::string::npos; }));
+    REQUIRE_FALSE(echoes.empty());
+    CHECK(echoes.front().find("echo:first") != std::string::npos);
+    CHECK(echoes.back().find("echo:second") != std::string::npos);
+    CHECK(tests::trace_line_count(trace, "tools/list") == 2);
+    CHECK(tests::trace_line_count(trace, "tools/call") == 3);
+    if (!scripted) {
+        REQUIRE_FALSE(provider->offered_tools.empty());
+        std::vector<std::string> names;
+        for (const auto& tool : provider->offered_tools.back()) {
+            if (!tool.name.starts_with("mcp__")) continue;
+            names.push_back(tool.name);
+            CHECK(tool.description == "updated");
+        }
+        CHECK(names == std::vector<std::string>{"mcp__echo__echo", "mcp__echo__late"});
+    }
+}
+
+TEST_CASE("agent session close discards a pending MCP tool refresh without reopening the transport",
+        "[coding_agent][mcp][issue1105][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    const auto trace = workspace.path() / "methods";
+    write_global_mcp_json(workspace,
+            "{\"mcpServers\":{\"echo\":{\"command\":\"python3\",\"args\":[\"" + fixture_dir() +
+                    "/resource_isolation_server.py\",\"" + trace.string() +
+                    "\",\"hold-change\"],\"exposure\":\"direct\"}}}");
+    tests::RuntimeFixture runtime;
+    auto attempt = make_persisted_session(runtime,
+            workspace,
+            std::make_shared<SingleCallProvider>(
+                    "mcp__echo__echo", support::JsonValue::object_t{{"text", "first"}}, "{\"text\":\"first\"}"));
+    auto manager =
+            coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*attempt.session)->shared_from_this();
+    const auto prompted = tests::run_awaitable(runtime, attempt.session->prompt("start a tool refresh"));
+    const auto observed =
+            runtime.run(support::detail::make_async_result([trace]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                const auto executor = co_await boost::asio::this_coro::executor;
+                co_await tests::wait_for(
+                        executor,
+                        [trace] { return tests::trace_line_count(trace, "tools/list") == 2; },
+                        std::chrono::seconds{2});
+                co_return support::ExpectedVoid{};
+            }));
+    const bool refresh_pending = tests::trace_line_count(trace, "tools/list") == 2;
+    attempt.session->close();
+    attempt.session.reset();
+    runtime.close();
+    const auto servers = manager->servers();
+
+    CHECK(prompted.has_value());
+    CHECK(observed.has_value());
+    CHECK(refresh_pending);
+    REQUIRE(servers.size() == 1);
+    REQUIRE(servers.front().connection.has_value());
+    CHECK(servers.front().connection->state == coding_agent::runtime::McpServerState::Closed);
+    CHECK_FALSE(servers.front().connection->error.has_value());
+    CHECK(tests::read_text_if_present(trace) ==
+            "initialize\nnotifications/initialized\ntools/list\ntools/call\ntools/list\n");
+}
 
 TEST_CASE("tool_search ranks a deferred MCP tool, activates only the match, and the next request executes it",
         "[coding_agent][mcp][tool_search][issue1095][spec]") {

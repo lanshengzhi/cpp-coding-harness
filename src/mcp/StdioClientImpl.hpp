@@ -78,6 +78,8 @@ public:
     /// requests through the same queue.
     void notify(std::string method, std::optional<support::JsonValue> params = std::nullopt) override;
 
+    void set_notification_listener(NotificationSink listener) override;
+
     [[nodiscard]] bool closed() const noexcept { return closed_; }
     [[nodiscard]] const std::string& server_name() const noexcept override { return config_.name; }
     /// pi `initialize` result `instructions`, when the server sent them: the
@@ -85,6 +87,10 @@ public:
     /// entry carries no description.
     [[nodiscard]] const std::optional<std::string>& server_instructions() const noexcept {
         return server_instructions_;
+    }
+
+    [[nodiscard]] const support::JsonValue& server_capabilities() const noexcept override {
+        return server_capabilities_;
     }
 
 private:
@@ -107,8 +113,10 @@ private:
     [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> reconnect_transport();
     [[nodiscard]] boost::asio::awaitable<void> drain_stderr();
     [[nodiscard]] support::Error failure_with_stderr_tail(support::Error error) const;
-    /// Serve the queued frames in order until the queue drains; one pump runs
-    /// at a time and is restarted by the next enqueue.
+    /// One reader serves requests and idle notifications; enqueue wakes its
+    /// idle read before writing the next request, so reads never overlap.
+    void start_pump();
+    bool dispatch_notification(const support::JsonValue& message);
     [[nodiscard]] boost::asio::awaitable<void> pump();
     [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> write_frame(std::string_view frame);
     /// Read frames until the response for `id` arrives. Malformed/invalid
@@ -118,7 +126,7 @@ private:
     /// read error. `last_read_timed_out_` is set for the deadline, and
     /// `last_read_woken_` for a cancellation-driven wake (see
     /// `cancel_request`); `closed_` is set for EOF or an unexpected error.
-    [[nodiscard]] boost::asio::awaitable<std::optional<std::string>> read_line();
+    [[nodiscard]] boost::asio::awaitable<std::optional<std::string>> read_line(bool idle = false);
 
     /// Resolve a cancellation request for `id` (posted from the stop
     /// callback). Marks the id cancelled and wakes the in-flight response
@@ -164,6 +172,7 @@ private:
     int process_group_{-1};
     /// pi `initialize` result `instructions` (see the accessor).
     std::optional<std::string> server_instructions_;
+    support::JsonValue server_capabilities_{support::JsonValue::object_t{}};
     /// The request id whose frame the pump is currently writing or awaiting;
     /// 0 when the pump is idle. `awaiting_id_` is set only while a response
     /// read is outstanding, so a cancellation wake targets the right read.
@@ -174,8 +183,11 @@ private:
     /// response is awaited; a matching `notifications/progress` delivers to it
     /// and the next read restarts the deadline (pi `armTimeout` re-arm).
     ProgressCallback progress_handler_;
+    NotificationSink notification_listener_;
+    bool idle_reading_{false};
     bool pumping_{false};
     bool closed_{false};
+    bool closing_{false};
     /// The last `read_line` nullopt came from the deadline rather than EOF.
     bool last_read_timed_out_{false};
     /// The last `read_line` nullopt was a cancellation wake, not EOF.

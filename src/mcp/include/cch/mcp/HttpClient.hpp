@@ -68,8 +68,7 @@ public:
 
     /// One server-to-client notification received on the GET stream (pi
     /// `TransportEvents`'s `message`).
-    using NotificationListener = std::function<void(std::string_view method, const support::JsonValue& params)>;
-    virtual void set_notification_listener(NotificationListener listener) = 0;
+    void set_notification_listener(NotificationSink listener) override = 0;
 
     /// One server-to-client stream failure (pi `TransportEvents`'s `error`):
     /// an exhausted reconnect reports "MCP server-to-client stream dropped and

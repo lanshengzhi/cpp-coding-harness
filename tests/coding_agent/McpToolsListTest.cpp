@@ -66,10 +66,13 @@ public:
     [[nodiscard]] const std::optional<std::string>& server_instructions() const noexcept override {
         return instructions_;
     }
+    [[nodiscard]] const support::JsonValue& server_capabilities() const noexcept override { return capabilities_; }
+    void set_notification_listener(NotificationSink) override {}
     void close() noexcept override {}
 
     std::string name_{"scripted"};
     std::optional<std::string> instructions_{};
+    support::JsonValue capabilities_{support::JsonValue::object_t{}};
 };
 
 [[nodiscard]] support::JsonValue tool(std::string name) {

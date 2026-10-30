@@ -24,6 +24,7 @@
 #include <cch/mcp/StdioClient.hpp>
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/this_coro.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -181,66 +182,85 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::read_resource(
 }
 
 support::AsyncResult<void> ProductionMcpConnection::refresh() {
-    return support::detail::make_async_result([this]() -> boost::asio::awaitable<support::ExpectedVoid> {
-        if (!connect_source_) {
-            co_return std::unexpected(support::make_error(
-                    support::ErrorCode::Validation, "MCP server '" + server_name_ + "' cannot reconnect"));
+    return support::detail::make_async_result([self = shared_from_this()]()
+                                                      -> boost::asio::awaitable<support::ExpectedVoid> {
+        if (self->state_ == McpServerState::Closed) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "MCP connection is closed"));
         }
-        auto connected = co_await connect_source_();
+        if (!self->connect_source_) {
+            co_return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "MCP server '" + self->server_name_ + "' cannot reconnect"));
+        }
+        support::Expected<ConnectedMcpTransport> connected =
+                ConnectedMcpTransport{.client = self->client_, .instructions = self->instructions_};
+        if (!self->client_) {
+            connected = co_await self->connect_source_();
+        }
         if (!connected) {
+            if (self->state_ == McpServerState::Closed) co_return std::unexpected(std::move(connected.error()));
             // An OAuth challenge (for example stale credentials after an
             // external sign-out) asks for a sign-in, not a failure.
-            state_ = connected.error().code == support::ErrorCode::OAuth ? McpServerState::NeedsAuth
-                                                                         : McpServerState::Failed;
-            error_ = connected.error().message;
+            self->state_ = connected.error().code == support::ErrorCode::OAuth ? McpServerState::NeedsAuth
+                                                                               : McpServerState::Failed;
+            self->error_ = connected.error().message;
             co_return std::unexpected(std::move(connected.error()));
         }
+        if (self->state_ == McpServerState::Closed) {
+            connected->client->close();
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "MCP connection is closed"));
+        }
         auto tools = co_await mcp::list_mcp_server_tools(*connected->client);
+        if (self->state_ == McpServerState::Closed) {
+            connected->client->close();
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "MCP connection is closed"));
+        }
         if (!tools) {
-            state_ = McpServerState::Failed;
-            error_ = tools.error().message;
+            self->state_ = McpServerState::Failed;
+            self->error_ = tools.error().message;
             co_return std::unexpected(std::move(tools.error()));
         }
-        // pi runtime `fetchResources`: the connected-time snapshot, with MCP
-        // App resources removed. A list failure leaves that side empty, so a
-        // server whose lists fail still connects.
-        mcp::McpConnectionResourceServer resource_server{connected->client};
-        auto snapshot = co_await support::detail::await_async_result(
-                mcp::fetch_mcp_resource_snapshot(resource_server, std::stop_token{}));
-        if (!snapshot) {
-            state_ = McpServerState::Failed;
-            error_ = snapshot.error().message;
-            co_return std::unexpected(std::move(snapshot.error()));
-        }
-        client_ = std::move(connected->client);
-        instructions_ = std::move(connected->instructions);
-        tools_ = live_tools(*tools);
-        has_resources_ = snapshot->has_resources;
-        resource_count_ = snapshot->resources.size();
-        error_.reset();
-        state_ = McpServerState::Connected;
+        // pi v1.3.0 connectOnce: resources are discovered only when requested;
+        // availability comes from initialize, including when listing later fails.
+        self->has_resources_ = connected->client->server_capabilities().get_object().contains("resources");
+        self->resource_count_ = 0;
+        self->client_ = std::move(connected->client);
+        self->instructions_ = std::move(connected->instructions);
+        self->tools_ = live_tools(*tools);
+        self->error_.reset();
+        self->state_ = McpServerState::Connected;
+        self->listen_for_tool_changes(co_await boost::asio::this_coro::executor);
         co_return support::ExpectedVoid{};
     });
 }
 
 support::AsyncResult<void> ProductionMcpConnection::reconnect() {
-    return support::detail::make_async_result([this]() -> boost::asio::awaitable<support::ExpectedVoid> {
-        state_ = McpServerState::Connecting;
-        error_.reset();
-        auto refreshed = co_await support::detail::await_async_result(refresh());
-        if (!refreshed) {
-            co_return std::unexpected(std::move(refreshed.error()));
-        }
-        if (tools_changed_) {
-            tools_changed_();
-        }
-        co_return support::ExpectedVoid{};
-    });
+    return support::detail::make_async_result(
+            [self = shared_from_this()]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                if (self->state_ == McpServerState::Closed) {
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Cancelled, "MCP connection is closed"));
+                }
+                self->state_ = McpServerState::Connecting;
+                self->error_.reset();
+                if (self->client_) {
+                    self->client_->close();
+                    self->client_.reset();
+                }
+                auto refreshed = co_await support::detail::await_async_result(self->refresh());
+                if (!refreshed) {
+                    co_return std::unexpected(std::move(refreshed.error()));
+                }
+                if (self->tools_changed_) {
+                    self->tools_changed_();
+                }
+                co_return support::ExpectedVoid{};
+            });
 }
 
 support::AsyncResult<void> ProductionMcpConnection::sign_out() {
     // pi `connection.signOut()`: drop the live client and mark needs-auth.
     // The credential removal itself is the sign-in driver's job.
+    if (client_) client_->close();
     client_.reset();
     state_ = McpServerState::NeedsAuth;
     return support::AsyncResult<void>{support::ExpectedVoid{}};
@@ -249,13 +269,37 @@ support::AsyncResult<void> ProductionMcpConnection::sign_out() {
 void ProductionMcpConnection::close() noexcept {
     state_ = McpServerState::Closed;
     if (client_) {
-        // stdio teardown runs in the client's destructor; the HTTP client has
-        // an explicit close (GET stream abort + session DELETE).
-        if (auto* http = dynamic_cast<cch::mcp::HttpClient*>(client_.get()); http != nullptr) {
-            http->close();
-        }
+        client_->close();
         client_.reset();
     }
+}
+
+void ProductionMcpConnection::listen_for_tool_changes(boost::asio::any_io_executor executor) {
+    std::weak_ptr<ProductionMcpConnection> weak_self = weak_from_this();
+    std::weak_ptr<cch::mcp::Client> weak_client = client_;
+    client_->set_notification_listener(
+            [weak_self, weak_client, executor](std::string_view method, const support::JsonValue&) {
+                if (method != "notifications/tools/list_changed") return;
+                auto self = weak_self.lock();
+                auto client = weak_client.lock();
+                if (!self || !client || self->client_ != client || self->state_ != McpServerState::Connected) return;
+                // The operation retains both owners through discovery. A close, sign-out
+                // or reconnect detaches this client; a late result must not publish.
+                support::detail::make_async_result_on(executor,
+                        [self, client]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                            auto tools = co_await mcp::list_mcp_server_tools(*client);
+                            if (self->client_ != client || self->state_ != McpServerState::Connected)
+                                co_return support::ExpectedVoid{};
+                            if (tools) {
+                                self->tools_ = live_tools(*tools);
+                                if (self->tools_changed_) self->tools_changed_();
+                            } else {
+                                self->error_ = "Failed to refresh tools: " + tools.error().message;
+                            }
+                            co_return support::ExpectedVoid{};
+                        })
+                        .start([](support::ExpectedVoid) noexcept {});
+            });
 }
 
 void ProductionMcpConnection::set_tools_changed_listener(ToolsChangedListener listener) {
@@ -349,9 +393,8 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                     connection->note_connect_error(std::move(connected.error()));
                     co_return std::shared_ptr<McpLiveConnection>{std::move(connection)};
                 }
-                // pi runtime `getClient()` after connect: list the tools and take the
-                // connected-time resource snapshot before the connection reports
-                // connected.
+                // Finish discovery on the already initialized transport. Resource
+                // access stays lazy (pi v1.3.0 connectOnce).
                 static_cast<void>(co_await support::detail::await_async_result(connection->refresh()));
                 co_return std::shared_ptr<McpLiveConnection>{std::move(connection)};
             });

@@ -86,8 +86,8 @@ public:
     /// `.../list_changed` re-list hooks consume this dispatch; the re-list
     /// itself is not implemented here. `params` is an empty object when the
     /// notification carries none.
-    using NotificationListener = std::function<void(std::string_view method, const support::JsonValue& params)>;
-    void set_notification_listener(NotificationListener listener) override;
+
+    void set_notification_listener(NotificationSink listener) override;
 
     /// One server-to-client stream failure (pi `TransportEvents`'s `error`):
     /// an exhausted reconnect reports "MCP server-to-client stream dropped and
@@ -119,6 +119,10 @@ public:
     /// entry carries no description.
     [[nodiscard]] const std::optional<std::string>& server_instructions() const noexcept {
         return server_instructions_;
+    }
+
+    [[nodiscard]] const support::JsonValue& server_capabilities() const noexcept override {
+        return server_capabilities_;
     }
 
 private:
@@ -284,6 +288,7 @@ private:
     std::string protocol_version_;
     /// pi `initialize` result `instructions` (see the accessor).
     std::optional<std::string> server_instructions_;
+    support::JsonValue server_capabilities_{support::JsonValue::object_t{}};
     int next_id_{1};
     bool pumping_{false};
 
@@ -295,7 +300,7 @@ private:
     /// the client closes; session DELETE uses its separate close-purpose path.
     std::stop_source close_stop_;
     bool closed_{false};
-    NotificationListener notification_listener_;
+    NotificationSink notification_listener_;
     ErrorListener error_listener_;
     std::map<std::string, ServerRequestHandler> request_handlers_;
     /// In-flight server-to-client request handlers, keyed by the serialized

@@ -143,6 +143,7 @@ StdioClientImpl::~StdioClientImpl() {
 }
 
 void StdioClientImpl::close() noexcept {
+    closing_ = true;
     close_transport();
     teardown_process_group();
 }
@@ -362,6 +363,8 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClientImpl>>> Stdi
         co_return std::unexpected(std::move(valid.error()));
     }
     client->server_instructions_ = detail::initialize_instructions(*initialized);
+    // validate_initialize_result guarantees an object-valued capabilities member.
+    client->server_capabilities_ = initialized->get_object().find("capabilities")->second;
     client->notify("notifications/initialized");
     co_return client;
 }
@@ -380,6 +383,10 @@ support::AsyncResult<support::JsonValue> StdioClientImpl::request(
                     options = std::move(options),
                     stop_token](
                     support::AsyncCompletion<support::JsonValue, support::Error> completion) mutable noexcept {
+                if (self->closing_) {
+                    completion(std::unexpected(closed_error(self->config_.name)));
+                    return;
+                }
                 if (stop_token.stop_requested()) {
                     completion(std::unexpected(detail::cancelled_error(self->config_.name)));
                     return;
@@ -491,7 +498,20 @@ void StdioClientImpl::enqueue_frame(std::string frame,
     item->is_notification = !item->completion.has_value();
     item->on_progress = std::move(on_progress);
     queue_.push_back(std::move(item));
-    if (!pumping_) {
+    start_pump();
+}
+
+void StdioClientImpl::set_notification_listener(NotificationSink listener) {
+    notification_listener_ = std::move(listener);
+    start_pump();
+}
+
+void StdioClientImpl::start_pump() {
+    if (idle_reading_) {
+        boost::system::error_code ignored;
+        stdout_pipe_.cancel(ignored);
+    }
+    if (!pumping_ && (!queue_.empty() || (!closed_ && notification_listener_))) {
         pumping_ = true;
         // Capture the shared owner in the coroutine frame at creation, so the
         // client outlives the pump even if every external reference drops.
@@ -531,14 +551,30 @@ boost::asio::awaitable<std::optional<support::Error>> StdioClientImpl::reconnect
         closed_ = true;
         co_return std::move(valid.error());
     }
+    server_instructions_ = detail::initialize_instructions(*initialized);
+    server_capabilities_ = initialized->get_object().find("capabilities")->second;
     notify("notifications/initialized");
     co_return std::nullopt;
 }
 
 boost::asio::awaitable<void> StdioClientImpl::pump() {
-    while (!queue_.empty()) {
+    for (;;) {
+        if (queue_.empty()) {
+            if (closed_ || !notification_listener_) break;
+            idle_reading_ = true;
+            auto line = co_await read_line(true);
+            idle_reading_ = false;
+            if (line) {
+                if (auto parsed = support::read_json(*line)) dispatch_notification(*parsed);
+            }
+            continue;
+        }
         auto item = std::move(queue_.front());
         queue_.pop_front();
+        if (closing_) {
+            complete_frame(*item, std::unexpected(closed_error(config_.name)));
+            continue;
+        }
         if (closed_) {
             // pi `connection.reconnect()`: a disconnected server reconnects on
             // the next call. Re-establish it once here; a failed reconnect is
@@ -607,7 +643,7 @@ boost::asio::awaitable<std::optional<support::Error>> StdioClientImpl::write_fra
     co_return std::nullopt;
 }
 
-boost::asio::awaitable<std::optional<std::string>> StdioClientImpl::read_line() {
+boost::asio::awaitable<std::optional<std::string>> StdioClientImpl::read_line(bool idle) {
     last_read_timed_out_ = false;
     last_read_woken_ = false;
     for (;;) {
@@ -636,7 +672,7 @@ boost::asio::awaitable<std::optional<std::string>> StdioClientImpl::read_line() 
         const auto executor = co_await boost::asio::this_coro::executor;
         boost::asio::steady_timer timer(executor);
         auto timed_out = std::make_shared<bool>(false);
-        if (config_.request_timeout > std::chrono::milliseconds::zero()) {
+        if (!idle && config_.request_timeout > std::chrono::milliseconds::zero()) {
             timer.expires_after(config_.request_timeout);
             // The timer handler may outlive this read (the deadline can fire
             // just as the read completes), so it reaches the client through a
@@ -740,6 +776,7 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> StdioClientImpl::a
             }
             continue;
         }
+        if (dispatch_notification(*parsed)) continue;
         auto matched = detail::response_for_id(*parsed, id);
         if (!matched) {
             co_return std::unexpected(std::move(matched.error()));
@@ -748,6 +785,22 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> StdioClientImpl::a
             co_return std::move(**matched);
         }
     }
+}
+
+bool StdioClientImpl::dispatch_notification(const support::JsonValue& message) {
+    const auto* object = message.get_if<support::JsonValue::object_t>();
+    if (!object || object->contains("id")) return false;
+    const auto version = object->find("jsonrpc");
+    const auto method = object->find("method");
+    if (version == object->end() || !version->second.holds<std::string>() || version->second.get_string() != "2.0" ||
+            method == object->end() || !method->second.holds<std::string>())
+        return false;
+    if (notification_listener_) {
+        const auto params = object->find("params");
+        const support::JsonValue empty{support::JsonValue::object_t{}};
+        notification_listener_(method->second.get_string(), params == object->end() ? empty : params->second);
+    }
+    return true;
 }
 
 void StdioClientImpl::close_transport() noexcept {
