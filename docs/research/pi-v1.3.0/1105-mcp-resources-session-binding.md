@@ -47,12 +47,31 @@ execution.
 ## Validation
 
 - Focused Validation: `cmake --build --preset vcpkg --target cch_tests_coding_agent`,
-  then `ctest --preset vcpkg -L '^issue1105$' --output-on-failure`: **3 selected,
-  3 passed**, covering five generated scenario executions. Both the initial
+  then `ctest --preset vcpkg -L '^issue1105$' --output-on-failure`: **4 selected,
+  4 passed**, covering six scenario executions across the Session and Native TUI
+  callers. Both the initial
   eager-resource regression and the missing-notification regression failed before
   their implementations and passed afterwards.
-- Full Validation and existing-receipt revalidation are recorded after the clean
-  implementation revision is committed, as required by the receipt contract.
+- Existing receipt revalidation: **36 selected, 36 passed** on clean source
+  revision `3496ff692ef2c4e4c7aaf2c7ab391594674c5026`, using
+  `ctest --preset vcpkg -L '^(issue1090|issue1101|issue1104)$'`. Each pinned input
+  was checked against its Git blob at that revision before rebinding its hash.
+  The shared JUnit is `deliveries/1105-existing-deliveries-revalidation.xml`.
+  No capability status changed; both consolidation checks pass.
+- The full run exposed an existing reconnect assertion that expected eager
+  resource counts. It now checks successful reconnection, fresh initialization
+  and tool discovery, and the absence of resource requests. Product status
+  presentation remains #1118's scope.
+- Full Validation: after the incremental build,
+  `ctest --preset vcpkg -j1 --output-on-failure --output-junit /tmp/1105-full.xml`
+  completed with **4,034 selected, 4,026 passed, 8 skipped, 0 failed** in
+  564 seconds. All **43 architecture cases passed**, including the warning gate
+  and standalone Owner Interface compilation. The skips require unavailable
+  prerequisites: six frozen-pi durable continuation cases, the realtime-clock
+  adjustment case and the native terminal differential capture.
+  Earlier attempts encountered compiler-host contention at the warning gate and
+  two timing-sensitive failures outside MCP; the unchanged gate and both tests
+  passed in the final serial run. No timeout, bound or quarantine policy changed.
 
 ## Capability status
 

@@ -84,19 +84,19 @@
           },
           {
             "path": "src/mcp/StdioClient.cpp",
-            "sha256": "c703a9f47dae23664b1c64578bd07592d3fb70c6c7cb620cded91eef3617314a"
+            "sha256": "b0bb7fe2d60ac6ddd6b611cef08a9c7cd3cc2373a57e34ef2340c7f9dd3a2924"
           },
           {
             "path": "src/mcp/StdioClientImpl.hpp",
-            "sha256": "5aa24edfb6ca3b30993f185eff2d4c272e33a8e94d66914e800edd3549b80757"
+            "sha256": "f989d17e3d4b17ca418b0499788a7f1cab40ab026037559c18349f6ad2b1d0b9"
           },
           {
             "path": "src/mcp/HttpClient.cpp",
-            "sha256": "29f5c989b544efeb98c86b6e70f6fe358455c5d89d0b1138203289715521273e"
+            "sha256": "408a5bf01b8d79c7bfc1ce3ffff10faafa2c4bdb5e7b651e7ddd0ff41938ab6e"
           },
           {
             "path": "src/mcp/HttpClientImpl.hpp",
-            "sha256": "0d1faef3099a1fc18f90af20c5f77431c662dcb51691f2cc0b888283fe8ac999"
+            "sha256": "ec16586184ec08a708c4d5bea04782badad3dfad712f3d5c7adc530a7f6bc194"
           },
           {
             "path": "src/mcp/ProtocolInternal.hpp",
@@ -104,7 +104,7 @@
           },
           {
             "path": "src/mcp/include/cch/mcp/Client.hpp",
-            "sha256": "7fe1dc6a7685b7447f3ed6d66950d05c1555765f6244ebdea407382fbbed7b2e"
+            "sha256": "fdd40dfdf031afd19c4f3ff40626d05b5d8cc9488efa1d3526794b5cc427451d"
           },
           {
             "path": "src/mcp/include/cch/mcp/Protocol.hpp",
@@ -120,7 +120,7 @@
           },
           {
             "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
-            "sha256": "03c6c8ba29a0219658346b8fc18799235ef9d62a7860dd213b1c92c2add677c2"
+            "sha256": "d23ca1776ffc928fe0fe8fac24ffd621d2cbdac7f804dd5f1f480115b95af822"
           },
           {
             "path": "src/mcp/include/cch/mcp/HttpServerConfig.hpp",
@@ -140,11 +140,11 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "aa41f10315d4062b6ed2b417a45809143f5d38ef21122f5e40f44c332680dc49"
+            "sha256": "6f5cc6cc4164631ec908901958f38e9ac679e37a8b8dcc356b4cb744b447dd97"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "dd613f58906acd99b3f149b84d338365e8f0c391dbc88f0597602cfd8c35ec2e"
+            "sha256": "b34b23fda48b16d231d448f890f4d8233cb2990b8e17e17af442a3ea569730d8"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "ef64465cd243b17a870c2530dcf88ca88a43597ac0b93e97dfe8241b53d72886"
+            "sha256": "88d7651db291b6612fcad5a5d4b857bd8345c2ed1fb3dfdd134693ad63ff9d11"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -257,17 +257,17 @@
             "--preset",
             "vcpkg",
             "-L",
-            "issue1101",
+            "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1093-registration-1101.xml"
+            "/tmp/1105-existing-revalidation.xml"
           ],
-          "testedRevision": "6cc1aa2bcc7520fda25c5370da2b2cc45fe24797",
-          "recordedAt": "2026-10-30T04:56:13Z",
-          "selected": 14,
+          "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
+          "recordedAt": "2026-10-30T13:11:22Z",
+          "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1093-registration-1101.xml",
-            "sha256": "1b8d4f7cd31a1222576cfc3ea4c0e14c8f1be35d13cdb2f308061de5a755b2ea"
+            "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+            "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
           }
         },
         "rows": [
@@ -324,17 +324,17 @@
             "--preset",
             "vcpkg",
             "-L",
-            "issue1090",
+            "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml"
+            "/tmp/1105-existing-revalidation.xml"
           ],
-          "testedRevision": "6cc1aa2bcc7520fda25c5370da2b2cc45fe24797",
-          "recordedAt": "2026-10-30T04:56:13Z",
-          "selected": 10,
+          "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
+          "recordedAt": "2026-10-30T13:11:22Z",
+          "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml",
-            "sha256": "46b3e44e3e9e0466f20c1cbee4045089d5502ae8d1077e370d1ebc315acac992"
+            "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+            "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
           }
         },
         "inputs": [
@@ -380,7 +380,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "c91528681340e3eefe768baf7a0f8e9215abb655a43bf232f80d1353b1157d70"
+            "sha256": "8c16dee17e642170c8602c5eca501c19681004e5a01fff66b59d7961eac8b374"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -661,11 +661,11 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "aa41f10315d4062b6ed2b417a45809143f5d38ef21122f5e40f44c332680dc49"
+            "sha256": "6f5cc6cc4164631ec908901958f38e9ac679e37a8b8dcc356b4cb744b447dd97"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "dd613f58906acd99b3f149b84d338365e8f0c391dbc88f0597602cfd8c35ec2e"
+            "sha256": "b34b23fda48b16d231d448f890f4d8233cb2990b8e17e17af442a3ea569730d8"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
@@ -737,7 +737,7 @@
           },
           {
             "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "sha256": "958f78808cb556dca6f8a325eb174e9a71355e0df8988bd1ed2a4d7931fd96bb"
+            "sha256": "3db9f497c8dd5ab66a8b5127eb064e1ee11ff9d2ac475aa7e48743abac10340e"
           },
           {
             "path": "tests/coding_agent/McpSessionManagerTest.cpp",
@@ -753,7 +753,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "c91528681340e3eefe768baf7a0f8e9215abb655a43bf232f80d1353b1157d70"
+            "sha256": "8c16dee17e642170c8602c5eca501c19681004e5a01fff66b59d7961eac8b374"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -838,17 +838,17 @@
             "--preset",
             "vcpkg",
             "-L",
-            "issue1104",
+            "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml"
+            "/tmp/1105-existing-revalidation.xml"
           ],
-          "testedRevision": "6cc1aa2bcc7520fda25c5370da2b2cc45fe24797",
-          "recordedAt": "2026-10-30T04:56:13Z",
-          "selected": 12,
+          "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
+          "recordedAt": "2026-10-30T13:11:22Z",
+          "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml",
-            "sha256": "73d70e8d76997922368d94a45e73885108ced1ae36125daf1c2be825567686ac"
+            "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+            "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27"
@@ -1193,10 +1193,13 @@
     ],
     "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 558,
+      "scenarios": 561,
       "scenarioNamed": 360,
       "artifactCovered": 58,
       "orphaned": [
+        "audit-1105/session-binding.json:real Session reads resources on demand and binds a late tool",
+        "audit-1105/session-binding.json:real Session calls tools after resources/list fails and binds a late tool",
+        "audit-1105/session-binding.json:real Session replaces MCP callable schemas after a tool-list change",
         "audit-1157/environment.json:output exceeding the window",
         "audit-1157/environment.json:output within the window",
         "audit-1089/environment.json:watch covers creation after return and stops callbacks after close",
@@ -3473,6 +3476,38 @@
     }
   ],
   "orphanScenarios": [
+    {
+      "family": "audit-1105",
+      "artifact": "session-binding.json",
+      "scenario": "real Session reads resources on demand and binds a late tool",
+      "reason": "Captured by #1105 through the real frozen Agent Session after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_coding_agent:mcp-application-resource-init",
+        "cch_mcp:mcp-resources-list-read"
+      ],
+      "disposition": "#1105 compares this slice; #1177 owns the application receipt follow-up. This observation does not promote a whole capability row."
+    },
+    {
+      "family": "audit-1105",
+      "artifact": "session-binding.json",
+      "scenario": "real Session calls tools after resources/list fails and binds a late tool",
+      "reason": "Captured by #1105 through the real frozen Agent Session after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_coding_agent:mcp-application-resource-init",
+        "cch_mcp:mcp-resources-list-read"
+      ],
+      "disposition": "#1105 compares this slice; #1177 owns the application receipt follow-up. This observation does not promote a whole capability row."
+    },
+    {
+      "family": "audit-1105",
+      "artifact": "session-binding.json",
+      "scenario": "real Session replaces MCP callable schemas after a tool-list change",
+      "reason": "Captured by #1105 through the real frozen Agent Session after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_coding_agent:mcp-reconnect-tools-changed"
+      ],
+      "disposition": "#1105 compares this slice; #1177 owns the application receipt follow-up. This observation does not promote a whole capability row."
+    },
     {
       "family": "audit-1157",
       "artifact": "environment.json",
