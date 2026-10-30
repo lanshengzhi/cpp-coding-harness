@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/support/Error.hpp>
@@ -36,7 +37,12 @@ namespace cch::agent {
         " [diagnostic truncated]");
 }
 
-/** Parse, clone, coerce, and validate one call against its private executable profile. */
+/** Parse, clone, apply tool-level prepare_arguments (if present), coerce, and validate one call against its private
+ * executable profile. */
+[[nodiscard]] support::Expected<support::JsonValue> prepare_tool_arguments(
+        const Tool& tool, const ai::ToolCallContent& call);
+
+/** Parse, clone, coerce, and validate one call against its definition. */
 [[nodiscard]] support::Expected<support::JsonValue> prepare_tool_arguments(
     const ai::Tool& tool,
     const ai::ToolCallContent& call);

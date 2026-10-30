@@ -1,6 +1,7 @@
 #include "ToolCallExecutor.hpp"
 
 #include "ExecutionShared.hpp"
+#include "RunToolCallImpl.hpp"
 #include "ToolArgumentPreparation.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include <cch/agent/NestedToolCalls.hpp>
@@ -36,37 +37,6 @@
 namespace cch::agent {
 namespace {
 
-struct ToolUpdateGate {
-    std::mutex mutex;
-    bool active{true};
-};
-
-void close_tool_updates(const std::shared_ptr<ToolUpdateGate>& gate) {
-    std::lock_guard lock(gate->mutex);
-    gate->active = false;
-}
-
-struct TimedToolExecution {
-    support::Expected<AsyncToolExecutionResult> result;
-    std::int64_t duration_ms;
-};
-
-[[nodiscard]] boost::asio::awaitable<TimedToolExecution> execute_with_update_lifetime(Tool& tool,
-        const ToolInvocation& invocation,
-        std::stop_token stop_token,
-        ToolUpdateSink update_sink,
-        const std::shared_ptr<ToolUpdateGate>& gate) {
-    const auto started_at = std::chrono::steady_clock::now();
-    auto result =
-            co_await support::detail::await_async_result(tool.execute(invocation, stop_token, std::move(update_sink)));
-    const auto duration_ms = std::llround(
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
-    close_tool_updates(gate);
-    co_return TimedToolExecution{std::move(result), duration_ms};
-}
-
-constexpr std::string_view kOperationAbortedMessage{"Operation aborted"};
-
 [[nodiscard]] ai::ToolResultMessage error_tool_result(
     const ai::ToolCallContent& call,
     std::string message) {
@@ -92,15 +62,6 @@ constexpr std::string_view kOperationAbortedMessage{"Operation aborted"};
     };
 }
 
-/// A nested call's terminal outcome: a tool failure is an `is_error` result
-/// the nested runner reports to the script, never a batch failure.
-[[nodiscard]] AsyncToolExecutionResult nested_error_result(std::string message) {
-    AsyncToolExecutionResult result;
-    result.content.emplace_back(ai::text_content(std::move(message)));
-    result.is_error = true;
-    return result;
-}
-
 /// Build the aborted outcome for a call that never emitted a
 /// ToolExecutionStartEvent. No ToolExecutionEndEvent is emitted here:
 /// lifecycle events stay strictly paired, so an unstarted call produces only
@@ -110,13 +71,6 @@ constexpr std::string_view kOperationAbortedMessage{"Operation aborted"};
         .result = error_tool_result(call, std::string{kOperationAbortedMessage}),
         .call_terminate = false,
     };
-}
-
-constexpr std::size_t kMaxToolFailureDiagnosticBytes = 4096;
-
-[[nodiscard]] std::string bounded_failure_text(const support::Error& error) {
-    std::string diagnostic = error.detail.empty() ? error.message : error.detail;
-    return support::bounded_redacted_text(std::move(diagnostic), kMaxToolFailureDiagnosticBytes, "...");
 }
 
 void apply_after_result(
@@ -223,7 +177,7 @@ struct ResolvedToolCall {
                                                  " (argument location: root)"));
         return resolved;
     }
-    auto arguments = prepare_tool_arguments(resolved.tool->definition, call);
+    auto arguments = prepare_tool_arguments(*resolved.tool, call);
     if (!arguments) {
         resolved.rejection = error_tool_result(call, arguments.error().detail);
         return resolved;
@@ -408,7 +362,7 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
         co_return std::unexpected(start_emit.error());
     }
 
-    const auto resolved = resolve_tool_call(registry_, call);
+    auto resolved = resolve_tool_call(registry_, call);
     SettledToolCall settled;
     if (resolved.rejection) {
         settled.tool_result = std::move(*resolved.rejection);
@@ -425,6 +379,9 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
             settled.tool_result = error_tool_result(call, bounded_failure_text(before_result.error()));
         } else if (before_result->block) {
             settled.tool_result = error_tool_result(call, before_result->reason.value_or("Tool execution was blocked"));
+            settled.call_terminate = before_result->terminate.value_or(false);
+        } else if (before_result->args.has_value()) {
+            resolved.invocation.arguments = std::move(*before_result->args);
         }
     }
 
@@ -734,99 +691,41 @@ boost::asio::awaitable<NestedToolCallOutcome> ToolCallExecutor::execute_nested(T
         AgentEventSink* sink,
         std::string parent_id,
         std::stop_token signal) {
-    if (signal.stop_requested()) {
-        co_return NestedToolCallOutcome{nested_error_result(std::string{kOperationAbortedMessage}), std::nullopt};
+    RunToolCallOptions options{registry_};
+    options.assistant_message = request.assistant_message;
+    options.context = request.context;
+    options.before_tool_call = options_.before_tool_call;
+    options.after_tool_call = options_.after_tool_call;
+    options.stop_token = signal;
+    options.nested_calls = invocation.nested_calls;
+    if (sink != nullptr) {
+        options.on_update = [sink,
+                                    call_id = invocation.call_id,
+                                    tool_name = invocation.name,
+                                    args = invocation.arguments,
+                                    parent_id = std::move(parent_id)](
+                                    const AsyncToolExecutionResult& partial_result) -> support::ExpectedVoid {
+            return emit_agent_event(*sink,
+                    ToolExecutionUpdateEvent{
+                            .tool_call_id = call_id,
+                            .tool_name = tool_name,
+                            .args = args,
+                            .partial_result = partial_result,
+                            .parent_tool_call_id = parent_id,
+                    });
+        };
     }
-    Tool* tool = registry_.find(invocation.name);
-    if (tool == nullptr) {
-        co_return NestedToolCallOutcome{nested_error_result("unknown tool: " + invocation.name), std::nullopt};
-    }
-
     ai::ToolCallContent nested_call;
-    nested_call.id = invocation.call_id;
-    nested_call.name = invocation.name;
-    nested_call.raw_arguments = invocation.raw_arguments;
-    nested_call.arguments = invocation.arguments;
-    auto arguments = prepare_tool_arguments(tool->definition, nested_call);
-    if (!arguments) {
-        co_return NestedToolCallOutcome{nested_error_result(arguments.error().detail), std::nullopt};
-    }
-    invocation.arguments = std::move(*arguments);
+    nested_call.id = std::move(invocation.call_id);
+    nested_call.name = std::move(invocation.name);
+    nested_call.raw_arguments = std::move(invocation.raw_arguments);
+    nested_call.arguments = std::move(invocation.arguments);
 
-    if (options_.before_tool_call) {
-        BeforeToolCallContext hook_context{
-                .assistant_message = request.assistant_message,
-                .tool_call = nested_call,
-                .args = invocation.arguments,
-                .context = request.context,
-        };
-        auto before_result = co_await invoke_agent_hook(
-                "beforeToolCall", *options_.before_tool_call, std::move(hook_context), signal);
-        if (!before_result) {
-            co_return NestedToolCallOutcome{
-                    nested_error_result(bounded_failure_text(before_result.error())), std::nullopt};
-        }
-        if (before_result->block) {
-            co_return NestedToolCallOutcome{
-                    nested_error_result(before_result->reason.value_or("Tool execution was blocked")), std::nullopt};
-        }
-    }
-
-    if (signal.stop_requested()) {
-        co_return NestedToolCallOutcome{nested_error_result(std::string{kOperationAbortedMessage}), std::nullopt};
-    }
-
-    auto update_gate = std::make_shared<ToolUpdateGate>();
-    ToolUpdateSink update_sink = [sink,
-                                         update_gate,
-                                         nested_id = invocation.call_id,
-                                         tool_name = invocation.name,
-                                         args = invocation.arguments,
-                                         parent_id](const AsyncToolExecutionResult& partial_result) {
-        std::lock_guard lock(update_gate->mutex);
-        if (!update_gate->active) {
-            return support::ExpectedVoid{};
-        }
-        return emit_agent_event(*sink,
-                ToolExecutionUpdateEvent{
-                        .tool_call_id = nested_id,
-                        .tool_name = tool_name,
-                        .args = args,
-                        .partial_result = partial_result,
-                        .parent_tool_call_id = parent_id,
-                });
+    auto outcome = co_await run_tool_call_coro(std::move(nested_call), std::move(options));
+    co_return NestedToolCallOutcome{
+            .result = std::move(outcome.result),
+            .duration_ms = outcome.duration_ms,
     };
-    auto timed = co_await execute_with_update_lifetime(*tool, invocation, signal, std::move(update_sink), update_gate);
-    auto& executed = timed.result;
-
-    AsyncToolExecutionResult outcome;
-    if (!executed) {
-        outcome = nested_error_result(bounded_failure_text(executed.error()));
-    } else {
-        outcome = std::move(*executed);
-    }
-
-    if (options_.after_tool_call) {
-        AfterToolCallContext hook_context{
-                .assistant_message = request.assistant_message,
-                .tool_call = nested_call,
-                .args = invocation.arguments,
-                .result = outcome,
-                .is_error = outcome.is_error,
-                .context = request.context,
-        };
-        auto after_result =
-                co_await invoke_agent_hook("afterToolCall", *options_.after_tool_call, std::move(hook_context), signal);
-        if (!after_result) {
-            outcome = nested_error_result(bounded_failure_text(after_result.error()));
-        } else {
-            if (after_result->content) outcome.content = std::move(*after_result->content);
-            if (after_result->details) outcome.details = std::move(*after_result->details);
-            if (after_result->is_error) outcome.is_error = *after_result->is_error;
-            if (after_result->terminate) outcome.terminate = *after_result->terminate;
-        }
-    }
-    co_return NestedToolCallOutcome{std::move(outcome), timed.duration_ms};
 }
 
 } // namespace cch::agent

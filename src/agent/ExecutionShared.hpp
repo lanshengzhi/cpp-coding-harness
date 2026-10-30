@@ -1,13 +1,19 @@
 #pragma once
 
 #include <cch/agent/AgentEvent.hpp>
+#include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/support/AsyncResult.hpp>
+#include <cch/support/BoundedText.hpp>
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
+#include <chrono>
+#include <cmath>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -16,6 +22,46 @@
 #include <vector>
 
 namespace cch::agent {
+
+struct ToolUpdateGate {
+    std::mutex mutex;
+    bool active{true};
+};
+
+inline void close_tool_updates(const std::shared_ptr<ToolUpdateGate>& gate) {
+    std::lock_guard lock(gate->mutex);
+    gate->active = false;
+}
+
+struct TimedToolExecution {
+    support::Expected<AsyncToolExecutionResult> result;
+    std::int64_t duration_ms{0};
+};
+
+/// Execute one tool and record its execute-only duration. Referenced values must
+/// outlive the coroutine.
+[[nodiscard]] inline boost::asio::awaitable<TimedToolExecution> execute_with_update_lifetime(
+        Tool& tool,                       // must outlive coroutine
+        const ToolInvocation& invocation, // must outlive coroutine
+        std::stop_token stop_token,
+        ToolUpdateSink update_sink,
+        const std::shared_ptr<ToolUpdateGate>& gate) {
+    const auto started_at = std::chrono::steady_clock::now();
+    auto result =
+            co_await support::detail::await_async_result(tool.execute(invocation, stop_token, std::move(update_sink)));
+    const auto duration_ms = std::llround(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
+    close_tool_updates(gate);
+    co_return TimedToolExecution{.result = std::move(result), .duration_ms = duration_ms};
+}
+
+inline constexpr std::string_view kOperationAbortedMessage{"Operation aborted"};
+inline constexpr std::size_t kMaxToolFailureDiagnosticBytes = 4096;
+
+[[nodiscard]] inline std::string bounded_failure_text(const support::Error& error) {
+    std::string diagnostic = error.detail.empty() ? error.message : error.detail;
+    return support::bounded_redacted_text(std::move(diagnostic), kMaxToolFailureDiagnosticBytes, "...");
+}
 
 /// Invoke one Agent event sink and return its explicit failure outcome.
 /// The single event-emit path shared by the agent loop and the tool-call

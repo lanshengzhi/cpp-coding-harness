@@ -51,7 +51,9 @@ struct BeforeToolCallContext {
 
 struct BeforeToolCallResult {
     bool block{false};
-    std::optional<std::string> reason;
+    std::optional<std::string> reason{std::nullopt};
+    std::optional<bool> terminate{std::nullopt};
+    std::optional<support::JsonValue> args{std::nullopt};
 };
 
 struct AfterToolCallContext {
@@ -92,6 +94,11 @@ enum class ToolConcurrency {
     ParallelSafe,
 };
 
+/// Optional compatibility shim for raw tool-call arguments before schema validation
+/// (pi `AgentTool.prepareArguments`). Must return an object that matches the tool's
+/// parameter schema. Operates as an independent copyable callable.
+using ToolPrepareArguments = std::function<support::JsonValue(const support::JsonValue&)>;
+
 /// Terminal result of one Agent Tool execute operation, delivered through a
 /// typed `AsyncResult` (ADR 0040 §Agent Tool).
 using ToolExecuteResult = cch::support::AsyncResult<AsyncToolExecutionResult>;
@@ -123,6 +130,7 @@ struct Tool {
     /// the System Prompt's Guidelines section, in declaration order.
     std::vector<std::string> prompt_guidelines{};
     ToolConcurrency concurrency{ToolConcurrency::Exclusive};
+    ToolPrepareArguments prepare_arguments{nullptr};
     ToolExecute execute;
 };
 
