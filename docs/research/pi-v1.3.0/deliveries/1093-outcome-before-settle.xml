@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="14"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="8"
+	timestamp="2026-10-30T13:56:13"
+	>
+	<testcase name="a pre-aborted public codemode run is finished when its result settles" classname="a pre-aborted public codemode run is finished when its result settles" time="0.0326165" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a pre-aborted public codemode run is finished when its result settles"
+Randomness seeded to: 1950823073
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller applies reversed answers by result number not arrival order" classname="a public codemode caller applies reversed answers by result number not arrival order" time="1.3602" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller applies reversed answers by result number not arrival order"
+Randomness seeded to: 1821587214
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets UTC and no WeakRef in a deterministic run" classname="a public codemode caller gets UTC and no WeakRef in a deterministic run" time="1.49616" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets UTC and no WeakRef in a deterministic run"
+Randomness seeded to: 615211260
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run" classname="a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run" time="1.44538" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run"
+Randomness seeded to: 4012841978
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets during for the result the VM was processing when the script ended" classname="a public codemode caller gets during for the result the VM was processing when the script ended" time="4.88328" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets during for the result the VM was processing when the script ended"
+Randomness seeded to: 234194928
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets illegal start options refused before any VM exists" classname="a public codemode caller gets illegal start options refused before any VM exists" time="0.033788" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets illegal start options refused before any VM exists"
+Randomness seeded to: 830190110
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets the fingerprint before the first call and a reused result number is refused" classname="a public codemode caller gets the fingerprint before the first call and a reused result number is refused" time="3.02499" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets the fingerprint before the first call and a reused result number is refused"
+Randomness seeded to: 3555248531
+===============================================================================
+All tests passed (31 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller keeps a call waiting when its answer cannot be serialized" classname="a public codemode caller keeps a call waiting when its answer cannot be serialized" time="1.5451" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller keeps a call waiting when its answer cannot be serialized"
+Randomness seeded to: 2151426769
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller numbers globals with tools and gets rejection properties on the script Error" classname="a public codemode caller numbers globals with tools and gets rejection properties on the script Error" time="1.3664" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller numbers globals with tools and gets rejection properties on the script Error"
+Randomness seeded to: 2586848897
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically" classname="a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically" time="1.42341" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically"
+Randomness seeded to: 251526200
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller replays a deterministic run from the same start seed and answers" classname="a public codemode caller replays a deterministic run from the same start seed and answers" time="1.71623" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller replays a deterministic run from the same start seed and answers"
+Randomness seeded to: 3010299852
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller sees a seed mismatch change randomness without changing the start time" classname="a public codemode caller sees a seed mismatch change randomness without changing the start time" time="8.08048" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller sees a seed mismatch change randomness without changing the start time"
+Randomness seeded to: 2424274086
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller sees finished track the outcome on the normal path and a finished run ignores a late answer" classname="a public codemode caller sees finished track the outcome on the normal path and a finished run ignores a late answer" time="1.50539" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller sees finished track the outcome on the normal path and a finished run ignores a late answer"
+Randomness seeded to: 344341302
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller sees the outcome before the result settles when the caller aborts" classname="a public codemode caller sees the outcome before the result settles when the caller aborts" time="1.44271" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller sees the outcome before the result settles when the caller aborts"
+Randomness seeded to: 2959809029
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

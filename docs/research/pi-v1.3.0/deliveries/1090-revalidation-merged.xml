@@ -6,113 +6,113 @@
 	skipped="0"
 	hostname=""
 	time="0"
-	timestamp="2026-10-30T08:19:03"
+	timestamp="2026-10-30T13:56:13"
 	>
-	<testcase name="A model without vision gets the image and the frozen placeholder note" classname="A model without vision gets the image and the frozen placeholder note" time="0.0139434" status="run">
+	<testcase name="A model without vision gets the image and the frozen placeholder note" classname="A model without vision gets the image and the frozen placeholder note" time="0.0339306" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "A model without vision gets the image and the frozen placeholder note"
-Randomness seeded to: 1472088317
+Randomness seeded to: 3287225718
 ===============================================================================
 All tests passed (23 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="An image the processor cannot decode is an explicit error" classname="An image the processor cannot decode is an explicit error" time="0.0425462" status="run">
+	<testcase name="An image the processor cannot decode is an explicit error" classname="An image the processor cannot decode is an explicit error" time="0.0253653" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "An image the processor cannot decode is an explicit error"
-Randomness seeded to: 2410595960
+Randomness seeded to: 3465259878
 ===============================================================================
 All tests passed (18 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="An inline GIF passes through the public Harness unchanged" classname="An inline GIF passes through the public Harness unchanged" time="0.0444358" status="run">
+	<testcase name="An inline GIF passes through the public Harness unchanged" classname="An inline GIF passes through the public Harness unchanged" time="0.01635" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "An inline GIF passes through the public Harness unchanged"
-Randomness seeded to: 533003671
+Randomness seeded to: 3819917642
 ===============================================================================
 All tests passed (25 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="Capability-absent image reads fail explicitly without another model turn" classname="Capability-absent image reads fail explicitly without another model turn" time="0.0786333" status="run">
+	<testcase name="Capability-absent image reads fail explicitly without another model turn" classname="Capability-absent image reads fail explicitly without another model turn" time="0.108543" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "Capability-absent image reads fail explicitly without another model turn"
-Randomness seeded to: 391167411
+Randomness seeded to: 685073139
 ===============================================================================
 All tests passed (93 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="Image detection accepts exactly the provider inline formats plus BMP" classname="Image detection accepts exactly the provider inline formats plus BMP" time="0.00796552" status="run">
+	<testcase name="Image detection accepts exactly the provider inline formats plus BMP" classname="Image detection accepts exactly the provider inline formats plus BMP" time="0.0106556" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "Image detection accepts exactly the provider inline formats plus BMP"
-Randomness seeded to: 534278102
+Randomness seeded to: 522918099
 ===============================================================================
 All tests passed (37 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="Image dimensions come from the frozen headers" classname="Image dimensions come from the frozen headers" time="0.00766134" status="run">
+	<testcase name="Image dimensions come from the frozen headers" classname="Image dimensions come from the frozen headers" time="0.0203209" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "Image dimensions come from the frozen headers"
-Randomness seeded to: 2631502218
+Randomness seeded to: 4000164413
 ===============================================================================
 All tests passed (16 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="Read converts BMP to PNG through the configured processor" classname="Read converts BMP to PNG through the configured processor" time="0.0428112" status="run">
+	<testcase name="Read converts BMP to PNG through the configured processor" classname="Read converts BMP to PNG through the configured processor" time="0.0278201" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "Read converts BMP to PNG through the configured processor"
-Randomness seeded to: 3553483458
+Randomness seeded to: 3210929385
 ===============================================================================
 All tests passed (24 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="Read returns a prepared image and the frozen diagnostic through the public Harness" classname="Read returns a prepared image and the frozen diagnostic through the public Harness" time="0.0139102" status="run">
+	<testcase name="Read returns a prepared image and the frozen diagnostic through the public Harness" classname="Read returns a prepared image and the frozen diagnostic through the public Harness" time="0.0168485" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "Read returns a prepared image and the frozen diagnostic through the public Harness"
-Randomness seeded to: 2306359565
+Randomness seeded to: 3224826698
 ===============================================================================
 All tests passed (35 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="The local image processor orients, resizes, and converts like the frozen processor" classname="The local image processor orients, resizes, and converts like the frozen processor" time="0.00808237" status="run">
+	<testcase name="The local image processor orients, resizes, and converts like the frozen processor" classname="The local image processor orients, resizes, and converts like the frozen processor" time="0.00989402" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "The local image processor orients\, resizes\, and converts like the frozen processor"
-Randomness seeded to: 1251796560
+Randomness seeded to: 3550513814
 ===============================================================================
 All tests passed (66 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="The local image processor passes through an upright inline image within the limits" classname="The local image processor passes through an upright inline image within the limits" time="0.00664035" status="run">
+	<testcase name="The local image processor passes through an upright inline image within the limits" classname="The local image processor passes through an upright inline image within the limits" time="0.012269" status="run">
 		<properties>
 			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
 		</properties>
 		<system-out>Filters: "The local image processor passes through an upright inline image within the limits"
-Randomness seeded to: 4123628107
+Randomness seeded to: 1182626332
 ===============================================================================
 All tests passed (22 assertions in 1 test case)
 

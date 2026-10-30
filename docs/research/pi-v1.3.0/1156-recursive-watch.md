@@ -25,7 +25,12 @@ observed, a write in a subdirectory created after the watch starts is observed, 
   returned watcher exists; a file (or not-yet-existing) target is covered at its parent,
   so creating it is a change. The change sink receives `WatchChange{paths}` values.
 - A directory created or moved in under a recursive watch is scanned and covered before
-  its own changes can be reported; coverage is never silently shrunk.
+  its own changes can be reported; `{overflow:true}` requests a rescan for writes that
+  could have preceded watch installation.
+- Moving or deleting a child removes its subtree watches immediately. Moving a directory
+  within the tree establishes fresh watches at the destination; moving it outside the root
+  or into an excluded name cannot keep reporting through its old inode. Ordinary child
+  deletion preserves the root watcher; loss or movement of the watched root is terminal.
 - Hidden names (when `exclude_hidden`) and `excluded_names` are neither watched below
   nor reported, at any depth. Symbolic links below the target are not followed.
 - The watch set is bounded (10,000 directories, the frozen default): a tree over the
@@ -63,6 +68,26 @@ observed, a write in a subdirectory created after the watch starts is observed, 
   tree under the current host load; it is the known resource-sensitive case (owner
   #632). A fullscreen scroll-indicator case that failed once under load passed on rerun.
 
+## Review correction
+
+The review reproduced stale paths after an inotify-watched directory was renamed:
+`visible` to `.hidden` still reported `visible/secret.txt`, and moving that inode
+outside the root still reported outside writes below the old path. A public
+`Environment::watch` regression for a renamed nested directory failed against
+the reviewed implementation in 5.02 seconds (three failed checks, worker joined
+before assertions), then passed with the correction.
+
+The six `issue1156` cases now pass, including current descendant paths after a
+rename, hidden/name exclusions after a move, move-out, child deletion and terminal
+root deletion. The independent real-file probe now reports zero hidden or
+outside writes. Test waits observe the requested path with a bounded condition
+variable wait; every discriminating assertion follows `close()`, and the old
+unlocked `changes.clear()` and stale semaphore-permit shortcut are gone.
+Full Validation on the repaired tree with the clean named frozen checkout:
+**4,015 selected / 4,014 passed / 0 failed / 1 opt-in TUI skip**, including
+**43/43 architecture cases**. The final Standards and Spec reviews report
+zero remaining findings.
+
 ## Capability status
 
 Advances the durable `ExecutionEnv` watch contract: recursive coverage, subtree
@@ -76,7 +101,6 @@ mode, multi-target arrays, or the remote environment.
 Polling mode is not implemented (Linux native inotify only; the frozen adapter selects
 polling only for Windows and unreliable network/FUSE file systems). One `WatchTarget` is
 watched per call; the frozen multi-target array form is not exposed. The directory
-budget is fixed at the frozen 10,000 default with no caller override. Moved-out
-subdirectories keep their watches until the kernel reports `IN_IGNORED`.
-The directory budget is fixed at the frozen 10,000 default (a caller override is not
-part of the frozen `WatchTarget` contract).
+budget is fixed at the frozen 10,000 default (a caller override is not part of the
+frozen `WatchTarget` contract). The budget counts active watches, so removing a
+subtree releases its directory capacity.

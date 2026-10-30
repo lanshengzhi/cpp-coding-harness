@@ -70,14 +70,26 @@ reconnects it).
 - Formatting: `scripts/format-check.sh origin/main` — clean. Warning gate: `cch_warning_gate`
   passed.
 - Full Validation: `ctest --preset vcpkg -j2` — 3,987 selected, 3,984 passed, 3 failed, exit 8.
-  The three failures are pre-existing and reproduce identically on the stashed baseline at this
-  branch point: `Native TUI product run entry starts, renders, and restores its selected root`,
+  These three failures were later traced to this branch's unconditional pre-prompt MCP
+  awaits, which yielded before the first turn and folded queued steering into the initial
+  input. They passed on the pre-merge baseline. Integration fix `13b04ae6e` skips the
+  no-work awaits while preserving the startup latch; the three cases pass again. The
+  affected cases were `Native TUI product run entry starts, renders, and restores its selected root`,
   `Native TUI queues batched submissions across deferred prompt dispatch`, and
-  `Native TUI restores pending input before abort and accepts it after quiescence` (each fails
+  `Native TUI restores pending input before abort and accepts it after quiescence` (each failed
   on a `messages.size() == 2` message count). Both consolidation checks pass
   (`cch_pi_v130_consolidation_check`, `cch_pi_v130_consolidation_boundaries`), as does
   `cch_warning_gate`. One load-sensitive terminal `postdrain EIO` case failed once under `-j2`
   and passed serially and three times in a row when rerun.
+
+## Review correction
+
+The settle continuation now uses `std::move_only_function<void()>`, and the
+stored-token operation owns its auth store before returning, so consuming the
+operation cannot borrow a destroyed driver. The Session, manager and interactive
+connection doubles share `tests::ConnectionGate`, built on the counted, latched
+`ReleaseGate`; the interactive test posts its release to the owning executor.
+The `issue1104` selection remains 12/12 after these changes.
 
 ## Capability status
 

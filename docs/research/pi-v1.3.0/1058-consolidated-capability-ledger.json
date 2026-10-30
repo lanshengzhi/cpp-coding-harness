@@ -140,7 +140,7 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "d7daf8bd8a1c70e2962819666dd4921d59eb2356993bbfa32b0b42405a8a18b4"
+            "sha256": "aa41f10315d4062b6ed2b417a45809143f5d38ef21122f5e40f44c332680dc49"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
@@ -256,19 +256,18 @@
             "ctest",
             "--preset",
             "vcpkg",
-            "-j2",
             "-L",
             "issue1101",
             "--output-on-failure",
             "--output-junit",
-            "/tmp/cch-1104-revalidation-1101.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1093-registration-1101.xml"
           ],
-          "testedRevision": "13b04ae6e3b25aa8f271a40f7a7265c54a1221ff",
-          "recordedAt": "2026-10-30T00:17:22Z",
+          "testedRevision": "6cc1aa2bcc7520fda25c5370da2b2cc45fe24797",
+          "recordedAt": "2026-10-30T04:56:13Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1085-revalidation-1101.xml",
-            "sha256": "70c59818de944024b9f5d781e7b5657d24848cfcc1b343665fb020f52154f27e"
+            "path": "docs/research/pi-v1.3.0/deliveries/1093-registration-1101.xml",
+            "sha256": "1b8d4f7cd31a1222576cfc3ea4c0e14c8f1be35d13cdb2f308061de5a755b2ea"
           }
         },
         "rows": [
@@ -326,15 +325,16 @@
             "vcpkg",
             "-L",
             "issue1090",
+            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml"
           ],
-          "testedRevision": "a000a271f88bb0b6b75248e46b0e9d332cb8d9e2",
-          "recordedAt": "2026-10-29T23:19:27Z",
+          "testedRevision": "6cc1aa2bcc7520fda25c5370da2b2cc45fe24797",
+          "recordedAt": "2026-10-30T04:56:13Z",
           "selected": 10,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml",
-            "sha256": "7a749b92a354bd58ed96f24b5893597faf59c427559118c3b1ddefb202989380"
+            "sha256": "46b3e44e3e9e0466f20c1cbee4045089d5502ae8d1077e370d1ebc315acac992"
           }
         },
         "inputs": [
@@ -661,7 +661,7 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "d7daf8bd8a1c70e2962819666dd4921d59eb2356993bbfa32b0b42405a8a18b4"
+            "sha256": "aa41f10315d4062b6ed2b417a45809143f5d38ef21122f5e40f44c332680dc49"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
@@ -685,11 +685,11 @@
           },
           {
             "path": "src/coding_agent/tui/McpManagerFlow.cpp",
-            "sha256": "677ae1e665f463dac9e314c88fe93a6a52971e4491924c73d51231645b07296c"
+            "sha256": "c90577a41f51b0fa66e9236dfaed184fcf1ca578f8429d2d2027a4f88ee05d2a"
           },
           {
             "path": "src/coding_agent/tui/McpManagerFlow.hpp",
-            "sha256": "4d1cd6bbb496adcb0de7d94c0ba66c4d0a39a48501b067aa4508630831e45424"
+            "sha256": "de86cdeda880062f1e70735225e5ad0f0126e720886593449b6f7e1541a28247"
           },
           {
             "path": "src/support/AsyncResultBridge.hpp",
@@ -737,15 +737,15 @@
           },
           {
             "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "sha256": "b4bf2f82a06931ed75c60a135ecc5ef265e9b4fcf04e23d867896afb01322293"
+            "sha256": "958f78808cb556dca6f8a325eb174e9a71355e0df8988bd1ed2a4d7931fd96bb"
           },
           {
             "path": "tests/coding_agent/McpSessionManagerTest.cpp",
-            "sha256": "1775c113a3abd2bc94d23b79912c58b3eafa240ea807557493a57e5e5d02e197"
+            "sha256": "dc3be3e51f40e0b47835314c1e6060e65e0979cf03eedf2fa6d99b258b3a83c9"
           },
           {
             "path": "tests/coding_agent/tui/McpManagerFlowTest.cpp",
-            "sha256": "30f00f165192415f5eebae44bdc908f19fc18cbae586f1ff6f925a63f562992e"
+            "sha256": "3175b4f0157878d5527963ec986f21a8687723a194f825a91dd42a2d41538726"
           },
           {
             "path": "tests/coding_agent/tui/McpManagerPresenterTest.cpp",
@@ -786,6 +786,14 @@
           {
             "path": "scripts/evidence/audit_evidence.py",
             "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "tests/support/ConnectionGate.hpp",
+            "sha256": "64c8501dca3a2e61f69229c68bb07a723f0641e3557776f87d969c4382ad2ebe"
+          },
+          {
+            "path": "tests/support/ReleaseGate.hpp",
+            "sha256": "c3f156d5fb4bd67ab7cc33be2ed99650e14e77e732cc6e4b362ee7561c725a07"
           }
         ],
         "rows": [
@@ -831,15 +839,16 @@
             "vcpkg",
             "-L",
             "issue1104",
+            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml"
           ],
-          "testedRevision": "a000a271f88bb0b6b75248e46b0e9d332cb8d9e2",
-          "recordedAt": "2026-10-30T00:16:54Z",
+          "testedRevision": "6cc1aa2bcc7520fda25c5370da2b2cc45fe24797",
+          "recordedAt": "2026-10-30T04:56:13Z",
           "selected": 12,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml",
-            "sha256": "77c1d96dd757e6afb49ac2ec36a355baebeeec24011481d650454e1522b4c3f8"
+            "sha256": "73d70e8d76997922368d94a45e73885108ced1ae36125daf1c2be825567686ac"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27"
