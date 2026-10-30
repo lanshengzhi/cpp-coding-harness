@@ -138,6 +138,245 @@ struct RecordingRemote final : public codemode::CodemodeRemote {
 
 } // namespace
 
+namespace {
+
+/// A successful answer with every field initialized.
+[[nodiscard]] codemode::CodemodeOutcome ok_outcome(std::string value_json) {
+    codemode::CodemodeOutcome outcome;
+    outcome.ok = true;
+    outcome.value_json = std::move(value_json);
+    return outcome;
+}
+
+/// Waits for `count` calls to reach the caller, or fails the case at the bound.
+[[nodiscard]] bool wait_for_calls(
+        std::vector<codemode::CodemodeHostCall>& calls, std::mutex& mutex, std::size_t count) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+    while (std::chrono::steady_clock::now() < deadline) {
+        {
+            std::lock_guard lock(mutex);
+            if (calls.size() >= count) return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+    }
+    return false;
+}
+
+} // namespace
+
+TEST_CASE("Remote deterministic execution runs the script remotely and answers through deliver",
+        "[codemode][remote][deterministic][issue1099]") {
+    auto remote = std::make_shared<RecordingRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(created.has_value());
+
+    std::string fingerprint;
+    std::mutex mutex;
+    std::vector<codemode::CodemodeHostCall> calls;
+    std::vector<std::pair<std::int64_t, std::int64_t>> idles;
+    codemode::CodemodeRunOptions run_options;
+    run_options.started_at = 1768471200000;
+    run_options.seed = 1;
+    run_options.tools = {{.name = "add", .js_name = "add", .description = "Add one."}};
+    run_options.timeout = std::chrono::seconds{20};
+    run_options.callbacks.on_started = [&fingerprint](std::string_view value) { fingerprint = value; };
+    run_options.callbacks.on_call = [&](const codemode::CodemodeHostCall& call) {
+        std::lock_guard lock(mutex);
+        calls.push_back(call);
+    };
+    run_options.callbacks.on_idle = [&](std::int64_t seq, std::int64_t issued) {
+        std::lock_guard lock(mutex);
+        idles.emplace_back(seq, issued);
+    };
+    auto started = (*created)->start("text('hi'); return await tools.add({ a: 1 })", std::move(run_options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    REQUIRE(wait_for_calls(calls, mutex, 1));
+    codemode::CodemodeHostCall call;
+    {
+        std::lock_guard lock(mutex);
+        call = calls.front();
+    }
+    CHECK_FALSE(run.deliver(1, 1768471201000.0, call.id, ok_outcome("2")).has_value());
+
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    CHECK(result->value_json == "2");
+    REQUIRE(result->output.size() == 1);
+    CHECK(result->output.front().data == "hi");
+    REQUIRE(result->calls.size() == 1);
+    CHECK(result->calls.front().name == "add");
+    CHECK_FALSE(fingerprint.empty());
+    CHECK(run.finished());
+}
+
+TEST_CASE("Remote deterministic execution applies reversed answers by result number",
+        "[codemode][remote][deterministic][issue1099]") {
+    // Frozen pi v1.3.0 (`remote-exchange.json`, "a deterministic start over a
+    // transport that reorders replies still applies results in seq order"):
+    // seq 2 arrives before seq 1 and the script still observes ["a", "b"].
+    auto remote = std::make_shared<RecordingRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(created.has_value());
+
+    std::mutex mutex;
+    std::vector<codemode::CodemodeHostCall> calls;
+    std::vector<std::pair<std::int64_t, std::int64_t>> idles;
+    codemode::CodemodeRunOptions run_options;
+    run_options.started_at = 1768471200000;
+    run_options.seed = 1;
+    run_options.tools = {{.name = "wait", .js_name = "wait", .description = "Wait for the host."}};
+    run_options.timeout = std::chrono::seconds{20};
+    run_options.callbacks.on_call = [&](const codemode::CodemodeHostCall& call) {
+        std::lock_guard lock(mutex);
+        calls.push_back(call);
+    };
+    run_options.callbacks.on_idle = [&](std::int64_t seq, std::int64_t issued) {
+        std::lock_guard lock(mutex);
+        idles.emplace_back(seq, issued);
+    };
+    const std::string script = "const order = []; "
+                               "await Promise.all([tools.wait(\"a\").then(() => order.push(\"a\")), "
+                               "tools.wait(\"b\").then(() => order.push(\"b\"))]); return order;";
+    auto started = (*created)->start(script, std::move(run_options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    // Both calls must be outstanding at once, or the transport could not
+    // reorder anything.
+    REQUIRE(wait_for_calls(calls, mutex, 2));
+    codemode::CodemodeHostCall a;
+    codemode::CodemodeHostCall b;
+    {
+        std::lock_guard lock(mutex);
+        a = calls[0];
+        b = calls[1];
+    }
+    CHECK(a.name == "wait");
+    CHECK(b.name == "wait");
+    CHECK(a.id != b.id);
+
+    // Result number 2 arrives first and waits for number 1.
+    CHECK_FALSE(run.deliver(2, 1768471202000.0, b.id, ok_outcome("null")).has_value());
+    CHECK_FALSE(run.deliver(1, 1768471201000.0, a.id, ok_outcome("null")).has_value());
+
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    CHECK(result->value_json == "[\"a\",\"b\"]");
+    {
+        std::lock_guard lock(mutex);
+        REQUIRE(idles.size() == 2);
+        CHECK(idles[0] == std::pair<std::int64_t, std::int64_t>{0, 2});
+        CHECK(idles[1] == std::pair<std::int64_t, std::int64_t>{1, 2});
+    }
+}
+
+TEST_CASE("Remote deterministic execution rejects a reused result number and an unknown call",
+        "[codemode][remote][deterministic][issue1099]") {
+    // Frozen pi v1.3.0: `deliver` refuses these synchronously, and the run
+    // stays open so a valid answer can still complete it.
+    auto remote = std::make_shared<RecordingRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(created.has_value());
+
+    std::mutex mutex;
+    std::vector<codemode::CodemodeHostCall> calls;
+    codemode::CodemodeRunOptions run_options;
+    run_options.started_at = 1768471200000;
+    run_options.seed = 1;
+    run_options.tools = {{.name = "wait", .js_name = "wait", .description = "Wait for the host."}};
+    run_options.timeout = std::chrono::seconds{20};
+    run_options.callbacks.on_call = [&](const codemode::CodemodeHostCall& call) {
+        std::lock_guard lock(mutex);
+        calls.push_back(call);
+    };
+    auto started = (*created)->start("return await tools.wait(1)", std::move(run_options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    REQUIRE(wait_for_calls(calls, mutex, 1));
+    codemode::CodemodeHostCall call;
+    {
+        std::lock_guard lock(mutex);
+        call = calls.front();
+    }
+    const auto unknown = run.deliver(1, 1768471200000.0, 99, ok_outcome("null"));
+    REQUIRE(unknown.has_value());
+    CHECK(unknown->reason == codemode::CodemodeDeliveryRejection::Reason::UnknownCall);
+    CHECK(unknown->message == "Call 99 is not waiting for a result");
+    CHECK_FALSE(run.finished());
+
+    CHECK_FALSE(run.deliver(1, 1768471200000.0, call.id, ok_outcome("null")).has_value());
+    const auto reused = run.deliver(1, 1768471200000.0, call.id, ok_outcome("null"));
+    REQUIRE(reused.has_value());
+    CHECK(reused->reason == codemode::CodemodeDeliveryRejection::Reason::ResultNumber);
+    CHECK(reused->message == "Result number 1 is not a positive integer used once");
+
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+}
+
+TEST_CASE("Remote deterministic execution leaves a missing result pending until the caller cancels",
+        "[codemode][remote][deterministic][issue1099]") {
+    // Frozen pi v1.3.0 (`audit-1099`): with result 1 absent, an accepted
+    // result 2 does not finish the run; the caller must cancel, and that
+    // settles as aborted rather than as a successful replay.
+    auto remote = std::make_shared<RecordingRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(created.has_value());
+
+    std::mutex mutex;
+    std::vector<codemode::CodemodeHostCall> calls;
+    std::stop_source stop;
+    codemode::CodemodeRunOptions run_options;
+    run_options.started_at = 1768471200000;
+    run_options.seed = 1;
+    run_options.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+    };
+    run_options.timeout = std::chrono::seconds{20};
+    run_options.stop_token = stop.get_token();
+    run_options.abort_message = "missing result";
+    run_options.callbacks.on_call = [&](const codemode::CodemodeHostCall& call) {
+        std::lock_guard lock(mutex);
+        calls.push_back(call);
+    };
+    const std::string script = "const order = []; "
+                               "await Promise.all([tools.wait(1), tools.wait(2)]); return order;";
+    auto started = (*created)->start(script, std::move(run_options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    REQUIRE(wait_for_calls(calls, mutex, 2));
+    codemode::CodemodeHostCall b;
+    {
+        std::lock_guard lock(mutex);
+        b = calls[1];
+    }
+    CHECK_FALSE(run.deliver(2, 1768471202000.0, b.id, ok_outcome("null")).has_value());
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    CHECK_FALSE(run.finished());
+
+    stop.request_stop();
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(result->error->message == "missing result");
+}
+
 TEST_CASE("RemoteCodemodeSandbox runs tools in the caller and the script on the remote", "[codemode][remote]") {
     auto remote = std::make_shared<RecordingRemote>();
     codemode::RemoteCodemodeSandboxOptions options;

@@ -29,6 +29,11 @@ struct CodemodeVmStartData {
     std::optional<std::uint64_t> memory_limit_bytes;
     /// Snapshot for load(): key to JSON text.
     std::map<std::string, std::string> store;
+    /// Deterministic start inputs (pi `start`). Unset runs the ordinary VM.
+    std::optional<std::int64_t> started_at;
+    std::optional<std::uint64_t> seed;
+    /// The recorded run's fingerprint, when replaying.
+    std::optional<std::string> expected_fingerprint;
 };
 
 /// pi `CodemodeRemoteRequest` (`packages/codemode/src/runtime/remote.ts`):
@@ -173,6 +178,43 @@ public:
     RemoteCodemodeSandbox& operator=(const RemoteCodemodeSandbox&) = delete;
 
     void close();
+
+    /// One running deterministic execution over the remote (pi `CodemodeRun`).
+    /// The caller answers its calls with `deliver`, exactly as the local
+    /// `CodemodeSandbox::Run` does; results reach the VM across the exchange.
+    class Run {
+    public:
+        Run(Run&&) noexcept;
+        Run& operator=(Run&&) noexcept;
+        ~Run();
+        Run(const Run&) = delete;
+        Run& operator=(const Run&) = delete;
+
+        /// pi `CodemodeRun.finished`: the outcome is decided.
+        [[nodiscard]] bool finished() const;
+
+        /// pi `CodemodeRun.result`: the terminal outcome, delivered once.
+        [[nodiscard]] support::AsyncResult<CodemodeRunResult> result();
+
+        /// pi `CodemodeRun.deliver`: answer call `id` as result `seq` with the
+        /// VM clock reading `now`. Refusals mirror the local run's, so a caller
+        /// learns about a duplicate, unknown or malformed answer synchronously
+        /// instead of from a stalled replay.
+        [[nodiscard]] std::optional<CodemodeDeliveryRejection> deliver(
+                std::int64_t seq, double now, std::int64_t id, CodemodeOutcome outcome);
+
+        struct State;
+
+    private:
+        explicit Run(std::shared_ptr<State> state);
+        std::shared_ptr<State> state_;
+        friend class RemoteCodemodeSandbox;
+    };
+
+    /// pi `CodemodeSandboxBase.start` over a remote: the same deterministic
+    /// inputs, fingerprint and seq-ordered delivery, with the VM running on the
+    /// remote and the calls answered here.
+    [[nodiscard]] support::Expected<Run> start(std::string script, CodemodeRunOptions options);
 
     [[nodiscard]] support::AsyncResult<CodemodeRunResult> run(std::string script,
             std::vector<CodemodeToolDescriptor> tools = {},

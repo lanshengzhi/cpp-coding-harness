@@ -1443,7 +1443,8 @@
         "captures": [
           "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json: a generic remote runs the script and calls the caller's tools across the exchange",
           "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json: remote output is buffered instead of one exchange per output item",
-          "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json: caller abort answers the remote's exchange with stop and settles without waiting for remote compute"
+          "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json: caller abort answers the remote's exchange with stop and settles without waiting for remote compute",
+          "fixtures/pi-v1.3.0/audit-1099/remote-failures.json: remote deterministic delivery rejects duplicates and missing calls remain pending"
         ],
         "comparison": "Compare exchange sequences, batched output, cap errors and abort settlement with the frozen remote capture.",
         "missing": "The Remote protocol consumers and the C++ host do not exist; the row is excluded only for the Cloudflare wrapper."

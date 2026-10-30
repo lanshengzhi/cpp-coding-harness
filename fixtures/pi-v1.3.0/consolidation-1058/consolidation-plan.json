@@ -751,13 +751,17 @@
     {
       "ticket": "1052",
       "scenario": "the /mcp manager lists connecting servers and completes a sign-in while another server connects",
-      "rows": ["mcp-management-ui"],
+      "rows": [
+        "mcp-management-ui"
+      ],
       "authority": "#1104 registered frozen capture plus tests/coding_agent/tui/McpManagerFlowTest.cpp panel-live-during-connect comparison; verification via the #1104 receipt"
     },
     {
       "ticket": "1052",
       "scenario": "a sign-in performed outside the session is picked up on the next turn",
-      "rows": ["mcp-external-signin-pickup"],
+      "rows": [
+        "mcp-external-signin-pickup"
+      ],
       "authority": "#1104 registered frozen capture plus tests/coding_agent/McpSessionManagerTest.cpp turn-start pickup comparison; verification via the #1104 receipt"
     }
   ],
@@ -767,7 +771,9 @@
       "artifact": "environment.json",
       "scenario": "output exceeding the window",
       "reason": "Captured after the #1058 ledger; frozen Node emits all output without a skip.",
-      "rows": ["cch_durable:node-exec"],
+      "rows": [
+        "cch_durable:node-exec"
+      ],
       "disposition": "The #1157 record describes the approved bounded-result behavior without promoting this row."
     },
     {
@@ -775,7 +781,9 @@
       "artifact": "environment.json",
       "scenario": "output within the window",
       "reason": "Captured after the #1058 ledger to contrast the over-window case.",
-      "rows": ["cch_durable:node-exec"],
+      "rows": [
+        "cch_durable:node-exec"
+      ],
       "disposition": "The #1157 record describes the observation without promoting this row."
     },
     {
@@ -1961,7 +1969,9 @@
       "artifact": "harness.json",
       "scenario": "pi JSONL Harness resumes a pending checkpoint after close and reopen",
       "reason": "Captured by #1085 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness continuation tests consume the observation.",
-      "rows": ["cch_durable:task-recovery"],
+      "rows": [
+        "cch_durable:task-recovery"
+      ],
       "disposition": "Compared by tests/durable/JsonlStorageTest.cpp and docs/research/pi-v1.3.0/1085-jsonl-continuation.md; this observation alone does not promote the referenced ledger row."
     },
     {
@@ -1969,7 +1979,9 @@
       "artifact": "interchange.json",
       "scenario": "pi creates a SQLite store with an unfinished task, document and checkpoint",
       "reason": "Captured by #1086 after the consolidated ledger; no #1056 source row routes to this artifact.",
-      "rows": ["cch_durable:task-recovery"],
+      "rows": [
+        "cch_durable:task-recovery"
+      ],
       "disposition": "Frozen pi observation recorded alongside live continuation tests in tests/durable/SqliteStorageTest.cpp; the tests do not directly consume this scenario. This observation alone does not promote the referenced ledger row."
     },
     {
@@ -1977,7 +1989,9 @@
       "artifact": "interchange.json",
       "scenario": "C++ creates a SQLite store that pi reopens, indexes and advances",
       "reason": "Captured by #1086 after the consolidated ledger; no #1056 source row routes to this artifact.",
-      "rows": ["cch_durable:task-recovery"],
+      "rows": [
+        "cch_durable:task-recovery"
+      ],
       "disposition": "Frozen pi observation on a C++-created input, recorded alongside live continuation tests in tests/durable/SqliteStorageTest.cpp; the tests do not directly consume this scenario. This observation alone does not promote the referenced ledger row."
     },
     {
@@ -1985,7 +1999,9 @@
       "artifact": "harness.json",
       "scenario": "pi JSONL Harness resumes a pending checkpoint after close and reopen",
       "reason": "Captured by #1085 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness continuation tests consume the observation.",
-      "rows": ["cch_durable:task-recovery"],
+      "rows": [
+        "cch_durable:task-recovery"
+      ],
       "disposition": "Compared by tests/durable/JsonlStorageTest.cpp and docs/research/pi-v1.3.0/1085-jsonl-continuation.md; this observation alone does not promote the referenced ledger row."
     },
     {
@@ -1993,7 +2009,9 @@
       "artifact": "codemode.json",
       "scenario": "durable codemode returns ordered text image console and value output",
       "reason": "Captured by #1094 after consolidation; the bounded no-environment output comparison does not cover output spilling or image files.",
-      "rows": ["cch_durable:codemode-output"],
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
       "disposition": "Compared through public Harness in tests/durable/HarnessCodemodeTest.cpp; full output capability remains partial. See docs/research/pi-v1.3.0/1094-durable-codemode.md."
     },
     {
@@ -2001,7 +2019,10 @@
       "artifact": "codemode.json",
       "scenario": "durable codemode reopens with the same clock seed and recorded nested answer",
       "reason": "Captured by #1094 after consolidation; bounded native restart does not verify independent nested task identity or pi/C++ interrupted-journal continuation.",
-      "rows": ["cch_durable:codemode-replay", "cch_durable:codemode-store"],
+      "rows": [
+        "cch_durable:codemode-replay",
+        "cch_durable:codemode-store"
+      ],
       "disposition": "Compared after SIGKILL on both SQLite and JSONL through public Harness in tests/durable/HarnessCodemodeTest.cpp; no whole-row replay promotion."
     },
     {
@@ -2009,7 +2030,10 @@
       "artifact": "codemode.json",
       "scenario": "durable codemode refuses to repeat an unsafe interrupted nested call",
       "reason": "Captured by #1094 after consolidation to separate safe replay from unsafe interrupted effects.",
-      "rows": ["cch_durable:codemode-replay", "cch_durable:codemode-failure"],
+      "rows": [
+        "cch_durable:codemode-replay",
+        "cch_durable:codemode-failure"
+      ],
       "disposition": "Compared after SIGKILL on both SQLite and JSONL through public Harness in tests/durable/HarnessCodemodeTest.cpp; the previously completed nested answer remains in failure history."
     },
     {
@@ -2191,6 +2215,16 @@
         "cch_durable:Interchange:jsonl-pi-create"
       ],
       "disposition": "Compared by tests/durable/TerminalLiveBatchTest.cpp and docs/research/pi-v1.3.0/1168-terminal-live-batches.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1099",
+      "artifact": "remote-failures.json",
+      "scenario": "remote deterministic delivery rejects duplicates and missing calls remain pending",
+      "reason": "Captured for #1099 after the #1058 ledger; the frozen observation pins the delivery refusals the C++ replay slice compares against.",
+      "rows": [
+        "cch_codemode:codemode-remote"
+      ],
+      "disposition": "The #1099 delivery compares against this observation without promoting the row."
     }
   ],
   "groups": [

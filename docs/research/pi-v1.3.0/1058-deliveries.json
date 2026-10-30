@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "ef64465cd243b17a870c2530dcf88ca88a43597ac0b93e97dfe8241b53d72886"
+          "sha256": "e7494365c2f2756d2cefd7f56bb143ba0e2049b64f7de8c56ffdafeb8d31c29e"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -277,7 +277,15 @@
           }
         }
       ],
-      "routingSha256": "e75e524b807c4a6dbc4a3a92f0ec2bf4942b82999ab4afdee3c66292dff25b42"
+      "routingSha256": "e75e524b807c4a6dbc4a3a92f0ec2bf4942b82999ab4afdee3c66292dff25b42",
+      "revalidation1099": {
+        "reason": "#1099 registered the audit-1099 frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json",
+          "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      }
     },
     {
       "id": "1090-durable-images",
@@ -326,7 +334,7 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
-          "sha256": "60b709b65b25777be151e0f912d80623d9c17bdf2b5b14652f8738d31db3806c"
+          "sha256": "91d0791bc806f9670378997e0d49456ee4f6737d156a67b74095f87a46a876f9"
         },
         {
           "path": "docs/research/pi-v1.3.0/1090-durable-images.md",
@@ -350,7 +358,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "c91528681340e3eefe768baf7a0f8e9215abb655a43bf232f80d1353b1157d70"
+          "sha256": "3eda52d4780723a334684ce9e5826d0af64e6a097dbe72c4a61e20ec88c8ea84"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -579,6 +587,14 @@
             "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
           }
         }
+      },
+      "revalidation1099": {
+        "reason": "#1099 registered the audit-1099 frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The durable image rows, their scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json",
+          "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -723,7 +739,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "c91528681340e3eefe768baf7a0f8e9215abb655a43bf232f80d1353b1157d70"
+          "sha256": "3eda52d4780723a334684ce9e5826d0af64e6a097dbe72c4a61e20ec88c8ea84"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -821,7 +837,15 @@
           "sha256": "73d70e8d76997922368d94a45e73885108ced1ae36125daf1c2be825567686ac"
         }
       },
-      "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27"
+      "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
+      "revalidation1099": {
+        "reason": "#1099 registered the audit-1099 frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json",
+          "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      }
     }
   ]
 }

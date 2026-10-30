@@ -1,5 +1,7 @@
+#include <cch/codemode/Declarations.hpp>
 #include <cch/codemode/Remote.hpp>
 
+#include "codemode/Deterministic.hpp"
 #include "codemode/Guest.hpp"
 #include "codemode/Prelude.hpp"
 #include "codemode/Shared.hpp"
@@ -21,14 +23,18 @@
 #include <atomic>
 #include <charconv>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <format>
+#include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -41,6 +47,13 @@
 namespace cch::codemode {
 
 namespace {
+
+/// Builds a failed outcome with every field initialized.
+[[nodiscard]] CodemodeRunResult error_result(CodemodeError error) {
+    CodemodeRunResult result;
+    result.error = std::move(error);
+    return result;
+}
 
 using detail::add_function;
 using detail::drain_jobs;
@@ -59,8 +72,10 @@ using detail::kBridgeName;
 using detail::make_function;
 using detail::make_module;
 using detail::parse_store_writes;
+using detail::sandbox_error;
 using detail::store_json;
 using detail::tools_json;
+using detail::validate_globals;
 
 [[nodiscard]] CodemodeError parse_error_json(std::string_view raw) {
     auto parsed = support::read_json(raw);
@@ -611,10 +626,284 @@ void run_remote_worker(CodemodeRemoteRequest request,
     module_cleanup();
 }
 
+/// Deterministic Remote delivery: the VM's own thread hands messages to the
+/// host coroutine, which owns the exchange.
+struct RemoteDeterministicQueue {
+    std::mutex mutex;
+    std::vector<CodemodeRemoteMessageVariant> messages;
+    std::optional<support::Expected<CodemodeRunResult>> terminal;
+
+    void push(CodemodeRemoteMessageVariant message) {
+        std::lock_guard lock(mutex);
+        messages.push_back(std::move(message));
+    }
+
+    [[nodiscard]] std::vector<CodemodeRemoteMessageVariant> take_messages() {
+        std::lock_guard lock(mutex);
+        return std::exchange(messages, {});
+    }
+
+    void finish(support::Expected<CodemodeRunResult> result) {
+        std::lock_guard lock(mutex);
+        terminal = std::move(result);
+    }
+
+    [[nodiscard]] std::optional<support::Expected<CodemodeRunResult>> take_terminal() {
+        std::lock_guard lock(mutex);
+        if (!terminal.has_value()) return std::nullopt;
+        auto result = std::move(terminal);
+        terminal.reset();
+        return result;
+    }
+};
+
+/// Owns the parsed guest for one deterministic remote execution; the driver
+/// holds only the raw pointer, so this must outlive it.
+struct RemoteAstOwner {
+    WasmEdge_ASTModuleContext* ast{nullptr};
+    ~RemoteAstOwner() {
+        if (ast != nullptr) WasmEdge_ASTModuleDelete(ast);
+    }
+};
+
+/// pi `storeWrites` as the `done` payload the caller reads back through
+/// `parse_store_writes`: a two-element entry sets a key, a one-element entry
+/// deletes it.
+[[nodiscard]] std::string write_store_writes(const CodemodeStoreWrites& writes) {
+    std::vector<support::JsonValue> entries;
+    for (const auto& [key, value] : writes.set) {
+        entries.push_back(support::JsonValue{support::JsonValue::array_t{support::JsonValue{key}, value}});
+    }
+    for (const auto& key : writes.deleted) {
+        entries.push_back(support::JsonValue{support::JsonValue::array_t{support::JsonValue{key}}});
+    }
+    auto text = support::write_json(support::JsonValue{std::move(entries)});
+    return text ? *text : std::string{"[]"};
+}
+
+/// The request's store snapshot in the JSON object text the deterministic
+/// driver's prelude reads.
+[[nodiscard]] std::string store_snapshot_json(const std::map<std::string, std::string>& store) {
+    std::string text{"{"};
+    bool first = true;
+    for (const auto& [key, value] : store) {
+        auto written_key = support::write_json(support::JsonValue{key});
+        if (!written_key) continue;
+        if (!first) text.push_back(',');
+        first = false;
+        text += *written_key;
+        text.push_back(':');
+        text += value.empty() ? std::string{"null"} : value;
+    }
+    text.push_back('}');
+    return text;
+}
+
+/// The terminal message for one deterministic outcome. An abort or a timeout
+/// keeps its error kind, which a `done` error payload could not carry.
+[[nodiscard]] CodemodeRemoteMessageVariant deterministic_terminal(CodemodeRunResult result) {
+    if (result.error.has_value() && result.error->kind != CodemodeError::Kind::Script) {
+        return CodemodeRemoteFailureMessage{.error = *result.error};
+    }
+    CodemodeRemoteDoneMessage done;
+    if (result.error.has_value()) {
+        done.ok = false;
+        support::JsonValue::object_t object;
+        object.emplace("message", support::JsonValue{result.error->message});
+        if (result.error->name.has_value()) object.emplace("name", support::JsonValue{*result.error->name});
+        if (result.error->stack.has_value()) object.emplace("stack", support::JsonValue{*result.error->stack});
+        auto text = support::write_json(support::JsonValue{std::move(object)});
+        done.error = text ? *text : result.error->message;
+    } else {
+        done.ok = true;
+        done.value = result.value_json;
+        done.writes = result.store_writes.has_value() ? write_store_writes(*result.store_writes) : std::string{"[]"};
+    }
+    return done;
+}
+
+/// Everything one deterministic execution must keep alive: the parsed guest,
+/// the driver, the exchange and the queue. The declaration order makes the
+/// driver die before the guest it points at.
+struct RemoteDeterministicServe {
+    std::shared_ptr<RemoteAstOwner> guest;
+    std::shared_ptr<detail::DeterministicRun> run;
+    std::shared_ptr<CodemodeRemoteExchangeHook> exchange;
+    std::shared_ptr<RemoteDeterministicQueue> queue;
+    std::shared_ptr<std::stop_source> stop;
+};
+
+/// pi `serveCodemodeRemote` for a deterministic request: the guest and the
+/// deterministic driver run here, and every message the driver reports goes out
+/// through `exchange` without waiting for a reply. That is what lets several
+/// calls be outstanding at once, so a caller's answers can arrive out of order
+/// and still be applied by result number.
+support::AsyncResult<void> serve_deterministic_remote(
+        CodemodeRemoteRequest request, CodemodeRemoteExchangeHook exchange, std::filesystem::path wasm_path) {
+    return support::detail::make_async_result(
+            [request = std::move(request),
+                    exchange = std::move(exchange),
+                    wasm_path = std::move(wasm_path)]() mutable -> boost::asio::awaitable<support::Expected<void>> {
+                auto executor = co_await boost::asio::this_coro::executor;
+                auto served = std::make_shared<RemoteDeterministicServe>();
+                served->exchange = std::make_shared<CodemodeRemoteExchangeHook>(std::move(exchange));
+                served->queue = std::make_shared<RemoteDeterministicQueue>();
+                served->guest = std::make_shared<RemoteAstOwner>();
+                served->stop = std::make_shared<std::stop_source>();
+
+                const auto path = wasm_path.string();
+                WasmEdge_ConfigureContext* configure = WasmEdge_ConfigureCreate();
+                if (request.data.memory_limit_bytes.has_value()) {
+                    WasmEdge_ConfigureSetMaxMemoryPage(
+                            configure, static_cast<std::uint32_t>((*request.data.memory_limit_bytes + 65535) / 65536));
+                }
+                WasmEdge_LoaderContext* loader = WasmEdge_LoaderCreate(configure);
+                const WasmEdge_Result loaded = WasmEdge_LoaderParseFromFile(loader, &served->guest->ast, path.c_str());
+                WasmEdge_LoaderDelete(loader);
+                WasmEdge_ConfigureDelete(configure);
+                if (WasmEdge_ResultOK(loaded) && served->guest->ast != nullptr) {
+                    WasmEdge_ConfigureContext* validate_configure = WasmEdge_ConfigureCreate();
+                    WasmEdge_ValidatorContext* validator = WasmEdge_ValidatorCreate(validate_configure);
+                    const WasmEdge_Result valid = WasmEdge_ValidatorValidate(validator, served->guest->ast);
+                    WasmEdge_ValidatorDelete(validator);
+                    WasmEdge_ConfigureDelete(validate_configure);
+                    if (!WasmEdge_ResultOK(valid)) {
+                        WasmEdge_ASTModuleDelete(served->guest->ast);
+                        served->guest->ast = nullptr;
+                    }
+                }
+                if (!WasmEdge_ResultOK(loaded) || served->guest->ast == nullptr) {
+                    CodemodeRemoteFailureMessage failure;
+                    failure.error = CodemodeError{
+                            .kind = CodemodeError::Kind::Sandbox, .message = "Failed to load guest module"};
+                    (void)co_await support::detail::await_async_result(
+                            (*served->exchange)(std::vector<CodemodeRemoteMessageVariant>{std::move(failure)}));
+                    co_return support::ExpectedVoid{};
+                }
+
+                detail::DeterministicStart start;
+                start.script = request.data.code;
+                start.tools = request.data.tools;
+                for (auto& tool : start.tools) {
+                    if (tool.js_name.empty()) tool.js_name = to_codemode_identifier(tool.name);
+                }
+                start.globals = request.data.globals;
+                start.store_json = store_snapshot_json(request.data.store);
+                start.started_at_ms = request.data.started_at.value_or(0);
+                start.seed = static_cast<std::uint32_t>(request.data.seed.value_or(0));
+                start.expected_fingerprint = request.data.expected_fingerprint;
+                start.memory_limit_bytes = request.data.memory_limit_bytes;
+                start.stop_token = served->stop->get_token();
+
+                detail::DeterministicHost host;
+                host.on_started = [queue = served->queue](std::string_view fingerprint) {
+                    queue->push(CodemodeRemoteStartedMessage{std::string{fingerprint}});
+                };
+                host.on_call = [queue = served->queue](const CodemodeHostCall& call) {
+                    CodemodeRemoteCallMessage message;
+                    message.id = call.id;
+                    message.target = call.target == CodemodeHostCall::Target::Global ? "global" : "tool";
+                    message.name = call.name;
+                    message.args = call.arguments_json;
+                    queue->push(std::move(message));
+                };
+                host.on_idle = [queue = served->queue](std::int64_t seq, std::int64_t issued) {
+                    queue->push(CodemodeRemoteIdleMessage{.seq = seq, .issued = issued});
+                };
+
+                served->run = std::make_shared<detail::DeterministicRun>(
+                        served->guest->ast, std::move(start), std::move(host));
+                served->run->consume([queue = served->queue](support::Expected<CodemodeRunResult> outcome) noexcept {
+                    queue->finish(std::move(outcome));
+                });
+
+                // Fire one exchange per reported message. Detached on purpose:
+                // the remote must not wait for one answer before reporting the
+                // next call, or a caller could never answer out of order.
+                auto dispatch = [&served, &executor](CodemodeRemoteMessageVariant message) {
+                    std::vector<CodemodeRemoteMessageVariant> batch;
+                    batch.push_back(std::move(message));
+                    boost::asio::co_spawn(
+                            executor,
+                            [served, batch = std::move(batch)]() mutable -> boost::asio::awaitable<void> {
+                                auto reply = co_await support::detail::await_async_result(
+                                        (*served->exchange)(std::move(batch)));
+                                if (!reply) {
+                                    served->stop->request_stop();
+                                    co_return;
+                                }
+                                if (auto* stopped = std::get_if<CodemodeRemoteStopReply>(&*reply)) {
+                                    (void)stopped;
+                                    served->stop->request_stop();
+                                    co_return;
+                                }
+                                if (auto* result = std::get_if<CodemodeRemoteResultReply>(&*reply)) {
+                                    const double now = result->now.value_or(0.0);
+                                    const std::int64_t seq = result->seq.value_or(0);
+                                    (void)served->run->deliver(seq,
+                                            now,
+                                            result->id,
+                                            CodemodeOutcome{.ok = result->ok,
+                                                    .value_json = result->ok ? result->payload.value_or(std::string{})
+                                                                             : std::string{},
+                                                    .message = result->ok ? std::string{}
+                                                                          : result->payload.value_or(std::string{}),
+                                                    .properties_json = result->properties});
+                                }
+                            },
+                            boost::asio::detached);
+                };
+
+                boost::asio::steady_timer timer(executor);
+                while (true) {
+                    for (auto& message : served->queue->take_messages())
+                        dispatch(std::move(message));
+                    if (auto terminal = served->queue->take_terminal()) {
+                        // pi sends whatever is still buffered with the terminal
+                        // message in one exchange, so a caller observes the
+                        // script's last output before its outcome.
+                        std::vector<CodemodeRemoteMessageVariant> batch;
+                        for (auto& message : served->queue->take_messages()) {
+                            if (std::holds_alternative<CodemodeRemoteCallMessage>(message)) {
+                                dispatch(std::move(message));
+                            } else {
+                                batch.push_back(std::move(message));
+                            }
+                        }
+                        auto outcome = std::move(*terminal);
+                        if (outcome.has_value()) {
+                            // The deterministic driver keeps output in its
+                            // result; pi's protocol reports it as buffered
+                            // messages ahead of the terminal one.
+                            for (auto& item : outcome->output) {
+                                batch.push_back(CodemodeRemoteOutputMessage{std::move(item)});
+                            }
+                            batch.push_back(deterministic_terminal(std::move(*outcome)));
+                        } else {
+                            CodemodeRemoteFailureMessage failure;
+                            failure.error = CodemodeError{
+                                    .kind = CodemodeError::Kind::Sandbox, .message = outcome.error().message};
+                            batch.push_back(std::move(failure));
+                        }
+                        (void)co_await support::detail::await_async_result((*served->exchange)(std::move(batch)));
+                        co_return support::ExpectedVoid{};
+                    }
+                    timer.expires_after(std::chrono::milliseconds{5});
+                    const auto [error] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+                    (void)error;
+                }
+            });
+}
+
 } // namespace
 
 support::AsyncResult<void> serve_codemode_remote(
         CodemodeRemoteRequest request, CodemodeRemoteExchangeHook exchange, CodemodeServeOptions options) {
+    std::filesystem::path wasm_path =
+            options.wasm_path.empty() ? default_codemode_guest_wasm_path() : options.wasm_path;
+    if (request.data.started_at.has_value()) {
+        return serve_deterministic_remote(std::move(request), std::move(exchange), std::move(wasm_path));
+    }
     const std::uint64_t max_budget = options.max_interrupt_budget.value_or(kDefaultInterruptBudget);
     const std::uint64_t budget =
             request.interrupt_budget.has_value() ? std::min(*request.interrupt_budget, max_budget) : max_budget;
@@ -628,9 +917,6 @@ support::AsyncResult<void> serve_codemode_remote(
         memory_limit_bytes = req_mem;
     else
         memory_limit_bytes = max_mem;
-
-    std::filesystem::path wasm_path =
-            options.wasm_path.empty() ? default_codemode_guest_wasm_path() : options.wasm_path;
 
     return support::detail::make_async_result(
             [request = std::move(request),
@@ -692,6 +978,59 @@ support::AsyncResult<void> serve_codemode_remote(
                 co_return support::ExpectedVoid{};
             });
 }
+
+struct RemoteCodemodeSandbox::Run::State {
+    std::mutex mutex;
+    bool finished{false};
+    bool taken{false};
+    std::optional<CodemodeRunResult> outcome;
+    support::AsyncCompletion<CodemodeRunResult, support::Error> completion;
+    /// Result numbers used so far, and the calls waiting for an answer; both
+    /// mirror the VM's admission rules so a refusal is synchronous.
+    std::set<std::int64_t> delivered;
+    std::map<std::int64_t, support::AsyncCompletion<CodemodeRemoteReplyVariant, support::Error>> waiting;
+    std::function<void(std::string_view)> on_started;
+    std::function<void(const CodemodeHostCall&)> on_call;
+    std::function<void(std::int64_t, std::int64_t)> on_idle;
+    std::vector<CodemodeOutputItem> output;
+    /// One record per issued call, in issue order (pi `calls`).
+    std::vector<CodemodeCallRecord> calls;
+    std::map<std::int64_t, std::size_t> call_index;
+    std::shared_ptr<std::stop_source> stop;
+    std::optional<std::stop_callback<std::function<void()>>> stop_notify;
+
+    /// Decide the outcome once. Any answer still waiting is answered with stop,
+    /// so a settled run never leaves an exchange hanging.
+    void settle(CodemodeRunResult result) {
+        std::vector<support::AsyncCompletion<CodemodeRemoteReplyVariant, support::Error>> pending;
+        std::optional<support::AsyncCompletion<CodemodeRunResult, support::Error>> complete;
+        {
+            std::lock_guard lock(mutex);
+            if (finished) return;
+            finished = true;
+            result.output = std::move(output);
+            for (auto& entry : waiting) {
+                if (const auto found = call_index.find(entry.first); found != call_index.end()) {
+                    calls[found->second].status = CodemodeCallRecord::Status::Cancelled;
+                    calls[found->second].duration_ms = 0.0;
+                }
+            }
+            result.calls = std::move(calls);
+            outcome = std::move(result);
+            for (auto& entry : waiting)
+                pending.push_back(std::move(entry.second));
+            waiting.clear();
+            complete = std::move(completion);
+            completion = {};
+        }
+        for (auto& waiter : pending) {
+            if (waiter) waiter(support::Expected<CodemodeRemoteReplyVariant>{CodemodeRemoteStopReply{}});
+        }
+        if (complete.has_value() && *complete) {
+            (*complete)(support::Expected<CodemodeRunResult>{*outcome});
+        }
+    }
+};
 
 struct RemoteCodemodeSandbox::Impl {
     struct PendingExchange {
@@ -781,6 +1120,7 @@ struct RemoteCodemodeSandbox::Impl {
     std::mutex mutex;
     bool closed{false};
     std::vector<std::weak_ptr<RunState>> active_runs;
+    std::vector<std::weak_ptr<Run::State>> active_deterministic;
 
     explicit Impl(RemoteCodemodeSandboxOptions opts) : options(std::move(opts)) {}
 };
@@ -797,6 +1137,7 @@ support::Expected<std::unique_ptr<RemoteCodemodeSandbox>> RemoteCodemodeSandbox:
 
 void RemoteCodemodeSandbox::close() {
     std::vector<std::shared_ptr<Impl::RunState>> active_runs;
+    std::vector<std::shared_ptr<Run::State>> active_deterministic;
     {
         std::lock_guard lock(impl_->mutex);
         if (impl_->closed) return;
@@ -808,9 +1149,20 @@ void RemoteCodemodeSandbox::close() {
             }
             return true;
         });
+        std::erase_if(impl_->active_deterministic, [&active_deterministic](const std::weak_ptr<Run::State>& weak) {
+            if (auto active = weak.lock()) {
+                active_deterministic.push_back(std::move(active));
+                return false;
+            }
+            return true;
+        });
     }
     for (const auto& state : active_runs)
         state->request_stop("Sandbox closed");
+    for (const auto& state : active_deterministic) {
+        if (state->stop) state->stop->request_stop();
+        state->settle(error_result(CodemodeError{.kind = CodemodeError::Kind::Aborted, .message = "Sandbox closed"}));
+    }
 }
 
 support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::run(std::string script,
@@ -1075,6 +1427,317 @@ support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::run(std::string s
             (void)error;
         }
     });
+}
+
+namespace {
+
+/// pi `handleMessage`'s `done` error payload as the frozen script error shape.
+[[nodiscard]] CodemodeError done_error(std::string_view payload) {
+    CodemodeError error{CodemodeError::Kind::Script, std::string{payload}};
+    auto parsed = support::read_json(payload);
+    if (!parsed || !parsed->holds<support::JsonValue::object_t>()) return error;
+    const auto& object = parsed->get_object();
+    if (const auto it = object.find("message"); it != object.end()) {
+        if (const auto* message = it->second.get_if<std::string>()) error.message = *message;
+    }
+    if (const auto it = object.find("name"); it != object.end()) {
+        if (const auto* name = it->second.get_if<std::string>()) error.name = *name;
+    }
+    if (const auto it = object.find("stack"); it != object.end()) {
+        if (const auto* stack = it->second.get_if<std::string>()) error.stack = *stack;
+    }
+    return error;
+}
+
+/// The caller's end of the deterministic exchange: every message the remote
+/// reports reaches the user callbacks, every call waits for `deliver`, and a
+/// terminal message settles the run.
+[[nodiscard]] CodemodeRemoteExchangeHook make_deterministic_exchange(
+        std::shared_ptr<RemoteCodemodeSandbox::Run::State> state) {
+    return [state](std::vector<CodemodeRemoteMessageVariant> messages)
+                   -> support::AsyncResult<CodemodeRemoteReplyVariant> {
+        return support::AsyncResult<CodemodeRemoteReplyVariant>{
+                support::AsyncProducer<CodemodeRemoteReplyVariant, support::Error>{
+                        [state, messages = std::move(messages)](support::AsyncCompletion<CodemodeRemoteReplyVariant,
+                                support::Error> complete) mutable noexcept {
+                            std::optional<CodemodeRemoteCallMessage> call;
+                            std::optional<CodemodeRunResult> terminal;
+                            for (const auto& message : messages) {
+                                std::visit(
+                                        [&](const auto& m) {
+                                            using T = std::decay_t<decltype(m)>;
+                                            if constexpr (std::is_same_v<T, CodemodeRemoteStartedMessage>) {
+                                                if (state->on_started) state->on_started(m.fingerprint);
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteCallMessage>) {
+                                                call = m;
+                                                std::lock_guard lock(state->mutex);
+                                                state->call_index.emplace(m.id, state->calls.size());
+                                                state->calls.push_back(CodemodeCallRecord{.name = m.name,
+                                                        .status = CodemodeCallRecord::Status::Ok,
+                                                        .duration_ms = std::nullopt});
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteOutputMessage>) {
+                                                std::lock_guard lock(state->mutex);
+                                                state->output.push_back(m.item);
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteIdleMessage>) {
+                                                if (state->on_idle) state->on_idle(m.seq, m.issued);
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteDoneMessage>) {
+                                                CodemodeRunResult result;
+                                                if (m.ok) {
+                                                    result.value_json = m.value;
+                                                    if (!m.writes.empty())
+                                                        result.store_writes = parse_store_writes(m.writes);
+                                                } else if (m.error.has_value()) {
+                                                    result.error = done_error(*m.error);
+                                                }
+                                                terminal = std::move(result);
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteFailureMessage>) {
+                                                terminal = error_result(m.error);
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteCrashMessage>) {
+                                                terminal = error_result(CodemodeError{
+                                                        .kind = CodemodeError::Kind::Sandbox, .message = m.message});
+                                            }
+                                        },
+                                        message);
+                            }
+                            if (terminal.has_value()) {
+                                state->settle(std::move(*terminal));
+                                complete(support::Expected<CodemodeRemoteReplyVariant>{CodemodeRemoteNullReply{}});
+                                return;
+                            }
+                            if (!call.has_value()) {
+                                complete(support::Expected<CodemodeRemoteReplyVariant>{CodemodeRemoteNullReply{}});
+                                return;
+                            }
+                            {
+                                std::lock_guard lock(state->mutex);
+                                if (state->finished) {
+                                    complete(support::Expected<CodemodeRemoteReplyVariant>{CodemodeRemoteStopReply{}});
+                                    return;
+                                }
+                                // Registered before `on_call`, so a caller that answers
+                                // synchronously from the callback is not lost.
+                                state->waiting.emplace(call->id, std::move(complete));
+                            }
+                            if (state->on_call) {
+                                state->on_call(CodemodeHostCall{.id = call->id,
+                                        .target = call->target == "global" ? CodemodeHostCall::Target::Global
+                                                                           : CodemodeHostCall::Target::Tool,
+                                        .name = call->name,
+                                        .arguments_json = call->args});
+                            }
+                        }}};
+    };
+}
+
+} // namespace
+
+bool RemoteCodemodeSandbox::Run::finished() const {
+    if (state_ == nullptr) return true;
+    std::lock_guard lock(state_->mutex);
+    return state_->finished;
+}
+
+support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::Run::result() {
+    if (state_ == nullptr) {
+        return support::AsyncResult<CodemodeRunResult>{support::Expected<CodemodeRunResult>{std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "the codemode run handle was moved from"))}};
+    }
+    {
+        std::lock_guard lock(state_->mutex);
+        if (state_->taken) {
+            return support::AsyncResult<CodemodeRunResult>{
+                    support::Expected<CodemodeRunResult>{std::unexpected(support::make_error(
+                            support::ErrorCode::Validation, "the codemode run result was already consumed"))}};
+        }
+        state_->taken = true;
+    }
+    auto state = state_;
+    support::AsyncResult<CodemodeRunResult>::producer_type producer =
+            [state](support::AsyncCompletion<CodemodeRunResult, support::Error> complete) noexcept {
+                std::optional<CodemodeRunResult> ready;
+                {
+                    std::lock_guard lock(state->mutex);
+                    if (state->finished) {
+                        ready = state->outcome;
+                    } else {
+                        state->completion = std::move(complete);
+                    }
+                }
+                if (ready.has_value()) complete(support::Expected<CodemodeRunResult>{std::move(*ready)});
+            };
+    return support::AsyncResult<CodemodeRunResult>{std::move(producer)};
+}
+
+std::optional<CodemodeDeliveryRejection> RemoteCodemodeSandbox::Run::deliver(
+        std::int64_t seq, double now, std::int64_t id, CodemodeOutcome outcome) {
+    using Reason = CodemodeDeliveryRejection::Reason;
+    if (state_ == nullptr) {
+        return CodemodeDeliveryRejection{Reason::UnknownCall, std::format("Call {} is not waiting for a result", id)};
+    }
+    if (!std::isfinite(now)) {
+        return CodemodeDeliveryRejection{
+                Reason::Clock, std::format("The clock value of result {} is not a finite number", seq)};
+    }
+    support::AsyncCompletion<CodemodeRemoteReplyVariant, support::Error> reply;
+    {
+        std::lock_guard lock(state_->mutex);
+        if (state_->finished) return std::nullopt;
+        if (seq < 1 || state_->delivered.contains(seq)) {
+            return CodemodeDeliveryRejection{
+                    Reason::ResultNumber, std::format("Result number {} is not a positive integer used once", seq)};
+        }
+        const auto waiting = state_->waiting.find(id);
+        if (waiting == state_->waiting.end()) {
+            return CodemodeDeliveryRejection{
+                    Reason::UnknownCall, std::format("Call {} is not waiting for a result", id)};
+        }
+        if (!outcome.ok && outcome.properties_json.has_value()) {
+            const auto properties = support::read_json(*outcome.properties_json);
+            if (!properties.has_value() || !properties->holds<support::JsonValue::object_t>()) {
+                return CodemodeDeliveryRejection{
+                        Reason::Properties, std::format("The properties of result {} are not an object", seq)};
+            }
+        }
+        if (outcome.ok && !outcome.value_json.empty() && !support::read_json(outcome.value_json).has_value()) {
+            return CodemodeDeliveryRejection{
+                    Reason::Serialization, std::format("The value of result {} is not JSON", seq)};
+        }
+        if (const auto found = state_->call_index.find(id); found != state_->call_index.end()) {
+            CodemodeCallRecord& record = state_->calls[found->second];
+            record.status = outcome.ok ? CodemodeCallRecord::Status::Ok : CodemodeCallRecord::Status::Error;
+            record.duration_ms = 0.0;
+        }
+        state_->delivered.insert(seq);
+        reply = std::move(waiting->second);
+        state_->waiting.erase(waiting);
+    }
+    if (reply) {
+        reply(support::Expected<CodemodeRemoteReplyVariant>{CodemodeRemoteResultReply{.id = id,
+                .ok = outcome.ok,
+                .payload = outcome.ok ? std::optional<std::string>{outcome.value_json}
+                                      : std::optional<std::string>{outcome.message},
+                .seq = seq,
+                .now = now,
+                .properties = outcome.properties_json}});
+    }
+    return std::nullopt;
+}
+
+RemoteCodemodeSandbox::Run::Run(std::shared_ptr<State> state) : state_(std::move(state)) {}
+RemoteCodemodeSandbox::Run::Run(Run&&) noexcept = default;
+RemoteCodemodeSandbox::Run& RemoteCodemodeSandbox::Run::operator=(Run&&) noexcept = default;
+RemoteCodemodeSandbox::Run::~Run() = default;
+
+support::Expected<RemoteCodemodeSandbox::Run> RemoteCodemodeSandbox::start(
+        std::string script, CodemodeRunOptions options) {
+    if (options.started_at < 0) {
+        return std::unexpected(
+                sandbox_error("startedAt must be a non-negative number of milliseconds since the epoch"));
+    }
+    if (options.seed > 0xffffffffull) {
+        return std::unexpected(sandbox_error("seed must be a 32-bit unsigned integer"));
+    }
+    if (options.expected_seed.has_value() && *options.expected_seed != options.seed) {
+        return std::unexpected(sandbox_error(std::format(
+                "Deterministic replay seed mismatch: expected {}, got {}", *options.expected_seed, options.seed)));
+    }
+    {
+        std::set<std::string> names;
+        for (const auto& tool : options.tools) {
+            if (!names.insert(tool.name).second) return std::unexpected(sandbox_error("Tool names must be unique"));
+        }
+        std::set<std::string> script_names;
+        for (const auto& tool : options.tools) {
+            const std::string js_name = tool.js_name.empty() ? to_codemode_identifier(tool.name) : tool.js_name;
+            if (!script_names.insert(js_name).second) {
+                return std::unexpected(sandbox_error("Tool script names must be unique"));
+            }
+        }
+    }
+    if (auto valid = validate_globals(options.globals); !valid) {
+        return std::unexpected(std::move(valid.error()));
+    }
+    {
+        std::lock_guard lock(impl_->mutex);
+        if (impl_->closed) return std::unexpected(sandbox_error("Sandbox closed"));
+    }
+    if (!impl_->options.remote) {
+        return std::unexpected(sandbox_error("Failed to reach the remote sandbox: no remote configured"));
+    }
+    auto remote_res = impl_->options.remote();
+    if (!remote_res) {
+        return std::unexpected(
+                sandbox_error(std::format("Failed to reach the remote sandbox: {}", remote_res.error().message)));
+    }
+    auto remote = *remote_res;
+    if (!remote) {
+        return std::unexpected(sandbox_error("Failed to reach the remote sandbox: remote is null"));
+    }
+
+    CodemodeRemoteRequest request;
+    request.data.code = std::move(script);
+    request.data.tools = std::move(options.tools);
+    for (auto& tool : request.data.tools) {
+        if (tool.js_name.empty()) tool.js_name = to_codemode_identifier(tool.name);
+    }
+    request.data.globals = std::move(options.globals);
+    request.data.memory_limit_bytes = options.memory_limit_bytes;
+    request.data.started_at = options.started_at;
+    request.data.seed = options.seed;
+    request.data.expected_fingerprint = options.expected_fingerprint;
+    for (const auto& [key, value] : options.store) {
+        auto written = support::write_json(value);
+        request.data.store.emplace(key, written ? *written : "null");
+    }
+
+    auto state = std::make_shared<Run::State>();
+    state->on_started = std::move(options.callbacks.on_started);
+    state->on_call = std::move(options.callbacks.on_call);
+    state->on_idle = std::move(options.callbacks.on_idle);
+    state->stop = std::make_shared<std::stop_source>();
+    const std::string abort_message = options.abort_message.value_or("This operation was aborted");
+    {
+        std::lock_guard lock(impl_->mutex);
+        if (impl_->closed) return std::unexpected(sandbox_error("Sandbox closed"));
+        impl_->active_deterministic.push_back(state);
+    }
+    std::weak_ptr<Run::State> weak = state;
+    state->stop_notify.emplace(options.stop_token, [weak, abort_message]() {
+        if (auto live = weak.lock()) {
+            if (live->stop) live->stop->request_stop();
+            live->settle(error_result(CodemodeError{.kind = CodemodeError::Kind::Aborted, .message = abort_message}));
+        }
+    });
+    if (options.stop_token.stop_requested()) {
+        state->settle(error_result(CodemodeError{.kind = CodemodeError::Kind::Aborted, .message = abort_message}));
+    }
+
+    auto exchange = make_deterministic_exchange(state);
+    auto worker_finished = std::make_shared<std::atomic<bool>>(false);
+    std::thread worker([state,
+                               remote = std::move(remote),
+                               request = std::move(request),
+                               exchange = std::move(exchange),
+                               worker_finished]() mutable {
+        boost::asio::io_context remote_ctx;
+        boost::asio::co_spawn(
+                remote_ctx,
+                [state,
+                        remote = std::move(remote),
+                        request = std::move(request),
+                        exchange = std::move(exchange)]() mutable -> boost::asio::awaitable<void> {
+                    (void)co_await support::detail::await_async_result(
+                            remote->execute(std::move(request), std::move(exchange)));
+                    state->settle(error_result(CodemodeError{.kind = CodemodeError::Kind::Sandbox,
+                            .message = "Remote sandbox returned before the script settled"}));
+                },
+                boost::asio::detached);
+        remote_ctx.run();
+        worker_finished->store(true, std::memory_order_release);
+        RemoteWorkerReaper::instance().notify();
+    });
+    RemoteWorkerReaper::instance().adopt(std::move(worker), worker_finished);
+    return Run{std::move(state)};
 }
 
 } // namespace cch::codemode
