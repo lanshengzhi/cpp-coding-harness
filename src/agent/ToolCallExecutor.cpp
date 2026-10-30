@@ -46,27 +46,26 @@ void close_tool_updates(const std::shared_ptr<ToolUpdateGate>& gate) {
     gate->active = false;
 }
 
-[[nodiscard]] boost::asio::awaitable<support::Expected<AsyncToolExecutionResult>>
-execute_with_update_lifetime(
-    Tool& tool,
-    const ToolInvocation& invocation,
-    std::stop_token stop_token,
-    ToolUpdateSink update_sink,
-    const std::shared_ptr<ToolUpdateGate>& gate) {
+struct TimedToolExecution {
+    support::Expected<AsyncToolExecutionResult> result;
+    std::int64_t duration_ms;
+};
+
+[[nodiscard]] boost::asio::awaitable<TimedToolExecution> execute_with_update_lifetime(Tool& tool,
+        const ToolInvocation& invocation,
+        std::stop_token stop_token,
+        ToolUpdateSink update_sink,
+        const std::shared_ptr<ToolUpdateGate>& gate) {
+    const auto started_at = std::chrono::steady_clock::now();
     auto result =
             co_await support::detail::await_async_result(tool.execute(invocation, stop_token, std::move(update_sink)));
+    const auto duration_ms = std::llround(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
     close_tool_updates(gate);
-    co_return result;
+    co_return TimedToolExecution{std::move(result), duration_ms};
 }
 
 constexpr std::string_view kOperationAbortedMessage{"Operation aborted"};
-
-/// pi `Math.round(performance.now() - startedAt)`: the recorded execution
-/// duration in whole milliseconds, measured with the monotonic clock.
-[[nodiscard]] std::int64_t measured_duration_ms(std::chrono::steady_clock::time_point started_at) {
-    return std::llround(
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
-}
 
 [[nodiscard]] ai::ToolResultMessage error_tool_result(
     const ai::ToolCallContent& call,
@@ -309,10 +308,10 @@ struct SettledToolCall {
     // tool's execute and stops when it returns, covering thrown errors, so
     // both the settled result and the paired end event carry the same
     // recorded duration (#812).
-    const auto execution_started_at = std::chrono::steady_clock::now();
-    auto executed = co_await execute_with_update_lifetime(
+    auto timed = co_await execute_with_update_lifetime(
             tool, invocation, options.stop_token, std::move(update_sink), update_gate);
-    const auto duration_ms = measured_duration_ms(execution_started_at);
+    const auto duration_ms = timed.duration_ms;
+    auto& executed = timed.result;
     release_concurrency();
 
     AsyncToolExecutionResult outcome;
@@ -714,7 +713,7 @@ bool ToolCallExecutor::is_sequential_execution() const {
     return false;
 }
 
-support::AsyncResult<AsyncToolExecutionResult> ToolCallExecutor::run_nested_tool(ToolInvocation invocation,
+support::AsyncResult<NestedToolCallOutcome> ToolCallExecutor::run_nested_tool(ToolInvocation invocation,
         ToolCallBatchRequest request,
         AgentEventSink* sink,
         std::string parent_id,
@@ -725,22 +724,22 @@ support::AsyncResult<AsyncToolExecutionResult> ToolCallExecutor::run_nested_tool
                     request,
                     sink,
                     parent_id = std::move(parent_id),
-                    signal]() mutable -> boost::asio::awaitable<support::Expected<AsyncToolExecutionResult>> {
+                    signal]() mutable -> boost::asio::awaitable<support::Expected<NestedToolCallOutcome>> {
                 co_return co_await execute_nested(std::move(invocation), request, sink, std::move(parent_id), signal);
             });
 }
 
-boost::asio::awaitable<AsyncToolExecutionResult> ToolCallExecutor::execute_nested(ToolInvocation invocation,
+boost::asio::awaitable<NestedToolCallOutcome> ToolCallExecutor::execute_nested(ToolInvocation invocation,
         ToolCallBatchRequest request,
         AgentEventSink* sink,
         std::string parent_id,
         std::stop_token signal) {
     if (signal.stop_requested()) {
-        co_return nested_error_result(std::string{kOperationAbortedMessage});
+        co_return NestedToolCallOutcome{nested_error_result(std::string{kOperationAbortedMessage}), std::nullopt};
     }
     Tool* tool = registry_.find(invocation.name);
     if (tool == nullptr) {
-        co_return nested_error_result("unknown tool: " + invocation.name);
+        co_return NestedToolCallOutcome{nested_error_result("unknown tool: " + invocation.name), std::nullopt};
     }
 
     ai::ToolCallContent nested_call;
@@ -750,7 +749,7 @@ boost::asio::awaitable<AsyncToolExecutionResult> ToolCallExecutor::execute_neste
     nested_call.arguments = invocation.arguments;
     auto arguments = prepare_tool_arguments(tool->definition, nested_call);
     if (!arguments) {
-        co_return nested_error_result(arguments.error().detail);
+        co_return NestedToolCallOutcome{nested_error_result(arguments.error().detail), std::nullopt};
     }
     invocation.arguments = std::move(*arguments);
 
@@ -764,11 +763,17 @@ boost::asio::awaitable<AsyncToolExecutionResult> ToolCallExecutor::execute_neste
         auto before_result = co_await invoke_agent_hook(
                 "beforeToolCall", *options_.before_tool_call, std::move(hook_context), signal);
         if (!before_result) {
-            co_return nested_error_result(bounded_failure_text(before_result.error()));
+            co_return NestedToolCallOutcome{
+                    nested_error_result(bounded_failure_text(before_result.error())), std::nullopt};
         }
         if (before_result->block) {
-            co_return nested_error_result(before_result->reason.value_or("Tool execution was blocked"));
+            co_return NestedToolCallOutcome{
+                    nested_error_result(before_result->reason.value_or("Tool execution was blocked")), std::nullopt};
         }
+    }
+
+    if (signal.stop_requested()) {
+        co_return NestedToolCallOutcome{nested_error_result(std::string{kOperationAbortedMessage}), std::nullopt};
     }
 
     auto update_gate = std::make_shared<ToolUpdateGate>();
@@ -791,8 +796,8 @@ boost::asio::awaitable<AsyncToolExecutionResult> ToolCallExecutor::execute_neste
                         .parent_tool_call_id = parent_id,
                 });
     };
-    auto executed =
-            co_await execute_with_update_lifetime(*tool, invocation, signal, std::move(update_sink), update_gate);
+    auto timed = co_await execute_with_update_lifetime(*tool, invocation, signal, std::move(update_sink), update_gate);
+    auto& executed = timed.result;
 
     AsyncToolExecutionResult outcome;
     if (!executed) {
@@ -821,7 +826,7 @@ boost::asio::awaitable<AsyncToolExecutionResult> ToolCallExecutor::execute_neste
             if (after_result->terminate) outcome.terminate = *after_result->terminate;
         }
     }
-    co_return outcome;
+    co_return NestedToolCallOutcome{std::move(outcome), timed.duration_ms};
 }
 
 } // namespace cch::agent

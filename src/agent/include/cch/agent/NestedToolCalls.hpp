@@ -72,10 +72,15 @@ struct NestedCallSummary {
 ///   * `is_sequential` — whether every nested call runs exclusively,
 ///   * `run_tool_call` — run one call through the tool pipeline,
 ///   * `emit` — deliver a `tool_execution_*` event carrying the parent id.
+struct NestedToolCallOutcome {
+    AsyncToolExecutionResult result{};
+    std::optional<std::int64_t> duration_ms{std::nullopt};
+};
+
 struct NestedToolCallHost {
     using GetTools = std::move_only_function<std::vector<ai::Tool>()>;
     using IsSequential = std::move_only_function<bool()>;
-    using RunToolCall = std::move_only_function<support::AsyncResult<AsyncToolExecutionResult>(
+    using RunToolCall = std::move_only_function<support::AsyncResult<NestedToolCallOutcome>(
             ToolInvocation, std::string parent_id, std::stop_token)>;
     using Emit = std::move_only_function<support::ExpectedVoid(const AgentLifecycleEvent&)>;
 

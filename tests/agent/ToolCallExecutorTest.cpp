@@ -6,6 +6,7 @@
 #include "support/ToolArgumentContracts.hpp"
 #include "support/Json.hpp"
 #include <cch/agent/AgentContext.hpp>
+#include <cch/agent/NestedToolCalls.hpp>
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Context.hpp>
@@ -25,6 +26,7 @@
 #include <atomic>
 #include <chrono>
 #include <expected>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -513,6 +515,82 @@ TEST_CASE("an afterToolCall override keeps the recorded duration", "[agent][tool
     CHECK(*end->duration_ms == *run.result->results[0].duration_ms);
 }
 
+TEST_CASE("nested tool events measure execution without the before hook", "[agent][tool-executor][issue1106][spec]") {
+    agent::ToolRegistry registry;
+    auto child = make_recording_tool(ai::Tool{"child", "Child", test::empty_object_tool_argument_contract()});
+    REQUIRE(registry.add(std::move(child.tool)));
+    auto parent = tests::make_fake_tool(ai::Tool{"parent", "Parent", test::empty_object_tool_argument_contract()},
+            agent::ToolConcurrency::Exclusive,
+            [](agent::ToolInvocation invocation, std::stop_token token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                co_return co_await support::detail::await_async_result(invocation.nested_calls->execute(
+                        invocation.call_id, "child", support::JsonValue::object_t{}, token));
+            });
+    REQUIRE(registry.add(std::move(parent)));
+    agent::BeforeToolCallHook hook = [](const agent::BeforeToolCallContext& context, std::stop_token) {
+        if (context.tool_call.name == "child") std::this_thread::sleep_for(std::chrono::milliseconds{120});
+        return support::AsyncResult<agent::BeforeToolCallResult>{agent::BeforeToolCallResult{}};
+    };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &hook;
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto run = run_executor(executor, assistant_with_calls({make_call("parent-1", "parent")}));
+    REQUIRE(run.result);
+    const agent::ToolExecutionEndEvent* nested_end = nullptr;
+    for (const auto& event : run.events) {
+        if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event); end && end->parent_tool_call_id) {
+            nested_end = end;
+        }
+    }
+    REQUIRE(nested_end != nullptr);
+    REQUIRE(nested_end->duration_ms.has_value());
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    // Instrumentation invalidates the execution-time comparison; presence still runs.
+#else
+    CHECK(*nested_end->duration_ms < 100);
+#endif
+    REQUIRE(run.result->results.size() == 1);
+    REQUIRE(run.result->results[0].duration_ms.has_value());
+    CHECK(*run.result->results[0].duration_ms >= 120);
+}
+
+TEST_CASE("nested cancellation after the before hook does not execute the child",
+        "[agent][tool-executor][issue1106][spec]") {
+    std::stop_source stop;
+    agent::ToolRegistry registry;
+    auto child = make_recording_tool(ai::Tool{"child", "Child", test::empty_object_tool_argument_contract()});
+    auto child_state = child.state;
+    REQUIRE(registry.add(std::move(child.tool)));
+    auto parent = tests::make_fake_tool(ai::Tool{"parent", "Parent", test::empty_object_tool_argument_contract()},
+            agent::ToolConcurrency::Exclusive,
+            [](agent::ToolInvocation invocation, std::stop_token token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                co_return co_await support::detail::await_async_result(invocation.nested_calls->execute(
+                        invocation.call_id, "child", support::JsonValue::object_t{}, token));
+            });
+    REQUIRE(registry.add(std::move(parent)));
+    agent::BeforeToolCallHook hook = [&stop](const agent::BeforeToolCallContext& context, std::stop_token) {
+        if (context.tool_call.name == "child") (void)stop.request_stop();
+        return support::AsyncResult<agent::BeforeToolCallResult>{agent::BeforeToolCallResult{}};
+    };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &hook;
+    options.stop_token = stop.get_token();
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto run = run_executor(executor, assistant_with_calls({make_call("parent-1", "parent")}));
+    REQUIRE(run.result);
+    CHECK(child_state->invocation_count() == 0);
+    const agent::ToolExecutionEndEvent* nested_end = nullptr;
+    for (const auto& event : run.events) {
+        if (const auto* end = std::get_if<agent::ToolExecutionEndEvent>(&event); end && end->parent_tool_call_id) {
+            nested_end = end;
+        }
+    }
+    REQUIRE(nested_end != nullptr);
+    CHECK(nested_end->is_error);
+    CHECK_FALSE(nested_end->duration_ms.has_value());
+}
+
 TEST_CASE("an unknown tool has no execution duration", "[agent][tool-executor][issue1106][spec]") {
     agent::ToolRegistry registry;
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
@@ -589,6 +667,33 @@ TEST_CASE("a blocked call records no duration because it never executed", "[agen
     }
     REQUIRE(end != nullptr);
     CHECK_FALSE(end->duration_ms.has_value());
+}
+
+TEST_CASE("tool duration ignores a changed realtime clock", "[agent][tool-executor][issue1106][spec]") {
+    if (std::getenv("CCH_TEST_REALTIME_JUMP") == nullptr) {
+        SKIP("requires the realtime clock interposition fixture");
+    }
+    agent::ToolRegistry registry;
+    std::chrono::system_clock::time_point before;
+    std::chrono::system_clock::time_point after;
+    auto tool = tests::make_fake_tool(ai::Tool{"clock", "Clock", test::empty_object_tool_argument_contract()},
+            agent::ToolConcurrency::Exclusive,
+            // run_executor joins its worker pool before these references leave scope.
+            [&before, &after](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                before = std::chrono::system_clock::now();
+                after = std::chrono::system_clock::now();
+                co_return agent::AsyncToolExecutionResult{};
+            });
+    REQUIRE(registry.add(std::move(tool)));
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto run = run_executor(executor, assistant_with_calls({make_call("clock-1", "clock")}));
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(std::chrono::abs(after - before) > std::chrono::hours{1});
+    REQUIRE(run.result->results[0].duration_ms.has_value());
+    CHECK(*run.result->results[0].duration_ms >= 0);
+    CHECK(*run.result->results[0].duration_ms < 1000);
 }
 
 TEST_CASE("the recorded duration covers execute only, not the policy hooks", "[agent][tool-executor][issue812][spec]") {

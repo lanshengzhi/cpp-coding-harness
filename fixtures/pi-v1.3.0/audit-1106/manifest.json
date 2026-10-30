@@ -1,0 +1,112 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1106",
+  "family": "audit-1106",
+  "capturedAt": "2026-10-30T08:07:14.493Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1106/capture-duration.mts",
+    "sha256": "61212464d380cd31e013b8194135003dbb2267632e1539f25d156a9ebef33f20",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1106/capture-duration.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1106/capture-duration.mts",
+        "sha256": "61212464d380cd31e013b8194135003dbb2267632e1539f25d156a9ebef33f20"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1106/scenarios.mts",
+        "sha256": "5ba142cd6f9e35c9a6efe76b6f2c02e0fe438786b80163e37cb71fa78baff04a"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "duration.json",
+      "family": "audit-1106",
+      "bytes": 1888,
+      "sha256": "819f97b10b036227c56ec74d05e22432435a10a503329c1d48a9b6d13c6ac56b",
+      "sourceEndpoints": [
+        "packages/agent/src/agent-loop.ts:runToolCall"
+      ],
+      "scenarios": [
+        {
+          "name": "tool duration cancelled-before",
+          "inputs": {
+            "mode": "cancelled-before"
+          },
+          "expected": {
+            "executed": 0,
+            "isError": true,
+            "durationPresent": false
+          },
+          "observed": {
+            "executed": 0,
+            "isError": true,
+            "durationPresent": false
+          },
+          "normalizations": []
+        },
+        {
+          "name": "tool duration cancelled-during",
+          "inputs": {
+            "mode": "cancelled-during"
+          },
+          "expected": {
+            "executed": 1,
+            "isError": true,
+            "durationPresent": true
+          },
+          "observed": {
+            "executed": 1,
+            "isError": true,
+            "durationPresent": true
+          },
+          "normalizations": []
+        },
+        {
+          "name": "tool duration after-error",
+          "inputs": {
+            "mode": "after-error"
+          },
+          "expected": {
+            "executed": 1,
+            "isError": true,
+            "durationPresent": true
+          },
+          "observed": {
+            "executed": 1,
+            "isError": true,
+            "durationPresent": true
+          },
+          "normalizations": []
+        },
+        {
+          "name": "tool duration unknown",
+          "inputs": {
+            "mode": "unknown"
+          },
+          "expected": {
+            "executed": 0,
+            "isError": true,
+            "durationPresent": false
+          },
+          "observed": {
+            "executed": 0,
+            "isError": true,
+            "durationPresent": false
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}

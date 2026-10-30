@@ -136,8 +136,10 @@ struct NestedToolCallRunner::Impl {
         auto awaited = co_await support::detail::await_async_result(
                 host.run_tool_call(std::move(invocation), caller_id, signal));
         AsyncToolExecutionResult outcome;
+        std::optional<std::int64_t> execute_duration_ms;
         if (awaited) {
-            outcome = std::move(*awaited);
+            execute_duration_ms = awaited->duration_ms;
+            outcome = std::move(awaited->result);
         } else {
             outcome.content.emplace_back(ai::text_content(
                     awaited.error().detail.empty() ? awaited.error().message : awaited.error().detail));
@@ -150,16 +152,13 @@ struct NestedToolCallRunner::Impl {
                         .count());
         const std::string error_text = outcome.is_error ? text_of(outcome.content) : std::string{};
         scope.recorder->finish(record, outcome.is_error, error_text, static_cast<std::uint64_t>(duration_ms));
-        // The nested end event carries the same recorded duration its record
-        // just took (pi: `endDurationMatchesOutcome`, audit-1047). The record's
-        // window additionally contains the event emission and the full nested
-        // pipeline, so the two agree at this point in the call.
+        // pi's record includes the full pipeline; the end event carries only execute time.
         (void)host.emit(ToolExecutionEndEvent{
                 .tool_call_id = nested_id,
                 .tool_name = name,
                 .result = outcome,
                 .is_error = outcome.is_error,
-                .duration_ms = duration_ms,
+                .duration_ms = execute_duration_ms,
                 .parent_tool_call_id = caller_id,
         });
         co_return outcome;
