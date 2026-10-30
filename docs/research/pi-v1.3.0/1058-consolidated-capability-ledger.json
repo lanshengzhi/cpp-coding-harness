@@ -325,7 +325,7 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1090-revalidation-merged.xml"
           ],
-          "testedRevision": "c1f412b1bbfc2868e41c1607a44d8ab5ee333502",
+          "testedRevision": "a000a271f88bb0b6b75248e46b0e9d332cb8d9e2",
           "recordedAt": "2026-10-29T23:19:27Z",
           "selected": 10,
           "junit": {
@@ -340,7 +340,7 @@
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "f0f9abb90523f3631a2d3aea859f9df3a508dfcc0548c8390bb893cf5986806f"
+            "sha256": "b58e63e652461108593e51461ed5bb07ef1cea8fd9bebb57f3f3b4d428ed400d"
           },
           {
             "path": "docs/agents/architecture.md",
@@ -830,7 +830,7 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1104-management-during-connection.xml"
           ],
-          "testedRevision": "13b04ae6e3b25aa8f271a40f7a7265c54a1221ff",
+          "testedRevision": "a000a271f88bb0b6b75248e46b0e9d332cb8d9e2",
           "recordedAt": "2026-10-30T00:16:54Z",
           "selected": 12,
           "junit": {
