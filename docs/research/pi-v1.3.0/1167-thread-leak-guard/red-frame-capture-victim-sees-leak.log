@@ -1,0 +1,36 @@
+Filters: [issue1167]
+Randomness seeded to: 3660434711
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+the case after a failed harness assertion runs with no leaked threads
+-------------------------------------------------------------------------------
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:123
+...............................................................................
+
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:145: FAILED:
+  REQUIRE( thread_count_from_proc() == g_threads_at_startup )
+with expansion:
+  2 == 1
+
+-------------------------------------------------------------------------------
+a failing assertion with a live harness phase is cleaned up before the next
+case
+-------------------------------------------------------------------------------
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:71
+...............................................................................
+
+/home/lansy/.herdr/worktrees/cpp-coding-harness/test/tests/durable/HarnessFailureCleanupProbeTest.cpp:110: FAILED:
+  REQUIRE( events == std::vector<std::string>{"phase-ran", "deliberate-red"} )
+with expansion:
+  { "phase-ran" }
+  ==
+  { "phase-ran", "deliberate-red" }
+
+===============================================================================
+test cases:  2 |  0 passed | 2 failed
+assertions: 12 | 10 passed | 2 failed
+

@@ -27,6 +27,9 @@ include_guard(GLOBAL)
         tests/durable/HarnessSubmissionsTest.cpp
         tests/durable/HarnessOwnershipTest.cpp
         tests/durable/HarnessFailureLifecycleTest.cpp
+        # Hidden `[.]` probe pair: deliberate RED for the -fno-exceptions
+        # failure path (issue #1167); never selected by a discovery spec.
+        tests/durable/HarnessFailureCleanupProbeTest.cpp
         tests/durable/HarnessObservationTest.cpp
         tests/durable/HarnessImagesTest.cpp
         tests/durable/HarnessCodemodeTest.cpp
@@ -45,6 +48,8 @@ include_guard(GLOBAL)
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_durable PRIVATE ${CCH_WARNING_OPTIONS})
+    # The deliberate-RED cleanup probe ([.][issue1167]) stays hidden from every
+    # discovery spec; it runs only when a spec names its tag explicitly.
     # Bound the whole live continuation process, including Harness operations whose
     # completion or cleanup cannot be interrupted by a waiter's stop token.
     catch_discover_tests(cch_tests_durable TEST_SPEC "~[issue1086live]~[issue1084]~[issue1094]" ADD_TAGS_AS_LABELS)
