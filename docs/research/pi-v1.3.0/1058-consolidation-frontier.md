@@ -66,7 +66,7 @@ folded into membership.
 | By lane | 1047:32, 1048:30, 1049:20, 1050:954, 1051:50, 1052:31, 1053:68, 1054:111, 1055:40, 1056:70, 1057:58 |
 | By owner | cch_tui:925, cch_durable:212, cch_coding_agent:159, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
 | Membership | supported:1435, excluded:29, no-decision:0 |
-| Implementation | implemented:1023, missing:213, not-applicable:18, partial:210 |
+| Implementation | implemented:1027, missing:212, not-applicable:18, partial:207 |
 | Verification | not-applicable:28, unverified:1016, upstream-captured:413, verified:7 |
 | Evidence route | captured:420, related-captured:23, declared-comparison:31, cpp-regression-only:10, unobserved:52, historical-v1.0.4:858, not-audited:42, excluded:28 |
 

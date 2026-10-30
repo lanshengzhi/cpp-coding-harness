@@ -49,10 +49,10 @@
         ]
       },
       "cppSeam": "`src/coding_agent/prompt/PromptTemplateExpander.cpp:parse_command_args` and `try_expand_prompt_template`.",
-      "cppEvidence": "`tests/coding_agent/PromptTemplateProcessingTest.cpp:85-90` expects the shifted `$10` result (`[][ten]`) instead of upstream's `[][j]` with the same input; the parser only pushes a token when `current` is non-empty.",
+      "cppEvidence": "`tests/coding_agent/PromptTemplateProcessingTest.cpp` verifies quoted-empty argument retention (`[\"\"]`) and preserves later positional parameters without shifting.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Track whether a token started, not whether its buffer is non-empty, and add the captured quoted-empty cases to the prompt processing test. Do not change the documented substitution forms in the same fix.",
@@ -73,10 +73,10 @@
         ]
       },
       "cppSeam": "`src/coding_agent/prompt/PromptTemplateExpander.cpp:substitute_args`.",
-      "cppEvidence": "Positional, collection, `${N:-default}`, `${@:N}` and `${@:N:L}` are implemented and tested in `tests/coding_agent/PromptTemplateProcessingTest.cpp:31-60`. The C++ branch handles `${...}` defaults only when the left side is numeric; `${@:-...}` and `${ARGUMENTS:-...}` are absent, while upstream retains them (`substituteArgs` scenario).",
+      "cppEvidence": "Positional, collection, `${N:-default}`, `${@:N}`, `${@:N:L}`, `${@:-default}`, and `${ARGUMENTS:-default}` are implemented and tested in `tests/coding_agent/PromptTemplateProcessingTest.cpp`.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add the two collection-default forms after the quoted-empty parser fix. Keep the existing no-recursive-expansion contract.",
@@ -122,10 +122,10 @@
         ]
       },
       "cppSeam": "`src/coding_agent/ProjectResourceLoader.cpp:38` `kContextFileCandidates`.",
-      "cppEvidence": "The C++ array has four candidates and starts at `AGENTS.md`; `AGENTS.override.md` is absent. `tests/coding_agent/ProjectResourceLoaderTest.cpp:1086` only checks that `AGENTS.md` wins over `CLAUDE.md`, so the existing suite cannot distinguish the override case.",
+      "cppEvidence": "`src/coding_agent/ProjectResourceLoader.cpp` lists `AGENTS.override.md` first in `kContextFileCandidates`. `tests/coding_agent/ProjectResourceLoaderTest.cpp` verifies single-directory override precedence and root-to-leaf ancestor layering.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add `AGENTS.override.md` as the first candidate and add the captured override-vs-AGENTS.md case. This is a v1.3.0 context-loader delta, not a new resource surface.",
@@ -172,10 +172,10 @@
         ]
       },
       "cppSeam": "`src/agent/harness/WorkspacePathResolution.cpp:resolve_to_cwd` (Unicode spaces, leading `@`, `~`/`$HOME`, absolute/relative lexical resolution). Explicit `--skill`/`--prompt-template`/`--theme` paths call `absolutePath`, which uses this operation.",
-      "cppEvidence": "The C++ operation implements Unicode-space normalization, `@` stripping and `~` expansion and is used by explicit resource paths. It does not convert `file:` URLs (`resolve_to_cwd` comment), while upstream `resolvePath` converts them. Upstream `resolveCliPaths` calls `resolvePath` without `stripAtPrefix`, so upstream keeps a literal leading `@` for `--extensions/--skills/--prompt-templates/--themes`; C++ reuses the tool-path resolver, which strips it. Both are selected resource/context path behavior under ADR 0075; the historical ADR 0057 `file:` narrowing does not override that selection.",
+      "cppEvidence": "`src/coding_agent/environment/WorkspacePathResolution.cpp:resolveResourcePath` implements JavaScript trim, tilde expansion, POSIX file:// conversion, literal leading @, and preserves Unicode spaces. Explicit resource inputs resolve through this seam in `ProjectResourceLoader.cpp` and `SessionFactory.cpp`, verified in `ProjectResourceLoaderTest.cpp` and `ResourceReloadTest.cpp`.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Implement the selected path behavior in a bounded slice: convert `file:` URLs and preserve the upstream leading-`@` outcome for CLI resource flags, without changing the tool-path `@` convention. Keep ADR 0057's no-follow symlink and filesystem-authority rules. The shared `resolve_to_cwd` seam may need a resource-flag-specific normalization rather than a global behavior change.",

@@ -34,9 +34,9 @@ using detail::warning_diagnostic;
 namespace {
 
 /// pi `loadContextFileFromDir` candidate names (`resource-loader.ts`), in
-/// order; the first existing regular file wins.
-constexpr std::array<std::string_view, 4> kContextFileCandidates{
-    "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"};
+/// order; the first existing regular file (or symlink to one) wins.
+constexpr std::array<std::string_view, 5> kContextFileCandidates{
+        "AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"};
 
 /// pi `String.prototype.trim()`.
 [[nodiscard]] std::string_view trim(std::string_view text) {
@@ -515,7 +515,8 @@ struct AsyncGitPaths {
     const auto root = normalized_absolute(filesystem->workspace());
     for (const auto filename : kContextFileCandidates) {
         const auto path = root / filename;
-        auto info = co_await std::move(filesystem->fileInfo(addressed_path(*filesystem, path), stop_token));
+        const auto addressed = addressed_path(*filesystem, path);
+        auto info = co_await std::move(filesystem->fileInfo(addressed, stop_token));
         if (!info) {
             if (loader_aborted(info.error())) {
                 co_return std::unexpected(std::move(info.error()));
@@ -525,10 +526,37 @@ struct AsyncGitPaths {
             }
             continue;
         }
-        if (info->kind != harness::FileKind::File) {
+        // Discovery follows symlinks because pi uses `existsSync`/`statSync`
+        // (`statSync(...).isFile()`), unlike the ordinary no-follow read
+        // contract. This bounded read-only exception applies only to context
+        // candidate discovery: the link itself is never read or written, and
+        // only a canonical target that is a regular file is accepted.
+        std::string readable = addressed;
+        if (info->kind == harness::FileKind::Symlink) {
+            auto canonical = co_await std::move(filesystem->canonicalPath(addressed, stop_token));
+            if (!canonical) {
+                if (loader_aborted(canonical.error())) {
+                    co_return std::unexpected(std::move(canonical.error()));
+                }
+                // A broken link or an inaccessible target makes the candidate
+                // absent, matching `existsSync`/`statSync` failure.
+                continue;
+            }
+            auto target_info = co_await std::move(filesystem->fileInfo(*canonical, stop_token));
+            if (!target_info) {
+                if (loader_aborted(target_info.error())) {
+                    co_return std::unexpected(std::move(target_info.error()));
+                }
+                continue;
+            }
+            if (target_info->kind != harness::FileKind::File) {
+                continue;
+            }
+            readable = std::move(*canonical);
+        } else if (info->kind != harness::FileKind::File) {
             continue;
         }
-        auto content = co_await std::move(filesystem->readTextFile(addressed_path(*filesystem, path), stop_token));
+        auto content = co_await std::move(filesystem->readTextFile(readable, stop_token));
         if (!content) {
             if (loader_aborted(content.error())) {
                 co_return std::unexpected(std::move(content.error()));
@@ -554,7 +582,13 @@ struct AsyncGitPaths {
     if (!filesystem) {
         co_return normalized_absolute(path).string();
     }
-    auto canonical = co_await std::move(filesystem->canonicalPath(addressed_path(*filesystem, path), stop_token));
+    auto addressed = addressed_path(*filesystem, path);
+    if (addressed.empty()) {
+        // A capability root has no addressable relative form; "." is the
+        // root itself for `resolveToCwd`.
+        addressed = ".";
+    }
+    auto canonical = co_await std::move(filesystem->canonicalPath(addressed, stop_token));
     if (!canonical) {
         if (loader_aborted(canonical.error())) {
             co_return std::unexpected(std::move(canonical.error()));
@@ -578,25 +612,24 @@ find_shadowed_context_file_task(const ProjectResourceFileSystems& filesystems,
         co_return std::optional<std::filesystem::path>{};
     }
 
-    const auto common_git_dir = normalized_absolute((*git_paths)->common_git_dir);
-    const auto worktree_root = normalized_absolute((*git_paths)->worktree_root);
-    const auto main_repo_root = common_git_dir.parent_path();
-    const auto prefix = main_repo_root.string() + std::filesystem::path::preferred_separator;
-    if (worktree_root == main_repo_root || !worktree_root.string().starts_with(prefix)) {
-        co_return std::optional<std::filesystem::path>{};
-    }
-
-    auto worktree_canonical = co_await std::move(
-            detail::to_async_result(canonicalized_path_task(filesystems, worktree_root, stop_token)));
+    // pi `findShadowedContextFile`: canonicalize the git dirs first, then take
+    // the main repo root from the canonical common git dir. The shadow path
+    // itself is `canonical main repo root + candidate basename`; file contents
+    // are never canonicalized, because a worktree context symlink must still
+    // load once at the worktree path.
+    auto worktree_canonical = co_await std::move(detail::to_async_result(
+            canonicalized_path_task(filesystems, normalized_absolute((*git_paths)->worktree_root), stop_token)));
     if (!worktree_canonical) {
         co_return std::unexpected(std::move(worktree_canonical.error()));
     }
-    auto common_canonical = co_await std::move(
-            detail::to_async_result(canonicalized_path_task(filesystems, common_git_dir, stop_token)));
+    auto common_canonical = co_await std::move(detail::to_async_result(
+            canonicalized_path_task(filesystems, normalized_absolute((*git_paths)->common_git_dir), stop_token)));
     if (!common_canonical) {
         co_return std::unexpected(std::move(common_canonical.error()));
     }
-    if (!worktree_canonical->starts_with(main_repo_root.string() + std::filesystem::path::preferred_separator)) {
+    const auto main_repo_root = std::filesystem::path{*common_canonical}.parent_path();
+    const auto prefix = main_repo_root.string() + std::filesystem::path::preferred_separator;
+    if (*worktree_canonical == main_repo_root.string() || !worktree_canonical->starts_with(prefix)) {
         co_return std::optional<std::filesystem::path>{};
     }
 
@@ -658,16 +691,6 @@ load_project_context_files_task(const ProjectResourceFileSystems& filesystems,
         }
         shadowed_context = std::move(*shadowed);
     }
-    std::optional<std::string> shadowed_canonical;
-    if (shadowed_context) {
-        auto canonical = co_await std::move(
-                detail::to_async_result(canonicalized_path_task(filesystems, *shadowed_context, stop_token)));
-        if (!canonical) {
-            co_return std::unexpected(std::move(canonical.error()));
-        }
-        shadowed_canonical = std::move(*canonical);
-    }
-
     auto roots = ordered_context_filesystems(filesystems);
     for (const auto& filesystem : roots) {
         auto loaded =
@@ -681,13 +704,21 @@ load_project_context_files_task(const ProjectResourceFileSystems& filesystems,
         if (!loaded->file || seen_paths.contains(loaded->file->path)) {
             continue;
         }
-        if (shadowed_canonical) {
-            auto canonical = co_await std::move(
-                    detail::to_async_result(canonicalized_path_task(filesystems, loaded->file->path, stop_token)));
-            if (!canonical) {
-                co_return std::unexpected(std::move(canonical.error()));
+        if (shadowed_context) {
+            // pi compares `join(canonicalizePath(currentDir), basename(file))`
+            // with the shadow path, not canonicalized file paths. A worktree
+            // context symlink therefore survives at the worktree path while
+            // the main repo's copy stays shadowed.
+            auto canonical_dir = co_await std::move(filesystem->canonicalPath(".", stop_token));
+            if (!canonical_dir) {
+                if (loader_aborted(canonical_dir.error())) {
+                    co_return std::unexpected(std::move(canonical_dir.error()));
+                }
+                canonical_dir = normalized_absolute(filesystem->workspace()).string();
             }
-            if (*canonical == *shadowed_canonical) {
+            const auto candidate =
+                    std::filesystem::path{*canonical_dir} / std::filesystem::path{loaded->file->path}.filename();
+            if (candidate.lexically_normal() == *shadowed_context) {
                 continue;
             }
         }
@@ -901,12 +932,12 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     const bool project_trusted = result.trust.decision == ProjectTrustDecision::Trusted;
 
     // Prompt templates retain pi's explicit-first, project, then user order.
-    // Each explicit input resolves once through the workspace capability's
-    // uniform pi `resolveToCwd` resolution (ADR 0057); the resolved absolute
-    // path flows into the loader spec and the template's filePath.
+    // Each explicit input resolves through pi `resolveCliPaths` +
+    // `resolvePath(..., { trim: true })`; the resolved path flows into the
+    // loader spec and the template's filePath.
     PromptNameTracker prompt_names;
     for (const auto& input : request.explicit_prompt_templates) {
-        auto resolved = co_await std::move(filesystems.workspace->absolutePath(input.path, stop_token));
+        auto resolved = co_await std::move(filesystems.workspace->resolveResourcePath(input.path, stop_token));
         if (!resolved) {
             if (loader_aborted(resolved.error())) {
                 co_return std::unexpected(std::move(resolved.error()));
@@ -1100,12 +1131,11 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             }
         }
     }
-    // Explicit --skill paths resolve once through the workspace capability's
-    // uniform pi `resolveToCwd` resolution (ADR 0057); the resolved absolute
-    // path flows into fileInfo, the loadSkills spec, and the skill's
-    // filePath/baseDir.
+    // Explicit --skill paths resolve through pi `resolveCliPaths` +
+    // `resolvePath(..., { trim: true })`; the resolved path flows into
+    // fileInfo, the loadSkills spec, and the skill's filePath/baseDir.
     for (const auto& path : request.skill_paths) {
-        auto resolved = co_await std::move(filesystems.workspace->absolutePath(path, stop_token));
+        auto resolved = co_await std::move(filesystems.workspace->resolveResourcePath(path, stop_token));
         if (!resolved) {
             if (loader_aborted(resolved.error())) {
                 co_return std::unexpected(std::move(resolved.error()));
@@ -1172,11 +1202,11 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             co_return std::unexpected(std::move(loaded.error()));
         }
     }
-    // Explicit --theme paths resolve once through the workspace capability's
-    // uniform pi `resolveToCwd` resolution (ADR 0057); the resolved absolute
-    // path is read and recorded as the theme's source path.
+    // Explicit --theme paths resolve through pi `resolveCliPaths` +
+    // `resolvePath(..., { trim: true })`; the resolved path is read and
+    // recorded as the theme's source path.
     for (const auto& path : request.theme_paths) {
-        auto resolved = co_await std::move(filesystems.workspace->absolutePath(path, stop_token));
+        auto resolved = co_await std::move(filesystems.workspace->resolveResourcePath(path, stop_token));
         if (!resolved) {
             if (loader_aborted(resolved.error())) {
                 co_return std::unexpected(std::move(resolved.error()));

@@ -34,6 +34,11 @@ public:
         return immediate<std::string>(path, stop_token, [&] { return filesystem_.absolutePath(path); });
     }
 
+    [[nodiscard]] support::AsyncResult<std::string, harness::FileError> resolveResourcePath(
+            std::string path, std::stop_token stop_token) override {
+        return immediate<std::string>(path, stop_token, [&] { return filesystem_.resolveResourcePath(path); });
+    }
+
     [[nodiscard]] support::AsyncResult<std::string, harness::FileError> joinPath(
             std::vector<std::string> parts, std::stop_token stop_token) override {
         return immediate<std::string>(std::nullopt, stop_token, [&] { return filesystem_.joinPath(parts); });

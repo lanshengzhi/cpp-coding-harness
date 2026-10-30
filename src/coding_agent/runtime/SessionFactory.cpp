@@ -1011,11 +1011,11 @@ make_explicit_template_inputs_async(const ProjectResourceFileSystems& filesystem
     for (const auto& path : paths) {
         bool is_file = true;
         if (filesystems.workspace) {
-            // The workspace capability's uniform pi `resolveToCwd` resolution
-            // (ADR 0057) addresses any explicit path; only an existing
-            // directory flips the file/dir classification.
-            auto resolved =
-                    co_await support::detail::await_async_result(filesystems.workspace->absolutePath(path, stop_token));
+            // Explicit resource inputs resolve with pi `resolveCliPaths` +
+            // `resolvePath(..., { trim: true })`; only an existing directory
+            // flips the file/dir classification.
+            auto resolved = co_await support::detail::await_async_result(
+                    filesystems.workspace->resolveResourcePath(path, stop_token));
             if (!resolved) {
                 if (resolved.error().code == harness::FileErrorCode::Aborted) {
                     co_return std::unexpected(harness::to_util_error(std::move(resolved.error())));

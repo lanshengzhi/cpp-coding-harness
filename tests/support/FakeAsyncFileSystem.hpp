@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/coding_agent/environment/FileSystem.hpp>
+#include "coding_agent/environment/WorkspaceFileSystem.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -68,6 +69,15 @@ public:
             std::string path, std::stop_token stop_token) override {
         if (auto error = failure(stop_token)) return failed<std::string>(std::move(*error));
         return ready(std::move(path));
+    }
+
+    support::AsyncResult<std::string, harness::FileError> resolveResourcePath(
+            std::string path, std::stop_token stop_token) override {
+        if (auto error = failure(stop_token)) return failed<std::string>(std::move(*error));
+        const harness::WorkspaceFileSystem resolver(workspace_);
+        auto resolved = resolver.resolveResourcePath(path);
+        if (!resolved) return failed<std::string>(std::move(resolved.error()));
+        return ready(std::move(*resolved));
     }
 
     support::AsyncResult<std::string, harness::FileError> joinPath(

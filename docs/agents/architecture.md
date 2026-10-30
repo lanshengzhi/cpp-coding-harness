@@ -85,7 +85,7 @@ Generic and serialization machinery stays local. Glaze DTOs, schema conversion, 
 
 ## Security and containment
 
-Filesystem access aligns with host user process permissions: all path resolution follows pi's `resolveToCwd` contract uniformly, with no workspace containment, path allowlists, or resolution-scope splits (ADR 0057). Shell, file, environment-variable, provider, and session changes preserve the remaining security policies — secret redaction, output truncation, the bash environment filter, and the no-follow symlink policy with atomic writes — and the documented “not a sandbox” boundary.
+Filesystem access aligns with host user process permissions: all path resolution follows pi's `resolveToCwd` contract uniformly, with no workspace containment, path allowlists, or resolution-scope splits (ADR 0057). Shell, file, environment-variable, provider, and session changes preserve the remaining security policies — secret redaction, output truncation, the bash environment filter, and the no-follow symlink policy with atomic writes — and the documented “not a sandbox” boundary. Explicit CLI resource paths select pi's `resolveCliPaths` + `resolvePath(..., { trim: true })` modifiers through the same private resolution core (literal leading `@`, POSIX `file://`, no unicode-space normalization): this is a distinct pi function, not a second tool-path scope. The one bounded read-only symlink exception is Project Context File discovery, mirroring pi's `statSync(...).isFile()`: a candidate symlink resolves through `canonicalPath` and is read only when the canonical target is a regular file; every ordinary read and write stays no-follow.
 
 ## Retired surfaces
 

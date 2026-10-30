@@ -58,11 +58,6 @@ namespace {
     return error.code == harness::FileErrorCode::Aborted;
 }
 
-[[nodiscard]] std::string async_prompt_read_path(const harness::AsyncFileSystem& fs, std::string_view file_path) {
-    const auto relative_path = strip_workspace_root(fs.workspace(), file_path);
-    return relative_path.value_or(std::string{file_path});
-}
-
 [[nodiscard]] std::string async_prompt_absolute_path(const harness::AsyncFileSystem& fs, std::string_view file_path) {
     const std::filesystem::path path{file_path};
     if (path.is_absolute()) {
@@ -90,7 +85,7 @@ namespace {
         co_return result;
     }
 
-    auto content = co_await std::move(fs.readTextFile(async_prompt_read_path(fs, file_path), stop_token));
+    auto content = co_await std::move(fs.readTextFile(file_path, stop_token));
     if (!content) {
         if (async_prompt_aborted(content.error())) {
             co_return std::unexpected(std::move(content.error()));
@@ -172,7 +167,7 @@ namespace {
             continue;
         }
 
-        auto entries = co_await std::move(fs.listDir(async_prompt_read_path(fs, spec.path), stop_token));
+        auto entries = co_await std::move(fs.listDir(spec.path, stop_token));
         if (!entries) {
             if (async_prompt_aborted(entries.error())) {
                 co_return std::unexpected(std::move(entries.error()));

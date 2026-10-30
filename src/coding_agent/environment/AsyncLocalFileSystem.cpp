@@ -39,6 +39,16 @@ support::AsyncResult<std::string, FileError> AsyncLocalFileSystem::absolutePath(
             [path = std::move(path)](const WorkspaceFileSystem& fs) { return fs.absolutePath(path); });
 }
 
+support::AsyncResult<std::string, FileError> AsyncLocalFileSystem::resolveResourcePath(
+        std::string path, std::stop_token stop_token) {
+    return filesystem_detail::submit_filesystem_operation<std::string>(impl_->runtime_target,
+            impl_->filesystem,
+            path.size(),
+            stop_token,
+            path,
+            [path = std::move(path)](const WorkspaceFileSystem& fs) { return fs.resolveResourcePath(path); });
+}
+
 support::AsyncResult<std::string, FileError> AsyncLocalFileSystem::joinPath(
         std::vector<std::string> parts, std::stop_token stop_token) {
     std::size_t byte_charge{0};

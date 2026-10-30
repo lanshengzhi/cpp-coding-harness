@@ -919,33 +919,40 @@ TEST_CASE("project resource loader loads an explicit --skill path outside every 
     CHECK(result.resources.skills[0].baseDir == (external.path() / "outside-skill").string());
 }
 
-TEST_CASE("project resource loader resolves a @-prefixed --skill path and /skill expands its body",
-        "[coding_agent][project-resource-loader][issue700][spec]") {
+TEST_CASE("project resource loader keeps a leading @ literal for --skill paths",
+        "[coding_agent][project-resource-loader][issue1114][spec]") {
     LoaderFixture fix;
-    tests::TempWorkspace external;
-    external.write("mention-skill/SKILL.md",
+    // pi `resolveCliPaths` leaves `stripAtPrefix` off for resource flags, so
+    // "@skills/literal-skill" names a directory whose name starts with "@".
+    fix.write("@skills/literal-skill/SKILL.md",
             "---\n"
-            "name: mention-skill\n"
-            "description: Mention-prefixed skill.\n"
+            "name: literal-skill\n"
+            "description: Literal-at skill.\n"
             "---\n"
-            "Mention body.\n");
-    const auto skill_file = (external.path() / "mention-skill" / "SKILL.md").string();
+            "Literal-at body.\n");
+    fix.write("skills/literal-skill/SKILL.md",
+            "---\n"
+            "name: stripped-skill\n"
+            "description: Stripped-at skill.\n"
+            "---\n"
+            "Stripped-at body.\n");
 
     coding_agent::ProjectResourceLoadingRequest request;
-    request.skill_paths.push_back("@" + skill_file);
+    request.skill_paths.push_back("@skills/literal-skill");
 
     auto result = fix.load(std::move(request));
 
     CHECK(result.fatal_errors.empty());
     REQUIRE(result.resources.skills.size() == 1);
-    // The capability's resolved path becomes the skill's filePath/baseDir —
-    // not the raw "@"-prefixed input joined against the workspace.
-    CHECK(result.resources.skills[0].filePath == skill_file);
-    CHECK(result.resources.skills[0].baseDir == (external.path() / "mention-skill").string());
+    CHECK(result.resources.skills[0].name == "literal-skill");
+    CHECK(result.resources.skills[0].filePath ==
+            (fix.workspace.path() / "@skills" / "literal-skill" / "SKILL.md").string());
+    CHECK(result.resources.skills[0].baseDir == (fix.workspace.path() / "@skills" / "literal-skill").string());
 
     // pi `_expandSkillCommand` reads the resolved filePath at invocation time.
-    const auto expanded = coding_agent::expandSkillCommand("/skill:mention-skill", result.resources.skills);
-    CHECK(expanded.find("Mention body.") != std::string::npos);
+    const auto expanded = coding_agent::expandSkillCommand("/skill:literal-skill", result.resources.skills);
+    CHECK(expanded.find("Literal-at body.") != std::string::npos);
+    CHECK(expanded.find("Stripped-at body.") == std::string::npos);
 }
 
 TEST_CASE("project resource loader resolves a ~-prefixed --skill path against $HOME",
@@ -997,15 +1004,9 @@ TEST_CASE("project resource loader loads an explicit --prompt-template path outs
     CHECK(result.resources.prompt_templates[0].filePath == prompt_file);
 }
 
-TEST_CASE("project resource loader resolves @-prefixed and ~-prefixed --prompt-template paths",
+TEST_CASE("project resource loader resolves a ~-prefixed --prompt-template path against $HOME",
         "[coding_agent][project-resource-loader][issue700][spec]") {
     LoaderFixture fix;
-    tests::TempWorkspace external;
-    external.write("mention-prompt.md",
-            "---\n"
-            "description: Mention prompt.\n"
-            "---\n"
-            "Mention prompt body.\n");
     tests::TempWorkspace home;
     home.write("home-prompt.md",
             "---\n"
@@ -1013,22 +1014,85 @@ TEST_CASE("project resource loader resolves @-prefixed and ~-prefixed --prompt-t
             "---\n"
             "Home prompt body.\n");
     const tests::EnvVarGuard home_env{"HOME", home.path().string()};
-    const auto mention_file = (external.path() / "mention-prompt.md").string();
     const auto home_file = (home.path() / "home-prompt.md").string();
 
     coding_agent::ProjectResourceLoadingRequest request;
     request.home_directory = home.path();
-    request.explicit_prompt_templates.push_back({.path = "@" + mention_file, .is_file = true});
     request.explicit_prompt_templates.push_back({.path = "~/home-prompt.md", .is_file = true});
 
     auto result = fix.load(std::move(request));
 
     CHECK(result.fatal_errors.empty());
-    REQUIRE(result.resources.prompt_templates.size() == 2);
-    CHECK(result.resources.prompt_templates[0].name == "mention-prompt");
-    CHECK(result.resources.prompt_templates[0].filePath == mention_file);
-    CHECK(result.resources.prompt_templates[1].name == "home-prompt");
-    CHECK(result.resources.prompt_templates[1].filePath == home_file);
+    REQUIRE(result.resources.prompt_templates.size() == 1);
+    CHECK(result.resources.prompt_templates[0].name == "home-prompt");
+    CHECK(result.resources.prompt_templates[0].filePath == home_file);
+}
+
+TEST_CASE("project resource loader applies resource-flag path modifiers",
+        "[coding_agent][project-resource-loader][issue1114][spec]") {
+    SECTION("JavaScript trim and file URL conversion") {
+        LoaderFixture fix;
+        fix.write("trimmed.md", "---\ndescription: Trimmed prompt.\n---\ntrim marker\n");
+        fix.write("url dir/url.md", "---\ndescription: URL prompt.\n---\nurl marker\n");
+        const auto url_path = (fix.workspace.path() / "url dir" / "url.md").string();
+        std::string file_url = "file://" + url_path;
+        for (auto position = file_url.find(' '); position != std::string::npos;
+                position = file_url.find(' ', position)) {
+            file_url.replace(position, 1, "%20");
+        }
+
+        coding_agent::ProjectResourceLoadingRequest request;
+        request.explicit_prompt_templates.push_back({.path = "  trimmed.md\t", .is_file = true});
+        request.explicit_prompt_templates.push_back({.path = file_url, .is_file = true});
+
+        auto result = fix.load(std::move(request));
+
+        CHECK(result.fatal_errors.empty());
+        REQUIRE(result.resources.prompt_templates.size() == 2);
+        CHECK(result.resources.prompt_templates[0].name == "trimmed");
+        CHECK(result.resources.prompt_templates[0].content.find("trim marker") != std::string::npos);
+        CHECK(result.resources.prompt_templates[0].filePath == (fix.workspace.path() / "trimmed.md").string());
+        CHECK(result.resources.prompt_templates[1].name == "url");
+        CHECK(result.resources.prompt_templates[1].content.find("url marker") != std::string::npos);
+        CHECK(result.resources.prompt_templates[1].filePath == url_path);
+    }
+
+    SECTION("a leading @ is a literal path character, not a mention prefix") {
+        LoaderFixture fix;
+        fix.write("@templates/literal.md", "---\ndescription: Literal prompt.\n---\nliteral marker\n");
+        fix.write("templates/literal.md", "---\ndescription: Stripped prompt.\n---\nstripped marker\n");
+
+        coding_agent::ProjectResourceLoadingRequest request;
+        request.explicit_prompt_templates.push_back({.path = "@templates/literal.md", .is_file = true});
+
+        auto result = fix.load(std::move(request));
+
+        CHECK(result.fatal_errors.empty());
+        REQUIRE(result.resources.prompt_templates.size() == 1);
+        CHECK(result.resources.prompt_templates[0].content.find("literal marker") != std::string::npos);
+        CHECK(result.resources.prompt_templates[0].content.find("stripped marker") == std::string::npos);
+        CHECK(result.resources.prompt_templates[0].filePath ==
+                (fix.workspace.path() / "@templates" / "literal.md").string());
+    }
+
+    SECTION("Unicode space variants are not normalized") {
+        LoaderFixture fix;
+        const std::string nbsp_directory = std::string{"nbsp"} + "\xC2\xA0" + "dir";
+        fix.write(nbsp_directory + "/nbsp.md", "---\ndescription: NBSP prompt.\n---\nnbsp marker\n");
+        fix.write("nbsp dir/nbsp.md", "---\ndescription: Space prompt.\n---\nspace marker\n");
+
+        coding_agent::ProjectResourceLoadingRequest request;
+        request.explicit_prompt_templates.push_back({.path = nbsp_directory + "/nbsp.md", .is_file = true});
+
+        auto result = fix.load(std::move(request));
+
+        CHECK(result.fatal_errors.empty());
+        REQUIRE(result.resources.prompt_templates.size() == 1);
+        CHECK(result.resources.prompt_templates[0].content.find("nbsp marker") != std::string::npos);
+        CHECK(result.resources.prompt_templates[0].content.find("space marker") == std::string::npos);
+        CHECK(result.resources.prompt_templates[0].filePath ==
+                (fix.workspace.path() / nbsp_directory / "nbsp.md").string());
+    }
 }
 
 TEST_CASE("project resource loader reads a --system-prompt file outside every known root",
@@ -1127,6 +1191,12 @@ void link_worktree(
         "gitdir: " + git_dir.string() + "\n");
 }
 
+void write_symlink(const std::filesystem::path& target, const std::filesystem::path& link) {
+    std::error_code error;
+    std::filesystem::create_symlink(target, link, error);
+    REQUIRE_FALSE(error);
+}
+
 [[nodiscard]] coding_agent::ProjectResourceLoadingResult load_context_files_at(
     const LoaderFixture& fix,
     const std::filesystem::path& workspace) {
@@ -1159,6 +1229,108 @@ TEST_CASE("project resource loader context files load even under an untrusted de
     CHECK(result.resources.agents_files[0].content == "workspace instructions\n");
     // The trust decision still gates the project resources.
     CHECK(result.resources.skills.empty());
+}
+
+TEST_CASE("project resource loader prefers AGENTS.override.md and layers ancestors root-to-leaf",
+        "[coding_agent][project-resource-loader][context-files][issue1114][spec]") {
+    // fixtures/pi-v1.3.0/audit-1049/resource-selection.json, scenario
+    // "AGENTS.override.md wins over AGENTS.md and ancestor context is
+    // root-to-leaf".
+    SECTION("AGENTS.override.md wins within one directory") {
+        LoaderFixture fix;
+        fix.write("precedence/AGENTS.override.md", "override marker\n");
+        fix.write("precedence/AGENTS.md", "agents marker\n");
+        fix.write("precedence/CLAUDE.md", "claude marker\n");
+
+        auto result = load_context_files_at(fix, fix.workspace.path() / "precedence");
+
+        REQUIRE(result.resources.agents_files.size() == 1);
+        CHECK(result.resources.agents_files[0].path ==
+                (fix.workspace.path() / "precedence" / "AGENTS.override.md").string());
+        CHECK(result.resources.agents_files[0].content == "override marker\n");
+    }
+    SECTION("ancestor context files layer root-most first") {
+        LoaderFixture fix;
+        fix.write("tree/AGENTS.md", "root marker\n");
+        fix.write("tree/nested/AGENTS.md", "nested marker\n");
+
+        auto result = load_context_files_at(fix, fix.workspace.path() / "tree" / "nested");
+
+        REQUIRE(result.resources.agents_files.size() == 2);
+        CHECK(result.resources.agents_files[0].path == (fix.workspace.path() / "tree" / "AGENTS.md").string());
+        CHECK(result.resources.agents_files[0].content == "root marker\n");
+        CHECK(result.resources.agents_files[1].path ==
+                (fix.workspace.path() / "tree" / "nested" / "AGENTS.md").string());
+        CHECK(result.resources.agents_files[1].content == "nested marker\n");
+    }
+}
+
+TEST_CASE("project resource loader loads a worktree context symlink once at the worktree path",
+        "[coding_agent][project-resource-loader][context-files][issue1114][spec]") {
+    // fixtures/pi-v1.3.0/audit-1049/resource-selection.json, scenario
+    // "worktree context file symlink is loaded once and not duplicated from
+    // the main repo".
+    LoaderFixture fix;
+    const auto main = fix.workspace.path() / "repo";
+    const auto worktree = main / "linked";
+    fix.write("repo/AGENTS.md", "main marker\n");
+    link_worktree(fix, main, worktree, "linked");
+    write_symlink("../AGENTS.md", worktree / "AGENTS.md");
+
+    auto result = load_context_files_at(fix, worktree / "src");
+
+    REQUIRE(result.resources.agents_files.size() == 1);
+    CHECK(result.resources.agents_files[0].path == (worktree / "AGENTS.md").string());
+    CHECK(result.resources.agents_files[0].content == "main marker\n");
+}
+
+TEST_CASE("project resource loader keeps the worktree symlink path when the main file is also a symlink",
+        "[coding_agent][project-resource-loader][context-files][issue1114][spec]") {
+    // pi compares the canonical directory plus candidate basename with the
+    // shadow path. A file-canonical comparison would dedupe both copies and
+    // load nothing here.
+    LoaderFixture fix;
+    const auto main = fix.workspace.path() / "repo";
+    const auto worktree = main / "linked";
+    fix.write("repo/shared.md", "shared marker\n");
+    link_worktree(fix, main, worktree, "linked");
+    write_symlink("shared.md", main / "AGENTS.md");
+    write_symlink("../AGENTS.md", worktree / "AGENTS.md");
+
+    auto result = load_context_files_at(fix, worktree / "src");
+
+    REQUIRE(result.resources.agents_files.size() == 1);
+    CHECK(result.resources.agents_files[0].path == (worktree / "AGENTS.md").string());
+    CHECK(result.resources.agents_files[0].content == "shared marker\n");
+}
+
+TEST_CASE("project resource loader skips broken and directory context symlinks",
+        "[coding_agent][project-resource-loader][context-files][issue1114][spec]") {
+    SECTION("broken symlink falls through to the next candidate") {
+        LoaderFixture fix;
+        fix.write("broken/CLAUDE.md", "fallback marker\n");
+        write_symlink("missing.md", fix.workspace.path() / "broken" / "AGENTS.md");
+
+        auto result = load_context_files_at(fix, fix.workspace.path() / "broken");
+
+        REQUIRE(result.resources.agents_files.size() == 1);
+        CHECK(result.resources.agents_files[0].path == (fix.workspace.path() / "broken" / "CLAUDE.md").string());
+        CHECK(result.resources.agents_files[0].content == "fallback marker\n");
+    }
+    SECTION("directory symlink is not a regular-file candidate") {
+        LoaderFixture fix;
+        fix.write("directory/CLAUDE.md", "fallback marker\n");
+        std::error_code ec;
+        std::filesystem::create_directories(fix.workspace.path() / "directory" / "agents-target", ec);
+        REQUIRE_FALSE(ec);
+        write_symlink("agents-target", fix.workspace.path() / "directory" / "AGENTS.md");
+
+        auto result = load_context_files_at(fix, fix.workspace.path() / "directory");
+
+        REQUIRE(result.resources.agents_files.size() == 1);
+        CHECK(result.resources.agents_files[0].path == (fix.workspace.path() / "directory" / "CLAUDE.md").string());
+        CHECK(result.resources.agents_files[0].content == "fallback marker\n");
+    }
 }
 
 TEST_CASE("project resource loader dedupes a global context file that is also an ancestor",

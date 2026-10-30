@@ -125,12 +125,12 @@ The complete operation/consumer/status record is `docs/research/pi-v1.3.0/1049-l
 
 | Row | Membership | Implementation | Verification | Audit result |
 |---|---|---|---|---|
-| `prompt-quoted-empty` | supported | missing | upstream-captured | C++ drops `""`/`''`; existing test encodes the shifted result |
-| `prompt-substitution-forms` | supported | partial | upstream-captured | Missing `${@:-default}` / `${ARGUMENTS:-default}` |
+| `prompt-quoted-empty` | supported | implemented | upstream-captured | Empty quoted tokens preserved as positional arguments |
+| `prompt-substitution-forms` | supported | implemented | upstream-captured | Positionals, $@, ${N:-default}, ${@:N}, ${@:N:L}, and ${@:-default}/${ARGUMENTS:-default} collection defaults |
 | `prompt-template-resources` | supported | implemented | upstream-captured | Discovery/explicit prompts covered |
-| `context-file-candidate-order` | supported | partial | upstream-captured | Missing `AGENTS.override.md` |
+| `context-file-candidate-order` | supported | implemented | upstream-captured | AGENTS.override.md first candidate; ancestors root-to-leaf |
 | `context-worktree-shadowing` | supported | implemented | upstream-captured | Captured real linked-worktree shadow and symlink dedupe |
-| `resource-path-modifiers` | supported | partial | upstream-captured | Tilde/Unicode/relative work; selected `file:` URL and resource-flag `@` behavior still differ |
+| `resource-path-modifiers` | supported | implemented | upstream-captured | JavaScript trim, tilde, file:// conversion, literal @ on resource flags, unnormalized Unicode spaces |
 | `resource-explicit-sources` | supported | implemented | upstream-captured | `--skill`/`--prompt-template`/`--theme`; no `--extensions` |
 | `settings-schema` | supported | partial | upstream-captured | Runtime subset exists; no published C++ schema or selected local resource-path fields |
 | `settings-runtime` | supported | partial | upstream-captured | Model/thinking/reload work; selected local resource-path lists missing, third-party markers excluded |

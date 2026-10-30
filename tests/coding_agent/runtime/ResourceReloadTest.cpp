@@ -28,10 +28,12 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <deque>
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -111,8 +113,10 @@ struct ReloadFixture {
     tests::RuntimeFixture runtime;
     coding_agent::AgentSession* session{
             nullptr}; // borrows a Session owned by runtime; runtime must outlive this pointer.
+    std::vector<coding_agent::LoadedThemeResource> theme_resources;
 
-    void create(bool trusted = true) {
+    void create(bool trusted = true,
+            const std::function<void(coding_agent::runtime::InteractiveSessionFacts&)>& configure = {}) {
         workspace.write(
             ".pi/skills/proj-skill/SKILL.md",
             "---\n"
@@ -140,6 +144,9 @@ struct ReloadFixture {
         options.project_trust_override = trusted;
 
         coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+        if (configure) {
+            configure(request.session_facts);
+        }
         request.execution_runtime_target = runtime.make_target();
         catalog_transport = std::make_shared<tests::ScriptedTransport>();
         catalog_transport->attempts.push_back(tests::TransportAttempt{
@@ -164,6 +171,7 @@ struct ReloadFixture {
         request.model_runtime = model_runtime;
         auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
         REQUIRE(created.has_value());
+        theme_resources = std::move(created->theme_resources);
         session = &runtime.adopt_session(std::move(created->session));
     }
 };
@@ -203,6 +211,200 @@ struct AsyncReloadFixture {
 };
 
 } // namespace
+
+TEST_CASE("session expands the frozen quoted-empty prompt before the model call",
+        "[coding_agent][reload][issue1114][spec]") {
+    // fixtures/pi-v1.3.0/audit-1049/prompt-expansion.json, scenario
+    // "session prompt expands the quoted-empty template before the model
+    // call".
+    ReloadFixture fixture;
+    fixture.create(/*trusted*/ true);
+    fixture.workspace.write(".pi/prompts/review.md",
+            "---\n"
+            "description: frozen review prompt.\n"
+            "---\n"
+            "Review $2. Focus: ${1:-correctness}.\n");
+
+    auto reloaded = run_reload(fixture.runtime, *fixture.session);
+    REQUIRE(reloaded.has_value());
+    CHECK(reloaded->prompt_diagnostics.empty());
+    const auto& templates = fixture.session->templates();
+    REQUIRE(std::any_of(templates.begin(), templates.end(), [](const auto& tmpl) { return tmpl.name == "review"; }));
+
+    auto prompted = run_prompt(fixture.runtime, *fixture.session, "/review \"\" src/index.ts");
+    REQUIRE(prompted.has_value());
+    CHECK_FALSE(fixture.session->is_busy());
+
+    const auto snapshot = fixture.session->snapshot();
+    std::string user_text;
+    std::string assistant_text;
+    for (const auto& message : snapshot.agent_state.messages) {
+        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+            user_text = ai::text_from_user_message(*user);
+        }
+        if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
+            assistant_text = ai::text_from_assistant_content(assistant->content);
+        }
+    }
+    CHECK(user_text == "Review src/index.ts. Focus: correctness.");
+    CHECK(assistant_text == "done");
+
+    REQUIRE_FALSE(fixture.client->requests.empty());
+    const auto& request = fixture.client->requests.back();
+    std::string request_user_text;
+    for (const auto& message : request.messages) {
+        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+            request_user_text = ai::text_from_user_message(*user);
+        }
+    }
+    CHECK(request_user_text == "Review src/index.ts. Focus: correctness.");
+    REQUIRE(request.system_prompt.has_value());
+    CHECK(request.system_prompt->find("/review") == std::string::npos);
+}
+
+TEST_CASE("session loads explicit resources through resource-flag path modifiers",
+        "[coding_agent][reload][issue1114][spec]") {
+    ReloadFixture fixture;
+    const std::string nbsp_directory = std::string{"nbsp"} + "\xC2\xA0" + "dir";
+    fixture.workspace.write("@templates/literal.md",
+            "---\n"
+            "description: Literal prompt.\n"
+            "---\n"
+            "literal marker\n");
+    fixture.workspace.write("templates/literal.md",
+            "---\n"
+            "description: Stripped prompt.\n"
+            "---\n"
+            "stripped marker\n");
+    fixture.workspace.write(nbsp_directory + "/nbsp.md",
+            "---\n"
+            "description: NBSP prompt.\n"
+            "---\n"
+            "nbsp marker\n");
+    fixture.workspace.write("nbsp dir/nbsp.md",
+            "---\n"
+            "description: Space prompt.\n"
+            "---\n"
+            "space marker\n");
+    fixture.workspace.write("url-skill/SKILL.md",
+            "---\n"
+            "name: url-skill\n"
+            "description: URL skill.\n"
+            "---\n"
+            "URL skill body.\n");
+    fixture.workspace.write("trim-theme/theme.json", R"({"name":"session-theme"})");
+    const auto url_skill = (fixture.workspace.path() / "url-skill" / "SKILL.md").string();
+    const auto trim_theme = (fixture.workspace.path() / "trim-theme").string();
+
+    fixture.create(/*trusted*/ true, [&](coding_agent::runtime::InteractiveSessionFacts& facts) {
+        facts.no_skills = true;
+        facts.no_prompt_templates = true;
+        facts.no_themes = true;
+        facts.no_context_files = true;
+        facts.prompt_template_paths = {
+                "  @templates/literal.md\t",
+                nbsp_directory + "/nbsp.md",
+        };
+        facts.skill_paths = {"file://" + url_skill};
+        facts.theme_paths = {"  " + trim_theme + "  "};
+    });
+
+    CHECK(fixture.session->prompt_diagnostics().empty());
+    const auto& templates = fixture.session->templates();
+    REQUIRE(templates.size() == 2);
+    const auto literal = std::find_if(templates.begin(), templates.end(), [](const auto& tmpl) {
+        return tmpl.filePath.find("@templates") != std::string::npos;
+    });
+    REQUIRE(literal != templates.end());
+    CHECK(literal->content.find("literal marker") != std::string::npos);
+    CHECK(literal->filePath == (fixture.workspace.path() / "@templates" / "literal.md").string());
+    const auto nbsp = std::find_if(templates.begin(), templates.end(), [](const auto& tmpl) {
+        return tmpl.content.find("nbsp marker") != std::string::npos;
+    });
+    REQUIRE(nbsp != templates.end());
+    CHECK(nbsp->filePath == (fixture.workspace.path() / nbsp_directory / "nbsp.md").string());
+
+    CHECK(fixture.session->skill_diagnostics().empty());
+    REQUIRE(fixture.session->skills().size() == 1);
+    CHECK(fixture.session->skills()[0].name == "url-skill");
+    CHECK(fixture.session->skills()[0].filePath == url_skill);
+
+    CHECK(fixture.session->theme_diagnostics().empty());
+    REQUIRE(fixture.theme_resources.size() == 1);
+    CHECK(fixture.theme_resources[0].path == (fixture.workspace.path() / "trim-theme" / "theme.json").string());
+    CHECK(fixture.theme_resources[0].json == R"({"name":"session-theme"})");
+
+    // `--no-context-files` still disables discovery in the same Session.
+    CHECK(fixture.session->context_files().empty());
+}
+
+TEST_CASE("session creation rejects an invalid explicit resource path modifier",
+        "[coding_agent][reload][issue1114][spec]") {
+    SECTION("malformed file URL percent escape is rejected during session startup") {
+        ReloadFixture fixture;
+        coding_agent::runtime::AgentSessionCreationRequest request;
+        request.workspace = fixture.workspace.path();
+        request.session_facts.prompt_template_paths = {"file:///broken/%zz/template.md"};
+        request.execution_runtime_target = fixture.runtime.make_target();
+        auto created =
+                fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
+        REQUIRE_FALSE(created.has_value());
+        CHECK(created.error().message == "explicit resource failed to load");
+        CHECK(created.error().detail.find("percent escape") != std::string::npos);
+    }
+    SECTION("remote file URL authority is rejected during session startup") {
+        ReloadFixture fixture;
+        coding_agent::runtime::AgentSessionCreationRequest request;
+        request.workspace = fixture.workspace.path();
+        request.session_facts.prompt_template_paths = {"file://remotehost/path/template.md"};
+        request.execution_runtime_target = fixture.runtime.make_target();
+        auto created =
+                fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
+        REQUIRE_FALSE(created.has_value());
+        CHECK(created.error().message == "explicit resource failed to load");
+        CHECK(created.error().detail.find("file URL host must be empty or localhost") != std::string::npos);
+    }
+}
+
+TEST_CASE("session context files prefer AGENTS.override.md after reload", "[coding_agent][reload][issue1114][spec]") {
+    ReloadFixture fixture;
+    fixture.create(/*trusted*/ true);
+    fixture.workspace.write("AGENTS.override.md", "override instructions\n");
+    fixture.workspace.write("AGENTS.md", "base instructions\n");
+
+    auto reloaded = run_reload(fixture.runtime, *fixture.session);
+    REQUIRE(reloaded.has_value());
+
+    const auto& files = fixture.session->context_files();
+    REQUIRE(files.size() == 1);
+    CHECK(files[0].path == (fixture.workspace.path() / "AGENTS.override.md").string());
+    CHECK(files[0].content == "override instructions\n");
+    const auto& system_prompt = fixture.session->snapshot().agent_state.system_prompt;
+    CHECK(system_prompt.find("override instructions") != std::string::npos);
+    CHECK(system_prompt.find("base instructions") == std::string::npos);
+}
+
+TEST_CASE("session context files load regular-file symlink target after reload",
+        "[coding_agent][reload][issue1114][spec]") {
+    ReloadFixture fixture;
+    fixture.create(/*trusted*/ true);
+    fixture.workspace.write("shared-context.md", "symlinked target instructions\n");
+    std::error_code ec;
+    std::filesystem::remove(fixture.workspace.path() / "AGENTS.md", ec);
+    REQUIRE_FALSE(ec);
+    std::filesystem::create_symlink("shared-context.md", fixture.workspace.path() / "AGENTS.md", ec);
+    REQUIRE_FALSE(ec);
+
+    auto reloaded = run_reload(fixture.runtime, *fixture.session);
+    REQUIRE(reloaded.has_value());
+
+    const auto& files = fixture.session->context_files();
+    REQUIRE(files.size() == 1);
+    CHECK(files[0].path == (fixture.workspace.path() / "AGENTS.md").string());
+    CHECK(files[0].content == "symlinked target instructions\n");
+    const auto& system_prompt = fixture.session->snapshot().agent_state.system_prompt;
+    CHECK(system_prompt.find("symlinked target instructions") != std::string::npos);
+}
 
 TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND and rebuilds the system prompt",
         "[coding_agent][reload][issue418][spec]") {

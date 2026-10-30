@@ -107,6 +107,21 @@ TEST_CASE("prompt expansion matches pi positional and slice edge cases", "[codin
             "[][j][a b  d e f g h i j ten][][ten]");
 }
 
+TEST_CASE("prompt expansion matches the frozen positional collection and default composite",
+        "[coding_agent][prompt][expand][issue1114][spec]") {
+    // fixtures/pi-v1.3.0/audit-1049/prompt-expansion.json, scenario
+    // "positional, collection and default substitution forms".
+    CHECK(process_template("/args '' src/index.ts",
+                  {{"args",
+                          std::nullopt,
+                          "$1|$2|$@|$ARGUMENTS|${1:-x}|${2:-y}|${@:2}|${@:2:1}|${@:-z}|${ARGUMENTS:-z}",
+                          std::nullopt,
+                          "",
+                          {}}}) ==
+            "|src/index.ts| src/index.ts| src/index.ts|x|src/index.ts|src/index.ts|src/index.ts| "
+            "src/index.ts| src/index.ts");
+}
+
 TEST_CASE("prompt expansion treats mixed whitespace as template argument separators",
         "[coding_agent][prompt][expand][spec]") {
     CHECK(process_template(
