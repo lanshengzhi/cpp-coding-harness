@@ -385,6 +385,23 @@ public:
     /// settles.
     [[nodiscard]] std::size_t pending_start_count() const noexcept { return pending_starts_; }
 
+    /// Whether the first-prompt `before_agent_start` wait still has work:
+    /// the startup wait has not run and an enabled `direct`-exposure server is
+    /// connecting. Callers must not await when this is false — consuming an
+    /// already-settled `AsyncResult` still yields to the executor, and that
+    /// window lets input queued between prompt admission and the first turn
+    /// fold into the initial input instead of staying steering.
+    [[nodiscard]] bool startup_wait_pending() const noexcept;
+
+    /// Latch pi's `waitedForStartup` without suspending, for the first prompt
+    /// whose direct servers had already settled.
+    void note_startup_checked() noexcept { waited_for_startup_ = true; }
+
+    /// Whether any server entered `needs-auth` with a stored-token snapshot,
+    /// i.e. whether `on_turn_start` could observe a sign-in from another
+    /// process. False means the caller must not await it.
+    [[nodiscard]] bool sign_in_pickup_pending() const noexcept { return !tokens_at_sign_in_.empty(); }
+
     /// pi `session_end`: close every live connection and drop any connect
     /// that is still in flight when it lands. Does not await the pending
     /// connects (pi's shutdown does not await `backgroundActions`).

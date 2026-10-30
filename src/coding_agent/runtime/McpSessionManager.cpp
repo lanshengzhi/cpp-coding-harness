@@ -359,6 +359,22 @@ support::AsyncResult<bool> McpSessionManager::wait_for_direct_servers(std::chron
     });
 }
 
+bool McpSessionManager::startup_wait_pending() const noexcept {
+    if (waited_for_startup_ || closed_) {
+        return false;
+    }
+    for (const auto& server : servers_) {
+        if (!is_enabled(server.entry) || !server.start_pending) {
+            continue;
+        }
+        const auto exposures = mcp::mcp_configured_exposures(server.entry);
+        if (std::ranges::find(exposures, mcp::McpExposure::Direct) != exposures.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 support::AsyncResult<void> McpSessionManager::on_turn_start() {
     return support::detail::make_async_result([this]() -> boost::asio::awaitable<support::ExpectedVoid> {
         // pi `turn_start` first awaits `waitForPendingConnections` so the

@@ -547,10 +547,20 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
         // MCP servers to finish connecting; every turn picks up servers
         // signed in through another process since their `needs-auth`
         // snapshot. Both are no-ops once the background connects landed.
+        // Await only when there is work: consuming an already-settled
+        // AsyncResult still yields to the executor, and that yield lands
+        // between prompt admission and the run's first turn, where queued
+        // input folds into the initial input instead of steering (#1104).
         if (services_.mcp_manager) {
-            (void)co_await support::detail::await_async_result(
-                    services_.mcp_manager->wait_for_direct_servers(std::chrono::seconds{10}));
-            (void)co_await support::detail::await_async_result(services_.mcp_manager->on_turn_start());
+            if (services_.mcp_manager->startup_wait_pending()) {
+                (void)co_await support::detail::await_async_result(
+                        services_.mcp_manager->wait_for_direct_servers(std::chrono::seconds{10}));
+            } else {
+                services_.mcp_manager->note_startup_checked();
+            }
+            if (services_.mcp_manager->sign_in_pickup_pending()) {
+                (void)co_await support::detail::await_async_result(services_.mcp_manager->on_turn_start());
+            }
         }
         result = co_await run_agent_loop(std::move(user_message), *active_stop_source_);
 
