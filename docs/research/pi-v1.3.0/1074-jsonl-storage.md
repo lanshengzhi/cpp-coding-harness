@@ -80,7 +80,10 @@ the delivery, but the ledger counts still need a consolidation regeneration.
 
 - No fsync option, fsync-failure observation, power-loss guarantee or
   multi-process coordination. The injected append failure is not SIGKILL or
-  power loss; `cch_durable:Storage:jsonl:fsync` remains unimplemented.
+  power loss. **Resolved by [#1174](https://github.com/lanshengzhi/cpp-coding-harness/issues/1174)**
+  ([1174-jsonl-fsync.md](1174-jsonl-fsync.md)): the public JSONL backend now
+  exposes the frozen `JsonlStorageOptions.fsync` option and the sidecar/main
+  flush contract; the row's verification stays with #1180.
 - No terminal task sidecar reclamation (owned by the #1055 task slice).
 - No SQLite backend, JSONL/SQLite interchange, historical import, migration,
   dual reads or fallback.

@@ -31,6 +31,9 @@ public:
     [[nodiscard]] static std::optional<FrozenScenario> load(
             std::string_view artifact_path, std::string_view scenario_name);
 
+    /// The frozen `inputs` object of the scenario.
+    [[nodiscard]] const support::JsonValue& inputs() const noexcept { return inputs_; }
+
     /// The frozen `expected` object of the scenario.
     [[nodiscard]] const support::JsonValue& expected() const noexcept { return expected_; }
 
@@ -50,8 +53,10 @@ public:
     [[nodiscard]] const support::JsonValue::array_t* array_member(std::string_view name) const;
 
 private:
-    explicit FrozenScenario(support::JsonValue expected) : expected_(std::move(expected)) {}
+    explicit FrozenScenario(support::JsonValue inputs, support::JsonValue expected)
+        : inputs_(std::move(inputs)), expected_(std::move(expected)) {}
 
+    support::JsonValue inputs_;
     support::JsonValue expected_;
 };
 

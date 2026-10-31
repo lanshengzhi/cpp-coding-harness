@@ -77,7 +77,12 @@ std::optional<FrozenScenario> FrozenScenario::load(std::string_view artifact_pat
         if (expected == object->end()) {
             return std::nullopt;
         }
-        return FrozenScenario{expected->second};
+        // A scenario without inputs is still a scenario: the capture records
+        // them only where they discriminate.
+        const auto inputs = object->find("inputs");
+        return FrozenScenario{
+                inputs == object->end() ? support::JsonValue{support::JsonValue::object_t{}} : inputs->second,
+                expected->second};
     }
     return std::nullopt;
 }

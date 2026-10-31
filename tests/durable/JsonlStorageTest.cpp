@@ -5,6 +5,7 @@
 #include <cch/support/JsonAccess.hpp>
 
 #include "durable/FrozenExpectation.hpp"
+#include "durable/JsonlIoTestHooks.hpp"
 #include "durable/Outcome.hpp"
 #include "support/Json.hpp"
 #include "support/TempWorkspace.hpp"
@@ -21,6 +22,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -46,6 +48,7 @@ constexpr std::string_view kPoisonScenario =
         "a JSONL main-marker I/O failure poisons the instance while reopen recovers the published prefix";
 constexpr std::string_view kCheckpointScenario =
         "a JSONL checkpoint replaces a current-only sidecar and retirement removes it";
+constexpr std::string_view kFsyncScenario = "JSONL fsync flushes sidecar bytes before the main marker is appended";
 
 /// The document definition of the captured scenarios: `{text, revision}`.
 [[nodiscard]] DocumentDefinition latest_document() {
@@ -151,6 +154,89 @@ void append_text(const std::filesystem::path& path, std::string_view text) {
     std::ofstream stream(path, std::ios::binary | std::ios::app);
     stream << text;
     REQUIRE(stream.good());
+}
+
+/// The physical JSONL operations one store performed, recorded through the
+/// private I/O seam. The shape mirrors the frozen `InstrumentedEnv` trace of
+/// `packages/durable/test/jsonl-storage.test.ts`, so a C++ trace can be
+/// compared with the frozen operation list directly.
+struct JsonlIoLog {
+    std::vector<std::string> operations;
+    std::map<testing::JsonlIoOperation, std::size_t> calls;
+    std::optional<testing::JsonlIoOperation> failing_operation;
+    std::size_t failing_call{0};
+};
+
+JsonlIoLog& jsonl_io_log() {
+    static JsonlIoLog log;
+    return log;
+}
+
+[[nodiscard]] std::string describe_io(const testing::JsonlIoEvent& event) {
+    switch (event.operation) {
+    case testing::JsonlIoOperation::Append:
+        return "append:" + event.file;
+    case testing::JsonlIoOperation::Flush:
+        return "flush:" + event.file;
+    case testing::JsonlIoOperation::Write:
+        return "write:" + event.file;
+    case testing::JsonlIoOperation::Rename:
+        return "rename:" + event.file + "->" + event.destination;
+    case testing::JsonlIoOperation::Remove:
+        return "remove:" + event.file;
+    }
+    return {};
+}
+
+/// The capture hook. It holds no test-case state, so an assertion that
+/// abandons a test frame leaves no dangling callback behind.
+bool record_jsonl_io(const testing::JsonlIoEvent& event) {
+    JsonlIoLog& log = jsonl_io_log();
+    log.operations.push_back(describe_io(event));
+    const std::size_t call = ++log.calls[event.operation];
+    if (!log.failing_operation.has_value() || *log.failing_operation != event.operation || log.failing_call != call) {
+        return false;
+    }
+    log.failing_operation.reset();
+    return true;
+}
+
+/// Install the recorder and forget every earlier operation.
+void start_io_trace() {
+    jsonl_io_log() = JsonlIoLog{};
+    testing::set_jsonl_io_hook(&record_jsonl_io);
+}
+
+/// Forget the recorded operations but keep the recorder installed.
+void clear_io_trace() {
+    jsonl_io_log().operations.clear();
+    jsonl_io_log().calls.clear();
+}
+
+/// Fail the nth call of one operation (1-based), like the frozen
+/// `InstrumentedEnv.fail`.
+void fail_io_call(testing::JsonlIoOperation operation, std::size_t call) {
+    jsonl_io_log().failing_operation = operation;
+    jsonl_io_log().failing_call = call;
+}
+
+void stop_io_trace() {
+    testing::clear_jsonl_io_hook();
+    jsonl_io_log() = JsonlIoLog{};
+}
+
+[[nodiscard]] std::vector<std::string> frozen_strings(
+        const support::JsonValue::object_t& object, std::string_view name) {
+    const auto* values = support::json_array_member(object, name);
+    REQUIRE(values != nullptr);
+    std::vector<std::string> result;
+    result.reserve(values->size());
+    for (const support::JsonValue& value : *values) {
+        const auto* text = value.get_if<std::string>();
+        REQUIRE(text != nullptr);
+        result.push_back(*text);
+    }
+    return result;
 }
 
 } // namespace
@@ -1662,4 +1748,544 @@ TEST_CASE("a JSONL checkpoint replaces a current-only sidecar and retirement rem
     auto retired = consume(retired_session->snapshot(definition, DocumentAddress{.conversation_id = conversation_id}));
     REQUIRE(retired.has_value());
     CHECK_FALSE(retired.value().has_value());
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1054/jsonl-store.json
+// "JSONL fsync flushes sidecar bytes before the main marker is appended".
+//
+// Discriminating case: the same document commit runs with the option disabled
+// and enabled. Only the enabled trace flushes, and the flush sits between the
+// sidecar append and the main marker append. An implementation that always
+// flushes fails the disabled trace; one that never flushes, or flushes after
+// the marker, fails the enabled trace.
+TEST_CASE("JSONL fsync flushes sidecar bytes before the main marker is appended",
+        "[durable][jsonl][fsync][issue1174][spec]") {
+    const auto loaded = FrozenScenario::load(kJsonlArtifact, kFsyncScenario);
+    REQUIRE(loaded.has_value());
+    const FrozenScenario& scenario = *loaded;
+    const auto* frozen_inputs = scenario.inputs().get_if<support::JsonValue::object_t>();
+    REQUIRE(frozen_inputs != nullptr);
+    const auto* frozen_options = support::json_object_member(*frozen_inputs, "options");
+    REQUIRE(frozen_options != nullptr);
+    const auto* frozen_fsync = support::json_member(*frozen_options, "fsync");
+    REQUIRE(frozen_fsync != nullptr);
+    REQUIRE(frozen_fsync->holds<bool>());
+    CHECK(frozen_fsync->get<bool>());
+    const auto* frozen_expected = scenario.expected().get_if<support::JsonValue::object_t>();
+    REQUIRE(frozen_expected != nullptr);
+    const std::vector<std::string> expected_appends = frozen_strings(*frozen_expected, "appendOrder");
+    const std::vector<std::string> expected_flushes = frozen_strings(*frozen_expected, "flushOrder");
+    CHECK(expected_appends == (std::vector<std::string>{"doc-3.jsonl", "main.jsonl"}));
+    CHECK(expected_flushes == (std::vector<std::string>{"doc-3.jsonl"}));
+    const auto* frozen_files = support::json_array_member(*frozen_expected, "files");
+    REQUIRE(frozen_files != nullptr);
+
+    // The frozen trace is a list of physical operations: every sidecar append,
+    // then the flushes in append order, then the main marker append. Building
+    // it from the frozen arrays keeps both sections on the registered contract
+    // instead of on a hand-written spelling.
+    const auto expected_operations = [&](bool fsync) {
+        std::vector<std::string> operations;
+        operations.reserve(expected_appends.size() + expected_flushes.size());
+        for (std::size_t index = 0; index + 1 < expected_appends.size(); ++index) {
+            operations.push_back("append:" + expected_appends[index]);
+        }
+        if (fsync) {
+            for (const std::string& file : expected_flushes) {
+                operations.push_back("flush:" + file);
+            }
+        }
+        operations.push_back("append:" + expected_appends.back());
+        return operations;
+    };
+
+    const auto commit_fsynced_document = [](JsonlStorage& storage) {
+        auto session = Session::create(storage);
+        const ConversationId conversation_id = create_conversation(*session);
+        CHECK(conversation_id.value == 2);
+        // The frozen capture resets its recording after the conversation
+        // commit, so the observed trace covers only the document commit.
+        clear_io_trace();
+        const auto definition = latest_document();
+        auto commit = run_commit(
+                *session, [&conversation_id, &definition](Transaction& transaction) -> support::Expected<void> {
+                    auto draft = transaction.doc(definition, DocumentAddress{.conversation_id = conversation_id});
+                    if (!draft) {
+                        return std::unexpected(std::move(draft.error()));
+                    }
+                    return draft->set(member_path("text"), chord::Json{std::string{"fsynced"}});
+                });
+        REQUIRE(commit.has_value());
+    };
+
+    SECTION("fsync disabled") {
+        TempWorkspace workspace;
+        start_io_trace();
+        auto opened = JsonlStorage::open(workspace.path());
+        REQUIRE(opened.has_value());
+        commit_fsynced_document(**opened);
+        // The option defaults to false: the frozen append order holds and no
+        // flush runs at all.
+        CHECK(jsonl_io_log().operations == expected_operations(false));
+        require_files_match(workspace, *frozen_files);
+        stop_io_trace();
+    }
+
+    SECTION("fsync enabled") {
+        TempWorkspace workspace;
+        start_io_trace();
+        auto opened = JsonlStorage::open(workspace.path(), JsonlStorageOptions{.fsync = true});
+        REQUIRE(opened.has_value());
+        commit_fsynced_document(**opened);
+        CHECK(jsonl_io_log().operations == expected_operations(true));
+        require_files_match(workspace, *frozen_files);
+        stop_io_trace();
+    }
+}
+
+// Frozen evidence: packages/durable/test/jsonl-storage.test.ts
+// "orders publication flushes exactly and flushes main only to authorize
+// reclamation". The registered audit-1054 observation pins only the single
+// document commit above; this trace extends the same contract over the four
+// publication shapes the frozen test separates.
+//
+// Recorded divergence, not fixed in this ticket: frozen pi appends sidecars in
+// write order, while the C++ encoder emits them in sorted filename order
+// (`EncodedCommit::sidecars`). The trace creates documents in ascending ID
+// order so the two orders coincide; changing the encoder is out of scope here.
+//
+// Discriminating case: a flush emitted after the marker, or one emitted for a
+// commit that reclaims nothing, fails the entry-only and terminal-task traces.
+TEST_CASE("JSONL publication flushes exactly and flushes main only to authorize reclamation",
+        "[durable][jsonl][fsync][issue1174]") {
+    for (const bool fsync : {false, true}) {
+        TempWorkspace workspace;
+        start_io_trace();
+        auto opened = JsonlStorage::open(workspace.path(), JsonlStorageOptions{.fsync = fsync});
+        REQUIRE(opened.has_value());
+        auto session = Session::create(**opened);
+        const ConversationId conversation_id = create_conversation(*session);
+        const auto first_id = (*opened)->mint_id();
+        const auto second_id = (*opened)->mint_id();
+        REQUIRE(first_id.has_value());
+        REQUIRE(second_id.has_value());
+        const std::string first = "doc-" + std::to_string(*first_id) + ".jsonl";
+        const std::string second = "doc-" + std::to_string(*second_id) + ".jsonl";
+
+        // Two session-scoped document creates: every sidecar is appended in
+        // order, then flushed in that same order, then the marker is appended.
+        clear_io_trace();
+        const auto create_document = [](std::int64_t id, std::string kind) {
+            return StorageWrite{.type = "document.create",
+                    .document_record = DocumentRecord{.id = DocumentId{.value = id}, .kind = std::move(kind)},
+                    .document_value = chord::Json{chord::Json::Object{}}};
+        };
+        const std::vector<StorageWrite> creates{
+                create_document(*first_id, "audit1174.first"), create_document(*second_id, "audit1174.second")};
+        REQUIRE(consume((*opened)->commit(creates)).has_value());
+        const std::vector<std::string> expected_creates = [&] {
+            std::vector<std::string> operations{"append:" + first, "append:" + second};
+            if (fsync) {
+                operations.push_back("flush:" + first);
+                operations.push_back("flush:" + second);
+            }
+            operations.push_back("append:main.jsonl");
+            return operations;
+        }();
+        CHECK(jsonl_io_log().operations == expected_creates);
+
+        // A checkpoint base on a current-only document reclaims the earlier
+        // revisions: main is flushed to authorize the replacement, the scratch
+        // file is written and flushed, then renamed over the sidecar.
+        clear_io_trace();
+        const StorageWrite checkpoint{.type = "document.change",
+                .document_id = DocumentId{.value = *first_id},
+                .document_value = chord::Json{chord::Json::Object{{"checkpoint", chord::Json{true}}}}};
+        const std::vector<StorageWrite> checkpoint_batch{checkpoint};
+        REQUIRE(consume((*opened)->commit(checkpoint_batch)).has_value());
+        const std::vector<std::string> expected_checkpoint = [&] {
+            std::vector<std::string> operations{"append:" + first};
+            if (fsync) {
+                operations.push_back("flush:" + first);
+            }
+            operations.push_back("append:main.jsonl");
+            if (fsync) {
+                operations.push_back("flush:main.jsonl");
+            }
+            operations.push_back("write:" + first + ".reclaim");
+            if (fsync) {
+                operations.push_back("flush:" + first + ".reclaim");
+            }
+            operations.push_back("rename:" + first + ".reclaim->" + first);
+            return operations;
+        }();
+        CHECK(jsonl_io_log().operations == expected_checkpoint);
+
+        // An entry-only commit publishes through the marker alone: no sidecar
+        // exists to flush and nothing is reclaimed, so fsync adds no flush.
+        clear_io_trace();
+        const auto entry_id = (*opened)->mint_id();
+        REQUIRE(entry_id.has_value());
+        const StorageWrite entry{.type = "entry",
+                .entry = EntryRecord{.id = EntryId{.value = *entry_id},
+                        .conversation_id = conversation_id,
+                        .kind = "audit1174.main-only",
+                        .data = chord::Json{chord::Json::Object{}}}};
+        const std::vector<StorageWrite> entry_batch{entry};
+        REQUIRE(consume((*opened)->commit(entry_batch)).has_value());
+        CHECK(jsonl_io_log().operations == (std::vector<std::string>{"append:main.jsonl"}));
+
+        // A terminal task reclaims its sidecar: the marker is appended, main is
+        // flushed to authorize the removal, then the sidecar is removed.
+        const auto task_id = (*opened)->mint_id();
+        REQUIRE(task_id.has_value());
+        TaskRecord task{.id = TaskId{.value = *task_id},
+                .kind = "audit1174.work",
+                .version = 1,
+                .state = TaskState{.status = "pending",
+                        .checkpoint = chord::Json{chord::Json::Object{{"phase", chord::Json{"start"}}}}}};
+        const std::vector<StorageWrite> pending{StorageWrite{.type = "task", .task = task}};
+        REQUIRE(consume((*opened)->commit(pending)).has_value());
+        clear_io_trace();
+        task.state = TaskState{.status = "terminal", .outcome = TaskOutcome{.status = "completed"}};
+        const std::vector<StorageWrite> terminal{StorageWrite{.type = "task", .task = task}};
+        REQUIRE(consume((*opened)->commit(terminal)).has_value());
+        const std::vector<std::string> expected_terminal = [&] {
+            std::vector<std::string> operations{"append:main.jsonl"};
+            if (fsync) {
+                operations.push_back("flush:main.jsonl");
+            }
+            operations.push_back("remove:task-" + std::to_string(*task_id) + ".jsonl");
+            return operations;
+        }();
+        CHECK(jsonl_io_log().operations == expected_terminal);
+
+        stop_io_trace();
+        REQUIRE((*opened)->close());
+    }
+}
+
+// Frozen evidence: packages/durable/test/jsonl-storage.test.ts
+// "poisons after {before,after} failure at flush {1,2} and never writes a marker".
+//
+// Discriminating case: every sidecar is appended before the first flush runs, so
+// a backend that flushed each sidecar as it appended it would still append the
+// marker after a later flush failed. The marker bytes must be unchanged and the
+// reopen must show the pre-change value with the unconfirmed tail truncated.
+TEST_CASE("JSONL sidecar flush failure poisons before the marker and never publishes",
+        "[durable][jsonl][fsync][issue1174]") {
+    constexpr std::string_view kPoisonMessage = "JSONL storage is poisoned and must be reopened";
+    const chord::Json base_value{chord::Json::Object{{"text", chord::Json{std::string{"before"}}}}};
+    const chord::Json changed_value{chord::Json::Object{{"text", chord::Json{std::string{"after"}}}}};
+
+    for (const std::size_t failing_call : {std::size_t{1}, std::size_t{2}}) {
+        CAPTURE(failing_call);
+        TempWorkspace workspace;
+        {
+            auto seeded = JsonlStorage::open(workspace.path());
+            REQUIRE(seeded.has_value());
+            const StorageWrite base{.type = "document.create",
+                    .document_record = DocumentRecord{.id = DocumentId{.value = 3}, .kind = "audit1174.before"},
+                    .document_value = base_value};
+            const std::vector<StorageWrite> base_batch{base};
+            REQUIRE(consume((*seeded)->commit(base_batch)).has_value());
+            REQUIRE((*seeded)->close());
+        }
+        const std::string main_before = workspace.read("main.jsonl");
+        const std::string sidecar_before = workspace.read("doc-3.jsonl");
+        REQUIRE_FALSE(sidecar_before.empty());
+
+        start_io_trace();
+        auto opened = JsonlStorage::open(workspace.path(), JsonlStorageOptions{.fsync = true});
+        REQUIRE(opened.has_value());
+        clear_io_trace();
+        // Two sidecars take part in the failing commit: the change to doc-3 and
+        // the creation of doc-4. Failing either flush must stop before the
+        // marker, so neither sidecar's bytes are published.
+        fail_io_call(testing::JsonlIoOperation::Flush, failing_call);
+        const StorageWrite change{
+                .type = "document.change", .document_id = DocumentId{.value = 3}, .document_value = changed_value};
+        const StorageWrite create{.type = "document.create",
+                .document_record = DocumentRecord{.id = DocumentId{.value = 4}, .kind = "audit1174.after"},
+                .document_value = changed_value};
+        const std::vector<StorageWrite> batch{change, create};
+        const auto outcome = consume((*opened)->commit(batch));
+        REQUIRE_FALSE(outcome.has_value());
+        CHECK(outcome.error().message == kPoisonMessage);
+        // The flushed sidecars never authorize the marker: main is byte-identical.
+        CHECK(workspace.read("main.jsonl") == main_before);
+        const auto poisoned_read = (*opened)->document(DocumentId{.value = 3}, DocumentPoint::current());
+        REQUIRE_FALSE(poisoned_read.has_value());
+        CHECK(poisoned_read.error().message == kPoisonMessage);
+        stop_io_trace();
+        REQUIRE((*opened)->close());
+
+        auto reopened = JsonlStorage::open(workspace.path());
+        REQUIRE(reopened.has_value());
+        const auto restored = (*reopened)->document(DocumentId{.value = 3}, DocumentPoint::current());
+        REQUIRE(restored.has_value());
+        REQUIRE(restored->has_value());
+        CHECK((*restored)->value == base_value);
+        const auto absent = (*reopened)->document(DocumentId{.value = 4}, DocumentPoint::current());
+        REQUIRE(absent.has_value());
+        CHECK_FALSE(absent->has_value());
+        // The unconfirmed tail is truncated: the pre-existing base line survives
+        // and the never-confirmed creation sidecar is removed.
+        CHECK(workspace.read("doc-3.jsonl") == sidecar_before);
+        CHECK_FALSE(std::filesystem::exists(workspace.path() / "doc-4.jsonl"));
+        REQUIRE((*reopened)->close());
+    }
+}
+
+// Frozen evidence: packages/durable/test/jsonl-storage.test.ts
+// "defers reclamation after authorizing-main flush {before,after} failure".
+//
+// Discriminating case: the main flush is the reclamation gate, not a publication
+// step. Failing it must leave the commit published and the store usable, so the
+// marker append and the in-memory apply still happen; a backend that treated the
+// main flush as part of publication would poison or reject here. Recovery then
+// emits the same gate as its only physical operation and defers the pass.
+TEST_CASE("JSONL main flush failure defers reclamation without changing the commit",
+        "[durable][jsonl][fsync][issue1174]") {
+    const chord::Json base_value{chord::Json::Object{{"count", chord::Json{0.0}}}};
+    const chord::Json changed_value{chord::Json::Object{{"count", chord::Json{2.0}}}};
+
+    TempWorkspace workspace;
+    start_io_trace();
+    auto opened = JsonlStorage::open(workspace.path(), JsonlStorageOptions{.fsync = true});
+    REQUIRE(opened.has_value());
+    clear_io_trace();
+    const StorageWrite create{.type = "document.create",
+            .document_record = DocumentRecord{.id = DocumentId{.value = 3}, .kind = "audit1174.gate"},
+            .document_value = base_value};
+    const std::vector<StorageWrite> create_batch{create};
+    REQUIRE(consume((*opened)->commit(create_batch)).has_value());
+    CHECK(jsonl_io_log().operations ==
+            (std::vector<std::string>{"append:doc-3.jsonl", "flush:doc-3.jsonl", "append:main.jsonl"}));
+
+    clear_io_trace();
+    // Flush 1 is the sidecar and flush 2 is the main gate of the reclamation.
+    fail_io_call(testing::JsonlIoOperation::Flush, 2);
+    const StorageWrite change{
+            .type = "document.change", .document_id = DocumentId{.value = 3}, .document_value = changed_value};
+    const std::vector<StorageWrite> change_batch{change};
+    const auto committed = consume((*opened)->commit(change_batch));
+    REQUIRE(committed.has_value());
+    CHECK(committed.value() == 2);
+    CHECK(jsonl_io_log().operations ==
+            (std::vector<std::string>{
+                    "append:doc-3.jsonl", "flush:doc-3.jsonl", "append:main.jsonl", "flush:main.jsonl"}));
+    const auto live = (*opened)->document(DocumentId{.value = 3}, DocumentPoint::current());
+    REQUIRE(live.has_value());
+    REQUIRE(live->has_value());
+    CHECK((*live)->value == changed_value);
+    CHECK(json_lines(workspace.read("doc-3.jsonl")).size() == 2);
+    REQUIRE((*opened)->close());
+
+    // Recovery repeats the gate: the only physical operation is the failed main
+    // flush, and the deferred pass leaves both sidecar lines in place.
+    clear_io_trace();
+    fail_io_call(testing::JsonlIoOperation::Flush, 1);
+    auto deferred = JsonlStorage::open(workspace.path(), JsonlStorageOptions{.fsync = true});
+    REQUIRE(deferred.has_value());
+    CHECK(jsonl_io_log().operations == (std::vector<std::string>{"flush:main.jsonl"}));
+    const auto deferred_value = (*deferred)->document(DocumentId{.value = 3}, DocumentPoint::current());
+    REQUIRE(deferred_value.has_value());
+    REQUIRE(deferred_value->has_value());
+    CHECK((*deferred_value)->value == changed_value);
+    CHECK(json_lines(workspace.read("doc-3.jsonl")).size() == 2);
+    REQUIRE((*deferred)->close());
+
+    // A later reopen with a healthy flush applies the deferred pass.
+    clear_io_trace();
+    auto reclaimed = JsonlStorage::open(workspace.path(), JsonlStorageOptions{.fsync = true});
+    REQUIRE(reclaimed.has_value());
+    const auto reclaimed_value = (*reclaimed)->document(DocumentId{.value = 3}, DocumentPoint::current());
+    REQUIRE(reclaimed_value.has_value());
+    REQUIRE(reclaimed_value->has_value());
+    CHECK((*reclaimed_value)->value == changed_value);
+    CHECK(json_lines(workspace.read("doc-3.jsonl")).size() == 1);
+    stop_io_trace();
+    REQUIRE((*reclaimed)->close());
+}
+
+// Frozen evidence: packages/durable/test/jsonl-storage.test.ts
+// "keeps a committed base usable after reclaim-temp flush {before,after} failure".
+//
+// Discriminating case: the scratch file is flushed before it is renamed, and a
+// failure there must not roll back or poison the commit that already published
+// the base. The scratch file stays for recovery to delete, a later delta commit
+// still appends, and the reopen keeps the committed base plus the delta.
+TEST_CASE("JSONL reclaim-temp flush failure keeps the committed base usable", "[durable][jsonl][fsync][issue1174]") {
+    const chord::Json base_value{chord::Json::Object{{"count", chord::Json{0.0}}}};
+    const chord::Json checkpoint_value{chord::Json::Object{{"count", chord::Json{2.0}}}};
+    const chord::Json delta_value{chord::Json::Object{{"count", chord::Json{3.0}}}};
+
+    TempWorkspace workspace;
+    start_io_trace();
+    auto opened = JsonlStorage::open(workspace.path(), JsonlStorageOptions{.fsync = true});
+    REQUIRE(opened.has_value());
+    clear_io_trace();
+    const StorageWrite create{.type = "document.create",
+            .document_record = DocumentRecord{.id = DocumentId{.value = 3}, .kind = "audit1174.scratch"},
+            .document_value = base_value};
+    const std::vector<StorageWrite> create_batch{create};
+    REQUIRE(consume((*opened)->commit(create_batch)).has_value());
+
+    clear_io_trace();
+    // Flush 1 is the sidecar, flush 2 the main gate, flush 3 the scratch file.
+    fail_io_call(testing::JsonlIoOperation::Flush, 3);
+    const StorageWrite checkpoint{
+            .type = "document.change", .document_id = DocumentId{.value = 3}, .document_value = checkpoint_value};
+    const std::vector<StorageWrite> checkpoint_batch{checkpoint};
+    const auto committed = consume((*opened)->commit(checkpoint_batch));
+    REQUIRE(committed.has_value());
+    CHECK(committed.value() == 2);
+    CHECK(jsonl_io_log().operations == (std::vector<std::string>{"append:doc-3.jsonl",
+                                               "flush:doc-3.jsonl",
+                                               "append:main.jsonl",
+                                               "flush:main.jsonl",
+                                               "write:doc-3.jsonl.reclaim",
+                                               "flush:doc-3.jsonl.reclaim"}));
+    // The failed scratch flush defers the replacement and leaves the scratch
+    // file for recovery to delete.
+    CHECK(std::filesystem::exists(workspace.path() / "doc-3.jsonl.reclaim"));
+    const auto live = (*opened)->document(DocumentId{.value = 3}, DocumentPoint::current());
+    REQUIRE(live.has_value());
+    REQUIRE(live->has_value());
+    CHECK((*live)->value == checkpoint_value);
+
+    clear_io_trace();
+    const StorageWrite delta{.type = "document.change",
+            .document_id = DocumentId{.value = 3},
+            .document_value = delta_value,
+            .document_ops =
+                    chord::OpBatch{chord::SetOp{.path = {chord::path_key("count")}, .value = chord::Json{3.0}}}};
+    const std::vector<StorageWrite> delta_batch{delta};
+    REQUIRE(consume((*opened)->commit(delta_batch)).has_value());
+    CHECK(jsonl_io_log().operations ==
+            (std::vector<std::string>{"append:doc-3.jsonl", "flush:doc-3.jsonl", "append:main.jsonl"}));
+    REQUIRE((*opened)->close());
+
+    auto reopened = JsonlStorage::open(workspace.path(), JsonlStorageOptions{.fsync = true});
+    REQUIRE(reopened.has_value());
+    const auto restored = (*reopened)->document(DocumentId{.value = 3}, DocumentPoint::current());
+    REQUIRE(restored.has_value());
+    REQUIRE(restored->has_value());
+    CHECK((*restored)->value == delta_value);
+    CHECK(json_lines(workspace.read("doc-3.jsonl")).size() == 2);
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / "doc-3.jsonl.reclaim"));
+    stop_io_trace();
+    REQUIRE((*reopened)->close());
+}
+
+// Criterion 4: the option belongs to one open incarnation. It is neither
+// global nor persisted, so an fsync-written store continues under the default
+// and a default-written store continues under fsync. No power-loss, SIGKILL or
+// multi-process guarantee is added by either direction; only flush ordering is.
+TEST_CASE("JSONL fsync is a per-instance option", "[durable][jsonl][fsync][issue1174]") {
+    const chord::Json base_value{chord::Json::Object{{"count", chord::Json{0.0}}}};
+    const chord::Json checkpoint_value{chord::Json::Object{{"count", chord::Json{1.0}}}};
+    const chord::Json next_value{chord::Json::Object{{"count", chord::Json{2.0}}}};
+    const auto create_document = [](const chord::Json& value) {
+        return StorageWrite{.type = "document.create",
+                .document_record = DocumentRecord{.id = DocumentId{.value = 3}, .kind = "audit1174.option"},
+                .document_value = value};
+    };
+    const auto checkpoint_document = [](const chord::Json& value) {
+        return StorageWrite{.type = "document.change", .document_id = DocumentId{.value = 3}, .document_value = value};
+    };
+    const std::vector<std::string> fsynced_checkpoint{"append:doc-3.jsonl",
+            "flush:doc-3.jsonl",
+            "append:main.jsonl",
+            "flush:main.jsonl",
+            "write:doc-3.jsonl.reclaim",
+            "flush:doc-3.jsonl.reclaim",
+            "rename:doc-3.jsonl.reclaim->doc-3.jsonl"};
+    const std::vector<std::string> plain_checkpoint{"append:doc-3.jsonl",
+            "append:main.jsonl",
+            "write:doc-3.jsonl.reclaim",
+            "rename:doc-3.jsonl.reclaim->doc-3.jsonl"};
+
+    SECTION("two open instances keep their own option") {
+        TempWorkspace synced;
+        TempWorkspace plain;
+        start_io_trace();
+        auto synced_storage = JsonlStorage::open(synced.path(), JsonlStorageOptions{.fsync = true});
+        auto plain_storage = JsonlStorage::open(plain.path());
+        REQUIRE(synced_storage.has_value());
+        REQUIRE(plain_storage.has_value());
+
+        // Interleaved commits: a global flag would leak into the other instance
+        // in one direction or the other.
+        clear_io_trace();
+        const std::vector<StorageWrite> synced_create{create_document(base_value)};
+        REQUIRE(consume((*synced_storage)->commit(synced_create)).has_value());
+        CHECK(jsonl_io_log().operations ==
+                (std::vector<std::string>{"append:doc-3.jsonl", "flush:doc-3.jsonl", "append:main.jsonl"}));
+
+        clear_io_trace();
+        const std::vector<StorageWrite> plain_create{create_document(base_value)};
+        REQUIRE(consume((*plain_storage)->commit(plain_create)).has_value());
+        CHECK(jsonl_io_log().operations == (std::vector<std::string>{"append:doc-3.jsonl", "append:main.jsonl"}));
+
+        clear_io_trace();
+        const std::vector<StorageWrite> synced_checkpoint_batch{checkpoint_document(checkpoint_value)};
+        REQUIRE(consume((*synced_storage)->commit(synced_checkpoint_batch)).has_value());
+        CHECK(jsonl_io_log().operations == fsynced_checkpoint);
+
+        clear_io_trace();
+        const std::vector<StorageWrite> plain_checkpoint_batch{checkpoint_document(checkpoint_value)};
+        REQUIRE(consume((*plain_storage)->commit(plain_checkpoint_batch)).has_value());
+        CHECK(jsonl_io_log().operations == plain_checkpoint);
+
+        stop_io_trace();
+        REQUIRE((*synced_storage)->close());
+        REQUIRE((*plain_storage)->close());
+    }
+
+    // One direction of the reopen: the first incarnation writes under
+    // `first_options`, and the second incarnation continues under
+    // `second_options` with the trace those options must produce.
+    const auto continue_under_option = [&](JsonlStorageOptions first_options,
+                                               JsonlStorageOptions second_options,
+                                               const std::vector<std::string>& expected_trace) {
+        TempWorkspace workspace;
+        {
+            auto first = JsonlStorage::open(workspace.path(), first_options);
+            REQUIRE(first.has_value());
+            const std::vector<StorageWrite> create{create_document(base_value)};
+            REQUIRE(consume((*first)->commit(create)).has_value());
+            const std::vector<StorageWrite> checkpoint{checkpoint_document(checkpoint_value)};
+            REQUIRE(consume((*first)->commit(checkpoint)).has_value());
+            REQUIRE((*first)->close());
+        }
+
+        start_io_trace();
+        auto second = JsonlStorage::open(workspace.path(), second_options);
+        REQUIRE(second.has_value());
+        clear_io_trace();
+        const std::vector<StorageWrite> checkpoint{checkpoint_document(next_value)};
+        REQUIRE(consume((*second)->commit(checkpoint)).has_value());
+        // A leaked or persisted fsync flag would emit the other trace here.
+        CHECK(jsonl_io_log().operations == expected_trace);
+        stop_io_trace();
+        REQUIRE((*second)->close());
+
+        auto reopened = JsonlStorage::open(workspace.path());
+        REQUIRE(reopened.has_value());
+        const auto stored = (*reopened)->document(DocumentId{.value = 3}, DocumentPoint::current());
+        REQUIRE(stored.has_value());
+        REQUIRE(stored->has_value());
+        CHECK((*stored)->value == next_value);
+        REQUIRE((*reopened)->close());
+    };
+
+    SECTION("an fsync-written store continues under the default") {
+        continue_under_option(JsonlStorageOptions{.fsync = true}, JsonlStorageOptions{}, plain_checkpoint);
+    }
+
+    SECTION("a default-written store continues under fsync") {
+        continue_under_option(JsonlStorageOptions{}, JsonlStorageOptions{.fsync = true}, fsynced_checkpoint);
+    }
 }
