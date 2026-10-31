@@ -642,6 +642,13 @@ void AgentMcpToolSurface::restore_loaded_tools(std::vector<std::string> names) {
     std::vector<std::string> accepted_names;
     for (auto& name : names) {
         const auto known = exposures_.find(name);
+        // A non-MCP tool registered at assembly is already on the Agent's
+        // surface and is not an MCP loaded tool: replaying its transcript
+        // declaration here would append it back to the declared set, undoing
+        // a `-name` modifier or a restored order.
+        if (known == exposures_.end() && known_names_.contains(name)) {
+            continue;
+        }
         // A name the registry does not know yet restores pending: its
         // server's background connect has not registered the tool (#1104),
         // so `apply_exposure` declares it from `loaded_tool_names_` once the

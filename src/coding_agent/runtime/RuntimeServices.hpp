@@ -65,6 +65,14 @@ struct RuntimeServices {
     /// of these tools is pi's activation path, so a name surviving the
     /// selection filter is dropped here by Session Assembly.
     std::vector<std::string> initially_inactive_tool_names;
+    /// pi `defaultToolModifiers`: the `--tools` `+name`/`-name` entries applied
+    /// to a fresh session's initial loadout and to the recorded loadout on
+    /// resume, in entry order.
+    std::vector<std::string> default_tool_modifiers;
+    /// pi `usesDefaultTools`: a resumed session restores the loadout its
+    /// transcript records. False for an explicit plain `--tools` allowlist,
+    /// which replaces the initial selection instead.
+    bool restore_tools_from_transcript{false};
     /// The live in-session MCP server manager (spec #882, ticket #884; pi
     /// `createMcpExtension`'s session manager): the one connection story for
     /// the persisted `mcp.json` servers — connections, exposure-aware tool

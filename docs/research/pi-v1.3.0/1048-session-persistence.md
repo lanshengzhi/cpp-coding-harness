@@ -133,7 +133,8 @@ entries only for a new session (`:448-463`). Pi has no separate `SessionFactory`
 
 **Current result**: assembly and publication are implemented in C++ and exercised by
 `SessionAssemblyContractTest.cpp`, `SessionLifecycleTest.cpp`, `SessionSnapshotTest.cpp` and the capture.
-The double-parse resume and the absent relative tool modifiers remain gaps.
+The double-parse resume remains a gap. The #1111 slice implements the captured restored order and relative
+`+name`/`-name` modifiers (below).
 
 ## Entry serialization, migration and the live tree
 
@@ -244,22 +245,34 @@ Pi's resume path is captured in `session-tool-restore.json`:
   delta. The capture shows the first declaration `toolsAdded:["read","bash"]` and the second
   `toolsAdded:["write"]`, not a full replacement.
 
-C++ resumes correctly enough for the existing test, but it does **not** implement the captured modifier or
-order contract:
+C++ now implements the captured order and modifier contract (issue #1111):
 
-- `AgentSessionCreationRequest::tools` is documented as an allowlist (`AgentSessionCreationRequest.hpp:78-83`);
-  `ToolSelection` has only `allowed` and `excluded` (`ToolSelection.hpp:14-23`). There is no `+name`/`-name`
-  parser, validation, or modifier precedence.
-- `replay_active_tool_names` accumulates declarations and then returns them in `available_names` order
-  (`AgentSessionExecution.cpp:55-85`). A recorded `["bash","read"]` loadout becomes the registry's
-  `["read","bash"]` order; only `AgentSessionSnapshotTest.cpp` case `resume replays the recorded tool loadout
-  and ignores unavailable imported tools` covers a registry-order result.
-- C++ keeps `initially_inactive_tool_names` so default-inactive registrations survive resume
-  (`AgentSessionExecution.cpp:234-242`), which covers the codemode activation case, but not pi's
-  transcript-order or modifier behavior.
+- `ToolSelection` carries `modifiers` alongside `allowed`/`excluded`; `make_tool_selection` validates the
+  `--tools`/SDK list exactly like pi `getToolListError` (mixed plain names and modifiers, or a wildcard
+  modifier, is a Validation error) and `apply_tool_modifiers` preserves positions and appends new names
+  (`src/coding_agent/runtime/ToolSelection.cpp`).
+- `replay_active_tool_names` returns the transcript's declaration order after removals/additions rather
+  than projecting it through registry order (`AgentSessionExecution.cpp`). Resume applies the modifiers to
+  that recorded order and filters names the registry cannot execute; a system message without tool
+  declarations keeps the session's initial loadout, matching pi `_restoreToolsFromTranscript`.
+- `usesDefaultTools` equivalent: an explicit plain `--tools` allowlist replaces the initial selection,
+  while an absent flag or a modifier list restores the transcript loadout (`restore_tools_from_transcript`
+  on `RuntimeServices`). A fresh session applies modifiers to its default loadout, including activating a
+  default-inactive name such as `codemode`.
+- The restore no longer prunes the registry, and the MCP late-registration replay skips registered
+  non-MCP tools, so a `-name` modifier is not undone after Agent construction. Modifier-added names are
+  still replayed to the MCP surface so a pending tool can activate on registration (#1104).
 
-**Rows**: `resume:tool-loadout` is `partial`, `resume:relative-tool-modifiers` is `missing`, both
-`upstream-captured` only. No C++ test compares against the capture values.
+**Comparisons**: `tests/coding_agent/ToolSelectionTest.cpp` case `resume restores the recorded tool order
+without rewriting the transcript` records `["write","read","bash"]` (neither registry nor sorted order) and
+compares the session file bytes; `resume applies ordered tool modifiers and a removed tool cannot execute`
+seeds `["read","bash","write"]`, applies `["-bash","+edit"]`, checks `["read","write","edit"]`, an
+unavailable `+name` is filtered, and the model's `bash` call fails without running. `a fresh session
+applies tool modifiers to its default loadout in order` covers `-bash,+codemode`. `tests/cli/CliSmokeTest.cpp`
+rejects mixed names/modifiers and wildcard modifiers through the CLI entry.
+
+**Rows**: `resume:tool-loadout` and `resume:relative-tool-modifiers` are `implemented` and remain
+`upstream-captured`; final whole-row verification is the #1177 receipt owner's scope.
 
 ## Compaction, automatic recovery and summary serialization
 
@@ -360,7 +373,7 @@ change the contract with the Owner.
 | Close during retry backoff | pi `dispose()` aborts retry and waits for idle (`agent-session.ts:1397-1419`) | `SessionCloseTest.cpp:Session Close during a retry backoff cancels the wait and settles the run` | **Implemented but divergent**: C++ uses its Close quiescence contract; pi disposes synchronously |
 | Persistence failure | pi writes synchronously; no queued failure state | `SessionCommitmentAsyncTest.cpp:a persistence failure keeps live state and rejects later prompts with a typed failure`; `SessionCloseTest.cpp:...latched persistence failure...` | **C++-specific**: sticky typed failure and Close drain are stronger than pi's synchronous write path |
 | Overflow recovery, repeated | `agent-session-compaction.test.ts:does not retry overflow recovery more than once`; `...notifies extensions when auto-compaction fails` | `AgentSessionCompactionTest.cpp:overflow terminal compacts and retries the turn exactly once`; `...a second overflow...verbatim recovery message` | **Partial**: retry count/error text align, but the failed attempt is not persisted as a `context_edit` omission, so reopen resurrects it |
-| Reopen with tool/summary usage | `session-manager/tree-traversal.test.ts:preserves tool and summary usage across a file-backed reload` | `SessionLifecycleTest.cpp` resume cases; `AgentSessionSnapshotTest.cpp` loadout case | **Partial**: usage survives where the C++ DTO has it, but tool order and relative modifiers diverge (see above) |
+| Reopen with tool/summary usage | `session-manager/tree-traversal.test.ts:preserves tool and summary usage across a file-backed reload` | `SessionLifecycleTest.cpp` resume cases; `AgentSessionSnapshotTest.cpp` loadout case; `ToolSelectionTest.cpp` issue1111 cases | **Partial**: usage survives where the C++ DTO has it; tool order and relative modifiers now match the capture, while summary-usage wire equality is not compared |
 
 These are the cases A14 should use to distinguish a green consumer move from a behavior change. The
 capture covers only the first row's frozen side; the other rows are existing test-source comparisons and
@@ -511,7 +524,7 @@ TUI double-open with it. Recommended expand–migrate–contract sequence:
 3. Add `SessionStore::open_loaded` (or equivalent) and make `publish_resume_session` use the single parse
    already performed by `resume_session`.
 4. Land behavior slices behind their own tests: `usage`/`context_edit` entry typing and projection;
-   compaction `systemMessage`; tool modifiers/order; v1/v2 migration; in-memory compaction; persisted
+   compaction `systemMessage`; v1/v2 migration; in-memory compaction; persisted
    recovery omission. Each slice gets a C++ test that names the capture scenario where one exists.
 
 **Migrate**

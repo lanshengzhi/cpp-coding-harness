@@ -12,6 +12,7 @@
 #include "coding_agent/prompt/PromptExpansion.hpp"
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
+#include "coding_agent/runtime/ToolSelection.hpp"
 #include "coding_agent/environment/RuntimeRoot.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -57,7 +58,7 @@ inline constexpr std::array kFixedToolNames{"read", "bash", "edit", "write"};
     return std::nullopt;
 }
 
-[[nodiscard]] std::vector<std::string> replay_active_tool_names(
+[[nodiscard]] std::optional<std::vector<std::string>> replay_active_tool_names(
         const std::vector<ai::MessageVariant>& history, std::span<const std::string> available_names) {
     std::vector<std::string> active_names;
     bool has_system_message = false;
@@ -78,15 +79,27 @@ inline constexpr std::array kFixedToolNames{"read", "bash", "edit", "write"};
         }
     }
     if (!has_system_message) {
-        return {available_names.begin(), available_names.end()};
+        return std::nullopt;
     }
-    std::vector<std::string> ordered_names;
-    for (const auto& name : available_names) {
-        if (std::ranges::find(active_names, name) != active_names.end()) {
-            ordered_names.push_back(name);
+    // The declarations replay in the order the transcript recorded them: a
+    // registry/set projection would lose the restored loadout order pi
+    // preserves (pi `getCurrentTools` insertion order).
+    return active_names;
+}
+
+/// Keep only names the session can actually execute, in the incoming order.
+/// pi `_applyToolLoadout` drops unknown names after modifiers are applied.
+[[nodiscard]] std::vector<std::string> available_tool_names(
+        std::span<const std::string> names, std::span<const std::string> available) {
+    std::vector<std::string> filtered;
+    filtered.reserve(names.size());
+    for (const auto& name : names) {
+        if (std::ranges::find(available, name) != available.end() &&
+                std::ranges::find(filtered, name) == filtered.end()) {
+            filtered.push_back(name);
         }
     }
-    return ordered_names;
+    return filtered;
 }
 
 /// pi `createInitialSystemMessage(systemPrompt, state.tools)`: the loadout a
@@ -235,8 +248,11 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // executable set agree before the first request. Declaring only the
     // prompt-selected tools would make the loop announce the remainder as a
     // delta on turn 1.
-    const auto initial_tool_loadout =
+    auto initial_tool_loadout =
             initial_active_tool_names(registered_tool_names, services_.initially_inactive_tool_names);
+    // pi `sdk.ts`: `--tools` modifiers change the default selection instead of
+    // replacing it, so a fresh session appends/removes by entry order.
+    initial_tool_loadout = runtime::apply_tool_modifiers(initial_tool_loadout, services_.default_tool_modifiers);
     auto sections = build_system_prompt_sections();
     ai::SystemMessage system_message;
     // pi `_preparePromptAndToolLoadout` stamps `timestamp: Date.now()` when
@@ -267,21 +283,20 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     }
     options.system_prompt = rebuild_system_prompt();
     std::vector<std::string> replayed_active_tool_names;
-    if (session_.resumed) {
-        const auto active_names = replay_active_tool_names(session_.history, registered_tool_names);
-        // pi never unregisters a tool: the replayed loadout is retained and
-        // the default-inactive registrations (codemode) stay registered too,
-        // so a later activation — the MCP `codemode` exposure — can still
-        // declare them.
-        std::vector<std::string> retained = active_names;
-        for (const auto& name : services_.initially_inactive_tool_names) {
-            if (std::ranges::find(retained, name) == retained.end() &&
-                    std::ranges::find(registered_tool_names, name) != registered_tool_names.end()) {
-                retained.push_back(name);
-            }
+    bool has_replayed_loadout = false;
+    if (session_.resumed && services_.restore_tools_from_transcript) {
+        if (auto recorded = replay_active_tool_names(session_.history, registered_tool_names)) {
+            const auto modified = runtime::apply_tool_modifiers(*recorded, services_.default_tool_modifiers);
+            replayed_active_tool_names = available_tool_names(modified, registered_tool_names);
+        } else {
+            // pi `_restoreToolsFromTranscript` keeps the initial loadout when the
+            // transcript declares no system message.
+            replayed_active_tool_names = initial_tool_loadout;
         }
-        services_.tools.retain_tools(retained);
-        replayed_active_tool_names = active_names;
+        has_replayed_loadout = true;
+        // pi never unregisters a tool: Session Factory already applied the
+        // allowlist/exclusions, and the restored names only shape the declared
+        // set. A modifier may add a registered tool the transcript omitted.
     }
     // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
     // before the next assistant response of the same run, so a long tool loop
@@ -321,11 +336,13 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // pi `defaultActive: false` (the codemode tool): the Agent's constructor
     // declares every registered tool, so shape the initial declared set here.
     // A fresh session declares everything except the default-inactive
-    // registrations; a resume declares exactly the replayed loadout (the
-    // inactive tools stay registered but undeclared).
-    if (!services_.initially_inactive_tool_names.empty() || session_.resumed) {
+    // registrations; a resume with defaults/modifiers declares exactly the
+    // replayed loadout, while an explicit allowlist declares its selection.
+    // Inactive tools stay registered but undeclared.
+    if (has_replayed_loadout || !services_.initially_inactive_tool_names.empty() ||
+            !services_.default_tool_modifiers.empty() || session_.resumed) {
         std::vector<std::string> initial_declared;
-        if (session_.resumed) {
+        if (has_replayed_loadout) {
             initial_declared = replayed_active_tool_names;
         } else {
             initial_declared = initial_tool_loadout;
@@ -416,6 +433,9 @@ void AgentSession::Impl::replay_loaded_tools() {
         for (const auto& tool : system->tools_removed)
             std::erase(names, tool.name);
     }
+    // pi keeps modifier-added names pending until their registration lands;
+    // the transcript replay alone would miss a `+mcp__server__tool` entry.
+    names = runtime::apply_tool_modifiers(names, services_.default_tool_modifiers);
     services_.mcp_manager->restore_loaded_tools(std::move(names));
 }
 
