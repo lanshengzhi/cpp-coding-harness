@@ -110,7 +110,7 @@ file(RENAME "${report_staging}" "${CCH_PARITY_REPORT}")
 
 if(NOT gate_result EQUAL 0)
     message(FATAL_ERROR
-        "Parity Architecture Gate (build phase) rejected the configured graph:\n"
+        "error: Parity Architecture Gate (build phase) rejected the configured graph:\n"
         "${gate_output}${gate_error}")
 endif()
 message(STATUS "Parity Architecture Gate (build phase): PASS (see ${CCH_PARITY_REPORT})")

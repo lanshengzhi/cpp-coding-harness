@@ -52,5 +52,5 @@ esac
 echo "$diff_output"
 echo ""
 echo "error: formatting differs from .clang-format on added or modified lines" >&2
-echo "hint: run 'git clang-format' with the same arguments to fix, then re-stage" >&2
+echo "hint: stage your changes and run 'git clang-format --extensions hpp,cpp ${base_commit:-HEAD}' to fix, then re-stage" >&2
 exit 1

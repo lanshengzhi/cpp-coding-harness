@@ -178,7 +178,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "983dc1e522eb3dd51d7128964b7b0316754e87f8d3ba26e567a6c5685f4e8477"
+          "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -284,6 +284,12 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
           "fixtures/pi-v1.3.0/baselines.json"
+        ]
+      },
+      "revalidation1105": {
+        "reason": "Post-review diagnostic refinement in consolidate_audits.py adds the delivery id and reconciliation pointer to digest-mismatch messages. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
         ]
       }
     },
@@ -767,7 +773,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "983dc1e522eb3dd51d7128964b7b0316754e87f8d3ba26e567a6c5685f4e8477"
+          "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -844,6 +850,12 @@
           "fixtures/pi-v1.3.0/baselines.json",
           "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1105": {
+        "reason": "Post-review diagnostic refinement in consolidate_audits.py adds the delivery id and reconciliation pointer to digest-mismatch messages. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
         ]
       }
     }

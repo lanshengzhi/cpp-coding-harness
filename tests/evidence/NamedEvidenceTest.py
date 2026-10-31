@@ -521,7 +521,18 @@ class RealCaptureTest(unittest.TestCase):
 
     def tsx(self) -> Path | None:
         candidate = self.pi_checkout() / "node_modules" / ".bin" / "tsx"
-        return candidate if candidate.is_file() else None
+        if not candidate.is_file():
+            return None
+        try:
+            probe = subprocess.run(
+                [str(candidate), "-e", "const ok: number = 1;"],
+                cwd=self.pi_checkout(),
+                capture_output=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return candidate if probe.returncode == 0 else None
 
     def stage(self, root: Path, revision: str) -> Path:
         audit_root = root / "fixtures" / "pi-v1.3.0"
@@ -551,6 +562,22 @@ class RealCaptureTest(unittest.TestCase):
             capture_output=True,
             timeout=600,
         )
+
+    def test_tsx_probe_skips_a_broken_checkout_toolchain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            broken_tsx = Path(directory) / "node_modules" / ".bin" / "tsx"
+            broken_tsx.parent.mkdir(parents=True)
+            broken_tsx.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+            broken_tsx.chmod(0o755)
+            previous = os.environ.get("PI_CHECKOUT")
+            os.environ["PI_CHECKOUT"] = directory
+            try:
+                self.assertIsNone(self.tsx())
+            finally:
+                if previous is None:
+                    os.environ.pop("PI_CHECKOUT", None)
+                else:
+                    os.environ["PI_CHECKOUT"] = previous
 
     def test_capture_refuses_a_checkout_at_another_revision_before_writing(self):
         if self.tsx() is None:

@@ -15,6 +15,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -153,10 +154,15 @@ class DeliveryEvidenceTest(unittest.TestCase):
             with self.subTest(path=relative):
                 path = self.root / relative
                 saved = path.read_bytes()
-                path.write_bytes(saved + b"changed")
-                with self.assertRaisesRegex(consolidate.ConsolidationError, "digest mismatch"):
-                    self.check()
-                path.write_bytes(saved)
+                try:
+                    path.write_bytes(saved + b"changed")
+                    with self.assertRaisesRegex(
+                        consolidate.ConsolidationError,
+                        rf"example: delivery digest mismatch: {re.escape(relative)}.*1058-delivery-reconciliation\.md",
+                    ):
+                        self.check()
+                finally:
+                    path.write_bytes(saved)
 
     def test_missing_report_or_result_cannot_fall_back(self) -> None:
         for relative in ("docs/result.xml", "docs/delivery.md"):

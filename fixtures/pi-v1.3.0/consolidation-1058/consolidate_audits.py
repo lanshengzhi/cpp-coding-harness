@@ -580,18 +580,23 @@ def gap_matches(gap: dict, raw: dict) -> bool:
     return False
 
 
-def pinned_delivery_file(record: dict) -> Path:
+def pinned_delivery_file(record: dict, delivery_id: str = "") -> Path:
     path = audit.resolve_repository_file(ROOT, record.get("path"), "delivery evidence")
-    require(audit.sha256_file(path) == record.get("sha256"), f"delivery digest mismatch: {record['path']}")
+    prefix = f"{delivery_id}: " if delivery_id else ""
+    require(
+        audit.sha256_file(path) == record.get("sha256"),
+        f"{prefix}delivery digest mismatch: {record['path']} "
+        "(see docs/research/pi-v1.3.0/1058-delivery-reconciliation.md §Delivery evidence contract)",
+    )
     return path
 
 
-def passed_delivery_tests(validation: dict) -> set[str]:
+def passed_delivery_tests(validation: dict, delivery_id: str = "") -> set[str]:
     require(isinstance(validation.get("command"), list) and validation["command"], "missing validation command")
     require(re.fullmatch(r"[0-9a-f]{40}", validation.get("testedRevision", "")) is not None,
             "validation requires a full C++ revision")
     audit.validate_timestamp(validation.get("recordedAt"), "C++ validation")
-    suite = ET.parse(pinned_delivery_file(validation["junit"])).getroot()
+    suite = ET.parse(pinned_delivery_file(validation["junit"], delivery_id)).getroot()
     require(suite.tag == "testsuite", "delivery result is not a CTest JUnit testsuite")
     cases = suite.findall("testcase")
     require(type(validation.get("selected")) is int and validation["selected"] > 0,
@@ -669,11 +674,11 @@ def delivery_updates(rows: list[dict], deliveries: dict) -> dict[str, dict]:
         require(isinstance(inputs, list) and inputs, f"{identity}: missing pinned inputs")
         paths: set[str] = set()
         for entry in inputs:
-            pinned_delivery_file(entry)
+            pinned_delivery_file(entry, identity)
             require(entry["path"] not in paths, f"{identity}: duplicate pinned input")
             paths.add(entry["path"])
         require(any(path.startswith("src/") for path in paths), f"{identity}: no production input")
-        passed = passed_delivery_tests(record["validation"])
+        passed = passed_delivery_tests(record["validation"], identity)
         claims = record.get("rows")
         require(isinstance(claims, list) and claims, f"{identity}: delivery covers no rows")
         for claim in claims:

@@ -108,7 +108,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 7.2. Implementations are `final`; every overridden virtual is marked `override`.
 
-7.3. Value types follow the rule of zero. Single-argument constructors and conversion operators are `explicit` unless intentionally converting. Move constructor and move assignment are `noexcept`. Fallible object construction uses private constructors and public static factory functions returning `Expected<T>` / `std::expected<T, E>`; never use two-stage initialization (`init()`). Owning types declare, in this order: move constructor/assignment (`noexcept`), destructor, deleted copy constructor/assignment.
+7.3. Value types follow the rule of zero. Single-argument constructors and conversion operators are `explicit` unless intentionally converting. Move constructor and move assignment are `noexcept`. Fallible object construction uses private constructors and public static factory functions returning `Expected<T>` / `std::expected<T, E>`; never use two-stage initialization (`init()`). Owning types declare, in this order: move constructor/assignment (`noexcept`, or `= delete` when the type is intentionally immovable; a raw-handle move nulls its source), destructor, deleted copy constructor/assignment. review-only: no compiler or linter flag distinguishes an intentionally immovable owner or verifies that a raw-handle move nulls its source.
 
 7.4. `std::unique_ptr` is the default owner (capabilities, factory results). `std::shared_ptr` is reserved for deliberately shared live state, such as the concrete coding-agent Models Runtime lifetime captured by the AI-owned `ModelStream`; it is not an injection or virtual-for-fake convention (ADR 0040).
 
