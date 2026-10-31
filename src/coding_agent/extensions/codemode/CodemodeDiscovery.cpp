@@ -1,5 +1,7 @@
 #include "coding_agent/extensions/codemode/CodemodeDiscovery.hpp"
 
+#include "coding_agent/extensions/codemode/CodemodeCatalog.hpp"
+
 #include <cch/codemode/Declarations.hpp>
 
 #include "support/Json.hpp"
@@ -145,10 +147,9 @@ void schema_text(const JsonValue& schema, std::vector<std::string>& parts) {
 
 } // namespace
 
-
 std::vector<std::string> tokenize_tool_text(std::string_view text) { return split_terms(text); }
 
-std::string tool_search_document_text(const ai::Tool& tool) {
+std::string tool_search_document_text(const ai::Tool& tool, const std::optional<ToolNamespace>& name_space) {
     std::vector<std::string> parts;
     parts.push_back(tool.name);
     std::string spaced_name{tool.name};
@@ -156,23 +157,29 @@ std::string tool_search_document_text(const ai::Tool& tool) {
     parts.push_back(std::move(spaced_name));
     parts.push_back(tool.description);
     schema_text(tool.parameters, parts);
+    if (name_space.has_value()) {
+        parts.push_back(name_space->name);
+        parts.push_back(name_space->description);
+        parts.push_back(name_space->instructions);
+    }
     return join_non_empty(parts);
 }
 
-std::vector<std::string> bm25_rank(std::string_view query, const std::vector<ai::Tool>& tools, std::size_t limit) {
+std::vector<std::string> bm25_rank(
+        std::string_view query, const std::vector<std::pair<std::string, std::string>>& documents, std::size_t limit) {
     std::vector<std::string> query_terms;
     for (const auto& term : split_terms(query)) {
         if (std::find(query_terms.begin(), query_terms.end(), term) == query_terms.end()) query_terms.push_back(term);
     }
-    if (query_terms.empty() || tools.empty() || limit == 0) return {};
+    if (query_terms.empty() || documents.empty() || limit == 0) return {};
 
     constexpr double k1 = 1.2;
     constexpr double b = 0.75;
-    const std::size_t count = tools.size();
+    const std::size_t count = documents.size();
     std::vector<std::map<std::string, double>> term_counts(count);
     std::vector<double> lengths(count, 0);
     for (std::size_t i = 0; i < count; ++i) {
-        for (const auto& term : split_terms(tool_search_document_text(tools[i]))) {
+        for (const auto& term : split_terms(documents[i].second)) {
             term_counts[i][term] += 1;
             lengths[i] += 1;
         }
@@ -208,7 +215,7 @@ std::vector<std::string> bm25_rank(std::string_view query, const std::vector<ai:
             const double norm = k1 * (1 - b + (b * lengths[i]) / average_length);
             score += idf[term] * ((term_count * (k1 + 1)) / (term_count + norm));
         }
-        if (score > 0) matches.push_back(Scored{tools[i].name, score, i});
+        if (score > 0) matches.push_back(Scored{documents[i].first, score, i});
     }
     std::stable_sort(matches.begin(), matches.end(), [](const Scored& left, const Scored& right) {
         if (left.score != right.score) return left.score > right.score;
@@ -222,21 +229,19 @@ std::vector<std::string> bm25_rank(std::string_view query, const std::vector<ai:
     return names;
 }
 
-
-bool is_namespace_name(std::string_view namespace_name, std::string_view query) {
-    const std::string id = to_codemode_identifier(namespace_name);
-    const std::string query_id = to_codemode_identifier(query);
-    const auto suffix = [](std::string_view name) -> std::optional<std::string> {
-        const std::size_t last = name.rfind("__");
-        if (last == std::string_view::npos) return std::nullopt;
-        return std::string{name.substr(last + 2)};
-    };
-    return namespace_name == query || id == query_id || suffix(namespace_name) == query || suffix(id) == query_id;
-}
-
-CodemodeDiscovery::CodemodeDiscovery(std::vector<ai::Tool> tools) : tools_(std::move(tools)) {
-    for (const auto& tool : tools_)
-        samples_.emplace(tool.name, render_tool_sample(tool));
+CodemodeDiscovery::CodemodeDiscovery(std::vector<LoadoutTool> tools) : tools_(std::move(tools)) {
+    for (const auto& tool : tools_) {
+        // pi `ALL_TOOLS`/`describeTool` samples: the declaration carries the
+        // tool's prompt guidelines and its defaulted output schema.
+        const CodemodeDeclaration declaration = to_codemode_declaration(tool.definition, tool.guidelines);
+        ai::Tool sample;
+        sample.name = declaration.name;
+        sample.description = declaration.description;
+        sample.parameters = declaration.input_schema;
+        sample.output_schema = declaration.output_schema;
+        samples_.emplace(tool.definition.name, render_tool_sample(sample));
+        documents_.emplace_back(tool.definition.name, tool_search_document_text(tool.definition, tool.name_space));
+    }
 }
 
 support::JsonValue CodemodeDiscovery::globals_json() const {
@@ -256,6 +261,21 @@ support::Expected<std::string> CodemodeDiscovery::handle(std::string_view name, 
         const auto& array = arguments.get_array();
         return index < array.size() ? &array[index] : nullptr;
     };
+    const auto write = [](const JsonValue& value) -> support::Expected<std::string> {
+        auto written = support::write_json(value);
+        if (!written) return std::unexpected(written.error());
+        return support::Expected<std::string>{std::move(*written)};
+    };
+    const auto results_for = [&](const std::vector<std::string>& ranked) -> support::Expected<std::string> {
+        JsonValue::array_t results;
+        for (const auto& matched : ranked) {
+            results.push_back(JsonValue::object_t{
+                    {"name", to_codemode_identifier(matched)},
+                    {"description", samples_.contains(matched) ? samples_.at(matched) : std::string{}},
+            });
+        }
+        return write(JsonValue{std::move(results)});
+    };
     if (name == "searchTools") {
         const JsonValue* query = arg_at(0);
         if (query == nullptr || !query->holds<std::string>()) {
@@ -265,23 +285,32 @@ support::Expected<std::string> CodemodeDiscovery::handle(std::string_view name, 
         std::size_t limit = kDefaultToolSearchLimit;
         if (const JsonValue* options = arg_at(1); options != nullptr && is_object(*options)) {
             if (const JsonValue* limit_value = member(*options, "limit"); limit_value != nullptr) {
-                if (!limit_value->holds<double>() || limit_value->get_number() <= 0) {
+                if (!limit_value->holds<double>() || limit_value->get_number() <= 0 ||
+                        std::floor(limit_value->get_number()) != limit_value->get_number()) {
                     return std::unexpected(support::make_error(
                             support::ErrorCode::Validation, "searchTools() limit must be a positive integer"));
                 }
                 limit = static_cast<std::size_t>(limit_value->get_number());
             }
+            if (const JsonValue* name_space = member(*options, "namespace");
+                    name_space != nullptr && !name_space->holds<JsonValue::null_t>()) {
+                if (!name_space->holds<std::string>()) {
+                    return std::unexpected(support::make_error(
+                            support::ErrorCode::Validation, "searchTools() namespace must be a string"));
+                }
+                const std::string query_namespace = name_space->get_string();
+                std::vector<std::pair<std::string, std::string>> filtered;
+                for (std::size_t index = 0; index < tools_.size(); ++index) {
+                    const auto& tool = tools_[index];
+                    if (!tool.name_space.has_value() || !is_namespace_name(*tool.name_space, query_namespace)) {
+                        continue;
+                    }
+                    filtered.push_back(documents_[index]);
+                }
+                return results_for(bm25_rank(query->get_string(), filtered, limit));
+            }
         }
-        JsonValue::array_t results;
-        for (const auto& matched : bm25_rank(query->get_string(), tools_, limit)) {
-            results.push_back(JsonValue::object_t{
-                    {"name", to_codemode_identifier(matched)},
-                    {"description", samples_.contains(matched) ? samples_.at(matched) : std::string{}},
-            });
-        }
-        auto written = support::write_json(JsonValue{std::move(results)});
-        return written ? support::Expected<std::string>{std::move(*written)}
-                       : support::Expected<std::string>{std::unexpected(written.error())};
+        return results_for(bm25_rank(query->get_string(), documents_, limit));
     }
     if (name == "describeTool") {
         const JsonValue* tool_name = arg_at(0);
@@ -291,17 +320,34 @@ support::Expected<std::string> CodemodeDiscovery::handle(std::string_view name, 
         }
         const std::string requested = tool_name->get_string();
         for (const auto& tool : tools_) {
-            if (tool.name == requested || to_codemode_identifier(tool.name) == requested) {
-                auto written = support::write_json(JsonValue{samples_.at(tool.name)});
-                return written ? support::Expected<std::string>{std::move(*written)}
-                               : support::Expected<std::string>{std::unexpected(written.error())};
+            if (tool.definition.name == requested || to_codemode_identifier(tool.definition.name) == requested) {
+                return write(JsonValue{samples_.at(tool.definition.name)});
             }
         }
         return support::Expected<std::string>{std::string{"null"}};
     }
     if (name == "describeNamespace") {
-        // Pike registers no tool namespaces yet, so no namespace matches.
-        return support::Expected<std::string>{std::string{"null"}};
+        const JsonValue* namespace_name = arg_at(0);
+        if (namespace_name == nullptr || !namespace_name->holds<std::string>()) {
+            return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "describeNamespace() expects a namespace name"));
+        }
+        const std::string requested = namespace_name->get_string();
+        const ToolNamespace* found = nullptr;
+        JsonValue::array_t names;
+        for (const auto& tool : tools_) {
+            if (!tool.name_space.has_value() || !is_namespace_name(*tool.name_space, requested)) continue;
+            if (found == nullptr) found = &*tool.name_space;
+            names.push_back(to_codemode_identifier(tool.definition.name));
+        }
+        if (found == nullptr) return support::Expected<std::string>{std::string{"null"}};
+        JsonValue::object_t described{
+                {"name", found->name},
+                {"tools", std::move(names)},
+        };
+        if (!found->description.empty()) described.emplace("description", found->description);
+        if (!found->instructions.empty()) described.emplace("instructions", found->instructions);
+        return write(JsonValue{std::move(described)});
     }
     return std::unexpected(
             support::make_error(support::ErrorCode::Validation, "unknown codemode global '" + std::string{name} + "'"));

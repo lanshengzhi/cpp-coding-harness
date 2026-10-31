@@ -20,6 +20,7 @@
 #include "coding_agent/mcp/McpConfigWrite.hpp"
 #include "coding_agent/mcp/McpExposure.hpp"
 #include "coding_agent/mcp/McpResourceTools.hpp"
+#include "coding_agent/extensions/ToolExposure.hpp"
 #include "coding_agent/extensions/tool_search/ToolSearch.hpp"
 
 #include <cch/mcp/Client.hpp>
@@ -193,6 +194,11 @@ struct McpRegisteredTool {
     std::string name;
     std::string description;
     mcp::McpExposure exposure{mcp::McpExposure::Codemode};
+    /// pi `ToolDefinition.namespace`: the server's namespace
+    /// (`mcp__<server>`, alias `<server>`) with the configured description and
+    /// the initialize result's instructions. The codemode catalog groups the
+    /// server's tools under it and `describeNamespace()` returns it.
+    std::optional<extensions::ToolNamespace> name_space;
     /// pi `Tool.inputSchema`: the JSON Schema the server advertised.
     support::JsonValue input_schema;
     /// pi `Tool.outputSchema`, when the server declared one.

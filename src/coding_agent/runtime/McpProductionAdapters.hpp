@@ -9,6 +9,8 @@
 // constructs these; tests inject scripted seams instead and never touch this
 // file's types.
 
+#include "coding_agent/extensions/ToolExposure.hpp"
+#include "coding_agent/extensions/codemode/CodemodeCatalogState.hpp"
 #include "coding_agent/runtime/McpSessionManager.hpp"
 
 #include <cch/agent/Agent.hpp>
@@ -190,8 +192,10 @@ public:
     /// codemode, programmatic servers): the Agent has no registered-tool
     /// listing, and the discovery-activation check must see codemode.
     using LoadoutCommitter = std::move_only_function<support::ExpectedVoid(ai::SystemMessage)>;
-    explicit AgentMcpToolSurface(
-            agent::Agent& agent, std::vector<std::string> registered_names, LoadoutCommitter loadout_committer);
+    explicit AgentMcpToolSurface(agent::Agent& agent,
+            std::vector<std::string> registered_names,
+            LoadoutCommitter loadout_committer,
+            std::shared_ptr<extensions::CodemodeCatalogState> codemode_catalog = nullptr);
 
     void register_tool(McpRegisteredTool tool) override;
     void register_resource_tools(
@@ -209,10 +213,13 @@ private:
     /// Whether `name` is a tool `tool_search` may load: pi `isSearchable`
     /// accepts the `codemode` and `deferred` exposures only.
     [[nodiscard]] bool is_searchable(const std::string& name) const;
-    void refresh_codemode_description();
+    /// Recompute the codemode catalog over the Agent's live loadout (pi
+    /// `_applyToolLoadout`: the hook runs whenever the active tools change).
+    void refresh_codemode_loadout();
 
     agent::Agent& agent_;
     LoadoutCommitter loadout_committer_;
+    std::shared_ptr<extensions::CodemodeCatalogState> codemode_catalog_;
     /// Every tool name known on the surface: the assembly-time registrations
     /// plus everything registered through this surface.
     std::set<std::string> known_names_;

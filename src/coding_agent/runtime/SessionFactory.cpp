@@ -1766,7 +1766,22 @@ struct PreparedAssemblyTarget final {
     // on-disk `.pi/codemode` declaration face is removed, so there is no
     // project-local resource to trust-gate. The guest module loads on the
     // first call, not at assembly.
-    plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>());
+    //
+    // The catalog (#1118) is the session's live loadout view: settings plus the
+    // exposure/namespace/guideline metadata the Agent's passive Tool values do
+    // not carry. It is created before the sources load so the codemode tool's
+    // script surface and discovery globals resolve against the same set the
+    // description lists, and filled once the selected registry is final.
+    auto codemode_catalog = std::make_shared<extensions::CodemodeCatalogState>(extensions::CodemodeCatalogSettings{
+            .mode = snapshot.manager.codemode_mode(),
+            .inline_budget = snapshot.manager.codemode_inline_budget(),
+            // Pike retains no codemode `models.*` provider execution: the
+            // Magpie gateway is the only AI capability, so the catalog binds
+            // the discovery globals only and never advertises `models`.
+            .bound_globals = extensions::codemode_discovery_globals(),
+    });
+    plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>(
+            codemode::default_codemode_guest_wasm_path(), codemode_catalog));
     plan.extension_tool_sources.push_back(std::make_unique<extensions::ToolSearchToolSource>(
             [manager = mcp_manager](
                     std::string_view query, std::size_t limit) { return manager->search_tools(query, limit); },
@@ -1778,6 +1793,7 @@ struct PreparedAssemblyTarget final {
     // names from the Agent's initial declared set; an explicit `--tools`
     // selection that names one drops it from the list (activation).
     std::vector<std::string> initially_inactive_tool_names;
+    std::vector<extensions::ExtensionToolLoadout> extension_loadout;
 
     // Extension Tool Source (spec #865): load every configured source and
     // register its tools before the registry moves into the Agent, so an
@@ -1798,6 +1814,7 @@ struct PreparedAssemblyTarget final {
         // pi `defaultActive: false` registrations (the codemode tool): the
         // session shapes the Agent's initial declared set around these names.
         initially_inactive_tool_names = extension_tools.default_inactive_tool_names();
+        extension_loadout = extension_tools.loadout();
         if (auto registered = extensions::register_extension_tools(tools, std::move(extension_tools)); !registered) {
             cleanup_on_failure();
             co_await discard_unpublished_session();
@@ -1839,6 +1856,30 @@ struct PreparedAssemblyTarget final {
             // nothing: surviving inactive names stay undeclared.
             std::erase_if(initially_inactive_tool_names,
                     [&tools](const std::string& name) { return tools.find(name) != nullptr; });
+        }
+    }
+
+    // The codemode catalog (#1118): register every surviving tool with the
+    // loadout facts the description and the script surface need. The
+    // extension sources supply exposure/namespace; a built-in or custom tool is
+    // `direct`. Guidelines come from the registry's normalized prompt
+    // metadata, which is what the System Prompt renders.
+    {
+        std::map<std::string, extensions::ExtensionToolLoadout, std::less<>> extension_metadata;
+        for (auto& entry : extension_loadout) {
+            extension_metadata.insert_or_assign(entry.name, std::move(entry));
+        }
+        for (const auto& definition : tools.definitions()) {
+            extensions::LoadoutTool entry;
+            entry.definition = definition;
+            if (const auto metadata = extension_metadata.find(definition.name); metadata != extension_metadata.end()) {
+                entry.exposure = metadata->second.exposure;
+                entry.name_space = std::move(metadata->second.name_space);
+            }
+            if (auto prompt = tools.prompt_metadata(definition.name); prompt.has_value()) {
+                entry.guidelines = std::move(prompt->guidelines);
+            }
+            codemode_catalog->register_tool(std::move(entry));
         }
     }
 
@@ -2037,6 +2078,7 @@ struct PreparedAssemblyTarget final {
     }
     services.bash_session_environment = std::move(bash_session_environment);
     services.tools = std::move(tools);
+    services.codemode_catalog = std::move(codemode_catalog);
     services.initially_inactive_tool_names = std::move(initially_inactive_tool_names);
     services.mcp_manager = std::move(mcp_manager);
 

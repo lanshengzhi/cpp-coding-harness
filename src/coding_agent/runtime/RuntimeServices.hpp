@@ -5,6 +5,7 @@
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/coding_agent/environment/FileSystem.hpp>
 #include <cch/coding_agent/tools/ToolFactories.hpp>
+#include "coding_agent/extensions/codemode/CodemodeCatalogState.hpp"
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/McpSessionManager.hpp"
 
@@ -59,6 +60,14 @@ struct RuntimeServices {
     /// Tool is absent or env-exposure-disabled.
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
     agent::ToolRegistry tools;
+    /// The session's live codemode catalog (pi `prepareLoadout` over the
+    /// codemode tool): exposure, namespace and guideline metadata the Agent's
+    /// passive Tool values do not carry, plus the current description and
+    /// hidden-declaration projection. Session Assembly fills it before the
+    /// registry moves into the Agent; the MCP surface refreshes it as servers
+    /// register, withdraw or re-expose tools. Never null in production
+    /// assembly.
+    std::shared_ptr<extensions::CodemodeCatalogState> codemode_catalog;
     /// pi `defaultActive: false` registrations (today only the codemode
     /// tool): registered on the Agent's surface but excluded from the
     /// initial declared set. An explicit `--tools` selection that names one

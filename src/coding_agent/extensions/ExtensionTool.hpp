@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coding_agent/extensions/ToolExposure.hpp"
+
 #include <cch/agent/AgentTool.hpp>
 #include <cch/agent/NestedToolCalls.hpp>
 #include <cch/ai/Content.hpp>
@@ -78,6 +80,14 @@ struct ExtensionTool {
     /// `defaultActive: false`; every other extension tool is declarable on
     /// registration.
     bool default_active{true};
+    /// pi `ToolDefinition.exposure` (default `direct`): how the model reaches
+    /// the tool. `model-only` tools (codemode, tool_search) are declared while
+    /// active but never callable from a codemode script; `codemode`/`deferred`
+    /// tools stay callable without being declared.
+    ToolExposure exposure{ToolExposure::Direct};
+    /// pi `ToolDefinition.namespace`: the group the tool belongs to, for example
+    /// its MCP server. Absent for ungrouped tools.
+    std::optional<ToolNamespace> name_space;
     /// pi `executionMode`: the scheduling policy the Agent applies. Carried
     /// onto the Agent Tool unchanged.
     agent::ToolConcurrency concurrency{agent::ToolConcurrency::Exclusive};

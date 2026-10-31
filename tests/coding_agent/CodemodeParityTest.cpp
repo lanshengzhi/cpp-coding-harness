@@ -1,8 +1,12 @@
 // Spec #882, ticket #885: the codemode parity differential baseline. The
 // frozen `pi-v1.0.4` evidence bundle (`fixtures/pi-ai/v1.0.4/mcp-codemode/`,
-// captured from pi `7c10bd43`) is the acceptance authority (ADR 0066 ruling 3):
-// the model-facing `codemode` tool definition, its grammar variant, and its
-// single `code` argument are diffed field by field against that bundle.
+// captured from pi `7c10bd43`) is the acceptance authority (ADR 0066 ruling 3)
+// for the model-facing `codemode` tool definition, its grammar variant, and its
+// single `code` argument. The description's text follows the selected
+// pi-v1.3.0 baseline (#1118): the frozen
+// `fixtures/pi-v1.3.0/audit-1053/application-catalog.json` empty-catalog
+// scenario is the authority for it, because v1.3.0 rewrote the intro and
+// globals block.
 //
 // Removal evidence: #870's `.pi/codemode` declaration face is physically
 // deleted. The cheap check is "no declaration symbol exists" — a search that
@@ -59,6 +63,21 @@ namespace extensions = cch::coding_agent::extensions;
     return std::move(*parsed);
 }
 
+/// The pi-v1.3.0 empty-catalog description (`createCodemodeDescription([])`).
+[[nodiscard]] std::string v130_empty_description() {
+    auto parsed = support::read_json(read_text(std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" /
+                                               "audit-1053" / "application-catalog.json"));
+    REQUIRE(parsed.has_value());
+    for (const auto& scenario : parsed->get_object().at("scenarios").get_array()) {
+        if (scenario.get_object().at("name").get_string() ==
+                "the empty codemode catalog still declares globals, discovery and the options grammar") {
+            return scenario.get_object().at("expected").get_string();
+        }
+    }
+    REQUIRE(false);
+    return {};
+}
+
 [[nodiscard]] const support::JsonValue& field(const support::JsonValue& object, std::string_view name) {
     const auto& fields = object.get_object();
     const auto it = fields.find(std::string{name});
@@ -84,25 +103,15 @@ namespace extensions = cch::coding_agent::extensions;
 
 } // namespace
 
-TEST_CASE("codemode description formats nested tools catalog dynamically", "[coding_agent][codemode][issue903][spec]") {
-    ai::Tool tool1;
-    tool1.name = "sample_tool";
-    tool1.description = "A sample tool description";
-    tool1.parameters = support::JsonValue::object_t{
-            {"type", "object"},
-            {"properties",
-                    support::JsonValue::object_t{
-                            {"path", support::JsonValue::object_t{{"type", "string"}}},
-                            {"limit", support::JsonValue::object_t{{"type", "number"}}},
-                    }},
-    };
-
-    const auto desc = extensions::codemode_description({tool1});
-    INFO("desc: " + desc);
-    CHECK(desc.find("Nested tools:") != std::string::npos);
-    CHECK(desc.find("tools.sample_tool") != std::string::npos);
-    CHECK(desc.find("A sample tool description") != std::string::npos);
-    CHECK(desc.find("tools.sample_tool({ limit, path })") != std::string::npos);
+TEST_CASE(
+        "the codemode description is the frozen pi-v1.3.0 empty catalog", "[coding_agent][codemode][issue1118][spec]") {
+    // #1118: v1.3.0 rewrote DESCRIPTION_INTRO and describeGlobals. The
+    // description is the catalog renderer's empty output, not a frozen literal
+    // that can drift from the live loadout.
+    const auto description = extensions::codemode_tool_definition().description;
+    INFO(description);
+    CHECK(description == v130_empty_description());
+    CHECK(description.find("Nested tools:") == std::string::npos);
 }
 
 TEST_CASE("the codemode grammar variant is pi's frozen CODEMODE_SOURCE_GRAMMAR",
@@ -133,9 +142,10 @@ TEST_CASE("the model-facing codemode tool definition matches the pi-v1.0.4 bundl
             static_cast<std::int64_t>(field(bundle, "defaultInlineBudget").get_number()));
     CHECK(std::string{codemode::kCodemodeOptionsPrefix} == field(bundle, "optionsPrefix").get_string());
 
-    // The description is the frozen literal: DESCRIPTION_INTRO, a blank line,
-    // then the Globals block (models disabled).
-    CHECK(definition.description == field(bundle, "description").get_string());
+    // The description is the pi-v1.3.0 empty-catalog text (see the dedicated
+    // case above); the v1.0.4 bundle's own description field predates the
+    // v1.3.0 intro/globals rewrite and is not the authority for it.
+    CHECK(definition.description == v130_empty_description());
 
     // The single `code` string argument, verbatim.
     CHECK(json_text(definition.parameters) == json_text(field(bundle, "parameters")));

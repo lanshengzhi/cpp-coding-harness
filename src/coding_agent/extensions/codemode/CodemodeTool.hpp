@@ -34,26 +34,14 @@ inline constexpr std::string_view kCodemodePromptSnippet = "Run JavaScript that 
 /// pi `codemodeToolSystemPromptContribution.guidelines`.
 [[nodiscard]] std::vector<std::string> codemode_prompt_guidelines();
 
-/// pi `DESCRIPTION_INTRO` verbatim (`tool.ts`).
-[[nodiscard]] std::string_view codemode_description_intro();
-
-/// pi `describeGlobals(models)` with `models` disabled: the `Globals:` block.
-/// Pike has no `models.*` namespace, so the `models` line is never emitted.
-[[nodiscard]] std::string codemode_globals_text();
-
-/// pi `createCodemodeDescription(tools)` for the no-tool case: the intro, a
-/// blank line, then the globals block. This is the description the frozen
-/// `pi-v1.0.4` evidence bundle captured, so a differential test compares it
-/// byte for byte.
-[[nodiscard]] std::string codemode_description(const std::vector<ai::Tool>& nested_tools = {});
-
 /// pi `codemodeSchema.parameters`: one required `code` string argument.
 [[nodiscard]] support::JsonValue codemode_parameters();
 
-/// The passive model-facing `codemode` definition: name, verbatim description,
-/// the single `code` argument, and the grammar-constrained sampling variant
-/// (`openai_lark` → pi's `CODEMODE_SOURCE_GRAMMAR`). `execute` is added by the
-/// tool source.
+/// The passive model-facing `codemode` definition: name, the empty-catalog
+/// description (`createCodemodeDescription([])`), the single `code` argument,
+/// and the grammar-constrained sampling variant (`openai_lark` → pi's
+/// `CODEMODE_SOURCE_GRAMMAR`). `execute` is added by the tool source; the live
+/// catalog replaces the description whenever the loadout changes.
 [[nodiscard]] ai::Tool codemode_tool_definition();
 
 } // namespace cch::coding_agent::extensions

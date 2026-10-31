@@ -23,6 +23,8 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/this_coro.hpp>
 
+#include <cch/mcp/Auth.hpp>
+
 #include <algorithm>
 #include <array>
 #include <format>
@@ -565,6 +567,15 @@ void McpSessionManager::register_tools(std::string_view server) {
     }
     const std::string name = record->entry.name;
     const McpServerConfigBase& base = config_base(record->entry);
+    // pi `index.ts` `registerTools`: one namespace per server
+    // (`mcp__<server>`, alias `<server>`), with the configured description and
+    // the initialize result's instructions.
+    extensions::ToolNamespace server_namespace{
+            .name = cch::mcp::mcp_namespace(name),
+            .aliases = {name},
+            .description = base.description.value_or(std::string{}),
+            .instructions = record->connection->instructions().value_or(std::string{}),
+    };
     const std::set<std::string> previous = server_tools_[name];
     const auto& live_tools = record->connection->tools();
     // pi `index.ts` assigns Agent-visible names order-independently across the
@@ -586,6 +597,7 @@ void McpSessionManager::register_tools(std::string_view server) {
         registration.name = assigned[index];
         registration.description = tool.description;
         registration.exposure = mcp::get_mcp_tool_exposure(base.tool_exposure, base.exposure, tool.name);
+        registration.name_space = server_namespace;
         registration.input_schema = tool.input_schema;
         registration.output_schema = tool.output_schema;
         // pi `client.callTool`: the runnable execution stays bound to the

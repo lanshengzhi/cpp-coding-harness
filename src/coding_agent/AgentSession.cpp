@@ -685,7 +685,8 @@ boost::asio::awaitable<support::Expected<std::unique_ptr<AgentSession>>> AgentSe
     // handshake, and the management surface stays live while connects land).
     if (auto& manager = session->impl_->services_.mcp_manager; manager && session->impl_->agent_) {
         const std::weak_ptr<AgentSession::Impl> weak_impl = session->impl_;
-        manager->attach_tool_surface(std::make_shared<runtime::AgentMcpToolSurface>(*session->impl_->agent_,
+        manager->attach_tool_surface(std::make_shared<runtime::AgentMcpToolSurface>(
+                *session->impl_->agent_,
                 session->impl_->assembly_tool_names_,
                 [weak_impl](ai::SystemMessage message) -> support::ExpectedVoid {
                     const auto impl = weak_impl.lock();
@@ -694,7 +695,8 @@ boost::asio::awaitable<support::Expected<std::unique_ptr<AgentSession>>> AgentSe
                                 support::make_error(support::ErrorCode::Validation, "session is unavailable"));
                     }
                     return impl->queue_tool_loadout(std::move(message));
-                }));
+                },
+                session->impl_->services_.codemode_catalog));
         if (auto started = co_await support::detail::await_async_result(manager->start()); !started) {
             co_return std::unexpected(std::move(started.error()));
         }

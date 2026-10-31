@@ -1,5 +1,7 @@
 #include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
 
+#include "coding_agent/extensions/codemode/CodemodeCatalog.hpp"
+#include "coding_agent/extensions/codemode/CodemodeCatalogState.hpp"
 #include "coding_agent/extensions/codemode/CodemodeDiscovery.hpp"
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 
@@ -42,9 +44,20 @@ struct GuestHolder {
     std::filesystem::path path;
     std::shared_ptr<codemode::CodemodeSandbox> sandbox;
 
+    /// pi `createDiscoveryGlobals`: the three discovery globals every codemode
+    /// sandbox binds. They are construction-time names; each run's backing tool
+    /// set is resolved from the live callable loadout at call time.
+    [[nodiscard]] static std::vector<codemode::CodemodeGlobal> discovery_globals() {
+        std::vector<codemode::CodemodeGlobal> globals;
+        for (const auto& name : codemode_discovery_globals()) {
+            globals.push_back(codemode::CodemodeGlobal{.name = name, .spread = true});
+        }
+        return globals;
+    }
+
     [[nodiscard]] support::Expected<codemode::CodemodeSandbox*> ensure() {
         if (!sandbox) {
-            auto created = codemode::CodemodeSandbox::create(path);
+            auto created = codemode::CodemodeSandbox::create(path, discovery_globals());
             if (!created) {
                 return std::unexpected(std::move(created.error()));
             }
@@ -106,28 +119,54 @@ struct GuestHolder {
     return ready(std::move(result));
 }
 
-/// pi `getCodemodeCallableTools`: every registered tool except codemode itself
+/// pi `getCodemodeCallableTools`: every given tool except codemode itself
 /// (its `exposure` is `model-only`, so scripts must not start other scripts).
-[[nodiscard]] std::vector<ai::Tool> callable_tools(const std::vector<ai::Tool>& tools) {
-    std::vector<ai::Tool> callable;
-    callable.reserve(tools.size());
-    for (const auto& tool : tools) {
-        if (tool.name == kCodemodeToolName) continue;
-        callable.push_back(tool);
+/// With the session's catalog, the set is the exposure-filtered callable
+/// loadout (`codemode`/`deferred` plus active `direct`); without one, every
+/// registered tool is callable.
+[[nodiscard]] std::vector<LoadoutTool> callable_loadout(
+        const std::vector<ai::Tool>& tools, const CodemodeCatalogState* catalog) {
+    std::vector<LoadoutTool> loadout;
+    loadout.reserve(tools.size());
+    if (catalog == nullptr) {
+        for (const auto& tool : tools) {
+            loadout.push_back(LoadoutTool{.definition = tool});
+        }
+        return callable_tools(loadout);
     }
-    return callable;
+    std::set<std::string, std::less<>> callable_names;
+    for (const auto& entry : catalog->callable())
+        callable_names.insert(entry.definition.name);
+    for (const auto& tool : tools) {
+        if (!callable_names.contains(tool.name)) continue;
+        const LoadoutTool* entry = catalog->find(tool.name);
+        if (entry == nullptr) continue;
+        LoadoutTool listed = *entry;
+        // The live definition (not the registration snapshot) is what the
+        // script must call: a replacement schema from a re-registered MCP tool
+        // reaches the sandbox exactly as it reaches the model.
+        listed.definition = tool;
+        loadout.push_back(std::move(listed));
+    }
+    return loadout;
 }
 
 /// The `toolsJson` entries the prelude binds `tools.<jsName>` and
 /// `tools["<raw name>"]` to.
-[[nodiscard]] std::vector<codemode::CodemodeToolDescriptor> to_descriptors(const std::vector<ai::Tool>& tools) {
+[[nodiscard]] std::vector<codemode::CodemodeToolDescriptor> to_descriptors(const std::vector<LoadoutTool>& tools) {
     std::vector<codemode::CodemodeToolDescriptor> descriptors;
     descriptors.reserve(tools.size());
     for (const auto& tool : tools) {
+        const CodemodeDeclaration declaration = to_codemode_declaration(tool.definition, tool.guidelines);
         codemode::CodemodeToolDescriptor descriptor;
-        descriptor.name = tool.name;
-        descriptor.js_name = codemode::to_codemode_identifier(tool.name);
-        descriptor.description = codemode::render_tool_sample(tool);
+        descriptor.name = tool.definition.name;
+        descriptor.js_name = codemode::to_codemode_identifier(tool.definition.name);
+        descriptor.description = codemode::render_tool_sample(ai::Tool{
+                .name = declaration.name,
+                .description = declaration.description,
+                .parameters = declaration.input_schema,
+                .output_schema = declaration.output_schema,
+        });
         descriptors.push_back(std::move(descriptor));
     }
     return descriptors;
@@ -163,8 +202,9 @@ struct GuestHolder {
 
 } // namespace
 
-CodemodeToolSource::CodemodeToolSource(std::filesystem::path guest_wasm_path)
-    : guest_wasm_path_(std::move(guest_wasm_path)) {}
+CodemodeToolSource::CodemodeToolSource(
+        std::filesystem::path guest_wasm_path, std::shared_ptr<const CodemodeCatalogState> catalog)
+    : guest_wasm_path_(std::move(guest_wasm_path)), catalog_(std::move(catalog)) {}
 
 support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
     auto holder = std::make_shared<GuestHolder>();
@@ -176,10 +216,12 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
     // not see `codemode` unless activation names it — pi's `--tools` selection,
     // an explicit `setActiveTools`, or the MCP `codemode` exposure.
     tool.default_active = false;
+    // pi `exposure: "model-only"`: scripts must not start other scripts.
+    tool.exposure = ToolExposure::ModelOnly;
     tool.prompt_snippet = std::string{kCodemodePromptSnippet};
     tool.prompt_guidelines = codemode_prompt_guidelines();
     tool.concurrency = agent::ToolConcurrency::Exclusive;
-    tool.context_execute = [holder](support::JsonValue arguments,
+    tool.context_execute = [holder, catalog = catalog_](support::JsonValue arguments,
                                    ExtensionToolContext context,
                                    std::stop_token stop_token) -> support::AsyncResult<ExtensionToolResult> {
         const auto* fields = arguments.get_if<support::JsonValue::object_t>();
@@ -196,16 +238,16 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
             return failed("Script error:\n" + parsed.error().message);
         }
 
-        std::vector<ai::Tool> callable;
+        std::vector<LoadoutTool> callable;
         if (context.nested_calls != nullptr) {
-            callable = callable_tools(context.nested_calls->tools());
+            callable = callable_loadout(context.nested_calls->tools(), catalog.get());
         }
         // pi `toScriptValue`'s output-schema guard: only tools declaring an
         // output schema resolve a script call to their structured content.
         auto schema_names = std::make_shared<std::unordered_set<std::string>>();
         for (const auto& tool : callable) {
-            if (tool.output_schema.has_value()) {
-                schema_names->insert(tool.name);
+            if (tool.definition.output_schema.has_value()) {
+                schema_names->insert(tool.definition.name);
             }
         }
         auto discovery = std::make_shared<CodemodeDiscovery>(callable);

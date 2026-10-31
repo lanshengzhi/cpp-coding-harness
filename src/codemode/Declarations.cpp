@@ -560,10 +560,12 @@ std::string render_tool_declaration(const ai::Tool& tool, std::size_t input_max_
             tool.parameters.holds<JsonValue::object_t>() || tool.parameters.holds<JsonValue::array_t>()
                     ? schema_to_type(tool.parameters, input_max_chars)
                     : std::string{"unknown"};
-    const std::string output = tool.output_schema.has_value()
-                                       ? schema_to_type(*tool.output_schema, kDefaultInputSchemaMaxChars)
-                                       : std::string{"unknown"};
+    const std::string output = render_tool_output_type(tool.output_schema);
     return to_codemode_identifier(tool.name) + "(args: " + input + "): Promise<" + output + ">;";
+}
+
+std::string render_tool_output_type(const std::optional<JsonValue>& schema) {
+    return schema.has_value() ? schema_to_type(*schema, kDefaultInputSchemaMaxChars) : std::string{"unknown"};
 }
 
 std::string render_tool_sample(const ai::Tool& tool) {

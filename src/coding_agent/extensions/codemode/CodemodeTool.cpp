@@ -1,76 +1,20 @@
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 
+#include "coding_agent/extensions/codemode/CodemodeCatalog.hpp"
+
 #include <cch/codemode/Source.hpp>
 
-#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace cch::coding_agent::extensions {
 
-namespace {
-
-/// pi `DESCRIPTION_INTRO` (`packages/coding-agent/src/extensions/codemode/tool.ts`), verbatim.
-constexpr std::string_view kDescriptionIntro =
-        "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an "
-        "async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, "
-        "network, or timers.\n"
-        "- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, "
-        "and rejects with an Error on failure. Calls still running when the script ends are cancelled.\n"
-        "- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`";
-
-/// pi `describeGlobals(false)` (`tool.ts`), verbatim.
-constexpr std::string_view kGlobals =
-        "Globals:\n"
-        "- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; "
-        "`exit()` ends the script. `image()` also saves the image to a temp file and the result names its path.\n"
-        "- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n"
-        "- `ALL_TOOLS`, `searchTools(query, { limit?, namespace? })`, `describeTool(name)`, "
-        "`describeNamespace(name)`: find unlisted tools, such as MCP tools.";
-
-} // namespace
-
 std::vector<std::string> codemode_prompt_guidelines() {
     return {
             "Use codemode to batch independent tool calls (Promise.allSettled), chain them, or filter large output, "
             "instead of many separate calls.",
     };
-}
-
-std::string_view codemode_description_intro() { return kDescriptionIntro; }
-
-std::string codemode_globals_text() { return std::string{kGlobals}; }
-
-std::string codemode_description(const std::vector<ai::Tool>& nested_tools) {
-    std::string desc = std::string{kDescriptionIntro} + "\n\n" + std::string{kGlobals};
-    if (nested_tools.empty()) return desc;
-
-    desc += "\n\nNested tools:\n";
-    for (const auto& tool : nested_tools) {
-        desc += "- `tools." + tool.name + "(";
-        if (tool.parameters.holds<support::JsonValue::object_t>()) {
-            const auto& obj = tool.parameters.get<support::JsonValue::object_t>();
-            if (const auto props = obj.find("properties");
-                    props != obj.end() && props->second.holds<support::JsonValue::object_t>()) {
-                // Sorted parameter names: the description text is a stable
-                // contract, so it never depends on the schema's member order.
-                std::vector<std::string> names;
-                for (const auto& [prop_name, _] : props->second.get<support::JsonValue::object_t>()) {
-                    names.push_back(prop_name);
-                }
-                std::sort(names.begin(), names.end());
-                desc += "{ ";
-                for (std::size_t index = 0; index < names.size(); ++index) {
-                    if (index != 0) desc += ", ";
-                    desc += names[index];
-                }
-                desc += " }";
-            }
-        }
-        desc += ")`: " + tool.description + "\n";
-    }
-    return desc;
 }
 
 support::JsonValue codemode_parameters() {
@@ -92,7 +36,11 @@ support::JsonValue codemode_parameters() {
 ai::Tool codemode_tool_definition() {
     ai::Tool tool;
     tool.name = std::string{kCodemodeToolName};
-    tool.description = codemode_description();
+    // pi `createCodemodeToolDefinition` starts from
+    // `createCodemodeDescription([], { models })`: an empty catalog still
+    // declares the globals and the options grammar. The session's catalog
+    // refresh replaces this description with the live loadout.
+    tool.description = create_codemode_description({}, CodemodeCatalogSettings{});
     tool.parameters = codemode_parameters();
     tool.constrained_sampling = ai::ConstrainedSampling{
             .variants = {{"openai_lark", std::string{codemode::kCodemodeSourceGrammar}}},

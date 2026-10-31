@@ -221,6 +221,16 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         // retained discovery request re-run with the creation-time trust state.
         if (services_.settings_manager) {
             (void)services_.settings_manager->reload();
+            // pi `getMode()`/`getInlineBudget()` read the live settings on every
+            // loadout application, so a reload that changed `codemode.mode` or
+            // `inlineBudget` reshapes the catalog and the request projection.
+            if (services_.codemode_catalog) {
+                auto settings = services_.codemode_catalog->settings();
+                settings.mode = services_.settings_manager->codemode_mode();
+                settings.inline_budget = services_.settings_manager->codemode_inline_budget();
+                services_.codemode_catalog->set_settings(std::move(settings));
+                static_cast<void>(services_.codemode_catalog->apply(*agent_));
+            }
         }
         if (reload_token.stop_requested() || lifecycle_ != Lifecycle::Open) {
             co_return co_await finish_reload(std::unexpected(cancelled_error()));

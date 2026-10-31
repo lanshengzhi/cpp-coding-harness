@@ -513,12 +513,33 @@ support::AsyncResult<std::optional<std::string>> McpOAuthFlowSignInDriver::store
 
 // ── AgentMcpToolSurface ─────────────────────────────────────────────────────
 
-AgentMcpToolSurface::AgentMcpToolSurface(
-        agent::Agent& agent, std::vector<std::string> registered_names, LoadoutCommitter loadout_committer)
-    : agent_(agent), loadout_committer_(std::move(loadout_committer)) {
+AgentMcpToolSurface::AgentMcpToolSurface(agent::Agent& agent,
+        std::vector<std::string> registered_names,
+        LoadoutCommitter loadout_committer,
+        std::shared_ptr<extensions::CodemodeCatalogState> codemode_catalog)
+    : agent_(agent), loadout_committer_(std::move(loadout_committer)), codemode_catalog_(std::move(codemode_catalog)) {
     known_names_.insert(
             std::make_move_iterator(registered_names.begin()), std::make_move_iterator(registered_names.end()));
 }
+
+namespace {
+
+/// pi `ToolDefinition.exposure` for one MCP registration.
+[[nodiscard]] extensions::ToolExposure to_tool_exposure(mcp::McpExposure exposure) {
+    switch (exposure) {
+    case mcp::McpExposure::Direct:
+        return extensions::ToolExposure::Direct;
+    case mcp::McpExposure::Codemode:
+        return extensions::ToolExposure::Codemode;
+    case mcp::McpExposure::Deferred:
+        return extensions::ToolExposure::Deferred;
+    case mcp::McpExposure::Hidden:
+        return extensions::ToolExposure::Hidden;
+    }
+    return extensions::ToolExposure::Codemode;
+}
+
+} // namespace
 
 void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     const std::string name = tool.name;
@@ -534,6 +555,13 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     // pi MCP tools carry no `executionMode`: parallel-capable, the transport
     // serializes frames internally.
     extension.concurrency = agent::ToolConcurrency::ParallelSafe;
+    // The catalog entry carries the facts the Agent's passive Tool value does
+    // not: the exposure the loadout hook filters by and the server namespace
+    // the description groups under.
+    extensions::LoadoutTool catalog_entry;
+    catalog_entry.definition = extension.definition;
+    catalog_entry.exposure = to_tool_exposure(exposure);
+    catalog_entry.name_space = std::move(tool.name_space);
     auto call = std::move(tool.call);
     // pi `createMcpToolDefinition`'s execute observes the call's progress and
     // streams pi's "Progress <n>[/<total>]" updates through the run's update
@@ -578,7 +606,8 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     namespaces_[name] = server;
     apply_exposure(name, exposure);
     exposures_[name] = exposure;
-    refresh_codemode_description();
+    if (codemode_catalog_) codemode_catalog_->register_tool(std::move(catalog_entry));
+    refresh_codemode_loadout();
 }
 
 void AgentMcpToolSurface::register_resource_tools(
@@ -586,18 +615,23 @@ void AgentMcpToolSurface::register_resource_tools(
     for (auto& tool : mcp::create_mcp_resource_tools(std::move(servers))) {
         const std::string name = tool.definition.name;
         const std::string description = tool.definition.description;
+        extensions::LoadoutTool catalog_entry;
+        catalog_entry.definition = tool.definition;
+        catalog_entry.exposure = to_tool_exposure(exposure);
         static_cast<void>(agent_.register_tool(extensions::convert_extension_tool(std::move(tool))));
         known_names_.insert(name);
         descriptions_[name] = description;
         namespaces_[name] = "mcp";
         apply_exposure(name, exposure);
         exposures_[name] = exposure;
+        if (codemode_catalog_) codemode_catalog_->register_tool(std::move(catalog_entry));
     }
-    refresh_codemode_description();
+    refresh_codemode_loadout();
 }
 
 void AgentMcpToolSurface::set_active_tools(std::vector<std::string> names) {
     static_cast<void>(agent_.set_active_tools(std::move(names)));
+    refresh_codemode_loadout();
 }
 
 std::vector<std::string> AgentMcpToolSurface::active_tools() const { return agent_.active_tools(); }
@@ -635,6 +669,7 @@ support::ExpectedVoid AgentMcpToolSurface::activate_tools(std::vector<std::strin
             loaded_tool_names_.push_back(name);
         }
     }
+    refresh_codemode_loadout();
     return {};
 }
 
@@ -663,6 +698,7 @@ void AgentMcpToolSurface::restore_loaded_tools(std::vector<std::string> names) {
         if (std::ranges::find(active, name) == active.end()) active.push_back(name);
     }
     static_cast<void>(agent_.set_active_tools(std::move(active)));
+    refresh_codemode_loadout();
 }
 
 bool AgentMcpToolSurface::is_searchable(const std::string& name) const {
@@ -688,16 +724,8 @@ std::vector<McpSurfaceTool> AgentMcpToolSurface::all_tools() const {
     return tools;
 }
 
-void AgentMcpToolSurface::refresh_codemode_description() {
-    std::vector<ai::Tool> callable;
-    for (auto& definition : agent_.tool_definitions()) {
-        if (definition.name == extensions::kCodemodeToolName) continue;
-        const auto exposure = exposures_.find(definition.name);
-        if (exposure != exposures_.end() && exposure->second == mcp::McpExposure::Hidden) continue;
-        callable.push_back(std::move(definition));
-    }
-    static_cast<void>(
-            agent_.update_tool_description(extensions::kCodemodeToolName, extensions::codemode_description(callable)));
+void AgentMcpToolSurface::refresh_codemode_loadout() {
+    if (codemode_catalog_) static_cast<void>(codemode_catalog_->apply(agent_));
 }
 
 void AgentMcpToolSurface::apply_exposure(const std::string& name, mcp::McpExposure exposure) {

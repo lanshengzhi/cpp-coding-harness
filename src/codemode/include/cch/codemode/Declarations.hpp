@@ -4,6 +4,7 @@
 #include <cch/support/JsonValue.hpp>
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -41,6 +42,10 @@ struct CodemodeGlobalDeclaration {
 /// absent) and `input_max_chars` bounds the rendered input type.
 [[nodiscard]] std::string render_tool_declaration(
         const ai::Tool& tool, std::size_t input_max_chars = kDefaultInputSchemaMaxChars);
+
+/// pi `renderToolOutputType`: the type a tool call resolves to — the output
+/// schema's TypeScript type, and `unknown` without a schema.
+[[nodiscard]] std::string render_tool_output_type(const std::optional<support::JsonValue>& schema);
 
 /// pi `renderToolSample`: the tool's description followed by its TS declaration.
 [[nodiscard]] std::string render_tool_sample(const ai::Tool& tool);

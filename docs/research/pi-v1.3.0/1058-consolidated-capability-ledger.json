@@ -60,7 +60,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "cb10e310289020b91f5060836cad25ce0b5d3f46b53dede8f2800579e14fb4f3"
+            "sha256": "c765517d529520138ad12be5ff550e93be47fa07f46c6b56ba6ba1f4ee800073"
           },
           {
             "path": "cmake/targets/Support.cmake",
@@ -76,7 +76,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "a3f5681b1d9eb49f18ba33e10a1d927d8e26afbe281efc7a1755de30eef7edb8"
+            "sha256": "b7330ec5a79a7df4cc82a8a0c1f3df226625cc8acdf522c43e833966f5c43253"
           },
           {
             "path": "src/mcp/Client.cpp",
@@ -140,19 +140,19 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "6f5cc6cc4164631ec908901958f38e9ac679e37a8b8dcc356b4cb744b447dd97"
+            "sha256": "2568e1c3f1ded3bd98c00be66a98424ab1c8b1bacbf393e1c7baa3ac200607cb"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "b34b23fda48b16d231d448f890f4d8233cb2990b8e17e17af442a3ea569730d8"
+            "sha256": "314984a7a0a0eaceda4063fbd98a02565d5e120f6a18937542250ab56e373fa3"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "24231c9c3ec4d7ef798839bb877540502077eb10427bfd2fbef5757cc2f24f45"
+            "sha256": "47bbacbe5a04d20d9f206e0032d446dd1e14b368f0161fc04e79d2da05db30f2"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "3104e58364af5d3ded185227493e8330d0622e0eed959541cdde0419d6a93c54"
+            "sha256": "0ef5d6aff17a0009b9df9bc0077f82b56f14a262ef9527005c7fbf25d2092517"
           },
           {
             "path": "src/support/Json.cpp",
@@ -180,7 +180,7 @@
           },
           {
             "path": "src/coding_agent/extensions/ExtensionTool.hpp",
-            "sha256": "35da04d5d347f3f3b8a7de860b83a59b949a7de5b76137ad163338076ae6218a"
+            "sha256": "f18634af5fb20f5a876e0acc19be006f891542571c9a69e31368b05ff40ac275"
           },
           {
             "path": "fixtures/pi-mcp/structured_content_server.py",
@@ -260,14 +260,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "/tmp/1105-existing-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
           ],
-          "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
-          "recordedAt": "2026-10-30T13:11:22Z",
+          "testedRevision": "74fe2e35766f35039222ff56e4afee44c2d29827",
+          "recordedAt": "2026-10-31T12:37:32Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
-            "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
+            "sha256": "2e5391210e9c9e4da97f2862a866174307c084f4edb0e1b7fb44566906d7eb38"
           }
         },
         "rows": [
@@ -321,6 +321,37 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1118": {
+          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The delivered rows, their scenarios and the routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "cmake/targets/CodingAgent.cmake",
+            "cmake/tests/CodingAgentTests.cmake",
+            "src/coding_agent/extensions/ExtensionTool.hpp",
+            "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "src/coding_agent/runtime/McpProductionAdapters.hpp",
+            "src/coding_agent/runtime/McpSessionManager.cpp",
+            "src/coding_agent/runtime/McpSessionManager.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "/tmp/1105-existing-revalidation.xml"
+            ],
+            "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
+            "recordedAt": "2026-10-30T13:11:22Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+              "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
+            }
+          }
         }
       },
       {
@@ -341,14 +372,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "/tmp/1105-existing-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
           ],
-          "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
-          "recordedAt": "2026-10-30T13:11:22Z",
+          "testedRevision": "74fe2e35766f35039222ff56e4afee44c2d29827",
+          "recordedAt": "2026-10-31T12:37:32Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
-            "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
+            "sha256": "2e5391210e9c9e4da97f2862a866174307c084f4edb0e1b7fb44566906d7eb38"
           }
         },
         "inputs": [
@@ -631,6 +662,32 @@
               "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
             }
           }
+        },
+        "revalidation1118": {
+          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The delivered rows, their scenarios and the routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "cmake/targets/CodingAgent.cmake",
+            "cmake/tests/CodingAgentTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "/tmp/1105-existing-revalidation.xml"
+            ],
+            "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
+            "recordedAt": "2026-10-30T13:11:22Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+              "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
+            }
+          }
         }
       },
       {
@@ -655,7 +712,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "cb10e310289020b91f5060836cad25ce0b5d3f46b53dede8f2800579e14fb4f3"
+            "sha256": "c765517d529520138ad12be5ff550e93be47fa07f46c6b56ba6ba1f4ee800073"
           },
           {
             "path": "cmake/targets/Mcp.cmake",
@@ -671,35 +728,35 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "a3f5681b1d9eb49f18ba33e10a1d927d8e26afbe281efc7a1755de30eef7edb8"
+            "sha256": "b7330ec5a79a7df4cc82a8a0c1f3df226625cc8acdf522c43e833966f5c43253"
           },
           {
             "path": "src/coding_agent/AgentSession.cpp",
-            "sha256": "4b92949611c4843e713fc740c65f8809e718567a57403c12ac5b5efefce2ac46"
+            "sha256": "3c95751bd1216e8cfcb679f659d6feff6c10bf588a8dbdfe7c4662893f6ba3a3"
           },
           {
             "path": "src/coding_agent/AgentSessionExecution.cpp",
-            "sha256": "a2c7c0fb9ff835d8f4beaafa9c4324c495c0238ee7db178662bcf78e332c4db7"
+            "sha256": "c4f2a7e0198ff8d853375c3e37494bdba68d614a280e6b1520829d245bb26be9"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "6f5cc6cc4164631ec908901958f38e9ac679e37a8b8dcc356b4cb744b447dd97"
+            "sha256": "2568e1c3f1ded3bd98c00be66a98424ab1c8b1bacbf393e1c7baa3ac200607cb"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "b34b23fda48b16d231d448f890f4d8233cb2990b8e17e17af442a3ea569730d8"
+            "sha256": "314984a7a0a0eaceda4063fbd98a02565d5e120f6a18937542250ab56e373fa3"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "24231c9c3ec4d7ef798839bb877540502077eb10427bfd2fbef5757cc2f24f45"
+            "sha256": "47bbacbe5a04d20d9f206e0032d446dd1e14b368f0161fc04e79d2da05db30f2"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "3104e58364af5d3ded185227493e8330d0622e0eed959541cdde0419d6a93c54"
+            "sha256": "0ef5d6aff17a0009b9df9bc0077f82b56f14a262ef9527005c7fbf25d2092517"
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.cpp",
-            "sha256": "1b06c1b8d52d0efc08b53c15565dad013bd428704f1bfedc7834b889c0a0aa87"
+            "sha256": "ef97c5c5778d5923a87269d3c2a535f8e51c613884048b7b663f3d808e192325"
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.hpp",
@@ -759,7 +816,7 @@
           },
           {
             "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "sha256": "2b4cad19b68cef919953994e630c6f8e21773f98774d1c55d72e39e8dcbdcc63"
+            "sha256": "7f7dd16aa9af75fb78901c148d3c2c19a1eda009713824b423fa68a3e817b7d3"
           },
           {
             "path": "tests/coding_agent/McpSessionManagerTest.cpp",
@@ -863,14 +920,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml"
+            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
           ],
-          "testedRevision": "bbb0a7f69989cffea01d982e24731f96de6a62c8",
-          "recordedAt": "2026-10-31T10:22:38Z",
+          "testedRevision": "74fe2e35766f35039222ff56e4afee44c2d29827",
+          "recordedAt": "2026-10-31T12:37:32Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml",
-            "sha256": "3e863322720ac6f682b24e6f13c039dbe30d94b5d59b5c64ce90375e13187326"
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
+            "sha256": "2e5391210e9c9e4da97f2862a866174307c084f4edb0e1b7fb44566906d7eb38"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -893,6 +950,40 @@
           "changedInputs": [
             "src/coding_agent/AgentSessionExecution.cpp"
           ]
+        },
+        "revalidation1118": {
+          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The delivered rows, their scenarios and the routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "cmake/targets/CodingAgent.cmake",
+            "cmake/tests/CodingAgentTests.cmake",
+            "src/coding_agent/AgentSession.cpp",
+            "src/coding_agent/AgentSessionExecution.cpp",
+            "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "src/coding_agent/runtime/McpProductionAdapters.hpp",
+            "src/coding_agent/runtime/McpSessionManager.cpp",
+            "src/coding_agent/runtime/McpSessionManager.hpp",
+            "src/coding_agent/runtime/SessionFactory.cpp",
+            "tests/coding_agent/McpSessionIntegrationTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml"
+            ],
+            "testedRevision": "bbb0a7f69989cffea01d982e24731f96de6a62c8",
+            "recordedAt": "2026-10-31T10:22:38Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml",
+              "sha256": "3e863322720ac6f682b24e6f13c039dbe30d94b5d59b5c64ce90375e13187326"
+            }
+          }
         }
       }
     ]

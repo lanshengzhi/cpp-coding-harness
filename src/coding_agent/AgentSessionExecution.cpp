@@ -154,7 +154,27 @@ ai::UserMessage detail::make_admitted_user_message(std::string text,
     return message;
 }
 
-ai::ModelStreamFactory AgentSession::Impl::make_stream_factory() { return services_.model_runtime->stream_factory(); }
+ai::ModelStreamFactory AgentSession::Impl::make_stream_factory() {
+    auto factory = services_.model_runtime->stream_factory();
+    const auto catalog = services_.codemode_catalog;
+    if (!catalog) return factory;
+    // pi `_installHiddenDeclarationsProjection`: a `prepareLoadout` hook that
+    // hides declared tools (`codemode.mode: "only"`) keeps them active and
+    // callable, and the transcript still declares them, but the provider
+    // request leaves their declarations out. pi's adapters derive request tools
+    // from the transcript (`getCurrentTools`), so the filtered system messages
+    // are enough there; the port's `AiContext.tools` is the request's tool list,
+    // so the same projection is applied at the one boundary that carries it.
+    return [factory = std::move(factory), catalog](
+                   ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options) mutable -> ai::ModelStream {
+        const auto& hidden = catalog->hidden_declarations();
+        if (!hidden.empty()) {
+            std::erase_if(context.tools,
+                    [&hidden](const ai::Tool& tool) { return std::ranges::find(hidden, tool.name) != hidden.end(); });
+        }
+        return factory(std::move(model), std::move(context), std::move(options));
+    };
+}
 
 AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     : services_(std::move(assembly.services)), session_(std::move(assembly.session)),
@@ -183,6 +203,32 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // delta before the first request (pi `declareToolChanges`). A fresh session
     // already leads with the System Message this Impl builds below.
     options.seed_initial_system_message = false;
+    // pi `_installHiddenDeclarationsProjection`: a `prepareLoadout` hook that
+    // hides declared tools (`codemode.mode: "only"`) filters them from every
+    // request, not from the transcript. The set is read at request time so an
+    // MCP re-exposure or a settings reload changes the projection without
+    // rewriting history.
+    if (services_.codemode_catalog) {
+        options.transform_context = [catalog = services_.codemode_catalog](std::vector<ai::MessageVariant> messages,
+                                            std::stop_token) -> support::AsyncResult<std::vector<ai::MessageVariant>> {
+            const auto& hidden = catalog->hidden_declarations();
+            if (!hidden.empty()) {
+                for (auto& message : messages) {
+                    auto* system = std::get_if<ai::SystemMessage>(&message);
+                    if (system == nullptr || (system->tools_added.empty() && system->tools_removed.empty())) {
+                        continue;
+                    }
+                    std::erase_if(system->tools_added, [&hidden](const ai::Tool& tool) {
+                        return std::ranges::find(hidden, tool.name) != hidden.end();
+                    });
+                    std::erase_if(system->tools_removed, [&hidden](const ai::ToolReference& tool) {
+                        return std::ranges::find(hidden, tool.name) != hidden.end();
+                    });
+                }
+            }
+            return support::AsyncResult<std::vector<ai::MessageVariant>>{std::move(messages)};
+        };
+    }
     // The Session installs no `convertToLlm` hook: the `excludeFromContext`
     // rule is applied on exactly one path, the provider-boundary conversion
     // (`ai::extended_message_to_user_message` drops excluded messages and the
@@ -237,6 +283,13 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // delta on turn 1.
     const auto initial_tool_loadout =
             initial_active_tool_names(registered_tool_names, services_.initially_inactive_tool_names);
+    // Apply the codemode loadout before the leading declaration is minted, so
+    // the first request already carries the final descriptions (pi
+    // `_preparePromptAndToolLoadout` runs before the first request). A resumed
+    // session replays its loadout below and applies there instead.
+    if (services_.codemode_catalog && !session_.resumed) {
+        static_cast<void>(services_.codemode_catalog->apply(services_.tools, initial_tool_loadout));
+    }
     auto sections = build_system_prompt_sections();
     ai::SystemMessage system_message;
     // pi `_preparePromptAndToolLoadout` stamps `timestamp: Date.now()` when
@@ -282,6 +335,9 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
         }
         services_.tools.retain_tools(retained);
         replayed_active_tool_names = active_names;
+        if (services_.codemode_catalog) {
+            static_cast<void>(services_.codemode_catalog->apply(services_.tools, replayed_active_tool_names));
+        }
     }
     // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
     // before the next assistant response of the same run, so a long tool loop

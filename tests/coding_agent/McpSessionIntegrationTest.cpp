@@ -579,7 +579,11 @@ TEST_CASE("agent session binds late MCP tools and replaces their callable schema
         for (const auto& tool : provider->offered_tools.back()) {
             if (!tool.name.starts_with("mcp__")) continue;
             names.push_back(tool.name);
-            CHECK(tool.description == "updated");
+            // pi `prepareCodemodeLoadout` (mode `on`): a declared callable
+            // direct tool's description is its own followed by the script-call
+            // sentence. The refreshed MCP description is the prefix.
+            CHECK(tool.description.starts_with("updated\n\nCodemode: `tools."));
+            CHECK(tool.description.find("` resolves to") != std::string::npos);
             INFO(tool.name << ": " << tests::json_mismatch(replacement_schema, tool.parameters).value_or(""));
             CHECK_FALSE(tests::json_mismatch(replacement_schema, tool.parameters).has_value());
         }

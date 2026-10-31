@@ -18,6 +18,9 @@ support::Expected<std::vector<ExtensionTool>> ToolSearchToolSource::load_tools()
     ExtensionTool tool;
     tool.definition = tool_search_definition();
     tool.default_active = false;
+    // pi `exposure: "model-only"`: searching changes what the model sees, not
+    // what a script can call.
+    tool.exposure = ToolExposure::ModelOnly;
     tool.prompt_snippet = std::nullopt;
     tool.concurrency = agent::ToolConcurrency::Exclusive;
     tool.execute = [search = search_, activate = activate_](

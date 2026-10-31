@@ -2,17 +2,28 @@
 
 #include "coding_agent/extensions/ExtensionTool.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"
+#include "coding_agent/extensions/ToolExposure.hpp"
 
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
 
 namespace cch::coding_agent::extensions {
+
+/// One registered extension Tool's loadout metadata: the facts the Agent's
+/// passive `Tool` value does not carry (pi `ToolDefinition.exposure` and
+/// `namespace`). Session Assembly hands them to the codemode catalog.
+struct ExtensionToolLoadout {
+    std::string name;
+    ToolExposure exposure{ToolExposure::Direct};
+    std::optional<ToolNamespace> name_space;
+};
 
 /// Move-only registry of extension-provided Tools keyed by tool name. This is
 /// where extension contributions are collected (the Extension Tool Source's
@@ -50,6 +61,10 @@ public:
     [[nodiscard]] const std::vector<std::string>& default_inactive_tool_names() const noexcept {
         return default_inactive_;
     }
+
+    /// Every registered Tool's exposure and namespace, in name order, without
+    /// consuming the registry.
+    [[nodiscard]] std::vector<ExtensionToolLoadout> loadout() const;
 
 private:
     std::map<std::string, ExtensionTool, std::less<>> tools_;

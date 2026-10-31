@@ -105,6 +105,19 @@ const ExtensionTool* ExtensionToolRegistry::find(const std::string& name) const 
     return it == tools_.end() ? nullptr : &it->second;
 }
 
+std::vector<ExtensionToolLoadout> ExtensionToolRegistry::loadout() const {
+    std::vector<ExtensionToolLoadout> loadout;
+    loadout.reserve(tools_.size());
+    for (const auto& [name, tool] : tools_) {
+        loadout.push_back(ExtensionToolLoadout{
+                .name = name,
+                .exposure = tool.exposure,
+                .name_space = tool.name_space,
+        });
+    }
+    return loadout;
+}
+
 std::vector<ExtensionTool> ExtensionToolRegistry::take_tools() {
     std::vector<ExtensionTool> tools;
     tools.reserve(tools_.size());
