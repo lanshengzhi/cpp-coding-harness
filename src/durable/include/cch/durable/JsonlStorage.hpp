@@ -7,6 +7,17 @@
 
 namespace cch::durable {
 
+/// Options of one JSONL store incarnation (frozen pi `JsonlStorageOptions`).
+struct JsonlStorageOptions {
+    /// Flush every affected sidecar before appending the main marker, and
+    /// flush `main.jsonl` before a reclamation pass replaces or removes a
+    /// sidecar. Defaults to false, matching frozen pi.
+    ///
+    /// This orders flushes only. It is not a power-loss, SIGKILL or
+    /// multi-process guarantee, and it adds no cross-process locking.
+    bool fsync{false};
+};
+
 /// The JSONL backend of the frozen `Storage` contract (frozen pi
 /// `JsonlStorage`, format 1).
 ///
@@ -19,13 +30,19 @@ namespace cch::durable {
 ///
 /// A failed commit I/O poisons this instance: later commits and reads reject
 /// until the directory is reopened. Opening recovers only the published
-/// prefix. This is not a power-loss or fsync guarantee.
+/// prefix. A failed reclamation is retryable maintenance after the marker
+/// already published the commit, so it never changes the commit outcome.
+///
+/// With `JsonlStorageOptions::fsync`, sidecar bytes are flushed before the
+/// main marker is appended and `main.jsonl` is flushed before a reclamation
+/// pass. This is not a power-loss or multi-process guarantee.
 class JsonlStorage final : public Storage {
 public:
     /// Open or create one JSONL storage directory and recover its published
     /// prefix. A corrupt or incompletely published store is rejected rather
     /// than silently repaired across a missing confirmed record.
-    [[nodiscard]] static support::Expected<std::unique_ptr<JsonlStorage>> open(const std::filesystem::path& directory);
+    [[nodiscard]] static support::Expected<std::unique_ptr<JsonlStorage>> open(
+            const std::filesystem::path& directory, JsonlStorageOptions options = {});
 
     JsonlStorage(const JsonlStorage&) = delete;
     JsonlStorage& operator=(const JsonlStorage&) = delete;

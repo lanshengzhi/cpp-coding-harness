@@ -8,6 +8,7 @@
 
 #include "StorageEncoding.hpp"
 #include "StorageState.hpp"
+#include "durable/JsonlIoTestHooks.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
@@ -25,6 +26,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <span>
@@ -39,6 +41,36 @@ namespace cch::durable {
 
 namespace {
 
+std::mutex jsonl_io_hook_mutex;
+testing::JsonlIoHook jsonl_io_hook;
+
+} // namespace
+
+namespace testing {
+
+void set_jsonl_io_hook(JsonlIoHook hook) {
+    std::lock_guard lock(jsonl_io_hook_mutex);
+    jsonl_io_hook = std::move(hook);
+}
+
+void clear_jsonl_io_hook() {
+    std::lock_guard lock(jsonl_io_hook_mutex);
+    jsonl_io_hook = nullptr;
+}
+
+bool fail_jsonl_io(const JsonlIoEvent& event) {
+    JsonlIoHook hook;
+    {
+        std::lock_guard lock(jsonl_io_hook_mutex);
+        hook = jsonl_io_hook;
+    }
+    return hook && hook(event);
+}
+
+} // namespace testing
+
+namespace {
+
 constexpr double kFormatVersion = 1.0;
 constexpr std::string_view kMainFile = "main.jsonl";
 constexpr std::string_view kReclaimSuffix = ".reclaim";
@@ -47,6 +79,12 @@ constexpr std::string_view kClosedMessage = "JSONL storage is closed";
 
 [[nodiscard]] support::Error corruption(std::string message) {
     return support::make_error(support::ErrorCode::Validation, std::move(message));
+}
+
+[[nodiscard]] testing::JsonlIoEvent io_event(
+        testing::JsonlIoOperation operation, std::string_view file, std::string_view destination = {}) {
+    return testing::JsonlIoEvent{
+            .operation = operation, .file = std::string{file}, .destination = std::string{destination}};
 }
 
 [[nodiscard]] bool is_format(const support::JsonValue& value) {
@@ -271,6 +309,9 @@ struct OpenedTaskFile {
         // keep failing a later append instead of being adopted.
         return {};
     }
+    if (testing::fail_jsonl_io(io_event(testing::JsonlIoOperation::Remove, entry))) {
+        return std::unexpected(corruption("JSONL sidecar reclamation failed"));
+    }
     if (::unlinkat(directory_fd, entry.c_str(), 0) != 0 && errno != ENOENT) {
         return std::unexpected(corruption("JSONL sidecar reclamation failed"));
     }
@@ -382,6 +423,9 @@ struct RawLine {
 }
 
 [[nodiscard]] support::ExpectedVoid append_file(const std::filesystem::path& path, std::string_view content) {
+    if (testing::fail_jsonl_io(io_event(testing::JsonlIoOperation::Append, path.filename().string()))) {
+        return std::unexpected(corruption("JSONL append failed"));
+    }
     std::error_code error;
     // A missing target is the normal first-append case; only an existing
     // directory (the injected I/O failure) must not be opened as a file.
@@ -400,9 +444,46 @@ struct RawLine {
     return {};
 }
 
+/// Flush one open file (frozen pi `FileSystem.flushFile`). The flush is a
+/// separate physical operation from the append, so it can fail on its own.
+[[nodiscard]] support::ExpectedVoid flush_descriptor(int fd, std::string_view name) {
+    if (testing::fail_jsonl_io(io_event(testing::JsonlIoOperation::Flush, name))) {
+        return std::unexpected(corruption("JSONL flush failed"));
+    }
+    while (::fsync(fd) != 0) {
+        if (errno == EINTR) continue;
+        return std::unexpected(corruption("JSONL flush failed"));
+    }
+    return {};
+}
+
+/// Flush one store file by path: frozen pi reopens the path read-write and
+/// `fsync`s it, so a missing or replaced path fails the flush as well.
+[[nodiscard]] support::ExpectedVoid flush_file(const std::filesystem::path& path) {
+    const std::string name = path.filename().string();
+    support::UniqueFd file{::open(path.c_str(), O_RDWR | O_CLOEXEC)};
+    if (!file) {
+        return std::unexpected(corruption("JSONL flush failed"));
+    }
+    return flush_descriptor(file.get(), name);
+}
+
+/// Best-effort removal of one published sidecar (frozen pi `remove`).
+void remove_file(const std::filesystem::path& path) {
+    if (testing::fail_jsonl_io(io_event(testing::JsonlIoOperation::Remove, path.filename().string()))) {
+        return;
+    }
+    std::error_code error;
+    std::filesystem::remove(path, error);
+}
+
 [[nodiscard]] support::ExpectedVoid replace_file(
-        const std::filesystem::path& directory, std::string_view name, std::string_view content) {
-    const std::filesystem::path temporary = directory / (std::string{name} + std::string{kReclaimSuffix});
+        const std::filesystem::path& directory, std::string_view name, std::string_view content, bool sync) {
+    const std::string temporary_name = std::string{name} + std::string{kReclaimSuffix};
+    const std::filesystem::path temporary = directory / temporary_name;
+    if (testing::fail_jsonl_io(io_event(testing::JsonlIoOperation::Write, temporary_name))) {
+        return std::unexpected(corruption("JSONL sidecar reclamation failed"));
+    }
     {
         std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
         if (!stream) {
@@ -413,6 +494,18 @@ struct RawLine {
         if (!stream.good()) {
             return std::unexpected(corruption("JSONL sidecar reclamation failed"));
         }
+    }
+    if (sync) {
+        if (auto flushed = flush_file(temporary); !flushed) {
+            // The marker already published this state; the scratch file stays
+            // for recovery to remove and the replacement is retried on reopen.
+            return std::unexpected(corruption("JSONL sidecar reclamation failed"));
+        }
+    }
+    if (testing::fail_jsonl_io(io_event(testing::JsonlIoOperation::Rename, temporary_name, name))) {
+        std::error_code error;
+        std::filesystem::remove(temporary, error);
+        return std::unexpected(corruption("JSONL sidecar reclamation failed"));
     }
     std::error_code error;
     std::filesystem::rename(temporary, directory / name, error);
@@ -1114,9 +1207,11 @@ struct EncodedCommit {
 } // namespace
 
 struct JsonlStorage::Impl {
-    explicit Impl(std::filesystem::path directory) : directory(std::move(directory)) {}
+    explicit Impl(std::filesystem::path directory, JsonlStorageOptions options)
+        : directory(std::move(directory)), options(options) {}
 
     std::filesystem::path directory;
+    JsonlStorageOptions options;
     // Captured once so task sidecar access and reclamation stay in the opened
     // store even if a later path lookup would resolve elsewhere.
     support::UniqueFd directory_fd;
@@ -1139,6 +1234,55 @@ struct JsonlStorage::Impl {
             return support::make_error(support::ErrorCode::Session, std::string{kClosedMessage});
         }
         return std::nullopt;
+    }
+
+    /// Flush one sidecar the store just appended. A task sidecar is reopened
+    /// through the no-follow, single-link boundary and must still be the entry
+    /// observed at append time, so a substituted file is never flushed as if
+    /// the store had written it (#1085).
+    [[nodiscard]] support::ExpectedVoid flush_sidecar(std::string_view file) {
+        if (!task_id_from_file(file)) {
+            return flush_file(directory / std::string{file});
+        }
+        auto opened = open_task_file(directory_fd.get(), file, O_RDWR);
+        if (!opened) return std::unexpected(std::move(opened.error()));
+        const auto known = task_identities.find(std::string{file});
+        if (known == task_identities.end() || !(known->second == opened->identity)) {
+            return std::unexpected(corruption("JSONL task sidecar changed before its flush"));
+        }
+        return flush_descriptor(opened->fd.get(), file);
+    }
+
+    /// Apply one reclamation pass (frozen pi `reclaimSidecars`). The marker
+    /// already published this state, so a failure defers the whole pass and
+    /// never changes a commit or recovery outcome. With fsync, `main.jsonl` is
+    /// flushed first: its marker bytes authorize every replacement and removal.
+    void reclaim_sidecars(const std::map<std::string, std::string>& replacements) {
+        if (replacements.empty()) {
+            return;
+        }
+        if (options.fsync) {
+            // Flushing main authorizes the replacement before a sidecar is
+            // removed or rewritten.
+            if (auto flushed = flush_file(directory / kMainFile); !flushed) {
+                return;
+            }
+        }
+        for (const auto& [file, content] : replacements) {
+            if (task_id_from_file(file)) {
+                // Task sidecars are reclaimed whole, relative to the captured
+                // directory, and only while the observed identity still holds.
+                if (content.empty()) {
+                    (void)reclaim_task_file(directory_fd.get(), file, task_identities);
+                }
+                continue;
+            }
+            if (content.empty()) {
+                remove_file(directory / file);
+            } else {
+                (void)replace_file(directory, file, content, options.fsync);
+            }
+        }
     }
 
     [[nodiscard]] support::ExpectedVoid recover() {
@@ -1188,8 +1332,7 @@ struct JsonlStorage::Impl {
                 continue;
             }
             if (is_reclaim_file(name)) {
-                std::filesystem::remove(entry.path(), error);
-                error.clear();
+                remove_file(entry.path());
                 continue;
             }
             if (document_id_from_file(name).has_value() || task_id_from_file(name).has_value()) {
@@ -1394,6 +1537,7 @@ struct JsonlStorage::Impl {
             }
         }
 
+        std::map<std::string, std::string> reclamations;
         for (auto& [file, lines] : parsed_files) {
             std::optional<std::size_t> unconfirmed_start;
             for (const ParsedSidecar& line : lines) {
@@ -1454,7 +1598,7 @@ struct JsonlStorage::Impl {
                     // Published state is already established; a cleanup failure
                     // leaves the sidecar for a later retry instead of hiding it
                     // behind an open failure.
-                    (void)reclaim_task_file(directory_fd.get(), file, task_identities);
+                    reclamations[file] = {};
                 }
                 continue;
             }
@@ -1462,14 +1606,8 @@ struct JsonlStorage::Impl {
             if (!id) {
                 continue;
             }
-            if (lines.empty()) {
-                std::filesystem::remove(directory / file, error);
-                error.clear();
-                continue;
-            }
-            if (retired.contains(id->value)) {
-                std::filesystem::remove(directory / file, error);
-                error.clear();
+            if (lines.empty() || retired.contains(id->value)) {
+                reclamations[file] = {};
                 continue;
             }
             const auto base = latest_bases.find(id->value);
@@ -1487,19 +1625,19 @@ struct JsonlStorage::Impl {
                 continue;
             }
             if (retained.empty()) {
-                std::filesystem::remove(directory / file, error);
-                error.clear();
+                reclamations[file] = {};
                 continue;
             }
             std::string content;
             for (const ParsedSidecar& line : retained) {
                 content += sidecar_line(line.record) + "\n";
             }
-            if (auto replaced = replace_file(directory, file, content); !replaced) {
-                return std::unexpected(std::move(replaced.error()));
-            }
+            reclamations[file] = std::move(content);
         }
+        // Truncation is part of recovery and stays ungated; reclamation is
+        // retryable maintenance applied once the plan is complete.
         this->task_identities = std::move(task_identities);
+        reclaim_sidecars(reclamations);
         return {};
     }
 
@@ -1540,6 +1678,10 @@ struct JsonlStorage::Impl {
         EncodedCommit encoded = encode_commit(seq, writes, current_only_documents, directory);
         for (const auto& [file, content] : encoded.sidecars) {
             if (task_id_from_file(file)) {
+                if (testing::fail_jsonl_io(io_event(testing::JsonlIoOperation::Append, file))) {
+                    poisoned = true;
+                    return std::unexpected(poison_error());
+                }
                 const auto known = task_identities.find(file);
                 // With no observed entry, create exclusively: a sidecar that
                 // reappears after reclamation must not be adopted. With an
@@ -1573,6 +1715,16 @@ struct JsonlStorage::Impl {
                 return std::unexpected(poison_error());
             }
         }
+        if (options.fsync) {
+            // Every sidecar is flushed in append order before the main marker
+            // exists, so a flush failure can never publish a marker.
+            for (const auto& sidecar : encoded.sidecars) {
+                if (auto flushed = flush_sidecar(sidecar.first); !flushed) {
+                    poisoned = true;
+                    return std::unexpected(poison_error());
+                }
+            }
+        }
         if (auto appended = append_file(directory / kMainFile, encoded.marker); !appended) {
             poisoned = true;
             return std::unexpected(poison_error());
@@ -1584,22 +1736,7 @@ struct JsonlStorage::Impl {
 
         // The marker already published this state. Reclamation is retryable
         // maintenance and a failure here does not change the commit outcome.
-        for (const auto& [file, content] : encoded.reclamations) {
-            if (task_id_from_file(file)) {
-                // Task sidecars are reclaimed whole, relative to the captured
-                // directory, and only while the observed identity still holds.
-                if (content.empty()) {
-                    (void)reclaim_task_file(directory_fd.get(), file, task_identities);
-                }
-                continue;
-            }
-            std::error_code error;
-            if (content.empty()) {
-                std::filesystem::remove(directory / file, error);
-            } else {
-                (void)replace_file(directory, file, content);
-            }
-        }
+        reclaim_sidecars(encoded.reclamations);
         return seq;
     }
 };
@@ -1608,8 +1745,9 @@ JsonlStorage::JsonlStorage(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) 
 
 JsonlStorage::~JsonlStorage() = default;
 
-support::Expected<std::unique_ptr<JsonlStorage>> JsonlStorage::open(const std::filesystem::path& directory) {
-    auto impl = std::make_unique<Impl>(directory);
+support::Expected<std::unique_ptr<JsonlStorage>> JsonlStorage::open(
+        const std::filesystem::path& directory, JsonlStorageOptions options) {
+    auto impl = std::make_unique<Impl>(directory, options);
     if (auto recovered = impl->recover(); !recovered) {
         return std::unexpected(std::move(recovered.error()));
     }
