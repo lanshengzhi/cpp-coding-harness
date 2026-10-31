@@ -43,6 +43,25 @@ namespace {
     return std::ranges::any_of(entries, [](const std::string& entry) { return entry.starts_with("mcp__"); });
 }
 
+/// pi `getToolListError`: a list is either plain names/patterns or only exact
+/// modifiers; mixing the forms or using a wildcard modifier is invalid.
+[[nodiscard]] std::optional<std::string> tool_list_error(std::span<const std::string> entries) {
+    const auto modifiers =
+            std::ranges::count_if(entries, [](const std::string& entry) { return is_tool_modifier(entry); });
+    if (modifiers == 0) {
+        return std::nullopt;
+    }
+    if (static_cast<std::size_t>(modifiers) < entries.size()) {
+        return std::string{"tool names cannot be mixed with +name or -name entries"};
+    }
+    const auto pattern = std::ranges::find_if(
+            entries, [](const std::string& entry) { return entry.find('*') != std::string::npos; });
+    if (pattern != entries.end()) {
+        return "+name and -name entries take exact tool names, not patterns: " + *pattern;
+    }
+    return std::nullopt;
+}
+
 /// pi `_allowlistFiltersMcp`: an engaged empty allowlist, or one that names an
 /// `mcp__` entry, subjects MCP tools to the allowlist; otherwise MCP tools are
 /// kept even though they are not named.
@@ -90,6 +109,47 @@ bool tool_name_matches(std::span<const std::string> entries, std::string_view na
 bool is_mcp_tool_name(std::string_view name) {
     return name.starts_with("mcp__") || name == mcp::kListMcpResourcesTool ||
            name == mcp::kListMcpResourceTemplatesTool || name == mcp::kReadMcpResourceTool;
+}
+
+bool is_tool_modifier(std::string_view entry) { return entry.starts_with('+') || entry.starts_with('-'); }
+
+support::Expected<ToolSelection> make_tool_selection(
+        std::optional<std::vector<std::string>> tools, std::vector<std::string> excluded) {
+    if (tools.has_value()) {
+        if (auto problem = tool_list_error(*tools)) {
+            return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "Invalid tools option: " + std::move(*problem)));
+        }
+        if (std::ranges::any_of(*tools, [](const std::string& entry) { return is_tool_modifier(entry); })) {
+            ToolSelection selection;
+            selection.excluded = std::move(excluded);
+            selection.modifiers = std::move(*tools);
+            return selection;
+        }
+    }
+    ToolSelection selection;
+    selection.allowed = std::move(tools);
+    selection.excluded = std::move(excluded);
+    return selection;
+}
+
+std::vector<std::string> apply_tool_modifiers(std::span<const std::string> base, std::span<const std::string> entries) {
+    std::vector<std::string> tools{base.begin(), base.end()};
+    for (const auto& entry : entries) {
+        if (!is_tool_modifier(entry)) {
+            continue;
+        }
+        const std::string name = entry.substr(1);
+        const auto existing = std::ranges::find(tools, name);
+        if (entry.starts_with('+')) {
+            if (existing == tools.end() && !name.empty()) {
+                tools.push_back(name);
+            }
+        } else if (existing != tools.end()) {
+            tools.erase(existing);
+        }
+    }
+    return tools;
 }
 
 support::Expected<ToolSelectionResult> resolve_tool_selection(

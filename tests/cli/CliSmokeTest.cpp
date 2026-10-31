@@ -672,6 +672,31 @@ TEST_CASE("CLI --exclude-tools removes one tool and reports it", "[cli][tools][i
     CHECK(result.stderr_text.find("read") == std::string::npos);
 }
 
+TEST_CASE("CLI rejects mixed tool names and modifiers and wildcard modifiers", "[cli][tools][issue1111][spec]") {
+    cch::tests::TempWorkspace workspace;
+
+    const auto mixed = cch::tests::run_cli(cch::tests::CliRunOptions{
+            .args = {"--session", (workspace.path() / "mixed.jsonl").string(), "--tools", "read,+edit"},
+            .cwd = workspace.path(),
+            .env = {},
+            .stdin_text = {},
+    });
+    REQUIRE(mixed.exit_code != 0);
+    CHECK(mixed.stderr_text.find("Invalid tools option: tool names cannot be mixed with +name or -name entries") !=
+            std::string::npos);
+
+    const auto pattern = cch::tests::run_cli(cch::tests::CliRunOptions{
+            .args = {"--session", (workspace.path() / "pattern.jsonl").string(), "--tools", "-mcp__echo__*"},
+            .cwd = workspace.path(),
+            .env = {},
+            .stdin_text = {},
+    });
+    REQUIRE(pattern.exit_code != 0);
+    CHECK(pattern.stderr_text.find(
+                  "Invalid tools option: +name and -name entries take exact tool names, not patterns: -mcp__echo__*") !=
+            std::string::npos);
+}
+
 TEST_CASE("CLI rejects a tool pattern that matches nothing", "[cli][tools][issue871][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "bad-pattern.jsonl";

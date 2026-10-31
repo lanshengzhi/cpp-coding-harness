@@ -25,6 +25,7 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -32,6 +33,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -182,6 +184,62 @@ private:
     return std::move(*created);
 }
 
+/// One persisted transcript whose leading system message declares `names` in
+/// exactly that order. A thinking entry keeps resume from appending the
+/// metadata pi restores for older sessions, so a no-rewrite assertion compares
+/// only the resume path under test.
+[[nodiscard]] std::filesystem::path seed_recorded_loadout(
+        const tests::TempWorkspace& workspace, std::vector<std::string> names, std::string user_text = "seed") {
+    const auto path = workspace.path() / "recorded-loadout.jsonl";
+    auto store = harness::session::SessionStore::create_new(path,
+            harness::session::SessionMetadata{
+                    .session_id = "recorded-loadout",
+                    .created_at = "2026-10-30T00:00:00Z",
+                    .workspace = workspace.path(),
+                    .provider = "fake",
+                    .model = "fake-model",
+            });
+    REQUIRE(store.has_value());
+    REQUIRE(store->append_thinking_level_change(std::nullopt, "off").has_value());
+    ai::SystemMessage declaration;
+    declaration.timestamp = 1'700'000'000'000;
+    for (auto& name : names) {
+        declaration.tools_added.push_back(ai::Tool{
+                .name = std::move(name),
+                .description = "recorded declaration",
+                .parameters = support::JsonValue{support::JsonValue::object_t{}},
+        });
+    }
+    REQUIRE(store->append(ai::MessageVariant{std::move(declaration)}).has_value());
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message(std::move(user_text))}).has_value());
+    return path;
+}
+
+[[nodiscard]] std::string read_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::string{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>{}};
+}
+
+/// Resume one persisted transcript through the public Session Assembly entry,
+/// with an optional `--tools` list exactly as the CLI/SDK supplies it.
+[[nodiscard]] coding_agent::CreateAgentSessionResult make_resumed_session(tests::RuntimeFixture& runtime,
+        const tests::TempWorkspace& workspace,
+        const std::filesystem::path& session_path,
+        std::shared_ptr<tests::ScriptedProvider> provider,
+        std::optional<std::vector<std::string>> tools) {
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::ExplicitResumeSessionTarget{session_path};
+    options.workspace = workspace.path();
+    options.request_model = tests::scripted_request_model("fake", "fake-model");
+    options.execution_runtime_target = runtime.make_target();
+    options.session_facts.tools = std::move(tools);
+    auto models = tests::models_from_provider(std::move(provider));
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(options), std::nullopt, tests::cli_fake_overrides(std::move(models))));
+    REQUIRE(created.has_value());
+    return std::move(*created);
+}
+
 } // namespace
 
 TEST_CASE("tool_name_matches mirrors pi's exact-name and wildcard entry matcher",
@@ -227,6 +285,45 @@ TEST_CASE("resolve_tool_selection keeps MCP tools when the allowlist does not na
     auto empty = resolve_tool_selection(allowed_only({}), discovered);
     REQUIRE(empty.has_value());
     CHECK(empty->selected.empty());
+}
+
+TEST_CASE("tool list validation rejects mixed names and wildcard modifiers", "[coding_agent][tools][issue1111][spec]") {
+    using coding_agent::runtime::make_tool_selection;
+
+    auto mixed = make_tool_selection(std::vector<std::string>{"read", "+edit"}, {});
+    REQUIRE_FALSE(mixed.has_value());
+    CHECK(mixed.error().code == support::ErrorCode::Validation);
+    CHECK(mixed.error().message == "Invalid tools option: tool names cannot be mixed with +name or -name entries");
+
+    auto pattern = make_tool_selection(std::vector<std::string>{"-mcp__echo__*"}, {});
+    REQUIRE_FALSE(pattern.has_value());
+    CHECK(pattern.error().code == support::ErrorCode::Validation);
+    CHECK(pattern.error().message ==
+            "Invalid tools option: +name and -name entries take exact tool names, not patterns: -mcp__echo__*");
+
+    auto valid = make_tool_selection(std::vector<std::string>{"-bash", "+edit"}, {"write"});
+    REQUIRE(valid.has_value());
+    CHECK_FALSE(valid->allowed.has_value());
+    CHECK(valid->modifiers == std::vector<std::string>{"-bash", "+edit"});
+    CHECK(valid->excluded == std::vector<std::string>{"write"});
+}
+
+TEST_CASE("tool modifiers apply in order without moving an existing tool", "[coding_agent][tools][issue1111][spec]") {
+    using coding_agent::runtime::apply_tool_modifiers;
+
+    const std::vector<std::string> recorded{"read", "bash", "write"};
+    // The captured resume: removing `bash` keeps the remaining order and
+    // `+edit` appends at the end rather than sorting or replacing the list.
+    CHECK(apply_tool_modifiers(recorded, std::vector<std::string>{"-bash", "+edit"}) ==
+            std::vector<std::string>{"read", "write", "edit"});
+    // Reversing the entries applies them in entry order to the same base.
+    CHECK(apply_tool_modifiers(recorded, std::vector<std::string>{"+edit", "-bash"}) ==
+            std::vector<std::string>{"read", "write", "edit"});
+    // Adding a name already present is idempotent and does not move it.
+    CHECK(apply_tool_modifiers(recorded, std::vector<std::string>{"+read", "-write"}) ==
+            std::vector<std::string>{"read", "bash"});
+    // Removing an absent name and an empty modifier name are no-ops.
+    CHECK(apply_tool_modifiers(recorded, std::vector<std::string>{"-edit", "+", "-"}) == recorded);
 }
 
 TEST_CASE("resolve_tool_selection lets the denylist win over an allowlist match",
@@ -400,4 +497,80 @@ TEST_CASE("a selection pattern that matches no discovered tool fails assembly ex
     CHECK(created.error().code == support::ErrorCode::Validation);
     CHECK(created.error().message.find("mcp__nosuch__*") != std::string::npos);
     CHECK(created.error().message.find("matched no discovered tool") != std::string::npos);
+}
+
+TEST_CASE("resume restores the recorded tool order without rewriting the transcript",
+        "[coding_agent][tools][resume][tool-loadout][issue1111][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
+    tests::RuntimeFixture runtime;
+
+    // Recorded order differs from both the registry order (read, bash, edit,
+    // write) and a sorted set: a set-equality or registry-order restore cannot
+    // satisfy this assertion.
+    const auto session_path = seed_recorded_loadout(workspace, {"write", "read", "bash"});
+    const auto before = read_file(session_path);
+
+    auto resumed =
+            make_resumed_session(runtime, workspace, session_path, tests::make_scripted_fake_provider(), std::nullopt);
+    CHECK(resumed.session->snapshot().agent_state.active_tool_names ==
+            std::vector<std::string>{"write", "read", "bash"});
+    resumed.session->close();
+
+    CHECK(read_file(session_path) == before);
+}
+
+TEST_CASE("resume applies ordered tool modifiers and a removed tool cannot execute",
+        "[coding_agent][tools][resume][tool-loadout][issue1111][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
+    tests::RuntimeFixture runtime;
+
+    const auto session_path = seed_recorded_loadout(workspace, {"read", "bash", "write"});
+    const auto before = read_file(session_path);
+    const auto marker = workspace.path() / "removed-bash-ran";
+    support::JsonValue arguments{support::JsonValue::object_t{{"command", "touch " + marker.string()}}};
+    auto resumed = make_resumed_session(runtime,
+            workspace,
+            session_path,
+            std::make_shared<ToolCallProvider>("bash", arguments),
+            std::vector<std::string>{"-bash", "+edit", "+not-registered"});
+
+    // `-bash` keeps the remaining recorded order; `+edit` appends, and an
+    // added name the registry does not know is filtered rather than declared.
+    CHECK(resumed.session->snapshot().agent_state.active_tool_names ==
+            std::vector<std::string>{"read", "write", "edit"});
+    // Restoring the modified loadout does not rewrite the transcript.
+    CHECK(read_file(session_path) == before);
+
+    REQUIRE(tests::run_awaitable(runtime, resumed.session->prompt("run the removed tool")).has_value());
+    CHECK_FALSE(std::filesystem::exists(marker));
+    CHECK(tool_result_is_error(*resumed.session, "bash"));
+    CHECK(tool_result_text(*resumed.session, "bash").value_or("").find("unknown tool: bash") != std::string::npos);
+
+    resumed.session->close();
+}
+
+TEST_CASE("a fresh session applies tool modifiers to its default loadout in order",
+        "[coding_agent][tools][issue1111][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
+    tests::RuntimeFixture runtime;
+
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.request_model = tests::scripted_request_model("fake", "fake-model");
+    options.execution_runtime_target = runtime.make_target();
+    // The default loadout is [read, bash, edit, write] with `codemode`
+    // registered but inactive. Removing `bash` keeps the rest in place, and
+    // `+codemode` appends the default-inactive name.
+    options.session_facts.tools = std::vector<std::string>{"-bash", "+codemode"};
+    auto models = tests::models_from_provider(tests::make_scripted_fake_provider());
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(options), std::nullopt, tests::cli_fake_overrides(std::move(models))));
+    REQUIRE(created.has_value());
+    CHECK(created->session->snapshot().agent_state.active_tool_names ==
+            std::vector<std::string>{"read", "edit", "write", "codemode"});
+    created->session->close();
 }

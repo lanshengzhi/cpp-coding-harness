@@ -11,9 +11,9 @@
       "no-decision": 0
     },
     "implementation": {
-      "implemented": 11,
-      "partial": 9,
-      "missing": 10
+      "implemented": 13,
+      "partial": 8,
+      "missing": 9
     },
     "verification": {
       "verified": 0,
@@ -44,7 +44,6 @@
         "result": "C++ SessionFactory/SessionAssemblyContract tests cover assembly; no frozen capture comparison in audit-1048"
       },
       "gaps": [
-        "C++ assembly has no relative +name/-name tool selection",
         "resume assembly parses the JSONL file twice"
       ],
       "notes": "C++ path: src/coding_agent/runtime/SessionFactory.cpp:2204 and SessionLifecycle.cpp:163/223/363."
@@ -243,7 +242,7 @@
         "packages/coding-agent/test/default-tools-setting.test.ts:restores the loadout the transcript records"
       ],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "AgentSession build/replay",
@@ -253,13 +252,10 @@
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json",
         "scenario": "resume without modifiers restores the recorded order and does not rewrite the transcript",
-        "result": "pi restores [read,bash,write] in recorded order; C++ replay_active_tool_names returns registry order"
+        "result": "pi restores [read,bash,write] in recorded order and leaves the file byte-identical; C++ issue1111 restores recorded order and the file bytes unchanged."
       },
-      "gaps": [
-        "C++ reorders the restored loadout by registered tool order",
-        "C++ does not preserve the pending/activation state semantics"
-      ],
-      "notes": "C++: AgentSessionExecution.cpp:55-85,227-243; AgentSessionSnapshotTest.cpp resume loadout case."
+      "gaps": [],
+      "notes": "C++: AgentSessionExecution.cpp replay restores transcript order; ToolSelectionTest.cpp issue1111 resume/order cases; AgentSessionSnapshotTest.cpp imported-tool case."
     },
     {
       "id": "cch_coding_agent:Session:resume:relative-tool-modifiers",
@@ -270,7 +266,7 @@
         "packages/coding-agent/test/default-tools-setting.test.ts:applies +name and -name tool options to the recorded loadout"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "Session creation / resume tool policy",
@@ -280,14 +276,10 @@
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json",
         "scenario": "resume applies relative tool modifiers to the recorded loadout",
-        "result": "pi tools [-bash,+edit] over [read,bash,write] yields [read,write,edit]; C++ has no modifier parser"
+        "result": "pi tools [-bash,+edit] over [read,bash,write] yields [read,write,edit]; C++ issue1111 matches the ordered set, filters unavailable names, and rejects mixed/wildcard entries."
       },
-      "gaps": [
-        "ToolSelection only has allow/deny lists",
-        "CLI/SDK validation does not reject mixed names and modifiers",
-        "C++ has no modifier precedence test"
-      ],
-      "notes": "Explicit ADR 0075 application addition. C++: ToolSelection.hpp:14-23, AgentSessionCreationRequest.hpp:78-83."
+      "gaps": [],
+      "notes": "C++: ToolSelection.hpp/cpp make_tool_selection + apply_tool_modifiers; AgentSessionExecution.cpp applies them to the fresh default and resumed transcript loadout; ToolSelectionTest.cpp issue1111 cases (captured -bash,+edit order, mixed/wildcard rejection)."
     },
     {
       "id": "cch_coding_agent:Session:fork:branch-file",

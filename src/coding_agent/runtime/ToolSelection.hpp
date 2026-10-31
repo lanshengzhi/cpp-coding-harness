@@ -21,9 +21,28 @@ struct ToolSelection {
     std::optional<std::vector<std::string>> allowed;
     /// pi `--exclude-tools`: an empty list excludes nothing.
     std::vector<std::string> excluded;
+    /// pi `--tools` relative `+name`/`-name` entries. When present they change
+    /// the default selection on a fresh session and the recorded loadout on a
+    /// resumed one, instead of replacing it, so `allowed` stays unset.
+    std::vector<std::string> modifiers;
 
-    [[nodiscard]] bool empty() const { return !allowed.has_value() && excluded.empty(); }
+    [[nodiscard]] bool empty() const { return !allowed.has_value() && excluded.empty() && modifiers.empty(); }
 };
+
+/// Whether an entry is a pi `+name` or `-name` modifier.
+[[nodiscard]] bool is_tool_modifier(std::string_view entry);
+
+/// Validate and split pi's `--tools`/SDK `tools` list: either plain names and
+/// patterns, or only exact `+name`/`-name` entries. A mixed list and a wildcard
+/// modifier are Validation errors carrying pi's `getToolListError` text.
+[[nodiscard]] support::Expected<ToolSelection> make_tool_selection(
+        std::optional<std::vector<std::string>> tools, std::vector<std::string> excluded);
+
+/// pi `applyToolModifiers`: apply `+name`/`-name` entries to `base` in entry
+/// order. `+name` appends a name that is absent; `-name` removes it, preserving
+/// the positions of every other name. Non-modifier entries are ignored.
+[[nodiscard]] std::vector<std::string> apply_tool_modifiers(
+        std::span<const std::string> base, std::span<const std::string> entries);
 
 /// pi `createToolNameMatcher`: whether `name` matches one entry exactly (an
 /// entry without `*`) or as a `*` wildcard pattern.

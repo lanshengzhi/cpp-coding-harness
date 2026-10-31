@@ -856,10 +856,12 @@ struct SessionTargetNormalizationOptions {
     plan.custom_tools = std::move(request.custom_tools);
     plan.extension_tool_sources = std::move(request.extension_tool_sources);
     plan.mcp_servers = std::move(request.mcp_servers);
-    plan.tool_selection = ToolSelection{
-            .allowed = std::move(request.session_facts.tools),
-            .excluded = std::move(request.session_facts.exclude_tools),
-    };
+    auto tool_selection =
+            make_tool_selection(std::move(request.session_facts.tools), std::move(request.session_facts.exclude_tools));
+    if (!tool_selection) {
+        return std::unexpected(std::move(tool_selection.error()));
+    }
+    plan.tool_selection = std::move(*tool_selection);
     plan.mcp_http_servers = std::move(request.mcp_http_servers);
     plan.bash_session_environment = std::move(request.bash_session_environment);
     plan.project_trust_override = request.project_trust_override.has_value()
@@ -1828,7 +1830,9 @@ struct PreparedAssemblyTarget final {
     // selected names before the registry moves into the Agent. An unselected
     // tool never enters the Agent's surface, so it is unreachable and no
     // second filter is needed inside the Agent. The removal is reported so a
-    // selection is never silent.
+    // selection is never silent. A `+name`/`-name` modifier list is not an
+    // allowlist: only exclusions resolve here, and the Session applies the
+    // modifiers to its default or recorded loadout.
     if (!plan.tool_selection.empty()) {
         std::vector<std::string> discovered;
         for (const auto& definition : tools.definitions()) {
@@ -2080,6 +2084,8 @@ struct PreparedAssemblyTarget final {
     services.tools = std::move(tools);
     services.codemode_catalog = std::move(codemode_catalog);
     services.initially_inactive_tool_names = std::move(initially_inactive_tool_names);
+    services.default_tool_modifiers = std::move(plan.tool_selection.modifiers);
+    services.restore_tools_from_transcript = !plan.tool_selection.allowed.has_value();
     services.mcp_manager = std::move(mcp_manager);
 
     const auto session_path = open.store->path();

@@ -140,7 +140,7 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "2568e1c3f1ded3bd98c00be66a98424ab1c8b1bacbf393e1c7baa3ac200607cb"
+            "sha256": "141f442f24edeaafb73771c0c3a47f0b6d8b77612cd0ea45f7334af0409abf8b"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
@@ -262,12 +262,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
           ],
-          "testedRevision": "74fe2e35766f35039222ff56e4afee44c2d29827",
-          "recordedAt": "2026-10-31T12:37:32Z",
+          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
+          "recordedAt": "2026-10-31T12:51:46Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "2e5391210e9c9e4da97f2862a866174307c084f4edb0e1b7fb44566906d7eb38"
+            "sha256": "d7bb6686ab14d6e10404d7afd11a1fb4a516c3f3b4cb23a55d3539f513ce9d03"
           }
         },
         "rows": [
@@ -322,16 +322,22 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
         },
+        "revalidation1111": {
+          "reason": "#1111 restores the recorded tool loadout order and applies relative +name/-name tool modifiers, including a fix in McpProductionAdapters.cpp so replaying the transcript does not re-add a registered non-MCP tool to the declared set. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "src/coding_agent/runtime/McpProductionAdapters.cpp"
+          ]
+        },
         "revalidation1118": {
-          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The delivered rows, their scenarios and the routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The merge with #1111 keeps the recorded-loadout restore, the relative +name/-name modifiers and the MCP replay skip intact; the catalog is applied to the post-modifier initial loadout and to the restored loadout. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on the merged tree, and this change makes no new verification claim about those rows.",
           "changedInputs": [
             "cmake/targets/CodingAgent.cmake",
             "cmake/tests/CodingAgentTests.cmake",
-            "src/coding_agent/extensions/ExtensionTool.hpp",
             "src/coding_agent/runtime/McpProductionAdapters.cpp",
             "src/coding_agent/runtime/McpProductionAdapters.hpp",
             "src/coding_agent/runtime/McpSessionManager.cpp",
-            "src/coding_agent/runtime/McpSessionManager.hpp"
+            "src/coding_agent/runtime/McpSessionManager.hpp",
+            "src/coding_agent/extensions/ExtensionTool.hpp"
           ],
           "previousValidation": {
             "command": [
@@ -342,14 +348,14 @@
               "^(issue1090|issue1101|issue1104)$",
               "--output-on-failure",
               "--output-junit",
-              "/tmp/1105-existing-revalidation.xml"
+              "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1111.xml"
             ],
-            "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
-            "recordedAt": "2026-10-30T13:11:22Z",
+            "testedRevision": "74fe2e35766f35039222ff56e4afee44c2d29827",
+            "recordedAt": "2026-10-31T12:26:00Z",
             "selected": 36,
             "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
-              "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
+              "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1111.xml",
+              "sha256": "e93ca4fd72d6c6da2177205938a24a9a3a0d9fa3876c7d1db684a8163f6cff8d"
             }
           }
         }
@@ -372,14 +378,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+            "/tmp/1105-existing-revalidation.xml"
           ],
-          "testedRevision": "74fe2e35766f35039222ff56e4afee44c2d29827",
-          "recordedAt": "2026-10-31T12:37:32Z",
+          "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
+          "recordedAt": "2026-10-30T13:11:22Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "2e5391210e9c9e4da97f2862a866174307c084f4edb0e1b7fb44566906d7eb38"
+            "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+            "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
           }
         },
         "inputs": [
@@ -662,32 +668,6 @@
               "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
             }
           }
-        },
-        "revalidation1118": {
-          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The delivered rows, their scenarios and the routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "cmake/targets/CodingAgent.cmake",
-            "cmake/tests/CodingAgentTests.cmake"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "/tmp/1105-existing-revalidation.xml"
-            ],
-            "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
-            "recordedAt": "2026-10-30T13:11:22Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
-              "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
-            }
-          }
         }
       },
       {
@@ -736,11 +716,11 @@
           },
           {
             "path": "src/coding_agent/AgentSessionExecution.cpp",
-            "sha256": "c4f2a7e0198ff8d853375c3e37494bdba68d614a280e6b1520829d245bb26be9"
+            "sha256": "4dac844eef3cfc756094753af473750523d10387d87c421869084ffda385e061"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "2568e1c3f1ded3bd98c00be66a98424ab1c8b1bacbf393e1c7baa3ac200607cb"
+            "sha256": "141f442f24edeaafb73771c0c3a47f0b6d8b77612cd0ea45f7334af0409abf8b"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
@@ -756,7 +736,7 @@
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.cpp",
-            "sha256": "ef97c5c5778d5923a87269d3c2a535f8e51c613884048b7b663f3d808e192325"
+            "sha256": "ccb56d2283c9bdea465c016f7ed1c4d194c9df9cfeb30a6e2cefef1da244c45f"
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.hpp",
@@ -922,12 +902,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
           ],
-          "testedRevision": "74fe2e35766f35039222ff56e4afee44c2d29827",
-          "recordedAt": "2026-10-31T12:37:32Z",
+          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
+          "recordedAt": "2026-10-31T12:51:46Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "2e5391210e9c9e4da97f2862a866174307c084f4edb0e1b7fb44566906d7eb38"
+            "sha256": "d7bb6686ab14d6e10404d7afd11a1fb4a516c3f3b4cb23a55d3539f513ce9d03"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -951,8 +931,16 @@
             "src/coding_agent/AgentSessionExecution.cpp"
           ]
         },
+        "revalidation1111": {
+          "reason": "#1111 restores the recorded tool loadout order, applies relative +name/-name tool modifiers to the fresh and resumed loadout, and stops transcript replay from re-adding a registered non-MCP tool after Agent construction. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "src/coding_agent/AgentSessionExecution.cpp",
+            "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "src/coding_agent/runtime/SessionFactory.cpp"
+          ]
+        },
         "revalidation1118": {
-          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The delivered rows, their scenarios and the routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The merge with #1111 keeps the recorded-loadout restore, the relative +name/-name modifiers and the MCP replay skip intact; the catalog is applied to the post-modifier initial loadout and to the restored loadout. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on the merged tree, and this change makes no new verification claim about those rows.",
           "changedInputs": [
             "cmake/targets/CodingAgent.cmake",
             "cmake/tests/CodingAgentTests.cmake",
@@ -974,14 +962,14 @@
               "^(issue1090|issue1101|issue1104)$",
               "--output-on-failure",
               "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml"
+              "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1111.xml"
             ],
-            "testedRevision": "bbb0a7f69989cffea01d982e24731f96de6a62c8",
-            "recordedAt": "2026-10-31T10:22:38Z",
+            "testedRevision": "74fe2e35766f35039222ff56e4afee44c2d29827",
+            "recordedAt": "2026-10-31T12:26:00Z",
             "selected": 36,
             "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml",
-              "sha256": "3e863322720ac6f682b24e6f13c039dbe30d94b5d59b5c64ce90375e13187326"
+              "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1111.xml",
+              "sha256": "ff64512e3fc12d4d752a3ad2a6a355ef2228161bb46b0831810d1769cfe27238"
             }
           }
         }
@@ -1239,10 +1227,10 @@
         "partial": 4
       },
       "cch_coding_agent": {
-        "implemented": 80,
-        "missing": 19,
+        "implemented": 82,
+        "missing": 18,
         "not-applicable": 6,
-        "partial": 54
+        "partial": 53
       },
       "cch_durable": {
         "implemented": 6,
@@ -1267,10 +1255,10 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1027,
-      "missing": 212,
+      "implemented": 1029,
+      "missing": 211,
       "not-applicable": 18,
-      "partial": 207
+      "partial": 206
     },
     "verification": {
       "not-applicable": 28,
@@ -14184,7 +14172,6 @@
       },
       "missingObservation": "no frozen comparison; existing C++ regression check only: C++ SessionFactory/SessionAssemblyContract tests cover assembly; no frozen capture comparison in audit-1048",
       "gaps": [
-        "C++ assembly has no relative +name/-name tool selection",
         "resume assembly parses the JSONL file twice"
       ],
       "remainingWork": "no frozen comparison; existing C++ regression check only: C++ SessionFactory/SessionAssemblyContract tests cover assembly; no frozen capture comparison in audit-1048",
@@ -14882,7 +14869,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "Session creation / resume tool policy",
@@ -14902,16 +14889,12 @@
         "capturedScenarios": [
           "resume applies relative tool modifiers to the recorded loadout"
         ],
-        "result": "pi tools [-bash,+edit] over [read,bash,write] yields [read,write,edit]; C++ has no modifier parser"
+        "result": "pi tools [-bash,+edit] over [read,bash,write] yields [read,write,edit]; C++ issue1111 matches the ordered set, filters unavailable names, and rejects mixed/wildcard entries."
       },
       "missingObservation": null,
-      "gaps": [
-        "ToolSelection only has allow/deny lists",
-        "CLI/SDK validation does not reject mixed names and modifiers",
-        "C++ has no modifier precedence test"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Explicit ADR 0075 application addition. C++: ToolSelection.hpp:14-23, AgentSessionCreationRequest.hpp:78-83.",
+      "notes": "C++: ToolSelection.hpp/cpp make_tool_selection + apply_tool_modifiers; AgentSessionExecution.cpp applies them to the fresh default and resumed transcript loadout; ToolSelectionTest.cpp issue1111 cases (captured -bash,+edit order, mixed/wildcard rejection).",
       "lane": "1048",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -14920,7 +14903,7 @@
           "ticket": "1048",
           "rowId": "cch_coding_agent:Session:resume:relative-tool-modifiers",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
@@ -14935,7 +14918,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "AgentSession build/replay",
@@ -14955,15 +14938,12 @@
         "capturedScenarios": [
           "resume without modifiers restores the recorded order and does not rewrite the transcript"
         ],
-        "result": "pi restores [read,bash,write] in recorded order; C++ replay_active_tool_names returns registry order"
+        "result": "pi restores [read,bash,write] in recorded order and leaves the file byte-identical; C++ issue1111 restores recorded order and the file bytes unchanged."
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ reorders the restored loadout by registered tool order",
-        "C++ does not preserve the pending/activation state semantics"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "C++: AgentSessionExecution.cpp:55-85,227-243; AgentSessionSnapshotTest.cpp resume loadout case.",
+      "notes": "C++: AgentSessionExecution.cpp replay restores transcript order; ToolSelectionTest.cpp issue1111 resume/order cases; AgentSessionSnapshotTest.cpp imported-tool case.",
       "lane": "1048",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -14972,7 +14952,7 @@
           "ticket": "1048",
           "rowId": "cch_coding_agent:Session:resume:tool-loadout",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
