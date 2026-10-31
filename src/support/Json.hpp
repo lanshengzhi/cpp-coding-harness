@@ -33,4 +33,16 @@ namespace cch::support {
 /// iteration order (#1149).
 [[nodiscard]] Expected<std::string> canonical_json(const JsonValue& value);
 
+/// Whether `value` is a JSON object.
+[[nodiscard]] inline bool is_json_object(const JsonValue& value) { return value.holds<JsonValue::object_t>(); }
+
+/// The member `key` of `object`, or null when `object` is not an object or has
+/// no such member.
+[[nodiscard]] inline const JsonValue* json_member(const JsonValue& object, std::string_view key) {
+    if (!is_json_object(object)) return nullptr;
+    const auto& fields = object.get_object();
+    const auto found = fields.find(key);
+    return found == fields.end() ? nullptr : &found->second;
+}
+
 } // namespace cch::support

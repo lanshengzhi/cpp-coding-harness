@@ -26,15 +26,6 @@ using codemode::render_tool_sample;
 using codemode::to_codemode_identifier;
 using support::JsonValue;
 
-[[nodiscard]] bool is_object(const JsonValue& value) { return value.holds<JsonValue::object_t>(); }
-
-[[nodiscard]] const JsonValue* member(const JsonValue& object, std::string_view key) {
-    if (!is_object(object)) return nullptr;
-    const auto& fields = object.get_object();
-    const auto found = fields.find(std::string{key});
-    return found == fields.end() ? nullptr : &found->second;
-}
-
 const std::set<std::string>& stop_words() {
     static const std::set<std::string> words{"a",
             "an",
@@ -73,20 +64,21 @@ const std::set<std::string>& stop_words() {
 
 /// pi `schemaText`: schema/property descriptions and property names, recursively.
 void schema_text(const JsonValue& schema, std::vector<std::string>& parts) {
-    if (!is_object(schema)) return;
-    if (const JsonValue* description = member(schema, "description");
+    if (!support::is_json_object(schema)) return;
+    if (const JsonValue* description = support::json_member(schema, "description");
             description != nullptr && description->holds<std::string>()) {
         parts.push_back(description->get_string());
     }
-    if (const JsonValue* properties = member(schema, "properties"); properties != nullptr && is_object(*properties)) {
+    if (const JsonValue* properties = support::json_member(schema, "properties");
+            properties != nullptr && support::is_json_object(*properties)) {
         for (const auto& [name, property] : properties->get_object()) {
             parts.push_back(name);
             schema_text(property, parts);
         }
     }
-    if (const JsonValue* items = member(schema, "items"); items != nullptr) schema_text(*items, parts);
+    if (const JsonValue* items = support::json_member(schema, "items"); items != nullptr) schema_text(*items, parts);
     for (const char* key : {"anyOf", "oneOf", "allOf"}) {
-        if (const JsonValue* variants = member(schema, key);
+        if (const JsonValue* variants = support::json_member(schema, key);
                 variants != nullptr && variants->holds<JsonValue::array_t>()) {
             for (const auto& variant : variants->get_array())
                 schema_text(variant, parts);
@@ -283,8 +275,8 @@ support::Expected<std::string> CodemodeDiscovery::handle(std::string_view name, 
                     support::make_error(support::ErrorCode::Validation, "searchTools() expects a query string"));
         }
         std::size_t limit = kDefaultToolSearchLimit;
-        if (const JsonValue* options = arg_at(1); options != nullptr && is_object(*options)) {
-            if (const JsonValue* limit_value = member(*options, "limit"); limit_value != nullptr) {
+        if (const JsonValue* options = arg_at(1); options != nullptr && support::is_json_object(*options)) {
+            if (const JsonValue* limit_value = support::json_member(*options, "limit"); limit_value != nullptr) {
                 if (!limit_value->holds<double>() || limit_value->get_number() <= 0 ||
                         std::floor(limit_value->get_number()) != limit_value->get_number()) {
                     return std::unexpected(support::make_error(
@@ -292,7 +284,7 @@ support::Expected<std::string> CodemodeDiscovery::handle(std::string_view name, 
                 }
                 limit = static_cast<std::size_t>(limit_value->get_number());
             }
-            if (const JsonValue* name_space = member(*options, "namespace");
+            if (const JsonValue* name_space = support::json_member(*options, "namespace");
                     name_space != nullptr && !name_space->holds<JsonValue::null_t>()) {
                 if (!name_space->holds<std::string>()) {
                     return std::unexpected(support::make_error(

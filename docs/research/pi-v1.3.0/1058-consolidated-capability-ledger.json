@@ -160,7 +160,7 @@
           },
           {
             "path": "src/support/Json.hpp",
-            "sha256": "4b7efc0a5d1379f0f418635284359478d5f58c9caa02dd44eb677c5de4bc09ad"
+            "sha256": "b28d2fa0c12b4b923e63d54dae09b24dee9d26c164c5f7ea59a0a52fd3d60322"
           },
           {
             "path": "src/support/include/cch/support/JsonValue.hpp",
@@ -263,11 +263,11 @@
             "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
           ],
           "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-          "recordedAt": "2026-10-31T13:16:43Z",
+          "recordedAt": "2026-10-31T14:20:13Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "126c5f4c434f4807aa24ed6ca885d5970292c69f7b39f973d0f2581792bc5d87"
+            "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
           }
         },
         "rows": [
@@ -339,7 +339,8 @@
             "src/coding_agent/runtime/McpSessionManager.hpp",
             "src/coding_agent/extensions/ExtensionTool.hpp",
             "src/coding_agent/mcp/McpExtensionToolSource.cpp",
-            "src/coding_agent/mcp/McpExtensionToolSource.hpp"
+            "src/coding_agent/mcp/McpExtensionToolSource.hpp",
+            "src/support/Json.hpp"
           ],
           "previousValidation": {
             "command": [
@@ -905,11 +906,11 @@
             "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
           ],
           "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-          "recordedAt": "2026-10-31T13:16:43Z",
+          "recordedAt": "2026-10-31T14:20:13Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "126c5f4c434f4807aa24ed6ca885d5970292c69f7b39f973d0f2581792bc5d87"
+            "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -1036,7 +1037,7 @@
           },
           {
             "path": "src/coding_agent/extensions/ToolExposure.hpp",
-            "sha256": "ed7e8c5b7380c35e97015d07b1d42bdfbff3f878e8284a7d3564919a6e348159"
+            "sha256": "b1bce8fa0915e1d3b5d4d124cb98240b9af9d090c0bdf63132b89c4c96c6096d"
           },
           {
             "path": "src/coding_agent/extensions/ExtensionTool.hpp",
@@ -1052,7 +1053,7 @@
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeCatalog.cpp",
-            "sha256": "86eb69c6e96794478a36af01ff94869e7bd4d5092c96967a6afe55f351ac3dad"
+            "sha256": "6b02d666fe0b0f8d81a5a9ebc33cf881d5bb6742e406b4a1bc525f53d8036573"
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeCatalog.hpp",
@@ -1068,7 +1069,7 @@
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp",
-            "sha256": "040871a1aaf92f0ed1e70cb654c31477992db9c35dd7758401bc2deedcfc59d6"
+            "sha256": "396b8ffd3c5e3f15375c10068646009adb333e1657ce14a823f2c51714da3c7d"
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeDiscovery.hpp",
@@ -1200,7 +1201,7 @@
           },
           {
             "path": "src/support/Json.hpp",
-            "sha256": "4b7efc0a5d1379f0f418635284359478d5f58c9caa02dd44eb677c5de4bc09ad"
+            "sha256": "b28d2fa0c12b4b923e63d54dae09b24dee9d26c164c5f7ea59a0a52fd3d60322"
           },
           {
             "path": "src/support/AsyncResultBridge.hpp",
@@ -1236,7 +1237,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
-            "sha256": "ac28bcd5ea0b2288246ca15c581cdcf312828861362949c80299c43c95a9a350"
+            "sha256": "ed55e2d9c856d927b10e31c4f93b8ba37e23af5bc34ab383fe38f8f8183d190e"
           }
         ],
         "validation": {
@@ -1251,11 +1252,11 @@
             "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml"
           ],
           "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-          "recordedAt": "2026-10-31T13:17:36Z",
+          "recordedAt": "2026-10-31T14:20:13Z",
           "selected": 19,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
-            "sha256": "ac28bcd5ea0b2288246ca15c581cdcf312828861362949c80299c43c95a9a350"
+            "sha256": "ed55e2d9c856d927b10e31c4f93b8ba37e23af5bc34ab383fe38f8f8183d190e"
           }
         },
         "rows": [

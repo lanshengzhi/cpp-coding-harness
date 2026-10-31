@@ -6,7 +6,6 @@
 // tool-search/discovery surfaces present the same loadout the Agent executes.
 
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace cch::coding_agent::extensions {
@@ -33,23 +32,6 @@ enum class ToolExposure {
     Deferred,
     Hidden,
 };
-
-/// The canonical pi spelling of an exposure (`ToolExposure`).
-[[nodiscard]] inline std::string_view tool_exposure_name(ToolExposure exposure) {
-    switch (exposure) {
-    case ToolExposure::Direct:
-        return "direct";
-    case ToolExposure::ModelOnly:
-        return "model-only";
-    case ToolExposure::Codemode:
-        return "codemode";
-    case ToolExposure::Deferred:
-        return "deferred";
-    case ToolExposure::Hidden:
-        return "hidden";
-    }
-    return "direct";
-}
 
 /// pi `ToolNamespace`: a group of related tools, such as the tools of one MCP
 /// server. Codemode tools list them together.

@@ -86,12 +86,12 @@ re-exposure. A catalog that advertises a fake global or a non-executable tool fa
   36/36 into `deliveries/1118-revalidation.xml`; the #1101/#1104 pinned inputs this branch changed are
   recorded in their `revalidation1118` entries with the previous validation preserved.
 - Full Validation on the merged tree with `TERM_PROGRAM=herdr`: `cmake --build --preset vcpkg` then the
-  unfiltered `ctest --preset vcpkg` — 4,102 selected, 0 failed, 8 skipped, exit 0. The 8 skips are the
-  six frozen-pi durable continuation cases, the realtime-clock wrapper and the Native TUI differential
-  capture, none of which this slice touches. An environment-default run (`TERM_PROGRAM=ghostty`) fails
-  only the real-PTY evidence case that asserts `TERM_PROGRAM=herdr`; the load-sensitive
-  `closing codemode settles the run before its worker exit releases admission` passed on isolated
-  rerun.
+  unfiltered serial `ctest --preset vcpkg -j1` — 4,102 selected, 0 failed, 8 skipped, exit 0. The 8
+  skips are the six frozen-pi durable continuation cases, the realtime-clock wrapper and the Native
+  TUI differential capture, none of which this slice touches. A parallel run of the same tree failed
+  only the load-sensitive `bounded parallel cancellation leaves queued tool capabilities unstarted`,
+  which passed on isolated rerun; an environment-default run (`TERM_PROGRAM=ghostty`) fails only the
+  real-PTY evidence case that asserts `TERM_PROGRAM=herdr`.
 - Formatting: `scripts/format-check.sh origin/main` clean.
 - Consolidation: `consolidate_audits.py build` wrote 1,464 rows; `check` passed and the
   `cch_pi_v130_consolidation_*` cases passed.

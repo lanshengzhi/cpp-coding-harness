@@ -1,9 +1,11 @@
-#include "coding_agent/extensions/codemode/CodemodeCatalog.hpp"
+#include "CodemodeCatalog.hpp"
 
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 
 #include <cch/codemode/Declarations.hpp>
 #include <cch/support/JsonValue.hpp>
+
+#include "support/Json.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -71,15 +73,6 @@ constexpr std::size_t kCharsPerToken = 4;
 [[nodiscard]] bool is_listable(ToolExposure exposure) {
     return exposure != ToolExposure::Deferred && exposure != ToolExposure::ModelOnly &&
            exposure != ToolExposure::Hidden;
-}
-
-[[nodiscard]] bool is_object(const JsonValue& value) { return value.holds<JsonValue::object_t>(); }
-
-[[nodiscard]] const JsonValue* member(const JsonValue& object, std::string_view key) {
-    if (!is_object(object)) return nullptr;
-    const auto& fields = object.get_object();
-    const auto found = fields.find(std::string{key});
-    return found == fields.end() ? nullptr : &found->second;
 }
 
 [[nodiscard]] std::string trimmed(std::string_view text) {
@@ -192,15 +185,16 @@ std::vector<LoadoutTool> callable_tools(const std::vector<LoadoutTool>& tools) {
 }
 
 std::optional<std::string> describe_fields(const JsonValue& schema, std::size_t depth) {
-    if (!is_object(schema)) return std::nullopt;
-    const JsonValue* type = member(schema, "type");
-    const JsonValue* properties = member(schema, "properties");
+    if (!support::is_json_object(schema)) return std::nullopt;
+    const JsonValue* type = support::json_member(schema, "type");
+    const JsonValue* properties = support::json_member(schema, "properties");
     if (type == nullptr || !type->holds<std::string>() || type->get_string() != "object" || properties == nullptr ||
-            !is_object(*properties)) {
+            !support::is_json_object(*properties)) {
         return std::nullopt;
     }
     std::set<std::string, std::less<>> required;
-    if (const JsonValue* names = member(schema, "required"); names != nullptr && names->holds<JsonValue::array_t>()) {
+    if (const JsonValue* names = support::json_member(schema, "required");
+            names != nullptr && names->holds<JsonValue::array_t>()) {
         for (const auto& name : names->get_array()) {
             if (name.holds<std::string>()) required.insert(name.get_string());
         }
