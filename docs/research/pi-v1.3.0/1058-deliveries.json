@@ -649,7 +649,7 @@
         },
         {
           "path": "src/coding_agent/AgentSessionExecution.cpp",
-          "sha256": "82d41efcc8a82e39f13cf88551f191a26972e291af40164a0cba67a665649d90"
+          "sha256": "a2c7c0fb9ff835d8f4beaafa9c4324c495c0238ee7db178662bcf78e332c4db7"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -836,7 +836,7 @@
           "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml"
         ],
         "testedRevision": "bbb0a7f69989cffea01d982e24731f96de6a62c8",
-        "recordedAt": "2026-10-31T09:59:18Z",
+        "recordedAt": "2026-10-31T10:22:38Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml",

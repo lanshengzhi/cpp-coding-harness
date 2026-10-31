@@ -37,6 +37,17 @@ delta` (inputs `initialTools: ["a","b"]`, `replacementTools: ["b"]`,
   Additions follow the executable set's order; removals follow the previous
   declaration's order; a changed definition is a removal plus an addition, so
   replaying the delta always yields exactly the executable set.
+- **Every prompt declares its section diff on the same entry.** pi
+  `_prepareRun` → `_preparePromptAndToolLoadout`
+  (`core/agent-session.ts:1743-1754`) diffs the prompt sections against what the
+  live transcript replays, unshifts the resulting system message ahead of the
+  prompt's own messages, and `declareToolChanges` then anchors the tool delta on
+  that message. The port had sections only at Session construction and on
+  `/reload`, so a resumed session declared a tools-only entry. New:
+  `AgentSession::Impl::pending_prompt_sections` (empty when nothing changed, so
+  no section is ever declared without a difference) and
+  `Agent::prompt_with_prefix` (private, through `AgentPromptAccess`) carrying
+  `InitialInput::prefix_messages`, committed before the run's user message.
 - **A bare Agent seeds its declared loadout; a Session does not.** `Agent::Impl`
   seeds the leading system message from the system prompt and initial
   declarations (pi `createMutableAgentState` → `createInitialSystemMessage`) when
@@ -74,9 +85,17 @@ not an accepted equivalence.
 `a resumed session declares its loadout without rewriting recorded history`
 (`tests/coding_agent/AgentSessionSnapshotTest.cpp`) separates the ownership rule:
 before any prompt the resumed snapshot is the recorded message list verbatim, and
-after one prompt the recorded message keeps position 0 while the declaration
-follows it with `toolsAdded` equal to the executable set in order. Re-enabling the
-constructor seed fails both halves.
+after one prompt the recorded message keeps position 0 while one entry follows it
+carrying both the full section diff (`preamble` first, no removals) and
+`toolsAdded` equal to the non-empty executable set in order. Re-enabling the
+constructor seed fails both halves, and a non-empty check keeps the tool half
+from passing vacuously. `a prompt declares only the section diff and the loadout
+delta it needs` covers the existing-sections case: a stale recorded `preamble`
+is replaced, no removal is invented, and a second prompt that changes nothing
+declares nothing. Its recorded transcript declares a system message without
+tools, so the restored loadout is empty (pi `_restoreToolsFromTranscript`) and
+there is no tool delta to merge — the one-entry rule is asserted in the case
+above.
 
 The discriminating case is `a removed active tool never executes and the request
 declares the ordered delta`. It drives the public `Agent` seam only
@@ -97,8 +116,8 @@ index 0 to 1 and `agent_end.messages` gains it.
 
 ## Validation
 
-- Focused Validation, `ctest --preset vcpkg -L issue1110`: 12 selected, 12 passed,
-  0 failed, 0 skipped. `ctest --preset vcpkg -L tool-loadout`: the same 12.
+- Focused Validation, `ctest --preset vcpkg -L issue1110`: 13 selected, 13 passed,
+  0 failed, 0 skipped. `ctest --preset vcpkg -L tool-loadout`: the same 13.
 - Owning module label, `ctest --preset vcpkg -L '^agent$' -j2`: 218 selected, 218
   passed. The realtime-clock case is skipped in the shard-only selection and is
   covered by its `cch_agent_realtime_jump` wrapper inside that label.
@@ -107,21 +126,16 @@ index 0 to 1 and `agent_end.messages` gains it.
   passed, including `cch_owner_interface_standalone` compiling the new
   `<cch/agent/ToolLoadout.hpp>`. The build-phase Parity Architecture Gate passed
   after reconfiguring for the changed include sets (`PARITY-4011`).
-- Full Validation, `cmake --build --preset vcpkg` then `ctest --preset vcpkg -j2`:
-  4,071 selected, 4,065 passed, 6 failed, 8 skipped, exit 8. The machine was
-  running a second full suite in worktree `1174` at the same time (load average
-  ≈ 8). Five of the six failures pass on an immediate isolated rerun —
-  `bounded parallel cancellation leaves queued tool capabilities unstarted`
-  (three consecutive passes), `Process Terminal atomic stop and default stop
-  detect postdrain EIO on closed master`, `Projection publishes 100
-  message-update chunks inside the issue cost bound` (the quarantined #632 Debug
-  bound) and the two consolidation checks, which failed only because
-  `AgentSessionExecution.cpp` is a pinned input of the #1104 receipt and were
-  green again after the revalidation below. The sixth is environmental and
-  deterministic: `real PTY records Herdr markdown and OSC 52 terminal bytes`
-  requires `TERM_PROGRAM=herdr` and reads `ghostty` here. The 8 skips are the six
-  frozen-pi durable continuation cases, the realtime-clock wrapper and the Native
-  TUI differential capture, none of which this slice touches.
+- Full Validation on the branch after merging `origin/main` (`766f9a477`, which
+  brings the #1174 durable JSONL fsync work; no overlap with this slice), with
+  `TERM_PROGRAM=herdr` and no other suite running: `cmake --build --preset vcpkg`
+  then `ctest --preset vcpkg -j2` — 4,078 selected, 4,078 passed, 0 failed, 8
+  skipped, exit 0. The 8 skips are the six frozen-pi durable continuation cases,
+  the realtime-clock wrapper and the Native TUI differential capture, none of
+  which this slice touches. An earlier run of the same suite under a concurrent
+  full suite in worktree `1174` (load average ≈ 8) reported six failures; all
+  five non-environmental ones passed on isolated rerun, which is why the record
+  above is the unloaded run and not that one.
 - Formatting: `scripts/format-check.sh origin/main` clean.
 - Consolidation: `consolidate_audits.py build` wrote 1,464 rows; `check` passed
   (7 delivered rows, 562 scenarios, 144 explicit orphans, 0 uncovered) and both
@@ -130,6 +144,18 @@ index 0 to 1 and `agent_end.messages` gains it.
   selection was rerun into `deliveries/1104-revalidation-1110.xml` (36 selected,
   36 passed) and the record carries a `revalidation1110` entry; no other input was
   rehashed and that receipt makes no claim about this row.
+- PM review (second axis, after delivery): keep the Session's constructor seed
+  disabled — accepted as implemented; verify and complete the resumed prompt's
+  section diff at the Session seam — implemented as described above, and the
+  `ToolCallBatchRequest` audit found no production caller beyond `AgentRun.cpp`;
+  add the frozen event/duration assertions to the removal case — added (single
+  start/end pair, `is_error`, no duration on event or result, 1-then-0 tool
+  results per turn, `agent_end` slice of 5), with the unknown-tool text pinned as
+  the tracked divergence rather than claimed as parity; re-run focused,
+  architecture and Full Validation on the merged tree and re-verify the #1104
+  receipt — done. The TUI `+1`-per-prompt reading is confirmed by the section
+  entry now being emitted on the same message (counts unchanged at +3 for a
+  resume-then-prompt case: entry, user, assistant).
 - Two-axis review. Standards: 1 P1 (positional aggregate initialization) and 5 P2
   findings; the P1, the iterator-pair algorithm, the embedded transformation in
   the Session constructor, the include grouping and the inaccurate comment are
@@ -164,6 +190,9 @@ keep their own blockers.
 - Per-turn tool refresh still comes from live state (`_installAgentNextTurnRefresh`),
   so a declaration is recomputed from the run's executable set each turn; the
   delta for a mid-run change is declared on the following request, as in pi.
+- A resumed transcript that declares a system message without `toolsAdded`
+  restores an empty loadout (pi `_restoreToolsFromTranscript`). That is pi's
+  behavior, and it means such a session declares sections but no tool delta.
 - A permutation of the executable set with no membership or definition change
   emits no delta, exactly like pi's set-based `getToolStateChanges`, so the
   transcript's declared order stays at the first declaration while the request's
