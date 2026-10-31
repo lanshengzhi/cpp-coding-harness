@@ -46,12 +46,53 @@ Frozen behavior implemented here:
 4. Recovery truncates unconfirmed tails first, then applies the same
    main-flush-gated reclamation pass.
 
-**Settled reading of criterion 1.** "Then flushes the main marker before
-publication" is implemented as the frozen reclamation gate: `main.jsonl` is
-flushed after the marker append, before a sidecar is replaced or removed.
-Flushing `main.jsonl` on every commit after the marker append would add
-`main.jsonl` to `flushOrder` and fail the registered discriminator, whose
+**Settled reading of criterion 1, adjudicated by the PM.** "Then flushes the
+main marker before publication" is implemented as the frozen reclamation gate:
+`main.jsonl` is flushed after the marker append, before a sidecar is replaced
+or removed. Flushing `main.jsonl` on every commit after the marker append would
+add `main.jsonl` to `flushOrder` and fail the registered discriminator, whose
 `flushOrder` is exactly `[doc-3.jsonl]`.
+
+This is not a tolerance in the implementation. Frozen
+`storage.ts:reclaimSidecars` returns immediately when the reclamation plan is
+empty and only flushes `main.jsonl` when it is not, so frozen pi never flushes
+the main marker on the publication path at all. Criterion 1 and criterion 2
+cannot both hold literally; the PM adjudicated to keep the frozen behavior and
+is amending the criterion's wording to name the reclamation pass.
+
+## Sidecar append-order divergence and its coverage
+
+Frozen pi appends sidecars in write order (`[...encoded.sidecars]` over an
+insertion-ordered map); the C++ encoder emits them in sorted filename order
+(`EncodedCommit::sidecars` is a `std::map`). The divergence is real for a commit
+carrying two or more sidecars.
+
+Its scope relative to this ticket:
+
+- Both registered observations for this baseline carry **one** sidecar:
+  `a JSONL commit appends every sidecar before the main marker`
+  (`appendOrder: [doc-4.jsonl, main.jsonl]`) and `JSONL fsync flushes sidecar
+  bytes before the main marker is appended` (`appendOrder: [doc-3.jsonl,
+  main.jsonl]`, `flushOrder: [doc-3.jsonl]`). Neither pins the relative order of
+  two sidecars, so criterion 2's discriminator is unaffected and this ticket's
+  acceptance does not depend on the divergence.
+- The property this ticket does own is structural: flushed sidecars are flushed
+  **in the store's own append order**, whatever that order is. That holds for
+  any encoder order and is what the publication-order trace pins.
+- The publication-order trace creates two sidecars with ascending IDs, so the
+  sorted order and the write order coincide there and the trace matches frozen
+  pi's expected list. That case therefore does not establish general
+  multi-sidecar append-order parity, and it is not claimed to.
+
+Ownership: the relative append order of multiple sidecars belongs to the
+append-order rows (`cch_durable:Storage:jsonl:ordering`,
+`cch_durable:Storage:jsonl:sidecar`,
+`cch_durable:Storage:jsonl:main-marker`), whose registered scenario is also
+single-sidecar. Closing that gap needs a new frozen capture of one commit
+carrying two document creates plus its `appendOrder`, registered against the
+baseline before any row claims it; that capture and any encoder change are
+outside this ticket. Changing the encoder here would have altered append order
+for every existing JSONL store with no observation authorizing it.
 
 ## Delivered behavior
 
@@ -90,8 +131,9 @@ Flushing `main.jsonl` on every commit after the marker append would add
 Recorded divergence, not fixed here: frozen pi appends sidecars in write order,
 while the C++ encoder emits them in sorted filename order
 (`EncodedCommit::sidecars`). The publication-order trace creates documents in
-ascending ID order so the two orders coincide; changing the encoder is outside
-this ticket.
+ascending ID order so the two orders coincide; the coverage scope and the row
+that owns the gap are recorded above. Changing the encoder is outside this
+ticket.
 
 ## Tests
 
@@ -146,15 +188,25 @@ the working tree and reverted before delivery.
   struct and a defaulted parameter: `ctest --preset vcpkg -L architecture`
   selected **43** cases and passed **43/43** (66.24 s), Parity Architecture
   Gate PASS.
-- Full Validation after the review fixes: `cmake --build --preset vcpkg`
-  passed, followed by unfiltered `ctest --preset vcpkg`: **4065 selected,
-  4055 passed, 8 skipped, 2 failed** (259.62 s). The fullscreen scroll-to-end
-  indicator case passed on isolated rerun. The other failure, `real PTY records
-  Herdr markdown and OSC 52 terminal bytes`, asserts the host `TERM_PROGRAM` is
-  `herdr`; this session reports `ghostty`, and the case passes with
-  `TERM_PROGRAM=herdr` set (**16/16** assertions). No failure touches
-  `cch_durable`. An earlier full run had seven failures; six passed in isolation
-  and the seventh was the same host-terminal prerequisite.
+- Full Validation, final: `cmake --build --preset vcpkg` then unfiltered
+  `TERM_PROGRAM=herdr ctest --preset vcpkg`: **4065 selected, 4065 passed, 8
+  skipped, 0 failed** (214.50 s). `TERM_PROGRAM=herdr` is the prerequisite
+  declared by the PTY evidence case itself, which opens with
+  `REQUIRE(host_term_program == "herdr")`; the suite is otherwise unfiltered and
+  no test is excluded. The 8 skipped cases are the existing optional
+  live-pi/SQLite interchange, realtime-clock and Native TUI differential
+  skips.
+- Two earlier full runs are recorded for honesty. The first reported seven
+  failures and the second two; every one of them passed on isolated rerun or
+  under the documented host-terminal prerequisite, and none touched
+  `cch_durable`. One of those runs reported `staged install contains only the
+  relocatable Runtime` as an install-gate staleness failure: a source comment
+  edit landed after the last full build, so the Gate correctly refused a stale
+  install. The rebuild above is what cleared it. The remaining earlier
+  failures (timed-out query partial results, bounded parallel cancellation,
+  codemode worker exit, PTY stop drain, projection cost bound, streaming block
+  freeze, fullscreen scroll indicator, `/mcp` reconnect) are load-sensitive
+  cases in unrelated owners.
 - `scripts/format-check.sh bbb0a7f69` reports clean after `git clang-format`
   on the changed C++ files; `git diff --check` passes.
 
@@ -170,11 +222,14 @@ the delivery record is the evidence for the implementation advance.
 
 - No power-loss, SIGKILL or cross-process guarantee, and no cross-process
   locking. The injected flush failures are ordering observations, not crash
-  evidence.
-- A reclamation failure never changes a commit outcome; recovery retries
+  evidence.- A reclamation failure never changes a commit outcome; recovery retries
   deferred reclamation on reopen. Later commits perform their own reclamation
   plans.
-- The encoder's sorted sidecar order diverges from frozen pi's write order; the
-  trace test compensates with ascending IDs and the encoder is unchanged.
+- The encoder's sorted sidecar order diverges from frozen pi's write order for
+  commits with two or more sidecars. No registered observation for this
+  baseline pins that relative order, so it is outside this ticket's acceptance;
+  the append-order rows own it and need a new two-sidecar frozen capture first.
+  Flush order follows the store's own append order, which is the property this
+  ticket delivers.
 - Whole-row verification, capability promotion and the ledger rebuild stay with
   #1180. #1044 remains open and is not edited by this slice.
