@@ -1486,6 +1486,36 @@ TEST_CASE("Process Terminal hands appearance and keyboard replies to the Tui roo
     REQUIRE(tui.stop());
 }
 
+TEST_CASE("Process Terminal forwards mouse reports to the input sink", "[tui][terminal][mouse][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    std::mutex mutex;
+    std::vector<std::string> delivered;
+    REQUIRE(terminal.start(
+            [&](std::string input) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(mutex);
+                delivered.push_back(std::move(input));
+                return {};
+            },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+
+    const std::string mouse_stream = "\x1b[<64;50;10M\x1b[<65;20;5m";
+    REQUIRE(::write(pty->master.get(), mouse_stream.data(), mouse_stream.size()) ==
+            static_cast<ssize_t>(mouse_stream.size()));
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(mutex);
+        return delivered.size() == 2;
+    }));
+    {
+        std::lock_guard lock(mutex);
+        CHECK(delivered == std::vector<std::string>{"\x1b[<64;50;10M", "\x1b[<65;20;5m"});
+    }
+    REQUIRE(terminal.stop());
+}
+
 TEST_CASE("Process Terminal writes Kitty and iTerm2 inline image sequences to pty",
         "[tui][terminal][image][issue385][spec][issue995]") {
     auto pty = cch::tests::open_pseudo_terminal();

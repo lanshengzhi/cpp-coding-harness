@@ -502,6 +502,10 @@ template <typename T> void process_framed_input(T& impl, std::string sequence) {
     if (sequence.empty()) return;
     auto decoded = impl.input_state.decoder.feed(sequence);
     apply_terminal_responses(impl, decoded.responses);
+    for (auto& frame : decoded.mouse_frames) {
+        invoke_input(impl, std::move(frame));
+        impl.input_state.needs_input_flush = true;
+    }
     if (!decoded.forwarded_input.empty()) {
         invoke_input(impl, std::move(decoded.forwarded_input));
         impl.input_state.needs_input_flush = true;
@@ -1034,6 +1038,7 @@ template <typename T> void arm_readiness_timer_locked(T& impl) {
 
         deliver_resize_if_changed(impl);
         std::vector<detail::TerminalResponseVariant> responses;
+        std::vector<std::string> mouse_frames;
         std::string forwarded_input;
         bool needs_input_flush = false;
         {
@@ -1046,6 +1051,7 @@ template <typename T> void arm_readiness_timer_locked(T& impl) {
                 }
                 auto decoded = impl.input_state.decoder.flush();
                 responses = std::move(decoded.responses);
+                mouse_frames = std::move(decoded.mouse_frames);
                 forwarded_input = std::move(decoded.forwarded_input);
                 // pi's contract (stdin-buffer.ts flush + tui.ts handleInput): any
                 // forwarded fragment is followed by an empty-value delivery so the
@@ -1053,12 +1059,15 @@ template <typename T> void arm_readiness_timer_locked(T& impl) {
                 // by this decoder flush are forwarded input too — without the
                 // trailing flush a lone ESC stays held downstream until the next
                 // byte frames with it (issue #1038).
-                needs_input_flush = impl.input_state.needs_input_flush || !forwarded_input.empty();
+                needs_input_flush =
+                        impl.input_state.needs_input_flush || !forwarded_input.empty() || !mouse_frames.empty();
                 impl.input_state.needs_input_flush = false;
                 impl.input_state.negotiation_deadline = std::chrono::steady_clock::time_point::max();
             }
         }
         apply_terminal_responses(impl, responses);
+        for (auto& frame : mouse_frames)
+            invoke_input(impl, std::move(frame));
         if (!forwarded_input.empty()) invoke_input(impl, std::move(forwarded_input));
         if (needs_input_flush) invoke_input(impl, {});
         std::lock_guard lock(impl.mutex);

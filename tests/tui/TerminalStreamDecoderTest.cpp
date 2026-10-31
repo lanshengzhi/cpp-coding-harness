@@ -511,3 +511,19 @@ TEST_CASE("stream decoder forwards kitty image protocol acknowledgements without
     CHECK(result.events.empty());
     CHECK(result.forwarded_input == acknowledgement);
 }
+
+TEST_CASE("stream decoder parses batched SGR mouse reports in one feed", "[tui][decoder][mouse][spec]") {
+    tui::detail::TerminalStreamDecoder decoder;
+    const auto result = decoder.feed("\x1b[<64;50;10M\x1b[<65;20;5m");
+    CHECK(result.mouse_frames == std::vector<std::string>{"\x1b[<64;50;10M", "\x1b[<65;20;5m"});
+    CHECK(result.events.empty());
+    CHECK(result.forwarded_input.empty());
+}
+
+TEST_CASE("stream decoder handles SGR mouse report followed by typed input", "[tui][decoder][mouse][spec]") {
+    tui::detail::TerminalStreamDecoder decoder;
+    const auto result = decoder.feed("\x1b[<64;50;10Mhello");
+    CHECK(result.mouse_frames == std::vector<std::string>{"\x1b[<64;50;10M"});
+    CHECK(result.forwarded_input == "hello");
+    REQUIRE(result.events.size() == 5);
+}

@@ -577,10 +577,9 @@ std::optional<std::size_t> escape_sequence_length(std::string_view pending, bool
             return pending.size() >= 6 ? std::optional<std::size_t>{6} : std::nullopt;
         }
         if (pending.starts_with("\x1b[<")) {
-            if (pending.size() < 4) return std::nullopt;
-            const auto final = pending.back();
-            if (final != 'M' && final != 'm') return std::nullopt;
-            const auto body = pending.substr(3, pending.size() - 4);
+            const auto end = pending.find_first_of("Mm", 3);
+            if (end == std::string_view::npos) return std::nullopt;
+            const auto body = pending.substr(3, end - 3);
             std::size_t start = 0;
             int parts = 0;
             while (start <= body.size()) {
@@ -594,7 +593,7 @@ std::optional<std::size_t> escape_sequence_length(std::string_view pending, bool
                 if (separator == std::string_view::npos) break;
                 start = separator + 1;
             }
-            return parts == 3 ? std::optional<std::size_t>{pending.size()} : std::nullopt;
+            return parts == 3 ? std::optional<std::size_t>{end + 1} : std::nullopt;
         }
         for (std::size_t index = 2; index < pending.size(); ++index) {
             const auto value = static_cast<unsigned char>(pending[index]);
