@@ -13,6 +13,7 @@
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/mcp/Auth.hpp>
 #include <cch/mcp/HttpClient.hpp>
 #include <cch/mcp/Pkce.hpp>
 #include <cch/mcp/Protocol.hpp>
@@ -420,12 +421,17 @@ support::JsonValue create_mcp_result_schema(const std::optional<support::JsonVal
     }};
 }
 
-McpExtensionToolSource::McpExtensionToolSource(
-        ConstructionKey, std::shared_ptr<cch::mcp::Client> connection, std::vector<McpToolDescriptor> tools)
-    : connection_(std::move(connection)), server_name_(connection_->server_name()), tools_(std::move(tools)) {}
+McpExtensionToolSource::McpExtensionToolSource(ConstructionKey,
+        std::shared_ptr<cch::mcp::Client> connection,
+        std::vector<McpToolDescriptor> tools,
+        McpServerConfigBase base,
+        std::optional<std::string> instructions)
+    : connection_(std::move(connection)), server_name_(connection_->server_name()), tools_(std::move(tools)),
+      base_(std::move(base)), instructions_(std::move(instructions)) {}
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
 McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
+    McpServerConfigBase base = config;
     auto client = co_await support::detail::await_async_result(cch::mcp::StdioClient::connect(std::move(config)));
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
@@ -434,11 +440,16 @@ McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
     if (!tools) {
         co_return std::unexpected(std::move(tools.error()));
     }
-    co_return std::make_unique<McpExtensionToolSource>(ConstructionKey{}, std::move(*client), std::move(*tools));
+    co_return std::make_unique<McpExtensionToolSource>(ConstructionKey{},
+            std::move(*client),
+            std::move(*tools),
+            std::move(base),
+            (**client).server_instructions());
 }
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>> McpExtensionToolSource::connect_http(
         McpHttpServerConfig config, std::shared_ptr<cch::mcp::RequestAuthSource> request_auth) {
+    McpServerConfigBase base = config;
     auto client = co_await support::detail::await_async_result(cch::mcp::HttpClient::connect(
             std::move(config), std::make_shared<support::BoostBeastStreamTransport>(), std::move(request_auth)));
     if (!client) {
@@ -448,10 +459,23 @@ boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>
     if (!tools) {
         co_return std::unexpected(std::move(tools.error()));
     }
-    co_return std::make_unique<McpExtensionToolSource>(ConstructionKey{}, std::move(*client), std::move(*tools));
+    co_return std::make_unique<McpExtensionToolSource>(ConstructionKey{},
+            std::move(*client),
+            std::move(*tools),
+            std::move(base),
+            (**client).server_instructions());
 }
 
 support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource::load_tools() {
+    // pi `index.ts` `registerTools`: one namespace per server
+    // (`mcp__<server>`, alias `<server>`), with the configured description and
+    // the initialize result's instructions.
+    extensions::ToolNamespace server_namespace{
+            .name = cch::mcp::mcp_namespace(server_name_),
+            .aliases = {server_name_},
+            .description = base_.description.value_or(std::string{}),
+            .instructions = instructions_.value_or(std::string{}),
+    };
     std::vector<extensions::ExtensionTool> result;
     result.reserve(tools_.size());
     for (const auto& descriptor : tools_) {
@@ -460,6 +484,9 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
         tool.definition.description = descriptor.description;
         tool.definition.parameters = descriptor.parameters;
         tool.definition.output_schema = create_mcp_result_schema(descriptor.output_schema);
+        tool.exposure = to_tool_exposure(
+                get_mcp_tool_exposure(base_.tool_exposure, base_.exposure, descriptor.server_tool_name));
+        tool.name_space = server_namespace;
         // pi MCP tools carry no `executionMode`, so they are parallel-capable;
         // the transport serializes frames internally, which keeps that safe.
         tool.concurrency = agent::ToolConcurrency::ParallelSafe;

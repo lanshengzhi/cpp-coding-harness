@@ -522,25 +522,6 @@ AgentMcpToolSurface::AgentMcpToolSurface(agent::Agent& agent,
             std::make_move_iterator(registered_names.begin()), std::make_move_iterator(registered_names.end()));
 }
 
-namespace {
-
-/// pi `ToolDefinition.exposure` for one MCP registration.
-[[nodiscard]] extensions::ToolExposure to_tool_exposure(mcp::McpExposure exposure) {
-    switch (exposure) {
-    case mcp::McpExposure::Direct:
-        return extensions::ToolExposure::Direct;
-    case mcp::McpExposure::Codemode:
-        return extensions::ToolExposure::Codemode;
-    case mcp::McpExposure::Deferred:
-        return extensions::ToolExposure::Deferred;
-    case mcp::McpExposure::Hidden:
-        return extensions::ToolExposure::Hidden;
-    }
-    return extensions::ToolExposure::Codemode;
-}
-
-} // namespace
-
 void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     const std::string name = tool.name;
     const mcp::McpExposure exposure = tool.exposure;
@@ -560,7 +541,7 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     // the description groups under.
     extensions::LoadoutTool catalog_entry;
     catalog_entry.definition = extension.definition;
-    catalog_entry.exposure = to_tool_exposure(exposure);
+    catalog_entry.exposure = mcp::to_tool_exposure(exposure);
     catalog_entry.name_space = std::move(tool.name_space);
     auto call = std::move(tool.call);
     // pi `createMcpToolDefinition`'s execute observes the call's progress and
@@ -617,7 +598,7 @@ void AgentMcpToolSurface::register_resource_tools(
         const std::string description = tool.definition.description;
         extensions::LoadoutTool catalog_entry;
         catalog_entry.definition = tool.definition;
-        catalog_entry.exposure = to_tool_exposure(exposure);
+        catalog_entry.exposure = mcp::to_tool_exposure(exposure);
         static_cast<void>(agent_.register_tool(extensions::convert_extension_tool(std::move(tool))));
         known_names_.insert(name);
         descriptions_[name] = description;

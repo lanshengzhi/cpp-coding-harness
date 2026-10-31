@@ -190,6 +190,36 @@ private:
 
 } // namespace
 
+TEST_CASE("a connected MCP server's contributed tools carry their exposure and namespace",
+        "[coding_agent][mcp][codemode][catalog][issue1118][spec]") {
+    // pi `index.ts` `registerTools`: every tool of one server carries the
+    // configured exposure and one namespace (`mcp__<server>`, alias `<server>`,
+    // configured description and initialize instructions). The codemode catalog
+    // groups and describes them by that metadata.
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
+    tests::RuntimeFixture runtime;
+
+    auto config = echo_server_config();
+    config.exposure = coding_agent::mcp::McpExposure::Codemode;
+    config.description = "Echo fixture server";
+    auto source = tests::run_awaitable(
+            runtime, coding_agent::mcp::McpExtensionToolSource::connect_stdio(std::move(config)));
+    REQUIRE(source.has_value());
+    REQUIRE(source.value() != nullptr);
+    auto loaded = source.value()->load_tools();
+    REQUIRE(loaded.has_value());
+    REQUIRE_FALSE(loaded->empty());
+    for (const auto& tool : *loaded) {
+        CHECK(tool.exposure == coding_agent::extensions::ToolExposure::Codemode);
+        REQUIRE(tool.name_space.has_value());
+        CHECK(tool.name_space->name == "mcp__echo");
+        REQUIRE(tool.name_space->aliases.size() == 1);
+        CHECK(tool.name_space->aliases.front() == "echo");
+        CHECK(tool.name_space->description == "Echo fixture server");
+    }
+}
+
 TEST_CASE("connecting an MCP stdio server lists its tools with the pi naming and schema",
         "[coding_agent][mcp][issue869][spec]") {
     tests::TempWorkspace workspace;

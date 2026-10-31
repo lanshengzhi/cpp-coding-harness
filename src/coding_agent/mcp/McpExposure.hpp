@@ -6,6 +6,8 @@
 // `MCP_EXPOSURES`, `MCP_EXPOSURE_ALIASES`, `toolPatternRegExp`,
 // `getMcpToolExposure`).
 
+#include "coding_agent/extensions/ToolExposure.hpp"
+
 #include <optional>
 #include <string>
 #include <string_view>
@@ -65,6 +67,22 @@ enum class McpExposure { Codemode, Deferred, Direct, Hidden };
         return McpExposure::Codemode;
     }
     return std::nullopt;
+}
+
+/// pi `toToolExposure` (`extensions/mcp/tools.ts`): the MCP exposure as the
+/// application Tool exposure.
+[[nodiscard]] inline extensions::ToolExposure to_tool_exposure(McpExposure exposure) {
+    switch (exposure) {
+    case McpExposure::Direct:
+        return extensions::ToolExposure::Direct;
+    case McpExposure::Codemode:
+        return extensions::ToolExposure::Codemode;
+    case McpExposure::Deferred:
+        return extensions::ToolExposure::Deferred;
+    case McpExposure::Hidden:
+        return extensions::ToolExposure::Hidden;
+    }
+    return extensions::ToolExposure::Codemode;
 }
 
 /// pi `toolPatternRegExp`: `*` matches any characters and every other character
