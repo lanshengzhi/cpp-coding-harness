@@ -28,6 +28,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -168,9 +169,21 @@ struct ResolvedToolCall {
     std::optional<ai::ToolResultMessage> rejection;
 };
 
-[[nodiscard]] ResolvedToolCall resolve_tool_call(ToolRegistry& registry, const ai::ToolCallContent& call) {
+/// pi `prepareToolCall` resolves a model-issued call against
+/// `currentContext.tools`, the run's executable set: a registered tool the run
+/// did not declare is unknown to the model and never executes. The registered
+/// set stays reachable for nested calls (pi `_getCallableTools`), which is the
+/// seam a codemode script or `tool_search` uses to reach undeclared tools.
+[[nodiscard]] bool is_executable_tool(std::span<const ai::Tool> executable, std::string_view name) {
+    return std::ranges::any_of(executable, [name](const ai::Tool& tool) { return tool.name == name; });
+}
+
+[[nodiscard]] ResolvedToolCall resolve_tool_call(
+        ToolRegistry& registry, std::span<const ai::Tool> executable, const ai::ToolCallContent& call) {
     ResolvedToolCall resolved;
-    resolved.tool = registry.find(call.name);
+    if (is_executable_tool(executable, call.name)) {
+        resolved.tool = registry.find(call.name);
+    }
     if (resolved.tool == nullptr) {
         resolved.rejection = error_tool_result(call,
                 bounded_tool_argument_diagnostic("unknown tool: " + bounded_tool_argument_component(call.name, 512) +
@@ -362,7 +375,7 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
         co_return std::unexpected(start_emit.error());
     }
 
-    auto resolved = resolve_tool_call(registry_, call);
+    auto resolved = resolve_tool_call(registry_, request.context.tools, call);
     SettledToolCall settled;
     if (resolved.rejection) {
         settled.tool_result = std::move(*resolved.rejection);
@@ -450,11 +463,13 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
 
     const auto* parallel = std::get_if<BoundedParallelToolExecution>(&options_.execution);
 
-    const bool any_sequential_tool = std::any_of(
-        calls.begin(), calls.end(), [&](const ai::ToolCallContent& call) {
-            const auto* tool = registry_.find(call.name);
-            return tool != nullptr && tool->concurrency == ToolConcurrency::Exclusive;
-        });
+    const bool any_sequential_tool = std::ranges::any_of(calls, [&](const ai::ToolCallContent& call) {
+        if (!is_executable_tool(request.context.tools, call.name)) {
+            return false;
+        }
+        const auto* tool = registry_.find(call.name);
+        return tool != nullptr && tool->concurrency == ToolConcurrency::Exclusive;
+    });
     if (parallel == nullptr || any_sequential_tool || parallel->max_in_flight == 1) {
         co_return co_await execute_sequential(request, calls, sink);
     }

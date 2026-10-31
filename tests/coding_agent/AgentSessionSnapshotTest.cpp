@@ -499,3 +499,50 @@ TEST_CASE("Frontend resumed snapshot preserves branch-summary active-path meanin
           "summary of abandoned branch");
     resumed->session->close();
 }
+
+// #1110: the loadout is declared at the request, not by rewriting the recorded
+// transcript. pi `createMutableAgentState` seeds a leading system message for a
+// bare Agent; pi's `sdk.ts` builds the session's Agent with an empty prompt and
+// tool baseline, so a resumed frontend snapshot sees exactly the recorded
+// history and the loop declares the executable loadout before the first
+// request (pi `declareToolChanges`).
+TEST_CASE("a resumed session declares its loadout without rewriting recorded history",
+        "[sdk][snapshot][resume][tool-loadout][issue1110][spec]") {
+    TestPaths paths;
+    tests::RuntimeFixture runtime;
+    auto store = harness::session::SessionStore::create_new(paths.session_file, test_metadata(paths));
+    REQUIRE(store.has_value());
+    REQUIRE(store->append(user_message("recorded turn")).has_value());
+
+    auto resumed = resume_for_frontend(paths, runtime);
+    REQUIRE(resumed.has_value());
+    auto* session = resumed->session.get();
+
+    // Before any prompt the live transcript is the recorded history verbatim.
+    const auto before = session->snapshot().agent_state.messages;
+    REQUIRE(before.size() == 1);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(before[0]));
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(before[0])) == "recorded turn");
+
+    REQUIRE(run_awaitable(runtime, session->prompt("declared")).has_value());
+
+    // The recorded message keeps its position; the declaration the run emits
+    // follows it, ahead of the prompt's own messages.
+    const auto after = session->snapshot().agent_state.messages;
+    REQUIRE(after.size() == 4);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(after[0]));
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(after[0])) == "recorded turn");
+    const auto* declaration = std::get_if<ai::SystemMessage>(&after[1]);
+    REQUIRE(declaration != nullptr);
+    CHECK(declaration->tools_removed.empty());
+    // The declared set is exactly the executable set, in its order.
+    std::vector<std::string> declared_names;
+    declared_names.reserve(declaration->tools_added.size());
+    for (const auto& tool : declaration->tools_added) {
+        declared_names.push_back(tool.name);
+    }
+    CHECK(declared_names == session->snapshot().agent_state.active_tool_names);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(after[2]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(after[3]));
+    session->close();
+}

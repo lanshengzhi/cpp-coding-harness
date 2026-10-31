@@ -30,7 +30,10 @@ struct ToolCallExecutorOptions {
 
 struct ToolCallBatchRequest {
     const ai::AssistantMessage& assistant_message; // must outlive the execute coroutine
-    const ai::AiContext& context;                  // must outlive the execute coroutine
+    /// pi `currentContext`: the run's model-facing context. `context.tools` is
+    /// the run's executable set — a model-issued call resolves only against
+    /// these names, so a tool the run did not declare never executes.
+    const ai::AiContext& context; // must outlive the execute coroutine
 };
 
 struct ToolCallBatchResult {

@@ -1463,11 +1463,16 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     CHECK(visible_screen(terminal).find("live user text") != std::string::npos);
 
     const auto authoritative_after = resumed->session->snapshot().agent_state.messages;
-    REQUIRE(authoritative_after.size() == authoritative_before.size() + 2);
-    const auto* live_user = std::get_if<ai::UserMessage>(&authoritative_after[authoritative_before.size()]);
+    // Resumed history carries no tool declaration, so the run declares the
+    // loadout before the prompt's first request (pi `declareToolChanges`).
+    REQUIRE(authoritative_after.size() == authoritative_before.size() + 3);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(authoritative_after[authoritative_before.size()]));
+    const auto* live_user = std::get_if<ai::UserMessage>(&authoritative_after[authoritative_before.size() + 1]);
     REQUIRE(live_user != nullptr);
     REQUIRE(std::get<std::vector<ai::Content>>(live_user->content).size() == 2);
     CHECK(std::get<ai::ImageContent>(std::get<std::vector<ai::Content>>(live_user->content)[1]).data == png_data);
+    // The resumed messages keep their recorded positions; the declaration the
+    // run appends lands after them.
     CHECK(std::get<ai::ImageContent>(
                   std::get<std::vector<ai::Content>>(std::get<ai::UserMessage>(authoritative_after[0]).content)[1])
                     .data == png_data);
@@ -2257,7 +2262,7 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
 
     REQUIRE(terminal.inject_input("continue here\r"));
     REQUIRE(pump_until(io, [&] {
-        return resumed->session->message_count() == authoritative_before.size() + 2 && !resumed->session->is_busy() &&
+        return resumed->session->message_count() == authoritative_before.size() + 3 && !resumed->session->is_busy() &&
                visible_screen(terminal).find("fake: continue here") != std::string::npos;
     }));
 

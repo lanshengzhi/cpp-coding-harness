@@ -200,6 +200,14 @@ struct AsyncAgentOptions {
     /// through the sequential path exactly like pi's per-tool
     /// `executionMode: "sequential"` override (ADR 0034 / #355).
     ToolExecutionPolicy tool_execution{BoundedParallelToolExecution{}};
+    /// Whether construction seeds a leading system message declaring the initial
+    /// loadout (pi `createMutableAgentState` → `createInitialSystemMessage`).
+    /// A bare Agent keeps pi's default; a host that owns the transcript's system
+    /// messages itself — the Session, like pi's `sdk.ts`, which builds its Agent
+    /// with `systemPrompt: ""` and `tools: []` — turns it off so the recorded
+    /// history is never rewritten and the loop declares the loadout as a delta on
+    /// the first request instead.
+    bool seed_initial_system_message{true};
 };
 
 struct AgentState {

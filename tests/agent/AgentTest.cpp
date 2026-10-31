@@ -1171,11 +1171,9 @@ TEST_CASE("stateful Agent owns configured tool state through a fake tool run", "
     REQUIRE(snapshot.active_tool_names.size() == 1);
     CHECK(snapshot.active_tool_names[0] == "read");
     CHECK(snapshot.pending_tool_call_ids.empty());
-    REQUIRE(snapshot.messages.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(snapshot.messages[2]));
-    CHECK(ai::text_from_content(
-              std::get<ai::ToolResultMessage>(snapshot.messages[2]).content) ==
-          "file contents");
+    REQUIRE(snapshot.messages.size() == 5);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(snapshot.messages[3]));
+    CHECK(ai::text_from_content(std::get<ai::ToolResultMessage>(snapshot.messages[3]).content) == "file contents");
 }
 
 TEST_CASE("stateful Agent retains its configured thinking state across a run", "[agent][stateful][issue35][spec]") {

@@ -17,6 +17,7 @@ cch_parity_declare_target(
         src/agent/ToolSchemaCompile.cpp
         src/agent/ToolSchemaValidate.cpp
         src/agent/ToolCallExecutor.cpp
+        src/agent/ToolLoadout.cpp
         src/agent/ToolRegistry.cpp
     DEPENDS
         cch_ai

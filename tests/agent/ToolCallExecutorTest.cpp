@@ -202,12 +202,18 @@ struct ExecuteResult {
     std::vector<agent::AgentLifecycleEvent> events;
 };
 
-ExecuteResult run_executor(
-    agent::ToolCallExecutor& executor,
-    const ai::AssistantMessage& assistant_message,
-    const ai::AiContext& context = {},
-    bool* tool_execution_started = nullptr,
-    bool fail_updates = false) {
+ExecuteResult run_executor(agent::ToolCallExecutor& executor,
+        agent::ToolRegistry& registry,
+        const ai::AssistantMessage& assistant_message,
+        ai::AiContext context = {},
+        bool* tool_execution_started = nullptr,
+        bool fail_updates = false) {
+    // A model-issued call resolves against the context's executable set (pi
+    // `currentContext.tools`). These cases execute the registered tools, so the
+    // helper declares the registry's definitions unless the case says otherwise.
+    if (context.tools.empty()) {
+        context.tools = registry.definitions();
+    }
     boost::asio::thread_pool pool{4};
     std::optional<support::Expected<agent::ToolCallBatchResult>> result;
     std::vector<agent::AgentLifecycleEvent> events;
@@ -343,7 +349,7 @@ void check_format_fixture(
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls(std::move(calls));
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == (valid ? 2 : 1));
@@ -369,7 +375,7 @@ void check_json_format_fixture(const tests::JsonFormatFixture& fixture) {
         "call-format",
         "json-format-fixture",
         std::string(fixture.raw_json))});
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -401,7 +407,7 @@ TEST_CASE("ToolCallExecutor executes a single exclusive call through the sequent
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -429,7 +435,7 @@ TEST_CASE("ToolCallExecutor records the measured duration on the settled result 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -458,7 +464,7 @@ TEST_CASE("ToolCallExecutor records the duration of a failing tool call", "[agen
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -500,7 +506,7 @@ TEST_CASE("an afterToolCall override keeps the recorded duration", "[agent][tool
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -535,7 +541,7 @@ TEST_CASE("nested tool events measure execution without the before hook", "[agen
     agent::ToolCallExecutorOptions options;
     options.before_tool_call = &hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
-    auto run = run_executor(executor, assistant_with_calls({make_call("parent-1", "parent")}));
+    auto run = run_executor(executor, registry, assistant_with_calls({make_call("parent-1", "parent")}));
     REQUIRE(run.result);
     const agent::ToolExecutionEndEvent* nested_end = nullptr;
     for (const auto& event : run.events) {
@@ -578,7 +584,7 @@ TEST_CASE("nested cancellation after the before hook does not execute the child"
     options.before_tool_call = &hook;
     options.stop_token = stop.get_token();
     agent::ToolCallExecutor executor{registry, std::move(options)};
-    auto run = run_executor(executor, assistant_with_calls({make_call("parent-1", "parent")}));
+    auto run = run_executor(executor, registry, assistant_with_calls({make_call("parent-1", "parent")}));
     REQUIRE(run.result);
     CHECK(child_state->invocation_count() == 0);
     const agent::ToolExecutionEndEvent* nested_end = nullptr;
@@ -595,7 +601,7 @@ TEST_CASE("nested cancellation after the before hook does not execute the child"
 TEST_CASE("an unknown tool has no execution duration", "[agent][tool-executor][issue1106][spec]") {
     agent::ToolRegistry registry;
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
-    auto run = run_executor(executor, assistant_with_calls({make_call("missing-1", "missing")}));
+    auto run = run_executor(executor, registry, assistant_with_calls({make_call("missing-1", "missing")}));
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -621,7 +627,7 @@ TEST_CASE("a failing after hook retains the executed tool duration", "[agent][to
     agent::ToolCallExecutorOptions options;
     options.after_tool_call = &after_hook;
     agent::ToolCallExecutor executor{registry, std::move(options)};
-    auto run = run_executor(executor, assistant_with_calls({make_call("call-1", "read_file")}));
+    auto run = run_executor(executor, registry, assistant_with_calls({make_call("call-1", "read_file")}));
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -655,7 +661,7 @@ TEST_CASE("a blocked call records no duration because it never executed", "[agen
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -688,7 +694,7 @@ TEST_CASE("tool duration ignores a changed realtime clock", "[agent][tool-execut
             });
     REQUIRE(registry.add(std::move(tool)));
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
-    auto run = run_executor(executor, assistant_with_calls({make_call("clock-1", "clock")}));
+    auto run = run_executor(executor, registry, assistant_with_calls({make_call("clock-1", "clock")}));
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
     CHECK(std::chrono::abs(after - before) > std::chrono::hours{1});
@@ -722,7 +728,7 @@ TEST_CASE("the recorded duration covers execute only, not the policy hooks", "[a
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -805,7 +811,7 @@ TEST_CASE("sequential execution coerces and validates the foundational argument 
         R"({"enabled":"true","binary_number":"0b10","hexadecimal_number":"0x10","count":false,"label":1000000,"large_label":100000000000000000000,"scientific_label":1e21,"tiny_label":0.000001,"spaced_number":"\u00a042\u00a0","nothing":"","values":[],"operation":"read","metadata":{"free":true},"dynamic":{"feature":{"active":"false"}},"settings":{"level":"2"},"retries":"3"})";
     auto assistant = assistant_with_calls({make_call("call-1", "configure", raw_arguments)});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -864,7 +870,7 @@ TEST_CASE(
         "radix",
         R"("0x60ccebff3e1f1a18ec01839708f0fd8c49fa56d1e8821b44121dc6")")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -892,7 +898,7 @@ TEST_CASE("sequential execution recursively prepares schema and tuple array item
         "collections",
         std::string(tests::kRecursiveCollectionArguments))});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -922,7 +928,7 @@ TEST_CASE("sequential execution enforces numeric string object and array constra
         make_call("call-lower", "bounded", std::string(tests::kBoundedLowerInvalidArguments)),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 4);
@@ -960,7 +966,7 @@ TEST_CASE("recorded TypeBox boundary behavior remains executable",
         "baseline-boundaries",
         std::string(tests::kTypeBoxBoundaryArguments))});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -999,7 +1005,7 @@ TEST_CASE("recorded TypeBox Unicode string-bound fast paths remain executable",
 
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls(std::move(calls));
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == tests::kStringBoundFixtures.size() * 2);
@@ -1070,7 +1076,7 @@ TEST_CASE("array item fixtures enforce boolean schemas additional items and patt
         make_call("call-unsupported-pattern", "unsupported-pattern", R"("😀")"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 8);
@@ -1124,7 +1130,7 @@ TEST_CASE("composition coercion selects only satisfying branches and validates t
         make_call("call-ambiguous", "ambiguous", "3"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 3);
@@ -1165,7 +1171,7 @@ TEST_CASE("recorded baseline formats reject invalid strings while unknown format
         "annotation-format",
         R"("not-project-shaped")")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -1241,7 +1247,7 @@ TEST_CASE("unsupported dialect vocabulary reference and executable constructs fa
         make_call("call-annotations", "annotations", "2"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 7);
@@ -1310,7 +1316,7 @@ TEST_CASE("sequential schema-invalid arguments are isolated before hooks and too
             R"({"a.b":"danger","a":{"b":"danger"},"revision":2,"settings":{"mode":"danger"}})"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -1398,7 +1404,7 @@ TEST_CASE("sequential preparation failures complete their lifecycle without supp
         make_call("call-valid", "valid", "false"),
     });
 
-    auto run = run_executor(executor, assistant, {}, &tool_execution_started);
+    auto run = run_executor(executor, registry, assistant, {}, &tool_execution_started);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 7);
@@ -1481,7 +1487,7 @@ TEST_CASE("malformed argument diagnostics redact before truncation and preserve 
         make_call("call-valid", "valid", "false"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -1547,7 +1553,7 @@ TEST_CASE("schema validation diagnostics keep credential-like locations actionab
         make_call("call-invalid", "configure", R"({"api_key":{}})"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -1568,7 +1574,7 @@ TEST_CASE("bounded preparation diagnostics preserve UTF-8 and actionable locatio
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", unknown_name, R"({})")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -1611,7 +1617,7 @@ TEST_CASE("exclusive tools force a bounded batch to execute sequentially", "[age
         make_call("call-2", "beta"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     CHECK(probe.max_active.load() == 1);
@@ -1649,7 +1655,7 @@ TEST_CASE("sequential cancellation during a hook does not start later calls",
         make_call("call-3", "work"),
     });
 
-    auto execution = run_executor(executor, assistant);
+    auto execution = run_executor(executor, registry, assistant);
 
     REQUIRE(execution.result);
     CHECK(tool_ptr->invocation_count() == 0);
@@ -1694,7 +1700,7 @@ TEST_CASE("bounded parallel cancellation leaves queued tool capabilities unstart
         make_call("call-6", "work"),
     });
 
-    auto execution = run_executor(executor, assistant);
+    auto execution = run_executor(executor, registry, assistant);
 
     REQUIRE(execution.result);
     CHECK(tool_ptr->invocation_count() == 2);
@@ -1739,7 +1745,7 @@ TEST_CASE("pre-aborted parallel batch produces aborted results without tool exec
         make_call("call-3", "work"),
     });
 
-    auto execution = run_executor(executor, assistant);
+    auto execution = run_executor(executor, registry, assistant);
 
     REQUIRE(execution.result);
     CHECK(tool_ptr->invocation_count() == 0);
@@ -1779,7 +1785,7 @@ TEST_CASE("pre-aborted sequential batch emits no tool execution events", "[agent
         make_call("call-2", "work"),
     });
 
-    auto execution = run_executor(executor, assistant);
+    auto execution = run_executor(executor, registry, assistant);
 
     REQUIRE(execution.result);
     CHECK(tool_ptr->invocation_count() == 0);
@@ -1809,7 +1815,7 @@ TEST_CASE("bounded parallel execution enforces max_in_flight", "[agent][tool-exe
         make_call("call-4", "lookup"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 4);
@@ -1872,7 +1878,7 @@ TEST_CASE("sequential and bounded parallel batches share argument preparation se
         options.execution = std::move(policy);
         options.before_tool_call = &before_hook;
         agent::ToolCallExecutor executor{registry, std::move(options)};
-        auto run = run_executor(executor, assistant);
+        auto run = run_executor(executor, registry, assistant);
 
         REQUIRE(run.result);
         REQUIRE(snapshot.before_hook_arguments_encoded);
@@ -1999,7 +2005,7 @@ TEST_CASE("bounded parallel preparation completes immediate failures before the 
         make_call("call-fast", "fast"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 7);
@@ -2080,7 +2086,7 @@ TEST_CASE("bounded parallel execution accepts a limit of one", "[agent][tool-exe
         make_call("call-2", "lookup"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     CHECK(probe.max_active.load() == 1);
@@ -2104,7 +2110,7 @@ TEST_CASE("Tool Call Executor treats bounded parallel zero as no explicit cap", 
         make_call("call-2", "lookup"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -2132,7 +2138,7 @@ TEST_CASE("bounded parallel execution preserves source-order results", "[agent][
         make_call("call-2", "beta"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -2216,6 +2222,7 @@ TEST_CASE("bounded parallel execution serializes suspended hooks and lifecycle c
         make_call("call-2", "beta"),
     });
     ai::AiContext context;
+    context.tools = registry.definitions();
 
     boost::asio::thread_pool pool{4};
     std::optional<support::Expected<agent::ToolCallBatchResult>> result;
@@ -2253,7 +2260,7 @@ TEST_CASE("ToolCallExecutor maps lookup and argument failures to results", "[age
         make_call("call-2", "read_file", "not-json"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -2282,7 +2289,7 @@ TEST_CASE("ToolCallExecutor keeps hook policy behind its interface", "[agent][to
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -2313,7 +2320,7 @@ TEST_CASE("ToolCallExecutor applies after-hook overrides and termination", "[age
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -2330,7 +2337,7 @@ TEST_CASE("tool errors prevent batch termination", "[agent][tool-executor][spec]
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     CHECK_FALSE(run.result->terminate_batch);
@@ -2352,7 +2359,7 @@ TEST_CASE("tool failure diagnostics redact before truncation", "[agent][tool-exe
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -2408,7 +2415,7 @@ TEST_CASE("Tool update failure becomes an isolated Tool Call Outcome", "[agent][
         make_call("call-1", "read_file"),
         make_call("call-2", "write_file"),
     });
-    auto run = run_executor(executor, assistant, {}, nullptr, true);
+    auto run = run_executor(executor, registry, assistant, {}, nullptr, true);
 
     REQUIRE(run.result);
     CHECK_FALSE(run.result->terminate_batch);
@@ -2475,7 +2482,7 @@ TEST_CASE("afterToolCall runs for an error execution result (sequential path)",
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "work")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -2505,7 +2512,7 @@ TEST_CASE("afterToolCall runs for an error execution result (bounded parallel pa
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "work")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -2530,7 +2537,7 @@ TEST_CASE("afterToolCall runs for a throwing tool (isolation handling)", "[agent
     agent::ToolCallExecutor executor{registry, std::move(options)};
     auto assistant = assistant_with_calls({make_call("call-1", "work")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -2568,7 +2575,7 @@ TEST_CASE("beforeToolCall hook failure finalizes only its call (sequential path)
         make_call("call-2", "beta"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -2612,7 +2619,7 @@ TEST_CASE("beforeToolCall hook failure finalizes only its call (bounded parallel
         make_call("call-2", "beta"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -2651,7 +2658,7 @@ TEST_CASE("Tool Call Executor confines an afterToolCall hook failure to its call
         make_call("call-2", "beta"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -2686,7 +2693,7 @@ TEST_CASE("an exclusive tool serializes the whole batch with full per-call lifec
         make_call("call-2", "beta"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -2746,7 +2753,7 @@ TEST_CASE("default policy executes parallel-safe calls concurrently", "[agent][t
         make_call("call-2", "beta"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -2765,7 +2772,7 @@ TEST_CASE("an error result with an explicit terminate hint terminates the batch"
     agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
     auto assistant = assistant_with_calls({make_call("call-1", "work")});
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 1);
@@ -2794,7 +2801,7 @@ TEST_CASE("batch termination requires every call to carry the hint", "[agent][to
         make_call("call-2", "beta"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -2823,7 +2830,7 @@ TEST_CASE("unified single tool call lifecycle preserves execution semantics acro
         make_call("call-2", "nonexistent"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
     CHECK_FALSE(run.result->results[0].is_error);
@@ -3207,7 +3214,7 @@ TEST_CASE("beforeToolCall mutation executes without revalidation",
         agent::ToolCallExecutor executor{registry, std::move(executor_options)};
 
         auto assistant = assistant_with_calls({make_call("call-mut-batch", "mutate_tool", R"({"value":"initial"})")});
-        auto run = run_executor(executor, assistant);
+        auto run = run_executor(executor, registry, assistant);
 
         REQUIRE(run.result);
         REQUIRE(run.result->results.size() == 1);
@@ -3265,7 +3272,7 @@ TEST_CASE("parallel tool ends follow completion order while result messages keep
             make_call("call-fast", "fast", "{}"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 2);
@@ -3352,7 +3359,7 @@ TEST_CASE("parallel batch distinguishes duration presence across ok, thrown, blo
             make_call("c-missing", "tool_missing", "{}"),
     });
 
-    auto run = run_executor(executor, assistant);
+    auto run = run_executor(executor, registry, assistant);
 
     REQUIRE(run.result);
     REQUIRE(run.result->results.size() == 4);

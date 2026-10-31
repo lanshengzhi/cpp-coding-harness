@@ -39,6 +39,11 @@
 namespace cch::coding_agent {
 namespace {
 
+/// pi's built-in tool registration order (`core/tools/index.ts`): the order the
+/// model sees the built-ins declared in, and the order the captured session
+/// transcripts record in `toolsAdded`.
+inline constexpr std::array kFixedToolNames{"read", "bash", "edit", "write"};
+
 /// The most recent assistant message in live history (pi
 /// `_findLastAssistantMessage`), which the automatic compaction policy checks
 /// after each completed loop run.
@@ -82,6 +87,31 @@ namespace {
         }
     }
     return ordered_names;
+}
+
+/// pi `createInitialSystemMessage(systemPrompt, state.tools)`: the loadout a
+/// fresh session starts with — every registered tool except the
+/// `defaultActive: false` registrations. The built-ins keep pi's registration
+/// order so the persisted declaration matches the captured pi transcript;
+/// custom and extension tools follow in registry order.
+[[nodiscard]] std::vector<std::string> initial_active_tool_names(
+        std::span<const std::string> registered_names, std::span<const std::string> inactive_names) {
+    const auto is_active = [inactive_names](const std::string& name) {
+        return std::ranges::find(inactive_names, name) == inactive_names.end();
+    };
+    std::vector<std::string> active;
+    active.reserve(registered_names.size());
+    for (const char* name : kFixedToolNames) {
+        if (std::ranges::find(registered_names, name) != registered_names.end() && is_active(name)) {
+            active.emplace_back(name);
+        }
+    }
+    for (const auto& name : registered_names) {
+        if (std::ranges::find(active, name) == active.end() && is_active(name)) {
+            active.push_back(name);
+        }
+    }
+    return active;
 }
 
 /// pi's verbatim overflow-recovery failure message (`agent-session.ts`
@@ -147,6 +177,12 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // The session id is forwarded as the per-turn `sessionId` streamSimple
     // option (pi harness `sessionMetadata.id`).
     options.session_id = session_.metadata.session_id;
+    // pi `sdk.ts` constructs the session's Agent with `systemPrompt: ""` and
+    // `tools: []`, so `createMutableAgentState` seeds nothing: the recorded
+    // transcript is never rewritten, and the loop declares the loadout as a
+    // delta before the first request (pi `declareToolChanges`). A fresh session
+    // already leads with the System Message this Impl builds below.
+    options.seed_initial_system_message = false;
     // The Session installs no `convertToLlm` hook: the `excludeFromContext`
     // rule is applied on exactly one path, the provider-boundary conversion
     // (`ai::extended_message_to_user_message` drops excluded messages and the
@@ -171,7 +207,6 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // The tool prompt metadata is retained before the registry moves into
     // the Agent below so `/reload` can rebuild the same shape.
     {
-        static constexpr std::array kFixedToolNames{"read", "bash", "edit", "write"};
         for (const char* name : kFixedToolNames) {
             auto metadata = services_.tools.prompt_metadata(name);
             if (!metadata) {
@@ -185,6 +220,23 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
                     prompt_tool_guidelines_.end(), metadata->guidelines.begin(), metadata->guidelines.end());
         }
     }
+    // Every registered tool name, captured before the registry moves into the
+    // Agent: the pi `defaultActive: false` shaping below needs the registered
+    // set, which the Agent does not expose separately from the declared set.
+    // The retained copy also seeds the MCP surface's pi `getAllTools()` view
+    // in `bind_assembly`.
+    std::vector<std::string> registered_tool_names;
+    for (const auto& tool : services_.tools.definitions()) {
+        registered_tool_names.push_back(tool.name);
+    }
+    assembly_tool_names_ = registered_tool_names;
+    // pi `createInitialSystemMessage`: the leading system message declares the
+    // loadout the Agent starts with, so the transcript's declared set and the
+    // executable set agree before the first request. Declaring only the
+    // prompt-selected tools would make the loop announce the remainder as a
+    // delta on turn 1.
+    const auto initial_tool_loadout =
+            initial_active_tool_names(registered_tool_names, services_.initially_inactive_tool_names);
     auto sections = build_system_prompt_sections();
     ai::SystemMessage system_message;
     // pi `_preparePromptAndToolLoadout` stamps `timestamp: Date.now()` when
@@ -201,7 +253,7 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     const bool has_system_message = std::ranges::any_of(
             session_.history, [](const auto& message) { return std::holds_alternative<ai::SystemMessage>(message); });
     if (!has_system_message && !session_.resumed) {
-        for (const auto& name : prompt_selected_tools_) {
+        for (const auto& name : initial_tool_loadout) {
             if (const auto* tool = services_.tools.find(name)) {
                 system_message.tools_added.push_back(tool->definition);
             }
@@ -214,16 +266,6 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
         branch_history_to_persist_.assign(branch_start, session_.history.end());
     }
     options.system_prompt = rebuild_system_prompt();
-    // Every registered tool name, captured before the registry moves into the
-    // Agent: the pi `defaultActive: false` shaping below needs the registered
-    // set, which the Agent does not expose separately from the declared set.
-    // The retained copy also seeds the MCP surface's pi `getAllTools()` view
-    // in `bind_assembly`.
-    std::vector<std::string> registered_tool_names;
-    for (const auto& tool : services_.tools.definitions()) {
-        registered_tool_names.push_back(tool.name);
-    }
-    assembly_tool_names_ = registered_tool_names;
     std::vector<std::string> replayed_active_tool_names;
     if (session_.resumed) {
         const auto active_names = replay_active_tool_names(session_.history, registered_tool_names);
@@ -286,13 +328,7 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
         if (session_.resumed) {
             initial_declared = replayed_active_tool_names;
         } else {
-            initial_declared.reserve(registered_tool_names.size());
-            for (const auto& name : registered_tool_names) {
-                if (std::ranges::find(services_.initially_inactive_tool_names, name) ==
-                        services_.initially_inactive_tool_names.end()) {
-                    initial_declared.push_back(name);
-                }
-            }
+            initial_declared = initial_tool_loadout;
         }
         // The names are registry-derived, so the replace cannot fail.
         static_cast<void>(agent_->set_active_tools(std::move(initial_declared)));

@@ -1,5 +1,6 @@
 #include <cch/agent/Agent.hpp>
 
+#include <cch/agent/ToolLoadout.hpp>
 #include "agent/AgentImpl.hpp"
 #include "agent/AgentMessageAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -10,7 +11,6 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -49,17 +49,38 @@ Agent::Impl::Impl(ai::ModelStreamFactory stream_factory,
     state.input_queues.steering.mode = options.steering_mode;
     state.input_queues.follow_up.mode = options.follow_up_mode;
     state.active_tool_names = tool_names(definitions);
+
+    // pi `createMutableAgentState` (agent.ts) seeds a leading system message
+    // declaring the initial prompt and loadout, so the first request has a
+    // declared tool state for the loadout delta to compare against. It applies
+    // only when the caller's transcript does not already lead with a system
+    // message, and only when this Agent owns the transcript's system messages:
+    // a Session turns it off because pi's `sdk.ts` builds its Agent with an
+    // empty prompt and tool baseline and lets the loop declare the loadout.
+    const bool leads_with_system_message =
+            !state.messages.empty() && std::holds_alternative<ai::SystemMessage>(state.messages.front());
+    if (options.seed_initial_system_message && !leads_with_system_message &&
+            (!state.system_prompt.empty() || !definitions.empty())) {
+        ai::SystemMessage declaration;
+        declaration.content = state.system_prompt;
+        declaration.timestamp = 0;
+        declaration.tools_added.reserve(definitions.size());
+        for (const auto& definition : definitions) {
+            declaration.tools_added.push_back(tool_declaration(definition));
+        }
+        state.messages.insert(state.messages.begin(), ai::MessageVariant{std::move(declaration)});
+    }
 }
 
 [[nodiscard]] AgentExecutionSnapshot Agent::Impl::snapshot() const {
-    // The declared tool set is the active subset (pi `setActiveTools` ->
-    // declared tools): the registry keeps every registered tool for nested
-    // calls, while the model sees only the active names.
-    const std::unordered_set<std::string> active{state.active_tool_names.begin(), state.active_tool_names.end()};
+    // The declared tool set is the active subset, in the order the caller named
+    // it (pi `AgentState.tools`): the registry keeps every registered tool for
+    // nested calls, while the model sees — and may call — only these names.
     std::vector<ai::Tool> declared;
-    for (auto& tool : run_policy.registry.definitions()) {
-        if (active.contains(tool.name)) {
-            declared.push_back(std::move(tool));
+    declared.reserve(state.active_tool_names.size());
+    for (const auto& name : state.active_tool_names) {
+        if (const auto* tool = run_policy.registry.find(name)) {
+            declared.push_back(tool->definition);
         }
     }
     return AgentExecutionSnapshot{
@@ -385,12 +406,16 @@ support::ExpectedVoid Agent::set_active_tools(std::vector<std::string> names) {
     if (!impl_) {
         return std::unexpected(agent_not_initialized());
     }
+    // pi `_applyToolLoadout`: `[...new Set(toolNames)]`, then registered names
+    // only. The declared set keeps the caller's order and always names live
+    // tools; the caller's array is copied, so later mutation cannot change it.
     std::vector<std::string> active;
     active.reserve(names.size());
     for (auto& name : names) {
-        if (impl_->run_policy.registry.find(name) != nullptr) {
-            active.push_back(std::move(name));
+        if (impl_->run_policy.registry.find(name) == nullptr || std::ranges::find(active, name) != active.end()) {
+            continue;
         }
+        active.push_back(std::move(name));
     }
     impl_->state.active_tool_names = std::move(active);
     return {};

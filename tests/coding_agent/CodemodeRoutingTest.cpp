@@ -103,7 +103,9 @@ struct Executed {
 
 /// Run one codemode script through the real Agent Tool executor with a real
 /// session registry, so the routing path (not a stand-in for it) is exercised.
-[[nodiscard]] Executed run_script_with_registry(std::string script, agent::ToolRegistry registry) {
+[[nodiscard]] Executed run_script_with_registry(std::string script,
+        agent::ToolRegistry registry,
+        std::optional<std::vector<std::string>> executable_names = std::nullopt) {
     {
         extensions::CodemodeToolSource source{};
         auto loaded = source.load_tools();
@@ -124,7 +126,20 @@ struct Executed {
     assistant.content.emplace_back(std::move(call));
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;
 
+    // `context.tools` is the run's executable set for model-issued calls
+    // (pi `currentContext.tools`, #1110); the default keeps every registered
+    // tool executable, and a restricted set lets a case separate the
+    // model-issued path from the nested one.
     ai::AiContext context;
+    if (executable_names) {
+        for (const auto& name : *executable_names) {
+            if (const auto* tool = registry.find(name)) {
+                context.tools.push_back(tool->definition);
+            }
+        }
+    } else {
+        context.tools = registry.definitions();
+    }
     agent::ToolCallExecutorOptions options;
     agent::ToolCallExecutor executor{registry, std::move(options)};
 
@@ -147,13 +162,15 @@ struct Executed {
     return Executed{std::move(*result), {}};
 }
 
-[[nodiscard]] Executed run_script_with_tools(std::string script, std::vector<std::string> extra_tool_names) {
+[[nodiscard]] Executed run_script_with_tools(std::string script,
+        std::vector<std::string> extra_tool_names,
+        std::optional<std::vector<std::string>> executable_names = std::nullopt) {
     std::vector<std::string> echo_calls;
     agent::ToolRegistry registry;
     for (auto& name : extra_tool_names) {
         REQUIRE(registry.add(echo_tool(name, &echo_calls)).has_value());
     }
-    auto executed = run_script_with_registry(std::move(script), std::move(registry));
+    auto executed = run_script_with_registry(std::move(script), std::move(registry), std::move(executable_names));
     executed.echo_calls = std::move(echo_calls);
     return executed;
 }
@@ -205,6 +222,23 @@ TEST_CASE("a codemode script's tools.* call runs the session tool and records th
     CHECK(calls.front().get_object().at("id").get_string() == "call_1/1");
     CHECK(calls.front().get_object().at("name").get_string() == "echo");
     CHECK(calls.front().get_object().at("status").get_string() == "ok");
+}
+
+TEST_CASE("a script reaches a registered tool the run never declared", "[coding_agent][codemode][issue1110][spec]") {
+    // #1110 makes `context.tools` the executable set for model-issued calls.
+    // The nested seam is a separate capability (pi `_getCallableTools`), and a
+    // codemode script must still reach a registered tool the run did not
+    // declare: routing nested resolution through `context.tools` would silently
+    // remove tool discovery once a loadout narrows.
+    auto executed = run_script_with_tools(
+            "text(await tools.echo({ x: 1 })); return 'done';", {"echo"}, std::vector<std::string>{"codemode"});
+
+    REQUIRE(executed.result.has_value());
+    const auto& result = executed.result->results.front();
+    CHECK_FALSE(result.is_error);
+    CHECK(joined_text(result).find("echoed") != std::string::npos);
+    REQUIRE(executed.echo_calls.size() == 1);
+    CHECK(executed.echo_calls.front() == "echo");
 }
 
 TEST_CASE(

@@ -1180,7 +1180,7 @@ TEST_CASE("async agent loop executes tool calls and continues with tool result c
     CHECK(tool_ptr->invocations[0].arguments.get<support::JsonValue::object_t>().at("path").get_string() ==
             "README.md");
     REQUIRE(client->requests.size() == 2);
-    REQUIRE(client->requests[1].context.messages.size() == 3);
+    REQUIRE(client->requests[1].context.messages.size() == 4);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(client->requests[1].context.messages.back()));
     CHECK(count_events<agent::MessageUpdateEvent>(run.events) >= 1);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
@@ -1364,7 +1364,7 @@ TEST_CASE("beforeToolCall hook failure finalizes only its call", "[agent][async]
     CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 3);
+    REQUIRE(messages.size() == 4);
     const auto* tool_result = std::get_if<ai::ToolResultMessage>(&messages.back());
     REQUIRE(tool_result != nullptr);
     CHECK(tool_result->is_error);
@@ -1398,7 +1398,7 @@ TEST_CASE(
     CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 3);
+    REQUIRE(messages.size() == 4);
     const auto* tool_result = std::get_if<ai::ToolResultMessage>(&messages.back());
     REQUIRE(tool_result != nullptr);
     CHECK(tool_result->is_error);
@@ -1840,7 +1840,7 @@ TEST_CASE("Async Agent Loop continues after an afterToolCall hook failure", "[ag
     CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 3);
+    REQUIRE(messages.size() == 4);
     const auto* tool_result = std::get_if<ai::ToolResultMessage>(&messages.back());
     REQUIRE(tool_result != nullptr);
     CHECK(tool_result->is_error);
@@ -1874,7 +1874,7 @@ TEST_CASE("afterToolCall hook failure diagnostic becomes a per-call tool error",
     CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 3);
+    REQUIRE(messages.size() == 4);
     const auto* tool_result = std::get_if<ai::ToolResultMessage>(&messages.back());
     REQUIRE(tool_result != nullptr);
     CHECK(tool_result->is_error);
@@ -2567,7 +2567,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     // prepare-next-turn: it observes the pre-prepare context (#745, ADR 0014).
     options.should_stop_after_turn = [&](const agent::PrepareNextTurnContext& context) -> support::AsyncResult<bool> {
         if (context.context.system_prompt && context.context.system_prompt->empty() &&
-                context.context.messages.size() == 3) {
+                context.context.messages.size() == 4) {
             stop_observed_pre_prepare_context = true;
         }
         return support::AsyncResult<bool>{support::Expected<bool>{false}};
@@ -2583,15 +2583,19 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     REQUIRE(client->requests.size() == 2);
     REQUIRE(client->requests[1].context.system_prompt.has_value());
     CHECK(*client->requests[1].context.system_prompt == "replacement prompt");
-    REQUIRE(client->requests[1].context.messages.size() == 1);
+    REQUIRE(client->requests[1].context.messages.size() == 2);
     REQUIRE(std::holds_alternative<ai::UserMessage>(client->requests[1].context.messages[0]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(client->requests[1].context.messages[0])) ==
             "replacement history");
+    // The replacement declared no tool state, so the request re-declares the
+    // executable set before the model is asked to answer (pi
+    // `declareToolChanges` with an empty pending list).
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(client->requests[1].context.messages[1]));
     REQUIRE(client->requests[1].context.tools.size() == 1);
     CHECK(client->requests[1].context.tools[0].name == "read_file");
 
     const auto& replacement_context = client->requests[1].context.messages;
-    REQUIRE(replacement_context.size() == 1);
+    REQUIRE(replacement_context.size() == 2);
     REQUIRE(std::holds_alternative<ai::UserMessage>(replacement_context[0]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(replacement_context[0])) == "replacement history");
     const agent::MessageEndEvent* final_message_end = nullptr;
@@ -2604,11 +2608,11 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     REQUIRE(final_message_end != nullptr);
     CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(final_message_end->message).content) ==
             "second");
-    CHECK(count_events<agent::MessageStartEvent>(run.events) == 4);
-    CHECK(count_events<agent::MessageEndEvent>(run.events) == 4);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
+    CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
     const auto* ended = std::get_if<agent::AgentEndEvent>(&run.events.back());
     REQUIRE(ended != nullptr);
-    REQUIRE(ended->messages.size() == 4);
+    REQUIRE(ended->messages.size() == 5);
     REQUIRE(std::holds_alternative<ai::UserMessage>(ended->messages[0]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(ended->messages[0])) == "read");
 }
@@ -2667,18 +2671,23 @@ TEST_CASE("between-turn context replacement keeps the invocation window valid", 
 
     CHECK(run.result);
     REQUIRE(client->requests.size() == 2);
-    REQUIRE(client->requests[1].context.messages.size() == 1);
+    REQUIRE(client->requests[1].context.messages.size() == 2);
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(client->requests[1].context.messages[0])) ==
             "compacted history");
-    // Only the message produced after the replacement is reported, and no
-    // position outside the replaced list is ever addressed.
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(client->requests[1].context.messages[1]));
+    // Only what was produced after the replacement is reported, and no
+    // position outside the replaced list is ever addressed: the rebuilt
+    // context declares no tool state, so the run first re-declares the
+    // executable set (pi `declareToolChanges`), then the answer.
     const auto* ended = std::get_if<agent::AgentEndEvent>(&run.events.back());
     REQUIRE(ended != nullptr);
-    REQUIRE(ended->messages.size() == 1);
-    REQUIRE(std::holds_alternative<ai::AssistantMessage>(ended->messages[0]));
-    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(ended->messages[0]).content) == "second");
-    // Live history is the replacement plus the answer produced after it.
-    REQUIRE(run.state.messages.size() == 2);
+    REQUIRE(ended->messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(ended->messages[0]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(ended->messages[1]));
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(ended->messages[1]).content) == "second");
+    // Live history is the replacement plus the re-declaration plus the answer
+    // produced after it.
+    REQUIRE(run.state.messages.size() == 3);
     REQUIRE(std::holds_alternative<ai::UserMessage>(run.state.messages[0]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(run.state.messages[0])) == "compacted history");
 }
@@ -2804,7 +2813,7 @@ TEST_CASE("steering queued while prepare-next-turn runs is injected before the n
     CHECK(prepare_calls == 1);
     REQUIRE(client->requests.size() == 2);
     // Turn 2's context: the turn-1 exchange plus exactly one injected steer.
-    REQUIRE(client->requests[1].context.messages.size() == 4);
+    REQUIRE(client->requests[1].context.messages.size() == 5);
     const auto& steered = client->requests[1].context.messages.back();
     REQUIRE(std::holds_alternative<ai::UserMessage>(steered));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(steered)) == "late steer");
@@ -3026,11 +3035,11 @@ TEST_CASE("bounded parallel execution preserves source order in the transcript",
 
     REQUIRE(client->requests.size() == 2);
     const auto& second_request = client->requests[1];
-    REQUIRE(second_request.context.messages.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[2]));
+    REQUIRE(second_request.context.messages.size() == 5);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[3]));
-    CHECK(std::get<ai::ToolResultMessage>(second_request.context.messages[2]).tool_name == "alpha");
-    CHECK(std::get<ai::ToolResultMessage>(second_request.context.messages[3]).tool_name == "beta");
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(second_request.context.messages[4]));
+    CHECK(std::get<ai::ToolResultMessage>(second_request.context.messages[3]).tool_name == "alpha");
+    CHECK(std::get<ai::ToolResultMessage>(second_request.context.messages[4]).tool_name == "beta");
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 5);
 
@@ -3109,11 +3118,11 @@ TEST_CASE("agent loop recovers after a schema-invalid call in a bounded parallel
 
     REQUIRE(client->requests.size() == 3);
     const auto& recovery_context = client->requests[1].context.messages;
-    REQUIRE(recovery_context.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(recovery_context[2]));
+    REQUIRE(recovery_context.size() == 5);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(recovery_context[3]));
-    const auto& invalid_result = std::get<ai::ToolResultMessage>(recovery_context[2]);
-    const auto& valid_result = std::get<ai::ToolResultMessage>(recovery_context[3]);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(recovery_context[4]));
+    const auto& invalid_result = std::get<ai::ToolResultMessage>(recovery_context[3]);
+    const auto& valid_result = std::get<ai::ToolResultMessage>(recovery_context[4]);
     CHECK(invalid_result.tool_call_id == "call-invalid");
     CHECK(invalid_result.tool_name == "alpha");
     CHECK(invalid_result.is_error);
@@ -3122,9 +3131,9 @@ TEST_CASE("agent loop recovers after a schema-invalid call in a bounded parallel
     CHECK_FALSE(valid_result.is_error);
 
     const auto& completion_context = client->requests[2].context.messages;
-    REQUIRE(completion_context.size() == 6);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(completion_context[5]));
-    const auto& corrected_result = std::get<ai::ToolResultMessage>(completion_context[5]);
+    REQUIRE(completion_context.size() == 7);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(completion_context[6]));
+    const auto& corrected_result = std::get<ai::ToolResultMessage>(completion_context[6]);
     CHECK(corrected_result.tool_call_id == "call-corrected");
     CHECK_FALSE(corrected_result.is_error);
 
@@ -3236,11 +3245,11 @@ TEST_CASE("bounded parallel execution keeps blocked calls out of tool adapters",
     CHECK(beta_ptr->invocations.size() == 1);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(messages.size() == 5);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
-    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
-    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[4]));
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[3]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[4]);
     CHECK(alpha_result.is_error);
     CHECK(ai::text_from_content(alpha_result.content) == "blocked alpha");
     CHECK_FALSE(beta_result.is_error);
@@ -3286,11 +3295,11 @@ TEST_CASE("bounded parallel before-hook failure finalizes every call without sta
     CHECK(probe.max_active.load() == 0);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(messages.size() == 5);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
-    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
-    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[4]));
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[3]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[4]);
     CHECK(alpha_result.is_error);
     CHECK(beta_result.is_error);
     CHECK(ai::text_from_content(alpha_result.content) == "preflight failed");
@@ -3324,11 +3333,11 @@ TEST_CASE("bounded parallel execution preserves peer success after a tool error"
     CHECK(run.result);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(messages.size() == 5);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
-    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
-    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[4]));
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[3]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[4]);
     CHECK(alpha_result.is_error);
     CHECK_FALSE(beta_result.is_error);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 5);
@@ -3416,11 +3425,11 @@ TEST_CASE("bounded parallel after-hook failure finalizes only its call", "[agent
     CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(messages.size() == 5);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
-    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
-    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[4]));
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[3]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[4]);
     CHECK(alpha_result.is_error);
     CHECK(ai::text_from_content(alpha_result.content) == "post-processor failed");
     CHECK_FALSE(beta_result.is_error);
@@ -3659,11 +3668,11 @@ TEST_CASE("length-truncated tool calls emit errors without crossing the executor
 
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(messages.size() == 5);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
-    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[2]);
-    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[3]);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[4]));
+    const auto& alpha_result = std::get<ai::ToolResultMessage>(messages[3]);
+    const auto& beta_result = std::get<ai::ToolResultMessage>(messages[4]);
     CHECK(alpha_result.is_error);
     CHECK(beta_result.is_error);
     CHECK_FALSE(alpha_result.duration_ms.has_value());
@@ -3720,11 +3729,11 @@ TEST_CASE("default tool execution runs a parallel-safe batch concurrently", "[ag
     CHECK(probe.max_active.load() == 2);
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(messages.size() == 5);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
-    CHECK(std::get<ai::ToolResultMessage>(messages[2]).tool_name == "alpha");
-    CHECK(std::get<ai::ToolResultMessage>(messages[3]).tool_name == "beta");
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[4]));
+    CHECK(std::get<ai::ToolResultMessage>(messages[3]).tool_name == "alpha");
+    CHECK(std::get<ai::ToolResultMessage>(messages[4]).tool_name == "beta");
 }
 
 TEST_CASE("an exclusive tool serializes the whole batch with full per-call lifecycle at the loop",
@@ -3845,11 +3854,11 @@ TEST_CASE("length-truncated fail-all matches pi's message and emits source-order
 
     REQUIRE(client->requests.size() == 2);
     const auto& messages = client->requests[1].context.messages;
-    REQUIRE(messages.size() == 4);
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
+    REQUIRE(messages.size() == 5);
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
-    CHECK(std::get<ai::ToolResultMessage>(messages[2]).is_error);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(messages[4]));
     CHECK(std::get<ai::ToolResultMessage>(messages[3]).is_error);
+    CHECK(std::get<ai::ToolResultMessage>(messages[4]).is_error);
 }
 
 TEST_CASE("all-true terminate batch ends the loop after one turn", "[agent][async][issue355][spec]") {

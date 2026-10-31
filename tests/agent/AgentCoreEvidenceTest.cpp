@@ -773,14 +773,14 @@ TEST_CASE("tool-result shape golden groups is_error exactly as pi's toolResult m
 
     boost::asio::io_context io;
     std::optional<support::Expected<agent::ToolCallBatchResult>> result;
+    ai::AiContext context;
+    context.tools = tools.definitions();
     boost::asio::co_spawn(
         io,
         [&]() -> boost::asio::awaitable<void> {
             agent::AgentEventSink sink{
                 [](const agent::AgentLifecycleEvent&) { return support::ExpectedVoid{}; }};
-            result = co_await executor.execute(
-                agent::ToolCallBatchRequest{assistant, {}},
-                sink);
+            result = co_await executor.execute(agent::ToolCallBatchRequest{assistant, context}, sink);
             co_return;
         },
         boost::asio::detached);
@@ -997,14 +997,14 @@ TEST_CASE("tool scheduling golden covers parallel default, sequential override, 
 
     // The truncated turn executed none of its tools; gamma/delta ran exactly
     // once (turn 3) despite the Length stop in turn 2. Turn 2's request saw
-    // only turn 1's four messages; the two truncated error results appear in
-    // turn 3's request at indexes 5/6.
-    CHECK(runtime->calls[1].context.messages.size() == 4);
-    REQUIRE(runtime->calls[2].context.messages.size() == 7);
+    // only turn 1's five messages; the two truncated error results appear in
+    // turn 3's request at indexes 6/7.
+    CHECK(runtime->calls[1].context.messages.size() == 5);
+    REQUIRE(runtime->calls[2].context.messages.size() == 8);
     const auto& third_turn_messages = runtime->calls[2].context.messages;
-    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(third_turn_messages[5]));
     REQUIRE(std::holds_alternative<ai::ToolResultMessage>(third_turn_messages[6]));
-    CHECK(std::get<ai::ToolResultMessage>(third_turn_messages[5]).is_error);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(third_turn_messages[7]));
     CHECK(std::get<ai::ToolResultMessage>(third_turn_messages[6]).is_error);
+    CHECK(std::get<ai::ToolResultMessage>(third_turn_messages[7]).is_error);
     CHECK(run.state.pending_tool_call_ids.empty());
 }

@@ -679,7 +679,7 @@
           },
           {
             "path": "src/coding_agent/AgentSessionExecution.cpp",
-            "sha256": "5747f23c6ce0cc36dd8d08939bb2895e8d253c20b309e8ac8bbde5f7a8e108ed"
+            "sha256": "82d41efcc8a82e39f13cf88551f191a26972e291af40164a0cba67a665649d90"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -863,14 +863,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "/tmp/1105-existing-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml"
           ],
-          "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
-          "recordedAt": "2026-10-30T13:11:22Z",
+          "testedRevision": "bbb0a7f69989cffea01d982e24731f96de6a62c8",
+          "recordedAt": "2026-10-31T09:59:18Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
-            "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1110.xml",
+            "sha256": "3e863322720ac6f682b24e6f13c039dbe30d94b5d59b5c64ce90375e13187326"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -886,6 +886,12 @@
           "reason": "Post-review diagnostic refinement in consolidate_audits.py adds the delivery id and reconciliation pointer to digest-mismatch messages. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
+        },
+        "revalidation1110": {
+          "reason": "#1110 makes the active tool set control the request's tool declarations, so the Session's leading system message must declare the loadout the Agent actually starts with. AgentSessionExecution.cpp now declares every initially active registered tool (pi `createInitialSystemMessage(systemPrompt, state.tools)`) instead of only the prompt-selected built-ins, which removes a spurious first-turn declaration delta. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "src/coding_agent/AgentSessionExecution.cpp"
           ]
         }
       }

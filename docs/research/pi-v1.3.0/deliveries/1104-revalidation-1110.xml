@@ -1,0 +1,407 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="36"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="1"
+	timestamp="2026-10-31T17:34:13"
+	>
+	<testcase name="A model without vision gets the image and the frozen placeholder note" classname="A model without vision gets the image and the frozen placeholder note" time="0.0220535" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "A model without vision gets the image and the frozen placeholder note"
+Randomness seeded to: 378705346
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="An image the processor cannot decode is an explicit error" classname="An image the processor cannot decode is an explicit error" time="0.0293672" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "An image the processor cannot decode is an explicit error"
+Randomness seeded to: 406802265
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="An inline GIF passes through the public Harness unchanged" classname="An inline GIF passes through the public Harness unchanged" time="0.0254455" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "An inline GIF passes through the public Harness unchanged"
+Randomness seeded to: 4067268705
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Capability-absent image reads fail explicitly without another model turn" classname="Capability-absent image reads fail explicitly without another model turn" time="0.0794244" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "Capability-absent image reads fail explicitly without another model turn"
+Randomness seeded to: 2577417263
+===============================================================================
+All tests passed (93 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Image detection accepts exactly the provider inline formats plus BMP" classname="Image detection accepts exactly the provider inline formats plus BMP" time="0.00903413" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "Image detection accepts exactly the provider inline formats plus BMP"
+Randomness seeded to: 4136140726
+===============================================================================
+All tests passed (37 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Image dimensions come from the frozen headers" classname="Image dimensions come from the frozen headers" time="0.0165236" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "Image dimensions come from the frozen headers"
+Randomness seeded to: 584458957
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Read converts BMP to PNG through the configured processor" classname="Read converts BMP to PNG through the configured processor" time="0.0256021" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "Read converts BMP to PNG through the configured processor"
+Randomness seeded to: 1863199879
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Read returns a prepared image and the frozen diagnostic through the public Harness" classname="Read returns a prepared image and the frozen diagnostic through the public Harness" time="0.0173951" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "Read returns a prepared image and the frozen diagnostic through the public Harness"
+Randomness seeded to: 626584259
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="The local image processor orients, resizes, and converts like the frozen processor" classname="The local image processor orients, resizes, and converts like the frozen processor" time="0.0106417" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "The local image processor orients\, resizes\, and converts like the frozen processor"
+Randomness seeded to: 1269635911
+===============================================================================
+All tests passed (66 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="The local image processor passes through an upright inline image within the limits" classname="The local image processor passes through an upright inline image within the limits" time="0.0133835" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;images;issue1090;spec"/>
+		</properties>
+		<system-out>Filters: "The local image processor passes through an upright inline image within the limits"
+Randomness seeded to: 334393490
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cch_mcp call_tool preserves actual wire object order for structuredContent" classname="cch_mcp call_tool preserves actual wire object order for structuredContent" time="0.587422" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1101;mcp;owner;spec"/>
+		</properties>
+		<system-out>Filters: "cch_mcp call_tool preserves actual wire object order for structuredContent"
+Randomness seeded to: 3326150431
+===============================================================================
+All tests passed (61 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cch_mcp stdio client preserves every JSON structuredContent type from tools/call" classname="cch_mcp stdio client preserves every JSON structuredContent type from tools/call" time="0.118175" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1101;mcp;owner;spec"/>
+		</properties>
+		<system-out>Filters: "cch_mcp stdio client preserves every JSON structuredContent type from tools/call"
+Randomness seeded to: 488385196
+===============================================================================
+All tests passed (55 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP structured results match every original frozen audit obligation through real public callers" classname="MCP structured results match every original frozen audit obligation through real public callers" time="0.261283" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "MCP structured results match every original frozen audit obligation through real public callers"
+Randomness seeded to: 67365350
+===============================================================================
+All tests passed (94 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a factory error is recorded as the server message, never a veto on start" classname="a factory error is recorded as the server message, never a veto on start" time="0.0381203" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a factory error is recorded as the server message\, never a veto on start"
+Randomness seeded to: 426788393
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="agent session creation returns while a gated MCP server connects and the manager stays manageable" classname="agent session creation returns while a gated MCP server connects and the manager stays manageable" time="0.0664126" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "agent session creation returns while a gated MCP server connects and the manager stays manageable"
+Randomness seeded to: 1186260781
+===============================================================================
+All tests passed (38 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP tools/call preserves actual wire structuredContent order" classname="an MCP HTTP tools/call preserves actual wire structuredContent order" time="0.879887" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;issue873;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP tools/call preserves actual wire structuredContent order"
+Randomness seeded to: 2317404829
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call distinguishes missing structuredContent from JSON null" classname="an MCP tools/call distinguishes missing structuredContent from JSON null" time="0.112443" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call distinguishes missing structuredContent from JSON null"
+Randomness seeded to: 3518569503
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call falls back for empty content and adds pi&apos;s isError text" classname="an MCP tools/call falls back for empty content and adds pi&apos;s isError text" time="0.0844682" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call falls back for empty content and adds pi's isError text"
+Randomness seeded to: 3605401131
+===============================================================================
+All tests passed (42 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call keeps non-empty content separate from structuredContent" classname="an MCP tools/call keeps non-empty content separate from structuredContent" time="0.0756305" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call keeps non-empty content separate from structuredContent"
+Randomness seeded to: 1044060100
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call object structuredContent survives conversion with content absent" classname="an MCP tools/call object structuredContent survives conversion with content absent" time="0.123201" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call object structuredContent survives conversion with content absent"
+Randomness seeded to: 4170294757
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects" classname="an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects" time="0.0931749" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call preserves actual wire order for reverse\, nested and integer-key objects"
+Randomness seeded to: 276017903
+===============================================================================
+All tests passed (37 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call preserves every primitive and array structuredContent when content is absent" classname="an MCP tools/call preserves every primitive and array structuredContent when content is absent" time="0.113776" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call preserves every primitive and array structuredContent when content is absent"
+Randomness seeded to: 2039632197
+===============================================================================
+All tests passed (70 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call rejects wrong content and malformed results at the public caller" classname="an MCP tools/call rejects wrong content and malformed results at the public caller" time="0.107633" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call rejects wrong content and malformed results at the public caller"
+Randomness seeded to: 132038199
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call renders every JSON number shape exactly as JSON.stringify" classname="an MCP tools/call renders every JSON number shape exactly as JSON.stringify" time="0.0952277" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call renders every JSON number shape exactly as JSON.stringify"
+Randomness seeded to: 1757399125
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call renders structuredContent numbers exactly as JSON.stringify" classname="an MCP tools/call renders structuredContent numbers exactly as JSON.stringify" time="0.104647" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call renders structuredContent numbers exactly as JSON.stringify"
+Randomness seeded to: 3937794522
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="close during a pending connect returns promptly and drops the late connection" classname="close during a pending connect returns promptly and drops the late connection" time="0.044601" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "close during a pending connect returns promptly and drops the late connection"
+Randomness seeded to: 2184129777
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="disabling a server while its connect is in flight drops the late connection" classname="disabling a server while its connect is in flight drops the late connection" time="0.0358095" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "disabling a server while its connect is in flight drops the late connection"
+Randomness seeded to: 1772997325
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="enabling a still-connecting server does not launch a second connect" classname="enabling a still-connecting server does not launch a second connect" time="0.049297" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "enabling a still-connecting server does not launch a second connect"
+Randomness seeded to: 535068669
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged" classname="on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged" time="0.0352261" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged"
+Randomness seeded to: 3615232989
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="on_turn_start reconnects a server signed in through another process" classname="on_turn_start reconnects a server signed in through another process" time="0.0254999" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "on_turn_start reconnects a server signed in through another process"
+Randomness seeded to: 830565590
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="sign-in completes for one server while another is still connecting" classname="sign-in completes for one server while another is still connecting" time="0.060694" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "sign-in completes for one server while another is still connecting"
+Randomness seeded to: 3326975613
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="start returns while a gated server is still connecting" classname="start returns while a gated server is still connecting" time="0.0633127" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "start returns while a gated server is still connecting"
+Randomness seeded to: 453158387
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the frozen review artifact matches every actual fixture observation" classname="the frozen review artifact matches every actual fixture observation" time="0.108938" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the frozen review artifact matches every actual fixture observation"
+Randomness seeded to: 1583714864
+===============================================================================
+All tests passed (218 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="wait_for_direct_servers waits only for direct exposure, bounded and latched" classname="wait_for_direct_servers waits only for direct exposure, bounded and latched" time="0.116781" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "wait_for_direct_servers waits only for direct exposure\, bounded and latched"
+Randomness seeded to: 4175465446
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="wait_for_pending_connects blocks until the gated connect lands" classname="wait_for_pending_connects blocks until the gated connect lands" time="0.0513782" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "wait_for_pending_connects blocks until the gated connect lands"
+Randomness seeded to: 1160697038
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp panel stays live while a server connect is pending and subcommands await the settle" classname="/mcp panel stays live while a server connect is pending and subcommands await the settle" time="0.222052" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp panel stays live while a server connect is pending and subcommands await the settle"
+Randomness seeded to: 1596272029
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

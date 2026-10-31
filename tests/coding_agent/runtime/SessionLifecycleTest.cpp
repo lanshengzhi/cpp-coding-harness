@@ -266,9 +266,10 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but the
     CHECK(session.is_open());
     // No rollback theatre: the admitted user and assistant messages stay in
     // live Session state (admission is asynchronous; there is no mid-flight
-    // veto). The resumed history is `first` + `branched`, plus this prompt's
+    // veto). The resumed history is `first` + `branched`; the run declares the
+    // executable loadout as a system message before its own prompt, then the
     // user and assistant messages.
-    CHECK(session.message_count() == 4);
+    CHECK(session.message_count() == 5);
 
     // Reopening follows the durable message. Whether the assistant reply
     // settled before the failure latched is timing-dependent, so the durable
@@ -291,7 +292,7 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but the
     CHECK(
         recovered.error().message ==
         "session persistence failed; rejecting new prompt");
-    CHECK(session.message_count() == 4);
+    CHECK(session.message_count() == 5);
     session.close();
 }
 

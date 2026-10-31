@@ -1,8 +1,8 @@
 #include "agent/AgentImpl.hpp"
-
 #include "agent/ToolCallExecutor.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
+#include <cch/agent/ToolLoadout.hpp>
 
 #include <algorithm>
 #include <memory>
@@ -197,12 +197,13 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
             context.tools = std::move(turn_snapshot.tools);
         }
 
-        if (turn == 1 && has_initial_user_message) {
-            CCH_TRY_VOID(append_message_with_lifecycle(context, *emit, std::move(initial_user_message)));
-        }
-
         if (turn == 1) {
-            pending_messages = std::move(initial_input.messages);
+            if (has_initial_user_message) {
+                pending_messages.push_back(std::move(initial_user_message));
+            }
+            for (auto& message : initial_input.messages) {
+                pending_messages.push_back(std::move(message));
+            }
             if (!initial_input.steering_already_drained) {
                 auto steering_messages = impl->drain(InputQueueKind::Steering);
                 for (auto& message : steering_messages) {
@@ -210,6 +211,12 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
                 }
             }
         }
+
+        // pi `declareToolChanges`: before every request the difference between
+        // the transcript's declared tool state and the run's executable set
+        // becomes a system message, so what the model may call and what it is
+        // told it may call cannot drift apart.
+        pending_messages = declare_tool_changes(context.messages, std::move(pending_messages), context.tools);
 
         if (!pending_messages.empty()) {
             for (auto& message : pending_messages) {
