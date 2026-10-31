@@ -658,12 +658,25 @@ struct RemoteDeterministicQueue {
 };
 
 /// Owns the parsed guest for one deterministic remote execution; the driver
-/// holds only the raw pointer, so this must outlive it.
+/// holds only the raw pointer, so this must outlive it. Moves null the source
+/// so only one owner ever deletes the module; copies would double-free it.
 struct RemoteAstOwner {
-    WasmEdge_ASTModuleContext* ast{nullptr};
+    RemoteAstOwner() = default;
+    RemoteAstOwner(RemoteAstOwner&& other) noexcept : ast{std::exchange(other.ast, nullptr)} {}
+    RemoteAstOwner& operator=(RemoteAstOwner&& other) noexcept {
+        if (this != &other) {
+            if (ast != nullptr) WasmEdge_ASTModuleDelete(ast);
+            ast = std::exchange(other.ast, nullptr);
+        }
+        return *this;
+    }
     ~RemoteAstOwner() {
         if (ast != nullptr) WasmEdge_ASTModuleDelete(ast);
     }
+    RemoteAstOwner(const RemoteAstOwner&) = delete;
+    RemoteAstOwner& operator=(const RemoteAstOwner&) = delete;
+
+    WasmEdge_ASTModuleContext* ast{nullptr};
 };
 
 /// pi `storeWrites` as the `done` payload the caller reads back through
@@ -724,13 +737,15 @@ struct RemoteAstOwner {
 
 /// Everything one deterministic execution must keep alive: the parsed guest,
 /// the driver, the exchange and the queue. The declaration order makes the
-/// driver die before the guest it points at.
+/// driver die before the guest it points at and before the queue its host
+/// callbacks push to; the enclosing `shared_ptr` is what detached exchanges
+/// hold, so no member needs its own.
 struct RemoteDeterministicServe {
-    std::shared_ptr<RemoteAstOwner> guest;
-    std::shared_ptr<detail::DeterministicRun> run;
-    std::shared_ptr<CodemodeRemoteExchangeHook> exchange;
-    std::shared_ptr<RemoteDeterministicQueue> queue;
-    std::shared_ptr<std::stop_source> stop;
+    RemoteAstOwner guest;
+    RemoteDeterministicQueue queue;
+    CodemodeRemoteExchangeHook exchange;
+    std::optional<detail::DeterministicRun> run;
+    std::stop_source stop;
 };
 
 /// pi `serveCodemodeRemote` for a deterministic request: the guest and the
@@ -746,10 +761,7 @@ support::AsyncResult<void> serve_deterministic_remote(
                                                       -> boost::asio::awaitable<support::Expected<void>> {
         auto executor = co_await boost::asio::this_coro::executor;
         auto served = std::make_shared<RemoteDeterministicServe>();
-        served->exchange = std::make_shared<CodemodeRemoteExchangeHook>(std::move(exchange));
-        served->queue = std::make_shared<RemoteDeterministicQueue>();
-        served->guest = std::make_shared<RemoteAstOwner>();
-        served->stop = std::make_shared<std::stop_source>();
+        served->exchange = std::move(exchange);
 
         const auto path = wasm_path.string();
         WasmEdge_ConfigureContext* configure = WasmEdge_ConfigureCreate();
@@ -758,26 +770,26 @@ support::AsyncResult<void> serve_deterministic_remote(
                     configure, static_cast<std::uint32_t>((*request.data.memory_limit_bytes + 65535) / 65536));
         }
         WasmEdge_LoaderContext* loader = WasmEdge_LoaderCreate(configure);
-        const WasmEdge_Result loaded = WasmEdge_LoaderParseFromFile(loader, &served->guest->ast, path.c_str());
+        const WasmEdge_Result loaded = WasmEdge_LoaderParseFromFile(loader, &served->guest.ast, path.c_str());
         WasmEdge_LoaderDelete(loader);
         WasmEdge_ConfigureDelete(configure);
-        if (WasmEdge_ResultOK(loaded) && served->guest->ast != nullptr) {
+        if (WasmEdge_ResultOK(loaded) && served->guest.ast != nullptr) {
             WasmEdge_ConfigureContext* validate_configure = WasmEdge_ConfigureCreate();
             WasmEdge_ValidatorContext* validator = WasmEdge_ValidatorCreate(validate_configure);
-            const WasmEdge_Result valid = WasmEdge_ValidatorValidate(validator, served->guest->ast);
+            const WasmEdge_Result valid = WasmEdge_ValidatorValidate(validator, served->guest.ast);
             WasmEdge_ValidatorDelete(validator);
             WasmEdge_ConfigureDelete(validate_configure);
             if (!WasmEdge_ResultOK(valid)) {
-                WasmEdge_ASTModuleDelete(served->guest->ast);
-                served->guest->ast = nullptr;
+                WasmEdge_ASTModuleDelete(served->guest.ast);
+                served->guest.ast = nullptr;
             }
         }
-        if (!WasmEdge_ResultOK(loaded) || served->guest->ast == nullptr) {
+        if (!WasmEdge_ResultOK(loaded) || served->guest.ast == nullptr) {
             CodemodeRemoteFailureMessage failure;
             failure.error =
                     CodemodeError{.kind = CodemodeError::Kind::Sandbox, .message = "Failed to load guest module"};
             (void)co_await support::detail::await_async_result(
-                    (*served->exchange)(std::vector<CodemodeRemoteMessageVariant>{std::move(failure)}));
+                    served->exchange(std::vector<CodemodeRemoteMessageVariant>{std::move(failure)}));
             co_return support::ExpectedVoid{};
         }
 
@@ -793,13 +805,15 @@ support::AsyncResult<void> serve_deterministic_remote(
         start.seed = static_cast<std::uint32_t>(request.data.seed.value_or(0));
         start.expected_fingerprint = request.data.expected_fingerprint;
         start.memory_limit_bytes = request.data.memory_limit_bytes;
-        start.stop_token = served->stop->get_token();
+        start.stop_token = served->stop.get_token();
 
         detail::DeterministicHost host;
-        host.on_started = [queue = served->queue](std::string_view fingerprint) {
+        // The host callbacks live inside `run`, which `RemoteDeterministicServe`
+        // destroys before `queue`, so the borrowed queue outlives every call.
+        host.on_started = [queue = &served->queue](std::string_view fingerprint) {
             queue->push(CodemodeRemoteStartedMessage{std::string{fingerprint}});
         };
-        host.on_call = [queue = served->queue](const CodemodeHostCall& call) {
+        host.on_call = [queue = &served->queue](const CodemodeHostCall& call) {
             CodemodeRemoteCallMessage message;
             message.id = call.id;
             message.target = call.target == CodemodeHostCall::Target::Global ? "global" : "tool";
@@ -807,12 +821,12 @@ support::AsyncResult<void> serve_deterministic_remote(
             message.args = call.arguments_json;
             queue->push(std::move(message));
         };
-        host.on_idle = [queue = served->queue](std::int64_t seq, std::int64_t issued) {
+        host.on_idle = [queue = &served->queue](std::int64_t seq, std::int64_t issued) {
             queue->push(CodemodeRemoteIdleMessage{.seq = seq, .issued = issued});
         };
 
-        served->run = std::make_shared<detail::DeterministicRun>(served->guest->ast, std::move(start), std::move(host));
-        served->run->consume([queue = served->queue](support::Expected<CodemodeRunResult> outcome) noexcept {
+        served->run.emplace(served->guest.ast, std::move(start), std::move(host));
+        served->run->consume([queue = &served->queue](support::Expected<CodemodeRunResult> outcome) noexcept {
             queue->finish(std::move(outcome));
         });
 
@@ -827,14 +841,13 @@ support::AsyncResult<void> serve_deterministic_remote(
             boost::asio::co_spawn(
                     executor,
                     [served, batch = std::move(batch)]() mutable -> boost::asio::awaitable<void> {
-                        auto reply =
-                                co_await support::detail::await_async_result((*served->exchange)(std::move(batch)));
+                        auto reply = co_await support::detail::await_async_result(served->exchange(std::move(batch)));
                         if (!reply) {
-                            served->stop->request_stop();
+                            served->stop.request_stop();
                             co_return;
                         }
                         if (std::holds_alternative<CodemodeRemoteStopReply>(*reply)) {
-                            served->stop->request_stop();
+                            served->stop.request_stop();
                             co_return;
                         }
                         if (auto* result = std::get_if<CodemodeRemoteResultReply>(&*reply)) {
@@ -860,7 +873,7 @@ support::AsyncResult<void> serve_deterministic_remote(
 
         boost::asio::steady_timer timer(executor);
         while (true) {
-            for (auto& message : served->queue->take_messages()) {
+            for (auto& message : served->queue.take_messages()) {
                 std::visit(
                         [&](auto& m) {
                             using T = std::decay_t<decltype(m)>;
@@ -879,7 +892,7 @@ support::AsyncResult<void> serve_deterministic_remote(
                         },
                         message);
             }
-            if (auto terminal = served->queue->take_terminal()) {
+            if (auto terminal = served->queue.take_terminal()) {
                 // pi sends whatever is still buffered with the terminal
                 // message in one exchange (or drops it when the caller
                 // asked to stop), so the caller observes the script's
@@ -901,9 +914,12 @@ support::AsyncResult<void> serve_deterministic_remote(
                             CodemodeError{.kind = CodemodeError::Kind::Sandbox, .message = outcome.error().message};
                     batch.push_back(std::move(failure));
                 }
-                (void)co_await support::detail::await_async_result((*served->exchange)(std::move(batch)));
+                (void)co_await support::detail::await_async_result(served->exchange(std::move(batch)));
                 co_return support::ExpectedVoid{};
             }
+            // debt: 5 ms polling loop over the deterministic queue; upgrade to an
+            // executor-posted wake from `RemoteDeterministicQueue::push` when replay
+            // latency or idle CPU on the serving thread matters.
             timer.expires_after(std::chrono::milliseconds{5});
             const auto [error] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
             (void)error;

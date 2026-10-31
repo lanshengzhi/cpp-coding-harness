@@ -753,7 +753,7 @@
           },
           {
             "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "sha256": "3db9f497c8dd5ab66a8b5127eb064e1ee11ff9d2ac475aa7e48743abac10340e"
+            "sha256": "2b4cad19b68cef919953994e630c6f8e21773f98774d1c55d72e39e8dcbdcc63"
           },
           {
             "path": "tests/coding_agent/McpSessionManagerTest.cpp",

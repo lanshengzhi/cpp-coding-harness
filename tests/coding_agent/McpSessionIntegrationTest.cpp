@@ -25,6 +25,7 @@
 #include "support/ConnectionGate.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
+#include "support/JsonCompare.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/McpTestKit.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -566,11 +567,21 @@ TEST_CASE("agent session binds late MCP tools and replaces their callable schema
     CHECK(tests::trace_line_count(trace, "tools/call") == 3);
     if (!scripted) {
         REQUIRE_FALSE(provider->offered_tools.empty());
+        // The refreshed schema is what the caller must actually send; asserting
+        // only the description would pass even if the replacement schema never
+        // reached the declaration. `json_mismatch` rejects extra keys, so a
+        // stale `text` property left behind by a merge is a failure.
+        const auto parsed_schema = support::read_json(
+                R"({"type":"object","additionalProperties":false,"required":["message"],"properties":{"message":{"type":"string"}}})");
+        REQUIRE(parsed_schema.has_value());
+        const auto& replacement_schema = *parsed_schema;
         std::vector<std::string> names;
         for (const auto& tool : provider->offered_tools.back()) {
             if (!tool.name.starts_with("mcp__")) continue;
             names.push_back(tool.name);
             CHECK(tool.description == "updated");
+            INFO(tool.name << ": " << tests::json_mismatch(replacement_schema, tool.parameters).value_or(""));
+            CHECK_FALSE(tests::json_mismatch(replacement_schema, tool.parameters).has_value());
         }
         CHECK(names == std::vector<std::string>{"mcp__echo__echo", "mcp__echo__late"});
     }

@@ -1304,6 +1304,49 @@ TEST_CASE("project resource loader keeps the worktree symlink path when the main
     CHECK(result.resources.agents_files[0].content == "shared marker\n");
 }
 
+TEST_CASE("project resource loader follows a multi-hop worktree context symlink once",
+        "[coding_agent][project-resource-loader][context-files][issue1114][spec]") {
+    // The worktree candidate is a symlink to another symlink, so discovery has
+    // to resolve the whole chain to a regular file: stopping after one hop
+    // leaves `AGENTS.md` pointing at a symlink, which is not a regular-file
+    // candidate, and the worktree would load nothing.
+    //
+    // The chain sits on the candidate, not on a directory component of the
+    // worktree path, because ADR 0057 opens every directory component with
+    // O_NOFOLLOW: a worktree reached through a symlinked directory is refused
+    // by the capability before the shadow comparison is reached at all.
+    LoaderFixture fix;
+    const auto main = fix.workspace.path() / "repo";
+    const auto worktree = main / "wt";
+    fix.write("repo/AGENTS.md", "main marker\n");
+    link_worktree(fix, main, worktree, "wt");
+    write_symlink("hop-one", worktree / "AGENTS.md");
+    write_symlink("../AGENTS.md", worktree / "hop-one");
+
+    auto result = load_context_files_at(fix, worktree);
+
+    REQUIRE(result.resources.agents_files.size() == 1);
+    CHECK(result.resources.agents_files[0].path == (worktree / "AGENTS.md").string());
+    CHECK(result.resources.agents_files[0].content == "main marker\n");
+}
+
+TEST_CASE("project resource loader does not shadow the context file of the main repo root",
+        "[coding_agent][project-resource-loader][context-files][issue1114][spec]") {
+    // The workspace is the main repo itself, so the worktree root and the main
+    // repo root canonicalize to the same path and `findShadowedContextFile`
+    // returns nothing. Treating that root as a shadowed worktree would drop the
+    // only context file there is.
+    LoaderFixture fix;
+    fix.write("repo/.git/HEAD", "ref: refs/heads/main\n");
+    fix.write("repo/AGENTS.md", "root marker\n");
+
+    auto result = load_context_files_at(fix, fix.workspace.path() / "repo");
+
+    REQUIRE(result.resources.agents_files.size() == 1);
+    CHECK(result.resources.agents_files[0].path == (fix.workspace.path() / "repo" / "AGENTS.md").string());
+    CHECK(result.resources.agents_files[0].content == "root marker\n");
+}
+
 TEST_CASE("project resource loader skips broken and directory context symlinks",
         "[coding_agent][project-resource-loader][context-files][issue1114][spec]") {
     SECTION("broken symlink falls through to the next candidate") {

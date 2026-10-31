@@ -12,6 +12,7 @@
 #include <cch/coding_agent/Skill.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
@@ -89,6 +90,18 @@ public:
             [&session, text = std::move(text)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
                 co_return co_await session.prompt(std::move(text));
             }));
+}
+
+/// The text of the last user message the model saw, which is where an expanded
+/// prompt template lands before the request is dispatched.
+[[nodiscard]] std::string last_request_user_text(const ai::AiContext& context) {
+    std::string text;
+    for (const auto& message : context.messages) {
+        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+            text = ai::text_from_user_message(*user);
+        }
+    }
+    return text;
 }
 
 /// Yield to the fixture Runtime loop without introducing a production timeout
@@ -250,16 +263,58 @@ TEST_CASE("session expands the frozen quoted-empty prompt before the model call"
     CHECK(assistant_text == "done");
 
     REQUIRE_FALSE(fixture.client->requests.empty());
-    const auto& request = fixture.client->requests.back();
-    std::string request_user_text;
-    for (const auto& message : request.messages) {
-        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-            request_user_text = ai::text_from_user_message(*user);
-        }
-    }
-    CHECK(request_user_text == "Review src/index.ts. Focus: correctness.");
-    REQUIRE(request.system_prompt.has_value());
-    CHECK(request.system_prompt->find("/review") == std::string::npos);
+    CHECK(last_request_user_text(fixture.client->requests.back()) == "Review src/index.ts. Focus: correctness.");
+    REQUIRE(fixture.client->requests.back().system_prompt.has_value());
+    CHECK(fixture.client->requests.back().system_prompt->find("/review") == std::string::npos);
+}
+
+TEST_CASE("session applies collection defaults to joined prompt arguments", "[coding_agent][reload][issue1114][spec]") {
+    // `${@:-default}` / `${ARGUMENTS:-default}` cover the whole joined set, so
+    // an invocation with no arguments falls back instead of expanding to an
+    // empty string.
+    ReloadFixture fixture;
+    fixture.create(/*trusted*/ true);
+    fixture.workspace.write(".pi/prompts/collect.md",
+            "---\n"
+            "description: collection default prompt.\n"
+            "---\n"
+            "[${@:-fallback}][${ARGUMENTS:-fallback}]\n");
+
+    auto reloaded = run_reload(fixture.runtime, *fixture.session);
+    REQUIRE(reloaded.has_value());
+    CHECK(reloaded->prompt_diagnostics.empty());
+
+    auto without_args = run_prompt(fixture.runtime, *fixture.session, "/collect");
+    REQUIRE(without_args.has_value());
+    REQUIRE_FALSE(fixture.client->requests.empty());
+    CHECK(last_request_user_text(fixture.client->requests.back()) == "[fallback][fallback]");
+
+    auto with_args = run_prompt(fixture.runtime, *fixture.session, "/collect one two");
+    REQUIRE(with_args.has_value());
+    CHECK(last_request_user_text(fixture.client->requests.back()) == "[one two][one two]");
+}
+
+TEST_CASE("session loads a ~-prefixed explicit prompt template against $HOME",
+        "[coding_agent][reload][issue1114][spec]") {
+    // `~` is one of the resource-flag path modifiers: an explicit path resolves
+    // against the home directory rather than the workspace before it is read.
+    tests::TempWorkspace home;
+    home.write("home-prompt.md",
+            "---\n"
+            "description: home prompt.\n"
+            "---\n"
+            "home marker\n");
+    const tests::EnvVarGuard home_env{"HOME", home.path().string()};
+    ReloadFixture fixture;
+    fixture.create(/*trusted*/ true, [](coding_agent::runtime::InteractiveSessionFacts& facts) {
+        facts.no_prompt_templates = true;
+        facts.prompt_template_paths = {"~/home-prompt.md"};
+    });
+
+    CHECK(fixture.session->prompt_diagnostics().empty());
+    const auto& templates = fixture.session->templates();
+    REQUIRE(templates.size() == 1);
+    CHECK(templates[0].name == "home-prompt");
 }
 
 TEST_CASE("session loads explicit resources through resource-flag path modifiers",
