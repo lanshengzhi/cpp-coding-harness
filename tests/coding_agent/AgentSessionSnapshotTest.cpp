@@ -526,8 +526,10 @@ TEST_CASE("a resumed session declares its loadout without rewriting recorded his
 
     REQUIRE(run_awaitable(runtime, session->prompt("declared")).has_value());
 
-    // The recorded message keeps its position; the declaration the run emits
-    // follows it, ahead of the prompt's own messages.
+    // The recorded message keeps its position; one system entry follows it
+    // carrying both the section diff the transcript had not seen (pi
+    // `_preparePromptAndToolLoadout`) and the loadout delta the loop anchors on
+    // it (pi `declareToolChanges`).
     const auto after = session->snapshot().agent_state.messages;
     REQUIRE(after.size() == 4);
     REQUIRE(std::holds_alternative<ai::UserMessage>(after[0]));
@@ -535,14 +537,90 @@ TEST_CASE("a resumed session declares its loadout without rewriting recorded his
     const auto* declaration = std::get_if<ai::SystemMessage>(&after[1]);
     REQUIRE(declaration != nullptr);
     CHECK(declaration->tools_removed.empty());
-    // The declared set is exactly the executable set, in its order.
+    // A transcript with no system message restores the session's default
+    // loadout, so the delta is non-empty and the declared set is exactly the
+    // executable set, in its order — both declarations on this one entry.
+    const auto active_tool_names = session->snapshot().agent_state.active_tool_names;
+    REQUIRE_FALSE(active_tool_names.empty());
     std::vector<std::string> declared_names;
     declared_names.reserve(declaration->tools_added.size());
     for (const auto& tool : declaration->tools_added) {
         declared_names.push_back(tool.name);
     }
-    CHECK(declared_names == session->snapshot().agent_state.active_tool_names);
+    REQUIRE_FALSE(declared_names.empty());
+    CHECK(declared_names == active_tool_names);
+    // The same entry declares the prompt sections: a transcript with no system
+    // message has seen none of them, so the diff is the full rendered set, and
+    // the first rendered section is pi's `preamble`.
+    REQUIRE_FALSE(declaration->sections.empty());
+    CHECK(declaration->sections.front().name == "preamble");
+    CHECK(declaration->sections.front().text.has_value());
+    CHECK(std::ranges::none_of(
+            declaration->sections, [](const ai::SystemMessageSection& section) { return !section.text.has_value(); }));
     REQUIRE(std::holds_alternative<ai::UserMessage>(after[2]));
     REQUIRE(std::holds_alternative<ai::AssistantMessage>(after[3]));
+    session->close();
+}
+
+// #1110 / #1104: a transcript that already declares sections only re-declares
+// what changed, and a prompt that changes nothing declares nothing. The entry
+// carries the loadout delta on the same message, so a resumed session never
+// accumulates one system message for sections and another for tools.
+TEST_CASE("a prompt declares only the section diff and the loadout delta it needs",
+        "[sdk][snapshot][resume][tool-loadout][issue1110][spec]") {
+    TestPaths paths;
+    tests::RuntimeFixture runtime;
+    auto store = harness::session::SessionStore::create_new(paths.session_file, test_metadata(paths));
+    REQUIRE(store.has_value());
+    ai::SystemMessage recorded_system;
+    recorded_system.timestamp = 1'700'000'000'000;
+    recorded_system.sections.push_back(ai::SystemMessageSection{.name = "preamble", .text = "stale preamble"});
+    REQUIRE(store->append(ai::MessageVariant{recorded_system}).has_value());
+    REQUIRE(store->append(user_message("recorded turn")).has_value());
+
+    auto resumed = resume_for_frontend(paths, runtime);
+    REQUIRE(resumed.has_value());
+    auto* session = resumed->session.get();
+
+    // The transcript still leads with its recorded system message.
+    const auto before = session->snapshot().agent_state.messages;
+    REQUIRE(before.size() == 2);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(before[0]));
+
+    REQUIRE(run_awaitable(runtime, session->prompt("first")).has_value());
+
+    const auto after_first = session->snapshot().agent_state.messages;
+    REQUIRE(after_first.size() == 5);
+    const auto* declaration = std::get_if<ai::SystemMessage>(&after_first[2]);
+    REQUIRE(declaration != nullptr);
+    // The stale preamble is replaced; nothing is removed, because every name
+    // the transcript declares still exists in the prompt.
+    CHECK(std::ranges::none_of(
+            declaration->sections, [](const ai::SystemMessageSection& section) { return !section.text.has_value(); }));
+    const auto preamble = std::ranges::find_if(
+            declaration->sections, [](const ai::SystemMessageSection& section) { return section.name == "preamble"; });
+    REQUIRE(preamble != declaration->sections.end());
+    REQUIRE(preamble->text.has_value());
+    CHECK(*preamble->text != "stale preamble");
+    // This transcript declares a system message without tools, so the restored
+    // loadout is empty (pi `_restoreToolsFromTranscript`: the transcript's
+    // `toolsAdded` is the whole loadout) and there is no tool delta to merge.
+    // The one-entry rule for a real delta is asserted in the case above.
+    CHECK(declaration->tools_added.empty());
+    CHECK(session->snapshot().agent_state.active_tool_names.empty());
+    REQUIRE(std::holds_alternative<ai::UserMessage>(after_first[3]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(after_first[4]));
+
+    // Nothing changed since that entry, so the next prompt declares nothing.
+    const auto sections_before = after_first.size();
+    REQUIRE(run_awaitable(runtime, session->prompt("second")).has_value());
+    const auto after_second = session->snapshot().agent_state.messages;
+    REQUIRE(after_second.size() == sections_before + 2);
+    REQUIRE(std::ranges::none_of(after_second, [](const ai::MessageVariant& message) {
+        const auto* system = std::get_if<ai::SystemMessage>(&message);
+        return system != nullptr && system->sections.empty();
+    }));
+    REQUIRE(std::holds_alternative<ai::UserMessage>(after_second[sections_before]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(after_second[sections_before + 1]));
     session->close();
 }

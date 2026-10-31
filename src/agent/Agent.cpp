@@ -222,9 +222,17 @@ support::AsyncResult<void> Agent::prompt(
     if (impl_->active_run) {
         return support::AsyncResult<void>{std::unexpected(agent_busy_error())};
     }
+    return prompt_with_prefix(std::move(user_message), {}, std::move(commitment), std::move(stop_source));
+}
+
+support::AsyncResult<void> Agent::prompt_with_prefix(ai::UserMessage user_message,
+        std::vector<ai::MessageVariant> prefix,
+        AgentEventCommitter commitment,
+        std::stop_source stop_source) {
     return support::detail::make_async_result(
             [impl = impl_,
                     user_message = std::move(user_message),
+                    prefix = std::move(prefix),
                     commitment = std::move(commitment),
                     stop_source = std::move(stop_source)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
                 if (!impl) {
@@ -234,11 +242,13 @@ support::AsyncResult<void> Agent::prompt(
                     co_return std::unexpected(support::make_error(
                             support::ErrorCode::Validation, "agent is busy (prompt already in flight)"));
                 }
+                InitialInput initial_input;
+                initial_input.prefix_messages = std::move(prefix);
                 co_return co_await Impl::run_loop(impl,
                         std::optional<ai::UserMessage>{std::move(user_message)},
                         std::move(commitment),
                         std::move(stop_source),
-                        InitialInput{});
+                        std::move(initial_input));
             });
 }
 

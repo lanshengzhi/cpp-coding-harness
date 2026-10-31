@@ -110,6 +110,46 @@ namespace {
     return std::move(*result);
 }
 
+/// Prompt the Agent while capturing its lifecycle events, so a case can assert
+/// the emitted order rather than only the settled state.
+struct ObservedRun {
+    support::ExpectedVoid result;
+    std::vector<agent::AgentLifecycleEvent> events;
+};
+
+[[nodiscard]] ObservedRun run_prompt_observed(agent::Agent& subject, std::string prompt) {
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> result;
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
+    boost::asio::co_spawn(
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(subject.prompt(std::move(prompt)));
+                co_return;
+            },
+            boost::asio::detached);
+    io.run();
+    REQUIRE(result.has_value());
+    return ObservedRun{.result = std::move(*result), .events = std::move(events)};
+}
+
+template <typename Event>
+[[nodiscard]] std::vector<const Event*> events_of(const std::vector<agent::AgentLifecycleEvent>& events) {
+    std::vector<const Event*> matched;
+    for (const auto& event : events) {
+        if (const auto* concrete = std::get_if<Event>(&event)) {
+            matched.push_back(concrete);
+        }
+    }
+    return matched;
+}
+
 [[nodiscard]] std::vector<std::string> request_tool_names(const tests::FakeModelStream& stream) {
     REQUIRE(!stream.calls.empty());
     std::vector<std::string> names;
@@ -232,8 +272,8 @@ TEST_CASE("a removed active tool never executes and the request declares the ord
     stream->responses.push_back(std::move(removed_call));
     stream->responses.push_back(ai::assistant_text_message("done"));
 
-    auto run = run_prompt(subject, "go");
-    REQUIRE(run);
+    auto run = run_prompt_observed(subject, "go");
+    REQUIRE(run.result);
 
     CHECK(executes["alpha"] == 0);
     CHECK(executes["beta"] == 0);
@@ -255,6 +295,41 @@ TEST_CASE("a removed active tool never executes and the request declares the ord
     CHECK(result->is_error);
     // A call that never executed has no duration (pi `durationMs` absence).
     CHECK_FALSE(result->duration_ms.has_value());
+
+    // Frozen observation `replacing state.tools narrows the executable set and
+    // declares the system tool delta`: exactly one start/end pair for the
+    // rejected call, error flagged, duration absent on both the end event and
+    // the result message, one tool result on the first turn and none on the
+    // second, and an `agent_end` slice of five messages.
+    const auto starts = events_of<agent::ToolExecutionStartEvent>(run.events);
+    REQUIRE(starts.size() == 1);
+    CHECK(starts.front()->tool_call_id == "removed-1");
+    CHECK(starts.front()->tool_name == "alpha");
+    const auto ends = events_of<agent::ToolExecutionEndEvent>(run.events);
+    REQUIRE(ends.size() == 1);
+    CHECK(ends.front()->tool_call_id == "removed-1");
+    CHECK(ends.front()->tool_name == "alpha");
+    CHECK(ends.front()->is_error);
+    CHECK_FALSE(ends.front()->duration_ms.has_value());
+    CHECK(ends.front()->result.is_error);
+
+    const auto turn_ends = events_of<agent::TurnEndEvent>(run.events);
+    REQUIRE(turn_ends.size() == 2);
+    REQUIRE(turn_ends[0]->tool_results.size() == 1);
+    CHECK(turn_ends[0]->tool_results.front().tool_call_id == "removed-1");
+    CHECK(turn_ends[1]->tool_results.empty());
+
+    const auto agent_ends = events_of<agent::AgentEndEvent>(run.events);
+    REQUIRE(agent_ends.size() == 1);
+    REQUIRE(agent_ends.front()->messages.size() == 5);
+    const auto* ended_result = std::get_if<ai::ToolResultMessage>(&agent_ends.front()->messages[3]);
+    REQUIRE(ended_result != nullptr);
+    REQUIRE(ended_result->duration_ms.has_value() == false);
+
+    // Tracked divergence (1047 audit gap #10): pi emits `Tool a not found`,
+    // while the port keeps its bounded diagnostic. This pins the current text
+    // so a change has to revisit the ledger entry rather than drift silently.
+    CHECK(ai::text_from_content(result->content).starts_with("unknown tool: alpha"));
 }
 
 TEST_CASE("the tool delta declares ordered additions and removals", "[agent][async][tool-loadout][issue1110][spec]") {

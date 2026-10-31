@@ -165,6 +165,12 @@ struct AgentExecutionSnapshot {
 /// whether the caller already drained steering input, so the turn machine must
 /// not poll the steering queue again at turn 1.
 struct InitialInput {
+    /// Messages committed ahead of the run's own user message (pi
+    /// `_prepareRun`'s `messages.unshift(updateMessage)`): the Session's
+    /// prompt-time system message carries the section diff the model has not
+    /// seen yet, and `declare_tool_changes` anchors the loadout delta on it
+    /// instead of declaring a second system message.
+    std::vector<ai::MessageVariant> prefix_messages;
     std::vector<ai::MessageVariant> messages;
     bool steering_already_drained{false};
 };

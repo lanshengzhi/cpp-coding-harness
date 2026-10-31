@@ -225,6 +225,16 @@ private:
         AgentEventCommitter commitment,
         std::stop_source stop_source);
 
+    /// Execute one prompt whose transcript the caller prepares: `prefix`
+    /// messages are committed ahead of the user message, so a prompt-time
+    /// system message (the Session's section diff, pi
+    /// `_preparePromptAndToolLoadout`) anchors the loadout delta the loop
+    /// declares on it (pi `_prepareRun`: `messages.unshift(updateMessage)`).
+    [[nodiscard]] support::AsyncResult<void> prompt_with_prefix(ai::UserMessage user_message,
+            std::vector<ai::MessageVariant> prefix,
+            AgentEventCommitter commitment,
+            std::stop_source stop_source);
+
     /// Session-internal continuation used by overflow compact-and-retry-once.
     /// Unlike the public operation, this path does not use queued input to make
     /// an assistant-terminal transcript continuable; the session removes the

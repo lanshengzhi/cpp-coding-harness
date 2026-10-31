@@ -434,6 +434,19 @@ std::string AgentSession::Impl::rebuild_system_prompt() const {
     return prompt::renderSystemPromptSections(build_system_prompt_sections());
 }
 
+std::vector<ai::SystemMessageSection> AgentSession::Impl::pending_prompt_sections() const {
+    std::vector<ai::SystemMessage> system_messages;
+    if (agent_) {
+        for (const auto& message : agent_->state().messages) {
+            if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+                system_messages.push_back(*system);
+            }
+        }
+    }
+    return prompt::diffSystemPromptSections(
+            prompt::replaySystemPromptSections(system_messages), build_system_prompt_sections());
+}
+
 std::vector<prompt::SystemPromptSection> AgentSession::Impl::build_system_prompt_sections() const {
     // pi `_rebuildSystemPrompt` (`core/agent-session.ts`) + `buildSystemPrompt`
     // (`core/system-prompt.ts`): the default/custom branches, tool snippets +
@@ -670,9 +683,23 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
                 }};
     };
 
+    // pi `_prepareRun` -> `_preparePromptAndToolLoadout`: the prompt carries the
+    // section diff the transcript has not seen yet, unshifted ahead of the
+    // prompt's own messages. The Agent loop anchors its tool-loadout delta on
+    // that same message, so one system entry declares both (pi
+    // `declareToolChanges`).
+    std::vector<ai::MessageVariant> prompt_prefix;
+    if (auto sections = pending_prompt_sections(); !sections.empty()) {
+        ai::SystemMessage update;
+        update.sections = std::move(sections);
+        // pi mints the entry with `timestamp: Date.now()`.
+        update.timestamp = ai::current_timestamp_ms();
+        prompt_prefix.emplace_back(std::move(update));
+    }
+
     std::optional<support::ExpectedVoid> result;
     result = co_await support::detail::await_async_result(agent::detail::AgentPromptAccess::prompt(
-            *agent_, std::move(prompt), make_retry_observing_sink(), stop_source));
+            *agent_, std::move(prompt), std::move(prompt_prefix), make_retry_observing_sink(), stop_source));
     if (!result) {
         co_return co_await commitment->conclude(std::move(result));
     }

@@ -198,6 +198,12 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
         }
 
         if (turn == 1) {
+            // pi `_prepareRun` unshifts the prompt-time system message ahead of
+            // the prompt's own messages, so the loadout delta below lands on
+            // that message rather than an additional one.
+            for (auto& message : initial_input.prefix_messages) {
+                pending_messages.push_back(std::move(message));
+            }
             if (has_initial_user_message) {
                 pending_messages.push_back(std::move(initial_user_message));
             }

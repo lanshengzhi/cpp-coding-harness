@@ -427,6 +427,12 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// construction and on `/reload`.
     [[nodiscard]] std::string rebuild_system_prompt() const;
     [[nodiscard]] std::vector<prompt::SystemPromptSection> build_system_prompt_sections() const;
+    /// pi `_preparePromptAndToolLoadout`: the section diff between what the live
+    /// transcript already replays and the prompt this request would send. Empty
+    /// when nothing changed, so no section is ever declared without a
+    /// difference. The Agent loop then anchors its loadout delta on the same
+    /// message (pi `declareToolChanges`).
+    [[nodiscard]] std::vector<ai::SystemMessageSection> pending_prompt_sections() const;
     /// Shared preflight outcome rejecting a second concurrent User Bash.
     [[nodiscard]] support::ExpectedVoid reject_if_user_bash_busy() const;
 
