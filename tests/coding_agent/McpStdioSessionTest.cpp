@@ -203,8 +203,8 @@ TEST_CASE("a connected MCP server's contributed tools carry their exposure and n
     auto config = echo_server_config();
     config.exposure = coding_agent::mcp::McpExposure::Codemode;
     config.description = "Echo fixture server";
-    auto source = tests::run_awaitable(
-            runtime, coding_agent::mcp::McpExtensionToolSource::connect_stdio(std::move(config)));
+    auto source =
+            tests::run_awaitable(runtime, coding_agent::mcp::McpExtensionToolSource::connect_stdio(std::move(config)));
     REQUIRE(source.has_value());
     REQUIRE(source.value() != nullptr);
     auto loaded = source.value()->load_tools();

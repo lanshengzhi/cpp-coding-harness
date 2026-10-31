@@ -128,11 +128,11 @@
           },
           {
             "path": "src/coding_agent/mcp/McpExtensionToolSource.cpp",
-            "sha256": "3b059486aff0354d0e7f1f58648aaa7eca3109a3085064ed928158b2ac259dc2"
+            "sha256": "357eda915b4361da9eb9fe527718ae2b6ec86a26b4293940ce35652470ba887b"
           },
           {
             "path": "src/coding_agent/mcp/McpExtensionToolSource.hpp",
-            "sha256": "e8b901d11aac678a47881d2669419d7e3f86d207dc8d527b1c941307fc6650e7"
+            "sha256": "41ed260434a57c2e04d190cb6429a992dc2bd3ab2f9ddd59433d57a4f59d2847"
           },
           {
             "path": "src/coding_agent/PrettyJson.hpp",
@@ -140,7 +140,7 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "141f442f24edeaafb73771c0c3a47f0b6d8b77612cd0ea45f7334af0409abf8b"
+            "sha256": "3fd057d89d6e66397aa0dd41a439bad32d25a531a6e0d6ad9c7956df64bbfb87"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
@@ -263,11 +263,11 @@
             "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
           ],
           "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-          "recordedAt": "2026-10-31T12:51:46Z",
+          "recordedAt": "2026-10-31T13:16:43Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "d7bb6686ab14d6e10404d7afd11a1fb4a516c3f3b4cb23a55d3539f513ce9d03"
+            "sha256": "126c5f4c434f4807aa24ed6ca885d5970292c69f7b39f973d0f2581792bc5d87"
           }
         },
         "rows": [
@@ -329,7 +329,7 @@
           ]
         },
         "revalidation1118": {
-          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The merge with #1111 keeps the recorded-loadout restore, the relative +name/-name modifiers and the MCP replay skip intact; the catalog is applied to the post-modifier initial loadout and to the restored loadout. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on the merged tree, and this change makes no new verification claim about those rows.",
+          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface and the programmatic MCP source attach it, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The merge with #1111 keeps the recorded-loadout restore, the relative +name/-name modifiers and the MCP replay skip intact; the catalog is applied to the post-modifier initial loadout and to the restored loadout. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on the merged tree, and this change makes no new verification claim about those rows.",
           "changedInputs": [
             "cmake/targets/CodingAgent.cmake",
             "cmake/tests/CodingAgentTests.cmake",
@@ -337,7 +337,9 @@
             "src/coding_agent/runtime/McpProductionAdapters.hpp",
             "src/coding_agent/runtime/McpSessionManager.cpp",
             "src/coding_agent/runtime/McpSessionManager.hpp",
-            "src/coding_agent/extensions/ExtensionTool.hpp"
+            "src/coding_agent/extensions/ExtensionTool.hpp",
+            "src/coding_agent/mcp/McpExtensionToolSource.cpp",
+            "src/coding_agent/mcp/McpExtensionToolSource.hpp"
           ],
           "previousValidation": {
             "command": [
@@ -720,7 +722,7 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "141f442f24edeaafb73771c0c3a47f0b6d8b77612cd0ea45f7334af0409abf8b"
+            "sha256": "3fd057d89d6e66397aa0dd41a439bad32d25a531a6e0d6ad9c7956df64bbfb87"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
@@ -903,11 +905,11 @@
             "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
           ],
           "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-          "recordedAt": "2026-10-31T12:51:46Z",
+          "recordedAt": "2026-10-31T13:16:43Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "d7bb6686ab14d6e10404d7afd11a1fb4a516c3f3b4cb23a55d3539f513ce9d03"
+            "sha256": "126c5f4c434f4807aa24ed6ca885d5970292c69f7b39f973d0f2581792bc5d87"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -940,7 +942,7 @@
           ]
         },
         "revalidation1118": {
-          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface recomputes the catalog on registration/withdrawal/exposure changes, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The merge with #1111 keeps the recorded-loadout restore, the relative +name/-name modifiers and the MCP replay skip intact; the catalog is applied to the post-modifier initial loadout and to the restored loadout. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on the merged tree, and this change makes no new verification claim about those rows.",
+          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface and the programmatic MCP source attach it, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The merge with #1111 keeps the recorded-loadout restore, the relative +name/-name modifiers and the MCP replay skip intact; the catalog is applied to the post-modifier initial loadout and to the restored loadout. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on the merged tree, and this change makes no new verification claim about those rows.",
           "changedInputs": [
             "cmake/targets/CodingAgent.cmake",
             "cmake/tests/CodingAgentTests.cmake",
@@ -973,6 +975,384 @@
             }
           }
         }
+      },
+      {
+        "id": "1118-codemode-catalog",
+        "ticket": "1118",
+        "implementationCommits": [
+          "f9c5ad096d0632bcccc0422deff36bcba2ecf0d7",
+          "ce81c188a41559b8fdac4be56c4d69a4c83a62df",
+          "fbf269a8c18d9497248c3f0d7e9269090a80b24f"
+        ],
+        "report": "docs/research/pi-v1.3.0/1118-codemode-catalog.md",
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/targets/CodingAgent.cmake",
+            "sha256": "c765517d529520138ad12be5ff550e93be47fa07f46c6b56ba6ba1f4ee800073"
+          },
+          {
+            "path": "cmake/targets/Codemode.cmake",
+            "sha256": "c2b1069f80fab8deb195e2f5aa12b866f8a43b8e07984e0e345e58963f5d94d1"
+          },
+          {
+            "path": "cmake/targets/AgentCore.cmake",
+            "sha256": "6dc0586d612c0ad86d1919aa8fe008ff58fcaacdbfca7f910f89ad15c9d84a51"
+          },
+          {
+            "path": "cmake/targets/Ai.cmake",
+            "sha256": "19bc87c900ddf9fb09b77dfae4932dd0c52ced10fc33779bc1553b5243d8305e"
+          },
+          {
+            "path": "cmake/targets/Support.cmake",
+            "sha256": "536d6b8a41c3fa26de6b0f1e3ba23131e9fb70c5ac6870212752246606bba438"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "cmake/tests/CodingAgentTests.cmake",
+            "sha256": "b7330ec5a79a7df4cc82a8a0c1f3df226625cc8acdf522c43e833966f5c43253"
+          },
+          {
+            "path": "src/codemode/Declarations.cpp",
+            "sha256": "8878e6d834988f82fbf0c47baba413e906469adc612d9e8e7b80e38af1e90788"
+          },
+          {
+            "path": "src/codemode/include/cch/codemode/Declarations.hpp",
+            "sha256": "9647acb67bae019d9a87430aa5e465ebc3f3eb5bbe41e3726f420af6b6b5c404"
+          },
+          {
+            "path": "src/coding_agent/extensions/ToolExposure.hpp",
+            "sha256": "ed7e8c5b7380c35e97015d07b1d42bdfbff3f878e8284a7d3564919a6e348159"
+          },
+          {
+            "path": "src/coding_agent/extensions/ExtensionTool.hpp",
+            "sha256": "f18634af5fb20f5a876e0acc19be006f891542571c9a69e31368b05ff40ac275"
+          },
+          {
+            "path": "src/coding_agent/extensions/ExtensionToolRegistry.cpp",
+            "sha256": "f4313d7b8a1701670da1a4a3ceabd1a413a8cc3b2fa0c8058f29c788e2c44005"
+          },
+          {
+            "path": "src/coding_agent/extensions/ExtensionToolRegistry.hpp",
+            "sha256": "ee998028457ddba278c21f73dab10abdce6fd6589f0bfdb2467b6f5dd17cd128"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeCatalog.cpp",
+            "sha256": "86eb69c6e96794478a36af01ff94869e7bd4d5092c96967a6afe55f351ac3dad"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeCatalog.hpp",
+            "sha256": "e5f1cfe71b0f99cb9f260d3801a6f2062d319dc048011f4036874e779dc0e14a"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeCatalogState.cpp",
+            "sha256": "148abcb340f12213ece7267c571c6a0516889911c0b15373ccf2618db2d68ba6"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeCatalogState.hpp",
+            "sha256": "d01b4149bab26c826dd027bb743476ef03da78304c05a2d04f25e78037fad155"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp",
+            "sha256": "040871a1aaf92f0ed1e70cb654c31477992db9c35dd7758401bc2deedcfc59d6"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeDiscovery.hpp",
+            "sha256": "9ef55dec9998e5391b88c91cca3e08189e95f50fca6720c94a5a225e32d431ae"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeTool.cpp",
+            "sha256": "54fb20d4a41e1b86847dc1ae32ecb0d015e2eda4452ce9154c9a9949cf410f93"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeTool.hpp",
+            "sha256": "157061d36fbfca9b26373e9e5facb860910b1238a80fdc445229763ebfe56899"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
+            "sha256": "e511f6dd5b5db8e83efe5ff31a5642095cda9236d28aa1c9a430cc8eb2169458"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.hpp",
+            "sha256": "949887284243d3da43b78767b2adfb3daa78fad6daab983cbfc68d4ecd366ac0"
+          },
+          {
+            "path": "src/coding_agent/extensions/tool_search/ToolSearchToolSource.cpp",
+            "sha256": "d6cbb592aab99b77e1a5b3c96b9ae156c33d57ceee055ce70a2bff0ff71235bf"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpExposure.hpp",
+            "sha256": "dc5f30510bd1de6c7b84c3b7a20d8bf5fd5715c900606e7aed5a4321db97eb70"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpExtensionToolSource.cpp",
+            "sha256": "357eda915b4361da9eb9fe527718ae2b6ec86a26b4293940ce35652470ba887b"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpExtensionToolSource.hpp",
+            "sha256": "41ed260434a57c2e04d190cb6429a992dc2bd3ab2f9ddd59433d57a4f59d2847"
+          },
+          {
+            "path": "src/coding_agent/AgentSession.cpp",
+            "sha256": "3c95751bd1216e8cfcb679f659d6feff6c10bf588a8dbdfe7c4662893f6ba3a3"
+          },
+          {
+            "path": "src/coding_agent/AgentSessionExecution.cpp",
+            "sha256": "4dac844eef3cfc756094753af473750523d10387d87c421869084ffda385e061"
+          },
+          {
+            "path": "src/coding_agent/AgentSessionInteraction.cpp",
+            "sha256": "cd99e93706159350c591f7344c2d5f456f8eb490d1187f61f5dcf47e417c1d1f"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "sha256": "3fd057d89d6e66397aa0dd41a439bad32d25a531a6e0d6ad9c7956df64bbfb87"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
+            "sha256": "314984a7a0a0eaceda4063fbd98a02565d5e120f6a18937542250ab56e373fa3"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpSessionManager.cpp",
+            "sha256": "47bbacbe5a04d20d9f206e0032d446dd1e14b368f0161fc04e79d2da05db30f2"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpSessionManager.hpp",
+            "sha256": "0ef5d6aff17a0009b9df9bc0077f82b56f14a262ef9527005c7fbf25d2092517"
+          },
+          {
+            "path": "src/coding_agent/runtime/RuntimeServices.hpp",
+            "sha256": "a2209169c92bdf59b8caeeb2d5079eda43833d1c351e0bc398091f5e643d3a55"
+          },
+          {
+            "path": "src/coding_agent/runtime/SessionFactory.cpp",
+            "sha256": "ccb56d2283c9bdea465c016f7ed1c4d194c9df9cfeb30a6e2cefef1da244c45f"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/coding_agent/CodemodeCatalogTest.cpp",
+            "sha256": "e26dc3bd8a2502393ad8c3fecc6ae76c07fba1fffc6755cd3ffcd3541d6950f5"
+          },
+          {
+            "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+            "sha256": "3aa1bdd0421410df36216ccee122e1ce341943cff5558730ff4528651b4318cc"
+          },
+          {
+            "path": "tests/coding_agent/CodemodeParityTest.cpp",
+            "sha256": "07c99988b168bddaf650b8b8532a551b6c43f756599b1634cc3ec1896b53c94a"
+          },
+          {
+            "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
+            "sha256": "7f7dd16aa9af75fb78901c148d3c2c19a1eda009713824b423fa68a3e817b7d3"
+          },
+          {
+            "path": "tests/coding_agent/McpStdioSessionTest.cpp",
+            "sha256": "12dce2bf8688b5a455baf05425cfe694775f58df266eb5b92fd79ef12bb5ca51"
+          },
+          {
+            "path": "tests/support/RuntimeFixture.hpp",
+            "sha256": "bd441349fa9473da544f544b9edc451fc8fb548ea14d3b5bf11a3d3b16aba1c0"
+          },
+          {
+            "path": "tests/support/ModelsFixture.hpp",
+            "sha256": "e3a1015be6e69f31203ab7c90c48bedda450a51efb71f11666592d23f0644bd6"
+          },
+          {
+            "path": "tests/support/McpTestKit.hpp",
+            "sha256": "06ab36bb65c056096a599f696cbe416003ede98f2567f87d30f5118c33d20f1d"
+          },
+          {
+            "path": "tests/support/TempWorkspace.hpp",
+            "sha256": "4c3811b22c3abae96d3261a54d401899033ffb80fcc325a5ac5dd2c9f8f75140"
+          },
+          {
+            "path": "tests/support/EnvVarGuard.hpp",
+            "sha256": "5eacc743ff5f28688ebb430a99353133617c0156d3fe462fced37c0f239eb945"
+          },
+          {
+            "path": "tests/support/JsonCompare.hpp",
+            "sha256": "54599aa9c9ed5551ddbcff2bb39dae0027f2a9b7f513313de78bcf0ccdd5a9ae"
+          },
+          {
+            "path": "tests/support/ScriptedProvider.cpp",
+            "sha256": "3ad5af01f8a6a855f00ff634dfb009442d19005989bc8f0107572675d27c3bf9"
+          },
+          {
+            "path": "tests/support/ModelRuntimeTestSupport.cpp",
+            "sha256": "ef00f8b02a43b53dde4d83cd7d7c114b19c27cd614a1a8851b10ee88de2eb84f"
+          },
+          {
+            "path": "src/support/Json.hpp",
+            "sha256": "4b7efc0a5d1379f0f418635284359478d5f58c9caa02dd44eb677c5de4bc09ad"
+          },
+          {
+            "path": "src/support/AsyncResultBridge.hpp",
+            "sha256": "a8df9d396854060a9b5f9586de2d853c97633201a3fb797a49284dbcf3d110dc"
+          },
+          {
+            "path": "fixtures/pi-mcp/echo_server.py",
+            "sha256": "edb1dfec00a1ae6822831d5075abb87c6bcfb8a1c091321c7c74fe539ce58708"
+          },
+          {
+            "path": "fixtures/pi-mcp/resource_isolation_server.py",
+            "sha256": "db43f367bf135d2f9d7f4ce80b2ace7a7ed0412b7b1a8b7904c4d5a8946f2af2"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
+            "sha256": "68a7e9716755ef5ebba97948b3ad9343b1621c1bdf72517248554d0927f52fb6"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/baselines.json",
+            "sha256": "3416ef812c4c0e9fe79dfc52a0ea00ea1a51d93c435caf5fe57ee75eb0218be3"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "sha256": "f2b6069ac38fcf3c99e797acd5a0f601bf67e9aa98e80a6866662553a9a89caf"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
+            "sha256": "ac28bcd5ea0b2288246ca15c581cdcf312828861362949c80299c43c95a9a350"
+          }
+        ],
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1118",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml"
+          ],
+          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
+          "recordedAt": "2026-10-31T13:17:36Z",
+          "selected": 19,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
+            "sha256": "ac28bcd5ea0b2288246ca15c581cdcf312828861362949c80299c43c95a9a350"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_coding_agent:codemode-description-catalog",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "the empty codemode catalog still declares globals, discovery and the options grammar",
+                "test": "the empty codemode catalog matches the frozen pi-v1.3.0 description",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              },
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "a listed tool section carries its declaration, output type and guidelines",
+                "test": "a listed tool section carries its declaration, output type and guidelines",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              },
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "test": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              },
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "deferred tools are never listed and do not change the description",
+                "test": "deferred tools are never listed and do not change the description",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a real session's next request lists MCP tools registered late and executes them",
+              "testSource": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+              "reason": "A check that only compares the frozen empty-catalog text passes while the live catalog is stale. This case registers an MCP tool late, asserts the next request lists it, and then executes it through the nested-call seam, so a stale catalog or a listed-but-unexecutable tool fails."
+            }
+          },
+          {
+            "id": "cch_coding_agent:codemode-description-loadout",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+                "test": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              },
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "the only loadout lists every callable tool and hides direct declarations",
+                "test": "the only loadout lists every callable tool and hides direct declarations",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "the only loadout hides direct declarations from the request and lists them in the catalog",
+              "testSource": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+              "reason": "The description alone cannot prove the hidden-declaration projection. This case asserts a real request omits the direct built-ins while the transcript still declares them and the catalog lists them, so a hook that only rewrites descriptions fails."
+            }
+          },
+          {
+            "id": "cch_coding_agent:codemode-application-namespace",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "test": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "the advertised discovery globals are bound and answer over the callable loadout",
+              "testSource": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+              "reason": "A catalog-only namespace check passes while describeNamespace returns null. This case calls searchTools, describeTool and describeNamespace in a real script and asserts the namespace name, alias lookup, description and member list, so an unimplemented discovery handler fails."
+            }
+          },
+          {
+            "id": "cch_coding_agent:codemode-models-description-gate",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "the models declaration line is present only when models are enabled",
+                "test": "the models declaration line follows the bound capability",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "the models declaration line follows the bound capability",
+              "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp",
+              "reason": "The gate is the bound-globals set, not a formatting flag: the same case renders with and without `models` among the bound globals and requires the line to appear only when bound. An always-present or always-absent line fails one side, and production binds the discovery globals only."
+            }
+          }
+        ],
+        "routingSha256": "69324f2fda0d49ee9f5ecc9c334f5a5ef3f10bc98895ea395dcd416cc99c9d7b"
       }
     ]
   },
@@ -1227,10 +1607,10 @@
         "partial": 4
       },
       "cch_coding_agent": {
-        "implemented": 82,
-        "missing": 18,
+        "implemented": 86,
+        "missing": 17,
         "not-applicable": 6,
-        "partial": 53
+        "partial": 50
       },
       "cch_durable": {
         "implemented": 6,
@@ -1255,16 +1635,16 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1029,
-      "missing": 211,
+      "implemented": 1033,
+      "missing": 210,
       "not-applicable": 18,
-      "partial": 206
+      "partial": 203
     },
     "verification": {
       "not-applicable": 28,
       "unverified": 1016,
-      "upstream-captured": 413,
-      "verified": 7
+      "upstream-captured": 409,
+      "verified": 11
     },
     "evidenceRoute": {
       "captured": 420,
@@ -16015,15 +16395,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "Codemode catalog, MCP server grouping and scripts discovering MCP tools.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1118",
       "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
       "comparisonScenarios": [
         "namespaces group sections and the inline budget omits tools with an explicit marker"
@@ -16031,16 +16411,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "namespaces group sections and the inline budget omits tools with an explicit marker"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1118-codemode-catalog.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Thread namespace metadata from the MCP surface into the library catalog/discovery; implement `describeNamespace` rather than returning null. Test a namespaced and an unnamespaced tool together.",
+      "remainingWork": null,
+      "notes": "Delivered by #1118; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1118-codemode-catalog.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -16053,7 +16433,26 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "namespaces group sections and the inline budget omits tools with an explicit marker"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Thread namespace metadata from the MCP surface into the library catalog/discovery; implement `describeNamespace` rather than returning null. Test a namespaced and an unnamespaced tool together."
+      },
+      "delivery": "1118-codemode-catalog"
     },
     {
       "id": "cch_coding_agent:codemode-application-nested-calls",
@@ -16264,15 +16663,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "The `codemode` model-facing tool description, MCP late-registration refresh, and the loadout/prompt assembly.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1118",
       "scenario": "the empty codemode catalog still declares globals, discovery and the options grammar",
       "comparisonScenarios": [
         "the empty codemode catalog still declares globals, discovery and the options grammar",
@@ -16283,16 +16682,19 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
-          "the empty codemode catalog still declares globals, discovery and the options grammar"
+          "the empty codemode catalog still declares globals, discovery and the options grammar",
+          "a listed tool section carries its declaration, output type and guidelines",
+          "namespaces group sections and the inline budget omits tools with an explicit marker",
+          "deferred tools are never listed and do not change the description"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1118-codemode-catalog.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Replace the bullet renderer with the v1.3.0 catalog and thread mode/inline budget/namespace/deferred metadata into the refresh path. Update the parity test only after the new differential fixture is registered.",
+      "remainingWork": null,
+      "notes": "Delivered by #1118; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1118-codemode-catalog.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -16305,7 +16707,26 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "the empty codemode catalog still declares globals, discovery and the options grammar"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Replace the bullet renderer with the v1.3.0 catalog and thread mode/inline budget/namespace/deferred metadata into the refresh path. Update the parity test only after the new differential fixture is registered."
+      },
+      "delivery": "1118-codemode-catalog"
     },
     {
       "id": "cch_coding_agent:codemode-description-loadout",
@@ -16316,15 +16737,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "Application loadout assembly, system-prompt catalog and direct tool descriptions.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1118",
       "scenario": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
       "comparisonScenarios": [
         "the on loadout lists only non-direct callable tools and adds script-call descriptions",
@@ -16333,16 +16754,17 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
-          "the on loadout lists only non-direct callable tools and adds script-call descriptions"
+          "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+          "the only loadout lists every callable tool and hides direct declarations"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1118-codemode-catalog.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add the loadout seam (with exposure/namespace/deferred metadata) before porting the mode tests; keep settings parsing as the input.",
+      "remainingWork": null,
+      "notes": "Delivered by #1118; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1118-codemode-catalog.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -16355,7 +16777,26 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "the on loadout lists only non-direct callable tools and adds script-call descriptions"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Add the loadout seam (with exposure/namespace/deferred metadata) before porting the mode tests; keep settings parsing as the input."
+      },
+      "delivery": "1118-codemode-catalog"
     },
     {
       "id": "cch_coding_agent:codemode-extension-registration",
@@ -16466,15 +16907,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "Model-facing codemode description and system prompt.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1118",
       "scenario": "the models declaration line is present only when models are enabled",
       "comparisonScenarios": [
         "the models declaration line is present only when models are enabled"
@@ -16482,16 +16923,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "the models declaration line is present only when models are enabled"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1118-codemode-catalog.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Keep the absent branch correct and add a differential assertion when the catalog is ported. Do not use this row as a demand to implement model providers.",
+      "remainingWork": null,
+      "notes": "Delivered by #1118; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1118-codemode-catalog.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -16504,7 +16945,26 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "the models declaration line is present only when models are enabled"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Keep the absent branch correct and add a differential assertion when the catalog is ported. Do not use this row as a demand to implement model providers."
+      },
+      "delivery": "1118-codemode-catalog"
     },
     {
       "id": "cch_coding_agent:codemode-settings",

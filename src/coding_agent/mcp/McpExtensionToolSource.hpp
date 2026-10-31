@@ -133,9 +133,11 @@ public:
         ConstructionKey() = default;
         friend class McpExtensionToolSource;
     };
-    McpExtensionToolSource(
-            ConstructionKey, std::shared_ptr<cch::mcp::Client> connection, std::vector<McpToolDescriptor> tools,
-            McpServerConfigBase base, std::optional<std::string> instructions = std::nullopt);
+    McpExtensionToolSource(ConstructionKey,
+            std::shared_ptr<cch::mcp::Client> connection,
+            std::vector<McpToolDescriptor> tools,
+            McpServerConfigBase base,
+            std::optional<std::string> instructions = std::nullopt);
 
     McpExtensionToolSource(const McpExtensionToolSource&) = delete;
     McpExtensionToolSource& operator=(const McpExtensionToolSource&) = delete;

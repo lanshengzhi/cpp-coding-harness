@@ -81,9 +81,7 @@ struct CodemodeCatalogSettings {
 
     /// Whether the session binds the `models` namespace (pi
     /// `describeGlobals(models)`).
-    [[nodiscard]] bool models() const {
-        return std::ranges::find(bound_globals, "models") != bound_globals.end();
-    }
+    [[nodiscard]] bool models() const { return std::ranges::find(bound_globals, "models") != bound_globals.end(); }
 };
 
 /// What a script sees of one tool (pi `toCodemodeDeclaration`): its description
