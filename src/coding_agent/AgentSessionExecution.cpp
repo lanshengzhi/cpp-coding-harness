@@ -363,8 +363,8 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // cannot grow past the context window (pi 0.84.4, #6879). The hook is
     // stored inside the Agent, which this Impl owns and destroys with itself,
     // so the captured `this` cannot outlive its target.
-    options.prepare_next_turn = [this](agent::PrepareNextTurnContext turn)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [this](agent::AgentTurnContext turn) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         return support::detail::make_async_result(
                 [this, turn = std::move(turn)]() mutable
                         -> boost::asio::awaitable<support::Expected<std::optional<agent::AgentLoopTurnUpdate>>> {

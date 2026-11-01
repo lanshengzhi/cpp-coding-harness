@@ -689,7 +689,7 @@
         },
         {
           "path": "src/coding_agent/AgentSessionExecution.cpp",
-          "sha256": "4dac844eef3cfc756094753af473750523d10387d87c421869084ffda385e061"
+          "sha256": "3089a067f338bb721271e21f5636448e814c3b79092a988dca7a2e8eefb1023b"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -873,14 +873,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+          "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml"
         ],
-        "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-        "recordedAt": "2026-10-31T14:20:13Z",
+        "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
+        "recordedAt": "2026-11-01T04:36:15Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-          "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
+          "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml",
+          "sha256": "3a87c3e769af4c154d0fca40e5bd0b9cda03ef708c137fdeafb9c6547e774dfb"
         }
       },
       "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -943,6 +943,31 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1111.xml",
             "sha256": "ff64512e3fc12d4d752a3ad2a6a355ef2228161bb46b0831810d1769cfe27238"
+          }
+        }
+      },
+      "revalidation1107": {
+        "reason": "#1107 renames the completed-turn context to AgentTurnContext (pi `AgentTurnContext`), adds the pi-v1.3.0 prepareRequest/finishTurn loop hooks and appendable prepareNextTurn messages, and retires should_stop_after_turn. AgentSessionExecution.cpp changes only the hook parameter type and its formatting. The delivered rows, scenarios and routing digest are unchanged; the shared selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "src/coding_agent/AgentSessionExecution.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+          ],
+          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
+          "recordedAt": "2026-10-31T14:20:13Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
+            "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
           }
         }
       }
@@ -1084,7 +1109,7 @@
         },
         {
           "path": "src/coding_agent/AgentSessionExecution.cpp",
-          "sha256": "4dac844eef3cfc756094753af473750523d10387d87c421869084ffda385e061"
+          "sha256": "3089a067f338bb721271e21f5636448e814c3b79092a988dca7a2e8eefb1023b"
         },
         {
           "path": "src/coding_agent/AgentSessionInteraction.cpp",
@@ -1220,14 +1245,14 @@
           "issue1118",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml"
+          "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1107.xml"
         ],
-        "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-        "recordedAt": "2026-10-31T14:20:13Z",
+        "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
+        "recordedAt": "2026-11-01T04:36:15Z",
         "selected": 19,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
-          "sha256": "ed55e2d9c856d927b10e31c4f93b8ba37e23af5bc34ab383fe38f8f8183d190e"
+          "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1107.xml",
+          "sha256": "fdfa531ab684460a3904926ef178f18822d4e4c046524ecb48dc0623966b8172"
         }
       },
       "rows": [
@@ -1324,7 +1349,32 @@
           }
         }
       ],
-      "routingSha256": "69324f2fda0d49ee9f5ecc9c334f5a5ef3f10bc98895ea395dcd416cc99c9d7b"
+      "routingSha256": "69324f2fda0d49ee9f5ecc9c334f5a5ef3f10bc98895ea395dcd416cc99c9d7b",
+      "revalidation1107": {
+        "reason": "#1107 renames the completed-turn context to AgentTurnContext (pi `AgentTurnContext`), adds the pi-v1.3.0 prepareRequest/finishTurn loop hooks and appendable prepareNextTurn messages, and retires should_stop_after_turn. AgentSessionExecution.cpp changes only the hook parameter type and its formatting. The delivered rows, scenarios and routing digest are unchanged; the shared selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "src/coding_agent/AgentSessionExecution.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1118",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml"
+          ],
+          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
+          "recordedAt": "2026-10-31T14:20:13Z",
+          "selected": 19,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
+            "sha256": "ed55e2d9c856d927b10e31c4f93b8ba37e23af5bc34ab383fe38f8f8183d190e"
+          }
+        }
+      }
     }
   ]
 }

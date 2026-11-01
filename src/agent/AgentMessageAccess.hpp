@@ -20,7 +20,7 @@ public:
     /// same assignment in `_runAutoCompaction`, which runs between the tool
     /// results of one turn and the next assistant response of the same run.
     /// The invocation window behind `AgentEndEvent` and
-    /// `PrepareNextTurnContext.new_messages` restarts at the replacement, so
+    /// `AgentTurnContext.new_messages` restarts at the replacement, so
     /// it always addresses a position inside the replaced list.
     [[nodiscard]] static support::ExpectedVoid replace_messages(
         Agent& agent,

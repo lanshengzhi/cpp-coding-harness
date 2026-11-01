@@ -41,8 +41,10 @@ TEST_CASE("event sink contracts are move-only", "[architecture][u5][spec]") {
     static_assert(std::is_move_constructible_v<agent::ConvertToLlmHook>);
     static_assert(!std::is_copy_constructible_v<agent::PrepareNextTurnHook>);
     static_assert(std::is_move_constructible_v<agent::PrepareNextTurnHook>);
-    static_assert(!std::is_copy_constructible_v<agent::ShouldStopAfterTurnHook>);
-    static_assert(std::is_move_constructible_v<agent::ShouldStopAfterTurnHook>);
+    static_assert(!std::is_copy_constructible_v<agent::PrepareRequestHook>);
+    static_assert(std::is_move_constructible_v<agent::PrepareRequestHook>);
+    static_assert(!std::is_copy_constructible_v<agent::FinishTurnHook>);
+    static_assert(std::is_move_constructible_v<agent::FinishTurnHook>);
     static_assert(!std::is_copy_constructible_v<agent::ValidateTurnUpdateHook>);
     static_assert(std::is_move_constructible_v<agent::ValidateTurnUpdateHook>);
 

@@ -1,0 +1,247 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-01T00:36:26.350Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/agent/src/agent.ts:Agent.prompt,Agent.subscribe,Agent.state,Agent.steer,Agent.followUp",
+    "packages/agent/src/agent-loop.ts:runLoop",
+    "packages/agent/src/types.ts:AgentOptions,AgentTurnContext,AgentTurnDecision,AgentLoopTurnUpdate,AgentRequestUpdate"
+  ],
+  "scenarios": [
+    {
+      "name": "prepareRequest observes the emitted pending prompt and can replace the request state",
+      "inputs": {
+        "prompt": "go",
+        "queuedSteering": "steering",
+        "replacementModel": "replacement",
+        "replacementThinking": "high"
+      },
+      "expected": {
+        "prepareCalls": 1,
+        "completedRolesBeforePrepare": [
+          "user",
+          "user"
+        ],
+        "contextRolesInPrepare": [
+          "user",
+          "user"
+        ],
+        "requestRoles": [
+          "user"
+        ],
+        "requestLastUser": "canonical projection",
+        "requestModel": "replacement",
+        "requestReasoning": "high"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "prepares the initial request after pending messages and can replace request state"
+      }
+    },
+    {
+      "name": "prepareRequest replacement state carries into the next request of the run",
+      "inputs": {
+        "prompt": "go",
+        "tool": "echo",
+        "replacementModel": "replacement",
+        "replacementThinking": "high"
+      },
+      "expected": {
+        "prepareCalls": 2,
+        "requestCount": 2,
+        "requestModels": [
+          "replacement",
+          "replacement"
+        ],
+        "requestReasoning": [
+          "high",
+          "high"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "prepares the initial request after pending messages and can replace request state"
+      }
+    },
+    {
+      "name": "prepareRequest does not poll the steering queue",
+      "inputs": {
+        "prompt": "go",
+        "lateSteeringQueuedBy": "prepareRequest"
+      },
+      "expected": {
+        "prepareCalls": 2,
+        "requestCount": 2,
+        "lateSteeringInRequest": [
+          false,
+          true
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "does not poll steering after prepareRequest"
+      }
+    },
+    {
+      "name": "finishTurn runs after the tool-result message and before turn_end",
+      "inputs": {
+        "prompt": "go",
+        "tool": "echo"
+      },
+      "expected": {
+        "orderingBeforeFirstTurnEnd": [
+          "message_end:toolResult",
+          "finishTurn",
+          "turn_end:tools=1"
+        ],
+        "firstFinishObservation": {
+          "toolResults": 1,
+          "lastContextRole": "toolResult",
+          "newMessages": 3
+        },
+        "finishCalls": 2
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "runs finishTurn after tool-result messages and before turn_end"
+      }
+    },
+    {
+      "name": "finishTurn action continue makes exactly one context-only request",
+      "inputs": {
+        "prompt": "go",
+        "finishTurnAction": "continue"
+      },
+      "expected": {
+        "finishCalls": 2,
+        "requestCount": 2,
+        "requestRoles": [
+          [
+            "user"
+          ],
+          [
+            "user",
+            "assistant"
+          ]
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "makes exactly one context-only request when no natural request satisfies continuation"
+      }
+    },
+    {
+      "name": "finishTurn action continue is satisfied by the natural tool-result request",
+      "inputs": {
+        "prompt": "go",
+        "tool": "echo",
+        "finishTurnAction": "continue"
+      },
+      "expected": {
+        "finishCalls": 2,
+        "requestCount": 2
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "lets a natural tool-result request satisfy continuation"
+      }
+    },
+    {
+      "name": "finishTurn observes an aborted assistant before turn_end without continuing",
+      "inputs": {
+        "prompt": "go",
+        "providerTerminal": "aborted",
+        "finishTurnAction": "continue",
+        "queuedFollowUp": "queued"
+      },
+      "expected": {
+        "finishCalls": 1,
+        "observedStopReason": "aborted",
+        "ordering": [
+          "finishTurn",
+          "turn_end"
+        ],
+        "requestCount": 1,
+        "queuedAfterRun": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "runs finishTurn for a aborted assistant before turn_end without changing the hard exit"
+      }
+    },
+    {
+      "name": "prepareNextTurn appended messages are emitted before the next request",
+      "inputs": {
+        "prompt": "go",
+        "tool": "echo",
+        "preparedMessage": "prepared"
+      },
+      "expected": {
+        "prepareCalls": 1,
+        "requestCount": 2,
+        "secondRequestRoles": [
+          "system",
+          "user",
+          "assistant",
+          "toolResult",
+          "user"
+        ],
+        "secondRequestLastUser": "prepared",
+        "orderingWindow": [
+          "prepareNextTurn",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "should use prepareNextTurn snapshot before continuing"
+      }
+    },
+    {
+      "name": "prepareNextTurn replacement context and appended messages both reach the next request",
+      "inputs": {
+        "prompt": "go",
+        "finishTurnAction": "continue",
+        "replacementMessage": "replacement",
+        "preparedMessage": "prepared"
+      },
+      "expected": {
+        "prepareCalls": 1,
+        "requestCount": 2,
+        "secondRequestRoles": [
+          "user",
+          "user"
+        ],
+        "secondRequestUserTexts": [
+          "replacement",
+          "prepared"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "should use prepareNextTurn snapshot before continuing"
+      }
+    }
+  ]
+}

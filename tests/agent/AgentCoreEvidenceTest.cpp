@@ -504,8 +504,9 @@ TEST_CASE("loop lifecycle ordering golden covers the pi turn lifecycle end to en
     // #745 invocation points: exactly once per continuing turn (turns 1 and 2
     // continue through tool calls and the queued follow-up), and zero after
     // the run's final turn 3.
-    options.prepare_next_turn = [&prepare_calls](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [&prepare_calls](
+                    const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepare_calls;
         if (prepare_calls == 1) {
             return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
@@ -643,14 +644,14 @@ TEST_CASE("thinking-level clamp golden covers creation and model-switch clamping
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_reasoning_model("gpt-partial", partial_map);
-    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{agent::AgentLoopTurnUpdate{
                         .model = tests::make_model("gpt-basic"),
                 }}};
     };
-    options.validate_turn_update = [](const agent::AgentLoopTurnUpdate&) -> support::AsyncResult<void> {
+    options.validate_turn_update = [](const agent::AgentRequestUpdate&) -> support::AsyncResult<void> {
         return support::AsyncResult<void>{support::ExpectedVoid{}};
     };
 
