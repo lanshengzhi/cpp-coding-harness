@@ -9,8 +9,9 @@
 
 namespace cch::durable {
 
-/// Recover the unfinished call's committed nested history for the generation's
-/// abort transaction, before task-scoped documents retire.
+/// The model-visible result of a codemode call the generation's abort transaction
+/// ends: a committed result stands, else the frozen harness error. The nested
+/// calls' own terminal records carry their history.
 [[nodiscard]] support::Expected<std::optional<ai::ToolResultMessage>> aborted_codemode_result(
         Transaction& tx, const TaskRecord& task);
 

@@ -4,6 +4,7 @@
 #include "durable/AwaitResult.hpp"
 #include "durable/CodemodeExecution.hpp"
 #include "durable/CommittedContext.hpp"
+#include "durable/ToolContent.hpp"
 #include "durable/Compaction.hpp"
 #include "support/Json.hpp"
 
@@ -43,44 +44,6 @@ Json tool_json(const ai::Tool& tool) {
     return Json{std::move(value)};
 }
 
-template <typename Block> Json block_json(const Block& block) {
-    return std::visit([](const auto& item) -> Json {
-        using T = std::decay_t<decltype(item)>;
-        if constexpr (std::is_same_v<T, ai::TextContent>) {
-            Object value{{"type", "text"}, {"text", item.text}};
-            if (item.text_signature) value.emplace("textSignature", *item.text_signature);
-            return Json{std::move(value)};
-        } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
-            Object value{{"type", "thinking"}, {"thinking", item.thinking}};
-            if (item.thinking_signature) value.emplace("thinkingSignature", *item.thinking_signature);
-            if (item.redacted) value.emplace("redacted", true);
-            return Json{std::move(value)};
-        } else if constexpr (std::is_same_v<T, ai::ImageContent>) {
-            return Json{Object{{"type", "image"}, {"data", item.data}, {"mimeType", item.mime_type}}};
-        } else {
-            Object value{{"type", "toolCall"}, {"id", item.id}, {"name", item.name},
-                    {"arguments", item.arguments ? *Json::from_support(*item.arguments) : Json{Object{}}}};
-            if (item.thought_signature) value.emplace("thoughtSignature", *item.thought_signature);
-            return Json{std::move(value)};
-        }
-    }, block);
-}
-
-/// The call as tool hooks see it (frozen pi `ToolHookCall`): the model's
-/// arguments, or the arguments a `beforeTool` rewrite left for the next
-/// handler and for execution.
-Json tool_call_json(const ai::ToolCallContent& call, const Json& arguments) {
-    Object value{{"type", "toolCall"}, {"id", call.id}, {"name", call.name}, {"arguments", arguments}};
-    if (call.thought_signature) value.emplace("thoughtSignature", *call.thought_signature);
-    return Json{std::move(value)};
-}
-
-template <typename Blocks> Json blocks_json(const Blocks& blocks) {
-    Array result;
-    for (const auto& block : blocks) result.push_back(block_json(block));
-    return Json{std::move(result)};
-}
-
 Json system_json(const ai::SystemMessage& message) {
     Object result{{"role", "system"}, {"content", message.content}, {"timestamp", numeric(message.timestamp)}};
     Object sections;
@@ -117,7 +80,7 @@ Json usage_json(const ai::Usage& usage) {
 
 Json assistant_json(const ai::AssistantMessage& message) {
     Object result{{"role", "assistant"},
-            {"content", blocks_json(message.content)},
+            {"content", content_json(message.content)},
             {"api", message.api},
             {"provider", message.provider},
             {"model", message.model},
@@ -129,8 +92,11 @@ Json assistant_json(const ai::AssistantMessage& message) {
 }
 
 Json tool_result_json(const ai::ToolResultMessage& message) {
-    Object result{{"role", "toolResult"}, {"toolCallId", message.tool_call_id}, {"toolName", message.tool_name},
-            {"content", blocks_json(message.content)}, {"isError", message.is_error},
+    Object result{{"role", "toolResult"},
+            {"toolCallId", message.tool_call_id},
+            {"toolName", message.tool_name},
+            {"content", content_json(message.content)},
+            {"isError", message.is_error},
             {"timestamp", numeric(message.timestamp)}};
     if (message.duration_ms) result.emplace("durationMs", numeric(*message.duration_ms));
     if (message.details) result.emplace("details", *Json::from_support(*message.details));
@@ -933,50 +899,6 @@ support::ExpectedVoid hand_over(
     if (!run) return std::unexpected(run.error());
     if (!run->has_value()) return std::unexpected(validation("A live run must exist to hand over"));
     return start_run(tx, conversation_id, live, (*run)->inputs, definition);
-}
-
-/// Decode the content blocks a hook returns (frozen pi `Content`).
-support::Expected<std::vector<ai::Content>> content_from_json(const Json& value) {
-    const auto* blocks = value.as_array();
-    if (blocks == nullptr) return std::unexpected(validation("Hook content must be an array"));
-    std::vector<ai::Content> content;
-    content.reserve(blocks->size());
-    for (const Json& item : *blocks) {
-        const Json* type = member(item, "type");
-        if (type == nullptr || type->as_string() == nullptr) {
-            return std::unexpected(validation("A content block must name its type"));
-        }
-        if (*type->as_string() == "text") {
-            const Json* text = member(item, "text");
-            if (text == nullptr || text->as_string() == nullptr) {
-                return std::unexpected(validation("A text block must carry text"));
-            }
-            content.push_back(ai::text_content(*text->as_string()));
-        } else if (*type->as_string() == "image") {
-            const Json* data = member(item, "data");
-            const Json* mime = member(item, "mimeType");
-            if (data == nullptr || data->as_string() == nullptr || mime == nullptr || mime->as_string() == nullptr) {
-                return std::unexpected(validation("An image block must carry data and mimeType"));
-            }
-            content.push_back(ai::image_content(*data->as_string(), *mime->as_string()));
-        } else if (*type->as_string() == "thinking") {
-            const Json* thinking = member(item, "thinking");
-            if (thinking == nullptr || thinking->as_string() == nullptr) {
-                return std::unexpected(validation("A thinking block must carry thinking"));
-            }
-            content.push_back(ai::thinking_content(*thinking->as_string()));
-        } else {
-            return std::unexpected(validation("A tool result block must be text, image or thinking"));
-        }
-    }
-    return content;
-}
-
-/// The content of a harness-produced tool result: its diagnostic rendered in
-/// the frozen `<harness>` block (frozen pi `appendToolResult` of
-/// `harnessError`).
-std::vector<ai::Content> harness_error_content(std::string_view message) {
-    return {ai::text_content(std::format("<harness>\n[error] {}\n</harness>", message))};
 }
 
 /// Invoke every handler registered for `name` on task kind `kind` in
@@ -2381,7 +2303,7 @@ support::Expected<ai::ToolResultMessage> WorkflowRuntime::execute_tool(const ai:
     // afterTool: every replacement becomes the next handler's result and the
     // committed entry carries the last one (frozen pi `finalResult`); ordinary
     // handler errors stay isolated.
-    Object final_fields{{"output", blocks_json(result.content)}, {"isError", result.is_error}};
+    Object final_fields{{"output", content_json(result.content)}, {"isError", result.is_error}};
     if (result.details) final_fields.emplace("details", *Json::from_support(*result.details));
     if (result.nested_calls) final_fields.emplace("nestedCalls", *Json::from_support(*result.nested_calls));
     Json final_result{std::move(final_fields)};

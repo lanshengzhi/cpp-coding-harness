@@ -92,7 +92,9 @@ replay and the application codemode store are not promoted by this slice.
 ## Remaining boundary
 
 Nested operations currently execute serially on the generation thread, and their persisted run
-state is keyed by model call ID under that generation task. It is not the complete frozen
+state is keyed by model call ID under that generation task. **Superseded by
+[#1170](1170-nested-tool-tasks.md)**: each nested call is now an independent durable `pi.tool`
+task owned by the calling task, with its own cancellation and replay policy. It is not the complete frozen
 `pi.tool` / `CodemodeRunDoc` / `CodemodeJournalDoc` task graph. In particular, this evidence does not
 establish bidirectional pi/C++ continuation of an interrupted codemode call. That target remains
 an implementation gap; no legacy format reader, migration or fallback was added.

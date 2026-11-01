@@ -4,6 +4,7 @@
 
 #include "durable/Compaction.hpp"
 #include "durable/SessionErrors.hpp"
+#include "durable/ToolTask.hpp"
 #include "durable/ViewMounts.hpp"
 #include "durable/WorkflowRuntime.hpp"
 
@@ -558,13 +559,19 @@ public:
             ConversationId conv_id,
             const TaskDefinition& task_def,
             std::vector<std::shared_ptr<TaskHookRegistration>> phase_hooks,
+            std::vector<std::shared_ptr<ToolRegistration>> phase_tools,
+            std::move_only_function<const TaskDefinition*(std::string_view)> definition_lookup,
+            std::move_only_function<support::AsyncResult<TaskRecord>(TaskId, std::stop_token)> wait_for_task,
+            std::move_only_function<support::AsyncResult<std::string>(TaskId)> abort_task,
             std::stop_token stop_token,
             std::shared_ptr<std::move_only_function<std::int64_t()>> now_fn,
             std::move_only_function<void(const support::Error&)> report_fn,
             bool allow_abort_commit = false,
             bool abort_invocation = false)
         : session_(session), task_id_(id), conversation_id_(conv_id), task_def_(task_def),
-          phase_hooks_(std::move(phase_hooks)), stop_token_(std::move(stop_token)), now_fn_(std::move(now_fn)),
+          phase_hooks_(std::move(phase_hooks)), phase_tools_(std::move(phase_tools)),
+          definition_lookup_(std::move(definition_lookup)), wait_for_task_(std::move(wait_for_task)),
+          abort_task_(std::move(abort_task)), stop_token_(std::move(stop_token)), now_fn_(std::move(now_fn)),
           report_fn_(std::move(report_fn)), allow_abort_commit_(allow_abort_commit),
           abort_invocation_(abort_invocation) {}
 
@@ -573,8 +580,15 @@ public:
     [[nodiscard]] const std::stop_token& stop_token() const noexcept override { return stop_token_; }
 
     [[nodiscard]] support::AsyncResult<void> commit(CommitCallback change) override {
+        return commit_with(std::move(change), allow_abort_commit_);
+    }
+
+    [[nodiscard]] support::AsyncResult<void> commit_result(CommitCallback change) override {
+        return commit_with(std::move(change), true);
+    }
+
+    [[nodiscard]] support::AsyncResult<void> commit_with(CommitCallback change, bool allow_abort_commit) {
         const TaskId task_id = task_id_;
-        const bool allow_abort_commit = allow_abort_commit_;
         const bool abort_invocation = abort_invocation_;
         const auto now_fn = now_fn_;
         return session_.commit([task_id, allow_abort_commit, abort_invocation, now_fn, change = std::move(change)](
@@ -807,12 +821,41 @@ public:
         });
     }
 
+    [[nodiscard]] const std::vector<std::shared_ptr<ToolRegistration>>& callable_tools() const noexcept override {
+        return phase_tools_;
+    }
+
+    [[nodiscard]] const TaskDefinition* task_definition(std::string_view kind) noexcept override {
+        return definition_lookup_ ? definition_lookup_(kind) : nullptr;
+    }
+
+    [[nodiscard]] support::AsyncResult<TaskRecord> wait_for_task(TaskId id, std::stop_token stop) override {
+        if (!wait_for_task_) {
+            return support::AsyncResult<TaskRecord>{std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "This invocation cannot wait"))};
+        }
+        return wait_for_task_(id, std::move(stop));
+    }
+
+    [[nodiscard]] support::AsyncResult<std::string> abort_task(TaskId id) override {
+        if (!abort_task_) {
+            return support::AsyncResult<std::string>{std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "This invocation cannot abort"))};
+        }
+        return abort_task_(id);
+    }
+
 private:
     Session& session_; // must outlive every pending operation returned by this runtime
     TaskId task_id_;
     ConversationId conversation_id_;
     const TaskDefinition& task_def_; // must outlive every pending operation returned by this runtime
     std::vector<std::shared_ptr<TaskHookRegistration>> phase_hooks_;
+    /// The invocation's callable tools (frozen pi `runtime.agent().callable`).
+    std::vector<std::shared_ptr<ToolRegistration>> phase_tools_;
+    std::move_only_function<const TaskDefinition*(std::string_view)> definition_lookup_;
+    std::move_only_function<support::AsyncResult<TaskRecord>(TaskId, std::stop_token)> wait_for_task_;
+    std::move_only_function<support::AsyncResult<std::string>(TaskId)> abort_task_;
     std::stop_token stop_token_;
     std::shared_ptr<std::move_only_function<std::int64_t()>> now_fn_;
     std::move_only_function<void(const support::Error&)> report_fn_;
@@ -834,6 +877,8 @@ struct Harness::Impl {
     std::unique_ptr<WorkflowRuntime> workflow;
     std::unique_ptr<CompactionRuntime> compaction;
     std::shared_ptr<TaskDefinition> builtin_generation_task;
+    /// The built-in `pi.tool` definition a nested call is created with (frozen pi `ToolTask`).
+    std::shared_ptr<const TaskDefinition> builtin_tool_task;
     std::unique_ptr<Submission::Registry> submissions;
     /// The conversation-view and task-graph mounts derived from committed
     /// state on the Session's commit-publication line. A read-only
@@ -927,6 +972,9 @@ struct Harness::Impl {
         }
         if (builtin_generation_task && builtin_generation_task->kind() == kind) {
             return builtin_generation_task;
+        }
+        if (builtin_tool_task && builtin_tool_task->kind() == kind) {
+            return builtin_tool_task;
         }
         for (const auto& def : snapshot.tasks) {
             if (def && def->kind() == kind) {
@@ -1144,6 +1192,138 @@ struct Harness::Impl {
                 }));
     }
 
+    /// Register one task wait (frozen pi `TaskScheduler.waitForTask`). The caller
+    /// keeps every borrowed local alive until completion; `stop` cancels only this
+    /// wait, never the task.
+    [[nodiscard]] support::AsyncResult<TaskRecord> wait_for_task(TaskId id, std::stop_token stop) {
+        return support::AsyncResult<TaskRecord>{support::AsyncProducer<TaskRecord, support::Error>{
+                [this, id, stop = std::move(stop)](
+                        support::AsyncCompletion<TaskRecord, support::Error> completion) mutable noexcept {
+                    // Check and register under the lock so no terminal publication
+                    // falls between them (frozen pi `TaskScheduler.waitForTask`).
+                    std::optional<support::Error> immediate_error;
+                    std::optional<TaskRecord> immediate_value;
+                    std::shared_ptr<TaskWaiter> waiter;
+                    {
+                        std::lock_guard lock(mutex);
+                        if (wait_error) {
+                            immediate_error = *wait_error;
+                        } else if (auto cur_opt = storage->task(id); !cur_opt) {
+                            immediate_error = cur_opt.error();
+                        } else if (!cur_opt->has_value()) {
+                            immediate_error = support::make_error(support::ErrorCode::Validation,
+                                    "Task " + std::to_string(id.value) + " does not exist");
+                        } else if ((*cur_opt)->state.status == "terminal") {
+                            immediate_value = **cur_opt;
+                        } else if (stop.stop_requested()) {
+                            immediate_error = support::make_error(support::ErrorCode::Cancelled, "stop waiting");
+                        } else {
+                            waiter = std::make_shared<TaskWaiter>();
+                            waiter->completion = std::move(completion);
+                            waiters[id.value].push_back(waiter);
+                        }
+                    }
+                    if (immediate_value.has_value()) {
+                        completion(std::move(*immediate_value));
+                        return;
+                    }
+                    if (immediate_error.has_value()) {
+                        completion(std::unexpected(*immediate_error));
+                        return;
+                    }
+                    // Cancelling this wait rejects only this waiter; the task keeps
+                    // running and settles on its own.
+                    waiter->cancellation = std::make_unique<std::stop_callback<std::move_only_function<void()>>>(
+                            stop, [weak = std::weak_ptr<TaskWaiter>{waiter}] {
+                                const std::shared_ptr<TaskWaiter> claimed = weak.lock();
+                                if (claimed == nullptr) return;
+                                if (claimed->outcome.exchange(2) != 0) return;
+                                auto done = std::move(claimed->completion);
+                                if (done.has_value()) {
+                                    (*done)(std::unexpected(
+                                            support::make_error(support::ErrorCode::Cancelled, "stop waiting")));
+                                }
+                            });
+                }}};
+    }
+
+    /// Mark a task abort (frozen pi `TaskScheduler.abort`): "marked", or
+    /// "terminal" when the task already ended.
+    [[nodiscard]] support::AsyncResult<std::string> abort_task(TaskId id) {
+        return support::AsyncResult<std::string>{support::AsyncProducer<std::string, support::Error>{
+                [this, id](support::AsyncCompletion<std::string, support::Error> completion) mutable noexcept {
+                    auto current_result = storage->task(id);
+                    if (!current_result) {
+                        completion(std::unexpected(current_result.error()));
+                        return;
+                    }
+                    if (!current_result->has_value()) {
+                        completion(
+                                std::unexpected(support::make_error(support::ErrorCode::Validation, "Task not found")));
+                        return;
+                    }
+                    const TaskRecord current = **current_result;
+                    if (current.state.status == "terminal") {
+                        completion("terminal");
+                        return;
+                    }
+
+                    bool has_active_invocation = false;
+                    {
+                        std::lock_guard lock(mutex);
+                        has_active_invocation = active_invocations.contains(id.value);
+                    }
+                    std::optional<std::string> orphan_reason;
+                    if (!has_active_invocation && current.state.status != "completing") {
+                        const auto resolution = resolve_task(current, registry.snapshot());
+                        orphan_reason = resolution.fit.blocked_reason;
+                    }
+                    const std::int64_t ended_at = current_time(clock);
+                    auto result = std::make_shared<std::string>("marked");
+                    session->commit([id, orphan_reason = std::move(orphan_reason), ended_at, result](
+                                            Transaction& tx) -> support::ExpectedVoid {
+                               auto cur = tx.task(id);
+                               if (!cur || !cur->has_value()) {
+                                   return std::unexpected(
+                                           support::make_error(support::ErrorCode::Validation, "Task not found"));
+                               }
+                               TaskRecord task = *cur.value();
+                               if (task.state.status == "terminal") {
+                                   *result = "terminal";
+                                   return {};
+                               }
+                               if (orphan_reason.has_value()) {
+                                   task.state.status = "terminal";
+                                   task.state.outcome = TaskOutcome{
+                                           .status = "orphaned",
+                                           .reason = *orphan_reason,
+                                   };
+                                   task.ended_at = ended_at;
+                                   task.memos.clear();
+                                   return tx.set_task(task);
+                               }
+                               task.abort_requested = true;
+                               return tx.set_task(task);
+                           })
+                            .start([impl = this, id, completion = std::move(completion), result](
+                                           support::ExpectedVoid outcome) mutable noexcept {
+                                if (!outcome) {
+                                    completion(std::unexpected(outcome.error()));
+                                    return;
+                                }
+                                std::optional<std::stop_source> source;
+                                {
+                                    std::lock_guard lock(impl->mutex);
+                                    auto invocation = impl->active_invocations.find(id.value);
+                                    if (invocation != impl->active_invocations.end()) source = invocation->second;
+                                }
+                                if (source) source->request_stop();
+                                impl->cv.notify_all();
+                                completion(std::move(*result));
+                            });
+                }}};
+    }
+
     void notify_waiters(const TaskRecord& record) {
         std::vector<std::shared_ptr<TaskWaiter>> comps;
         {
@@ -1331,6 +1511,9 @@ struct Harness::Impl {
         compaction = std::make_unique<CompactionRuntime>(*session, *storage, clock, *workflow);
         workflow->install_compaction_definition(compaction->definition());
         builtin_generation_task = workflow->generation();
+        auto tool_task = nested_tool_task(*session);
+        if (!tool_task) return std::unexpected(tool_task.error());
+        builtin_tool_task = std::make_shared<const TaskDefinition>(std::move(*tool_task));
         submissions = std::make_unique<Submission::Registry>(*session, *storage);
         registry_sub_id = registry.subscribe([this] {
             std::lock_guard lock(mutex);
@@ -1719,6 +1902,10 @@ struct Harness::Impl {
                     task.conversation_id,
                     *def,
                     phase_snapshot.hooks,
+                    phase_snapshot.tools,
+                    [this](std::string_view kind) { return find_definition(kind); },
+                    [this](TaskId id, std::stop_token stop) { return wait_for_task(id, std::move(stop)); },
+                    [this](TaskId id) { return abort_task(id); },
                     stop_src.get_token(),
                     clock,
                     [this](const support::Error& err) { report(err); },
@@ -1779,11 +1966,16 @@ struct Harness::Impl {
             }
 
             std::optional<chord::Json> cp_before = task.state.checkpoint;
-            HarnessTaskRuntime runtime(*session,
+            HarnessTaskRuntime runtime(
+                    *session,
                     tid,
                     task.conversation_id,
                     *def,
                     phase_snapshot.hooks,
+                    phase_snapshot.tools,
+                    [this](std::string_view kind) { return find_definition(kind); },
+                    [this](TaskId id, std::stop_token stop) { return wait_for_task(id, std::move(stop)); },
+                    [this](TaskId id) { return abort_task(id); },
                     stop_src.get_token(),
                     clock,
                     [this](const support::Error& err) { report(err); });
@@ -2123,56 +2315,7 @@ support::AsyncResult<void> Harness::open_tasks() {
 }
 
 support::AsyncResult<TaskRecord> Harness::wait_for_task(TaskId id, std::stop_token stop) {
-    return support::AsyncResult<TaskRecord>{support::AsyncProducer<TaskRecord, support::Error>{
-            [this, id, stop = std::move(stop)](
-                    support::AsyncCompletion<TaskRecord, support::Error> completion) mutable noexcept {
-                // Check and register under the lock so no terminal publication
-                // falls between them (frozen pi `TaskScheduler.waitForTask`).
-                std::optional<support::Error> immediate_error;
-                std::optional<TaskRecord> immediate_value;
-                std::shared_ptr<TaskWaiter> waiter;
-                {
-                    std::lock_guard lock(impl_->mutex);
-                    if (impl_->wait_error) {
-                        immediate_error = *impl_->wait_error;
-                    } else if (auto cur_opt = impl_->storage->task(id); !cur_opt) {
-                        immediate_error = cur_opt.error();
-                    } else if (!cur_opt->has_value()) {
-                        immediate_error = support::make_error(
-                                support::ErrorCode::Validation, "Task " + std::to_string(id.value) + " does not exist");
-                    } else if ((*cur_opt)->state.status == "terminal") {
-                        immediate_value = **cur_opt;
-                    } else if (stop.stop_requested()) {
-                        immediate_error = support::make_error(support::ErrorCode::Cancelled, "stop waiting");
-                    } else {
-                        waiter = std::make_shared<TaskWaiter>();
-                        waiter->completion = std::move(completion);
-                        impl_->waiters[id.value].push_back(waiter);
-                    }
-                }
-                if (immediate_value.has_value()) {
-                    completion(std::move(*immediate_value));
-                    return;
-                }
-                if (immediate_error.has_value()) {
-                    completion(std::unexpected(*immediate_error));
-                    return;
-                }
-                // Cancelling this wait rejects only this waiter; the task keeps
-                // running and settles on its own (frozen pi's abort signal on a
-                // wait, not on the task).
-                waiter->cancellation = std::make_unique<std::stop_callback<std::move_only_function<void()>>>(
-                        stop, [weak = std::weak_ptr<TaskWaiter>{waiter}] {
-                            const std::shared_ptr<TaskWaiter> claimed = weak.lock();
-                            if (claimed == nullptr) return;
-                            if (claimed->outcome.exchange(2) != 0) return;
-                            auto done = std::move(claimed->completion);
-                            if (done.has_value()) {
-                                (*done)(std::unexpected(
-                                        support::make_error(support::ErrorCode::Cancelled, "stop waiting")));
-                            }
-                        });
-            }}};
+    return impl_->wait_for_task(id, std::move(stop));
 }
 
 support::AsyncResult<void> Harness::wait_for_idle(std::optional<ConversationId> conversation, std::stop_token stop) {
@@ -2228,80 +2371,7 @@ support::AsyncResult<void> Harness::wait_for_idle(std::optional<ConversationId> 
             }}};
 }
 
-support::AsyncResult<std::string> Harness::abort_task(TaskId id) {
-    return support::AsyncResult<std::string>{support::AsyncProducer<std::string, support::Error>{
-            [this, id](support::AsyncCompletion<std::string, support::Error> completion) mutable noexcept {
-                auto current_result = impl_->storage->task(id);
-                if (!current_result) {
-                    completion(std::unexpected(current_result.error()));
-                    return;
-                }
-                if (!current_result->has_value()) {
-                    completion(std::unexpected(support::make_error(support::ErrorCode::Validation, "Task not found")));
-                    return;
-                }
-                const TaskRecord current = **current_result;
-                if (current.state.status == "terminal") {
-                    completion("terminal");
-                    return;
-                }
-
-                bool has_active_invocation = false;
-                {
-                    std::lock_guard lock(impl_->mutex);
-                    has_active_invocation = impl_->active_invocations.contains(id.value);
-                }
-                std::optional<std::string> orphan_reason;
-                if (!has_active_invocation && current.state.status != "completing") {
-                    const auto resolution = impl_->resolve_task(current, impl_->registry.snapshot());
-                    orphan_reason = resolution.fit.blocked_reason;
-                }
-                const std::int64_t ended_at = current_time(impl_->clock);
-                auto result = std::make_shared<std::string>("marked");
-                impl_->session
-                        ->commit([id, orphan_reason = std::move(orphan_reason), ended_at, result](
-                                         Transaction& tx) -> support::ExpectedVoid {
-                            auto cur = tx.task(id);
-                            if (!cur || !cur->has_value()) {
-                                return std::unexpected(
-                                        support::make_error(support::ErrorCode::Validation, "Task not found"));
-                            }
-                            TaskRecord task = *cur.value();
-                            if (task.state.status == "terminal") {
-                                *result = "terminal";
-                                return {};
-                            }
-                            if (orphan_reason.has_value()) {
-                                task.state.status = "terminal";
-                                task.state.outcome = TaskOutcome{
-                                        .status = "orphaned",
-                                        .reason = *orphan_reason,
-                                };
-                                task.ended_at = ended_at;
-                                task.memos.clear();
-                                return tx.set_task(task);
-                            }
-                            task.abort_requested = true;
-                            return tx.set_task(task);
-                        })
-                        .start([impl = impl_.get(), id, completion = std::move(completion), result](
-                                       support::ExpectedVoid outcome) mutable noexcept {
-                            if (!outcome) {
-                                completion(std::unexpected(outcome.error()));
-                                return;
-                            }
-                            std::optional<std::stop_source> source;
-                            {
-                                std::lock_guard lock(impl->mutex);
-                                auto invocation = impl->active_invocations.find(id.value);
-                                if (invocation != impl->active_invocations.end()) source = invocation->second;
-                            }
-                            if (source) source->request_stop();
-                            impl->cv.notify_all();
-                            completion(std::move(*result));
-                        });
-            }}};
-}
+support::AsyncResult<std::string> Harness::abort_task(TaskId id) { return impl_->abort_task(id); }
 
 support::AsyncResult<std::optional<TaskRecord>> Harness::get_task(TaskId id) {
     auto res = impl_->storage->task(id);
@@ -2449,14 +2519,15 @@ void Harness::abort_conversation_pass(
         const OwnershipIndex index(*tasks, *conversations);
         // Mark the reached live tasks. A background task is
         // reached but not marked unless the walk crosses
-        // background boundaries.
+        // background boundaries. Every record is read from the scan
+        // above: a per-task `tx.task()` after the first mark would be a
+        // table read after the commit's first table write.
         for (const TaskId id : index.reachable(conversation_id, background)) {
             reached->push_back(id);
-            auto cur = tx.task(id);
-            if (!cur) return std::unexpected(cur.error());
-            if (!cur->has_value()) continue;
-            TaskRecord task = **cur;
-            if (task.state.status == "terminal" || task.abort_requested) continue;
+            const auto found = std::ranges::find_if(*tasks, [id](const TaskRecord& record) { return record.id == id; });
+            if (found == tasks->end()) continue;
+            if (found->state.status == "terminal" || found->abort_requested) continue;
+            TaskRecord task = *found;
             task.abort_requested = true;
             auto written = tx.set_task(std::move(task));
             if (!written) return written;
