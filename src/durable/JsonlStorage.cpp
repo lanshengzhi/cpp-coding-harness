@@ -727,10 +727,29 @@ struct MainMarker {
             edits.push_back(std::move(edit));
         }
     }
+    // Frozen pi stores the payload flattened beside `model`; this runtime's own
+    // record keeps the whole payload under `data`. Recognize both.
+    chord::Json payload;
+    const bool data_is_payload =
+            data != nullptr &&
+            (model.empty() || (decoded_data.as_object() != nullptr && decoded_data.as_object()->contains("model")));
+    if (data_is_payload) {
+        payload = std::move(decoded_data);
+    } else {
+        chord::Json::Object fields;
+        if (data != nullptr) fields.emplace("data", std::move(decoded_data));
+        if (!model.empty()) {
+            chord::Json::Array messages;
+            for (const auto& message : model)
+                messages.push_back(message);
+            fields.emplace("model", chord::Json{std::move(messages)});
+        }
+        payload = chord::Json{std::move(fields)};
+    }
     return EntryRecord{.id = EntryId{.value = *id},
             .conversation_id = ConversationId{.value = *conversation_id},
             .kind = std::string{*kind},
-            .data = std::move(decoded_data),
+            .data = std::move(payload),
             .head = head,
             .model = std::move(model),
             .edits = std::move(edits),

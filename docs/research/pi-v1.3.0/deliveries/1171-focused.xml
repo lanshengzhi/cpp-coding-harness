@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="4"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="18"
+	timestamp="2026-11-01T23:27:06"
+	>
+	<testcase name="a serial-era codemode run is refused" classname="a serial-era codemode run is refused" time="0.113817" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1171"/>
+		</properties>
+		<system-out>Filters: "a serial-era codemode run is refused"
+Randomness seeded to: 3873985747
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="C++ creates an interrupted codemode run pi continues" classname="C++ creates an interrupted codemode run pi continues" time="18.6747" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1171;issue1171live"/>
+		</properties>
+		<system-out>Filters: "C++ creates an interrupted codemode run pi continues"
+Randomness seeded to: 1877228097
+Filters: [.] [issue1171child]
+Randomness seeded to: 4151449253
+READY pauseB
+READY pauseB
+Filters: [.] [issue1171child]
+Randomness seeded to: 2940786291
+Filters: [.] [issue1171child]
+Randomness seeded to: 3717922628
+READY pauseB
+Filters: [.] [issue1171child]
+Randomness seeded to: 1832223454
+===============================================================================
+All tests passed (116 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a divergent codemode frontier fails explicitly" classname="a divergent codemode frontier fails explicitly" time="11.1186" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1171;issue1171live"/>
+		</properties>
+		<system-out>Filters: "a divergent codemode frontier fails explicitly"
+Randomness seeded to: 2309499855
+Filters: [.] [issue1171child]
+Randomness seeded to: 2164181988
+Filters: [.] [issue1171child]
+Randomness seeded to: 676264430
+Filters: [.] [issue1171child]
+Randomness seeded to: 3451453315
+Filters: [.] [issue1171child]
+Randomness seeded to: 251873840
+===============================================================================
+All tests passed (36 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi and C++ continue each other&apos;s interrupted codemode run" classname="pi and C++ continue each other&apos;s interrupted codemode run" time="15.7061" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1171;issue1171live"/>
+		</properties>
+		<system-out>Filters: "pi and C++ continue each other's interrupted codemode run"
+Randomness seeded to: 4143042719
+READY pauseA
+Filters: [.] [issue1171child]
+Randomness seeded to: 2996384577
+Filters: [.] [issue1171child]
+Randomness seeded to: 519050953
+READY pauseA
+Filters: [.] [issue1171child]
+Randomness seeded to: 1731126143
+Filters: [.] [issue1171child]
+Randomness seeded to: 470666799
+===============================================================================
+All tests passed (156 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

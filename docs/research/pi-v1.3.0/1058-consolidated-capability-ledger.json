@@ -427,12 +427,12 @@
             "--output-junit",
             "/tmp/1105-existing-revalidation.xml"
           ],
-          "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
-          "recordedAt": "2026-10-30T13:11:22Z",
+          "testedRevision": "78dca1567d7df15ad1115f5471d5fdd79583deec",
+          "recordedAt": "2026-11-01T14:07:53Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
-            "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
+            "sha256": "f8b5ddb1299bfd81475a8e7e40ed08296cc3480e2a185cfec321dc41c7eb3ce5"
           }
         },
         "inputs": [
@@ -442,11 +442,11 @@
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "a64465389c1441702a7731e236781d2098c5306e1c5bc9fd71f5577e32cb8d61"
+            "sha256": "4150e8e022eb9247f56c868e3379bf11c1b0e693bb66ded2f107f85f4b77c985"
           },
           {
             "path": "docs/agents/architecture.md",
-            "sha256": "3bd4465fd9f9cfad6a010908814fcdb2571d188a682f55bfa5f4cadbde14696f"
+            "sha256": "7f6a566a9419d46f961eff5b783f69f3c4651262ca350b9e64ef6a56e821e90f"
           },
           {
             "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",

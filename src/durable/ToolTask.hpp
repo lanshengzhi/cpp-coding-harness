@@ -31,6 +31,14 @@ struct NestedCallDiagnostic {
 /// script sees; `content` replaces the frozen `structuredOutput`.
 struct NestedCallResult {
     bool is_error{false};
+    /// The value programs see (frozen pi `NestedToolExecutionResult.structuredOutput`).
+    /// A schema-less tool stores its output: one text item as a string, one
+    /// image as an image block, nothing as `""`, and anything else as the
+    /// content list. A tool with a schema stores its validated value.
+    std::optional<support::JsonValue> structured_output{std::nullopt};
+    /// The same output decoded as model content blocks, for hooks and the
+    /// caller's transcript path. Reconstructed from `structured_output` when a
+    /// frozen pi runtime wrote the result.
     std::vector<ai::Content> content{};
     std::optional<support::JsonValue> details{std::nullopt};
     std::optional<std::int64_t> duration_ms{std::nullopt};
@@ -65,17 +73,18 @@ struct NestedCallResult {
 [[nodiscard]] ai::ToolResultMessage nested_result_message(
         NestedCallResult result, std::string call_id, std::string name);
 
-/// The built-in `pi.tool` definition for a nested call created through
+/// The built-in `pi.tool` definition for a call created through
 /// `TaskRuntime::task_definition` + `Transaction::create_task` (frozen pi
-/// `ToolTask` with a `nested` input).
+/// `ToolTask` with a `model` or `nested` input).
 ///
-/// The `call` phase resolves the tool among the invocation's callable tools,
-/// runs the `beforeTool` hooks, records the execution intent, runs the tool, lets
-/// `afterTool` replace the result, and settles the result into the caller's
-/// nested-call member. The `execute` phase is reached only by recovery and
-/// applies the replay rule (rerun only when both the recorded and the current
-/// policy are safe). The `abort` handler settles an aborted result, so a
-/// cancelled nested call reports into the member its caller is waiting on.
+/// The `call` phase resolves the tool among the invocation's callable tools
+/// (or from the named assistant entry), runs the `beforeTool` hooks, records the
+/// execution intent, runs the tool, lets `afterTool` replace the result, and
+/// settles it into the caller's nested-call member or a `pi.tool-result` entry.
+/// The `execute` phase is reached only by recovery and applies the replay rule
+/// (rerun only when both the recorded and the current policy are safe). The
+/// `abort` handler settles an aborted result, so a cancelled call reports into
+/// the member its caller waits on.
 ///
 /// `session` must outlive every invocation of the returned definition; the
 /// Harness owns it for the definition's whole lifetime.
