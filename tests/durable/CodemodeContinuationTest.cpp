@@ -198,51 +198,62 @@ TaskDefinition parent_task() {
     return std::move(*built);
 }
 
-std::unique_ptr<Storage> open_storage(std::string_view backend, const std::filesystem::path& directory) {
+support::Expected<std::unique_ptr<Storage>> try_open_storage(
+        std::string_view backend, const std::filesystem::path& directory) {
     if (backend == "sqlite") {
         auto opened = SqliteStorage::open(directory / "store.sqlite");
-        if (!opened.has_value()) INFO(opened.error().message << ": " << opened.error().detail);
-        REQUIRE(opened.has_value());
-        return std::move(*opened);
+        if (!opened.has_value()) return std::unexpected(opened.error());
+        return std::unique_ptr<Storage>{std::move(*opened)};
     }
     auto opened = JsonlStorage::open(directory);
+    if (!opened.has_value()) return std::unexpected(opened.error());
+    return std::unique_ptr<Storage>{std::move(*opened)};
+}
+
+std::unique_ptr<Storage> open_storage(std::string_view backend, const std::filesystem::path& directory) {
+    auto opened = try_open_storage(backend, directory);
     if (!opened.has_value()) INFO(opened.error().message << ": " << opened.error().detail);
     REQUIRE(opened.has_value());
     return std::move(*opened);
 }
 
 struct Opened {
-    Registry registry;
+    // The Harness holds this registry's address; a unique_ptr keeps it stable
+    // when the Expected/Opened value moves.
+    std::unique_ptr<Registry> registry = std::make_unique<Registry>();
     std::unique_ptr<Storage> storage;
     std::unique_ptr<Harness> harness;
     ConversationId conversation{};
 };
 
-Opened open_harness(std::string_view backend, const std::filesystem::path& directory) {
+support::Expected<Opened> try_open_harness(std::string_view backend, const std::filesystem::path& directory) {
     Opened opened;
-    opened.storage = open_storage(backend, directory);
+    auto storage = try_open_storage(backend, directory);
+    if (!storage) return std::unexpected(storage.error());
+    opened.storage = std::move(*storage);
     Extension tools{.name = "audit1171-tools"};
     tools.tools.push_back(effect_tool(directory));
     tools.tools.push_back(pause_tool(directory, "pauseA"));
     tools.tools.push_back(pause_tool(directory, "pauseB"));
-    REQUIRE(opened.registry.install(std::move(tools)).has_value());
+    if (auto installed = opened.registry->install(std::move(tools)); !installed)
+        return std::unexpected(installed.error());
     auto sandbox = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path());
-    REQUIRE(sandbox.has_value());
-    REQUIRE(opened.registry.install(codemode_extension(std::move(*sandbox))).has_value());
+    if (!sandbox) return std::unexpected(sandbox.error());
+    if (auto installed = opened.registry->install(codemode_extension(std::move(*sandbox))); !installed)
+        return std::unexpected(installed.error());
     std::vector<TaskDefinition> tasks;
     tasks.push_back(parent_task());
-    auto harness = consume(
-            Harness::open(*opened.storage, HarnessOptions{.tasks = std::move(tasks), .registry = &opened.registry}));
-    if (!harness.has_value()) INFO(harness.error().message << ": " << harness.error().detail);
-    REQUIRE(harness.has_value());
+    auto harness = consume(Harness::open(
+            *opened.storage, HarnessOptions{.tasks = std::move(tasks), .registry = opened.registry.get()}));
+    if (!harness.has_value()) return std::unexpected(harness.error());
     opened.harness = std::move(harness.value());
     auto root = consume(opened.harness->root());
-    REQUIRE(root.has_value());
+    if (!root.has_value()) return std::unexpected(root.error());
     opened.conversation = root.value();
     return opened;
 }
 
-TaskId create_parent(Harness& harness, ConversationId conversation) {
+support::Expected<TaskId> try_create_parent(Harness& harness, ConversationId conversation) {
     TaskId id{};
     auto committed = consume(harness.session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness.task_definition(kParentKind),
@@ -252,7 +263,7 @@ TaskId create_parent(Harness& harness, ConversationId conversation) {
         id = *created;
         return {};
     }));
-    REQUIRE(committed.has_value());
+    if (!committed.has_value()) return std::unexpected(committed.error());
     return id;
 }
 
@@ -478,19 +489,35 @@ Json checkpoint(Storage& storage, TaskId parent, std::size_t expected_entries) {
 /// Rewrite the committed issued frontier: a continuation that silently ignored
 /// a recorded count would repeat or reorder the script's calls.
 void tamper_frontier(const std::filesystem::path& directory, std::string_view backend, TaskId parent) {
-    auto opened = open_harness(backend, directory);
-    auto record = consume(opened.harness->get_task(parent));
-    REQUIRE(record.has_value());
-    REQUIRE(record.value().has_value());
-    REQUIRE(record.value()->state.checkpoint.has_value());
+    auto opened = try_open_harness(backend, directory);
+    if (!opened.has_value()) INFO(opened.error().message << ": " << opened.error().detail);
+    REQUIRE(opened.has_value());
+    auto& harness = *opened->harness;
+    const auto close = [&] { return consume(harness.close()); };
+    auto record = consume(harness.get_task(parent));
+    if (!record.has_value() || !record.value().has_value() || !record.value()->state.checkpoint.has_value()) {
+        REQUIRE(close().has_value());
+        REQUIRE(record.has_value());
+        REQUIRE(record.value().has_value());
+        REQUIRE(record.value()->state.checkpoint.has_value());
+        return;
+    }
     const auto state = record.value()->state.checkpoint->to_support();
     const auto* child = field(state, "child");
-    REQUIRE(child != nullptr);
+    if (child == nullptr) {
+        REQUIRE(close().has_value());
+        REQUIRE(child != nullptr);
+        return;
+    }
     const TaskId codemode{.value = static_cast<std::int64_t>(child->get_number())};
     auto journal = define_document(DocumentDefinitionBuilder{"pi.codemode.journal"}.task(),
             [] { return chord::Json{chord::Json::Object{{"entries", chord::Json{chord::Json::Array{}}}}}; });
-    REQUIRE(journal.has_value());
-    auto committed = consume(opened.harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
+    if (!journal.has_value()) {
+        REQUIRE(close().has_value());
+        REQUIRE(journal.has_value());
+        return;
+    }
+    auto committed = consume(harness.session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto document = tx.doc(*journal, DocumentAddress{.task_id = codemode});
         if (!document) return std::unexpected(document.error());
         auto value = document->get({});
@@ -498,7 +525,8 @@ void tamper_frontier(const std::filesystem::path& directory, std::string_view ba
             return std::unexpected(
                     support::make_error(support::ErrorCode::Validation, "The journal could not be read"));
         auto entries = (**value).to_support().at("entries").get_array();
-        REQUIRE_FALSE(entries.empty());
+        if (entries.empty())
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "The journal has no entry"));
         entries.front().get_object().insert_or_assign("issuedAfter", Json{999.0});
         auto stored = chord::Json::from_support(Json{std::move(entries)});
         if (!stored) return std::unexpected(stored.error());
@@ -506,8 +534,8 @@ void tamper_frontier(const std::filesystem::path& directory, std::string_view ba
             return std::unexpected(written.error());
         return {};
     }));
+    REQUIRE(close().has_value());
     REQUIRE(committed.has_value());
-    REQUIRE(consume(opened.harness->close()).has_value());
 }
 
 void verify_result(const std::filesystem::path& directory, std::string_view file = "pi-result.json") {
@@ -568,45 +596,55 @@ Json result_view(Harness& harness, TaskId parent, ConversationId conversation, c
     return Json{std::move(view)};
 }
 
-void write_result(const std::filesystem::path& directory, Json result) {
+support::ExpectedVoid write_result_file(const std::filesystem::path& directory, const Json& result) {
     auto encoded = support::write_json(result);
-    REQUIRE(encoded.has_value());
+    if (!encoded) return std::unexpected(encoded.error());
     std::ofstream output{directory / "cpp-result.json"};
+    if (!output)
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Cannot write cpp-result.json"));
     output << *encoded;
+    return {};
 }
 
 /// The C++ side of a shared run, spawned as a child so the controlling test can
-/// SIGKILL it between committed boundaries exactly as it kills frozen pi.
+/// SIGKILL it between committed boundaries exactly as it kills frozen pi. A
+/// child reports setup failures through its exit code and never runs a Catch2
+/// assertion, so an abandoned test frame cannot corrupt its Harness teardown.
 void run_cpp_child() {
     const char* directory = std::getenv("CCH_1171_DIR");
     const char* backend = std::getenv("CCH_1171_BACKEND");
     const char* mode = std::getenv("CCH_1171_MODE");
     if (directory == nullptr || backend == nullptr || mode == nullptr) _exit(90);
     if (std::string_view{mode} == "create") {
-        auto opened = open_harness(backend, directory);
-        auto parent = create_parent(*opened.harness, opened.conversation);
-        auto encoded = support::write_json(Json{Object{{"parent", Json{static_cast<double>(parent.value)}},
-                {"conversation", Json{static_cast<double>(opened.conversation.value)}}}});
-        REQUIRE(encoded.has_value());
+        auto opened = try_open_harness(backend, directory);
+        if (!opened) _exit(91);
+        auto parent = try_create_parent(*opened->harness, opened->conversation);
+        if (!parent) _exit(92);
+        auto encoded = support::write_json(Json{Object{{"parent", Json{static_cast<double>(parent->value)}},
+                {"conversation", Json{static_cast<double>(opened->conversation.value)}}}});
+        if (!encoded) _exit(93);
         std::ofstream output{std::filesystem::path{directory} / "task.json"};
+        if (!output) _exit(93);
         output << *encoded;
         output.close();
-        REQUIRE(opened.harness->resume().has_value());
+        if (!opened->harness->resume().has_value()) _exit(94);
         for (;;)
             ::pause();
     }
-    auto opened = open_harness(backend, directory);
+    auto opened = try_open_harness(backend, directory);
+    if (!opened) _exit(95);
     auto task_json = support::read_json([&] {
         std::ifstream input{std::filesystem::path{directory} / "task.json"};
         return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
     }());
-    REQUIRE(task_json.has_value());
+    if (!task_json) _exit(96);
     const TaskId parent{.value = static_cast<std::int64_t>(task_json->at("parent").get_number())};
     const ConversationId conversation{.value = static_cast<std::int64_t>(task_json->at("conversation").get_number())};
-    REQUIRE(opened.harness->resume().has_value());
+    if (!opened->harness->resume().has_value()) _exit(97);
     if (std::string_view{mode} == "finish") {
-        write_result(directory, result_view(*opened.harness, parent, conversation, directory));
-        REQUIRE(consume(opened.harness->close()).has_value());
+        const auto view = result_view(*opened->harness, parent, conversation, directory);
+        if (view.holds<std::nullptr_t>() || !write_result_file(directory, view).has_value()) _exit(98);
+        if (!consume(opened->harness->close()).has_value()) _exit(99);
         _exit(0);
     }
     for (;;)
@@ -757,6 +795,85 @@ TEST_CASE("a divergent codemode frontier fails explicitly", "[durable][codemode]
     CHECK(text.find("different path") != std::string::npos);
     // The completed effect is reattached, never repeated.
     CHECK(lines(directory / "effects.txt").size() == 1);
+}
+
+TEST_CASE("a serial-era codemode run is refused", "[durable][codemode][issue1171]") {
+    MemoryStorage storage;
+    Registry registry;
+    auto sandbox = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path());
+    REQUIRE(sandbox.has_value());
+    REQUIRE(registry.install(codemode_extension(std::move(*sandbox))).has_value());
+    auto harness = consume(Harness::open(storage, HarnessOptions{.registry = &registry}));
+    REQUIRE(harness.has_value());
+    auto root = consume(harness.value()->root());
+    REQUIRE(root.has_value());
+    TaskId child{};
+    {
+        auto call = tool_call_json(
+                ai::ToolCallContent{.id = "c1", .name = "codemode", .arguments = Json{Object{{"code", "return 1;"}}}},
+                chord::Json::from_support(Json{Object{{"code", "return 1;"}}}).value());
+        Json message{Object{{"role", "assistant"},
+                {"content", Array{call.to_support()}},
+                {"api", "audit1171"},
+                {"provider", "audit1171"},
+                {"model", "audit1171"},
+                {"stopReason", "toolUse"},
+                {"timestamp", Json{0.0}}}};
+        auto legacy = define_document_family(DocumentDefinitionBuilder{"pi.codemode.run:v1"}.task(),
+                [](const chord::Json&) { return chord::Json{chord::Json::Object{}}; });
+        REQUIRE(legacy.has_value());
+        auto committed = consume(harness.value()->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
+            auto entry = tx.append_entry(root.value(),
+                    "pi.assistant",
+                    chord::Json::from_support(Json{Object{{"model", Array{message}}}}).value(),
+                    std::nullopt,
+                    {chord::Json::from_support(message).value()});
+            if (!entry) return std::unexpected(entry.error());
+            auto definition = harness.value()->task_definition(kToolTaskKind);
+            if (definition == nullptr)
+                return std::unexpected(
+                        support::make_error(support::ErrorCode::Validation, "The tool task is not registered"));
+            auto created = tx.create_task(*definition,
+                    chord::Json::from_support(Json{Object{{"kind", "model"},
+                                                      {"assistant", Json{static_cast<double>(entry->id.value)}},
+                                                      {"callId", "c1"}}})
+                            .value(),
+                    TaskOptions{.conversation_id = root.value()});
+            if (!created) return std::unexpected(created.error());
+            child = *created;
+            auto document =
+                    tx.doc(*legacy, DocumentAddress{.task_id = child, .key = "c1"}, chord::Json{chord::Json::Object{}});
+            if (!document) return std::unexpected(document.error());
+            return {};
+        }));
+        REQUIRE(committed.has_value());
+    }
+    REQUIRE(harness.value()->resume().has_value());
+    auto record = wait_terminal(*harness.value(), child);
+    REQUIRE(record.has_value());
+    REQUIRE(record->state.outcome.has_value());
+    REQUIRE(record->state.outcome->result.has_value());
+    const auto outcome = record->state.outcome->result->to_support();
+    const auto* entry_value = field(outcome, "entryId");
+    REQUIRE(entry_value != nullptr);
+    support::JsonValue message;
+    auto read = consume(harness.value()->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto entry = tx.entry(EntryId{.value = static_cast<std::int64_t>(entry_value->get_number())});
+        if (!entry || !entry->has_value())
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "The tool result entry is missing"));
+        message = (*entry)->data.to_support();
+        return {};
+    }));
+    const auto closed = consume(harness.value()->close());
+    REQUIRE(read.has_value());
+    REQUIRE(closed.has_value());
+    const auto* model = field(message, "model");
+    REQUIRE(model != nullptr);
+    std::string text;
+    for (const auto& block : model->get_array().front().at("content").get_array())
+        if (block.at("type").get_string() == "text") text += block.at("text").get_string();
+    CHECK(text.find("serial-era") != std::string::npos);
 }
 
 TEST_CASE("codemode continuation child", "[.][issue1171child]") { run_cpp_child(); }

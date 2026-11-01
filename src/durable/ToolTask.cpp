@@ -3,7 +3,6 @@
 #include "durable/AwaitResult.hpp"
 #include "durable/JsonFields.hpp"
 #include "durable/ToolContent.hpp"
-#include "durable/ToolContent.hpp"
 #include "support/Json.hpp"
 
 #include <cch/durable/Records.hpp>
@@ -171,6 +170,13 @@ support::Expected<ai::ToolCallContent> read_model_call(Session& session, const P
         return call;
     }
     return std::unexpected(validation("An assistant entry has no such tool call"));
+}
+
+/// The call a `pi.tool` input names: carried by a nested input, or read from
+/// its assistant entry for a model-issued input.
+support::Expected<ai::ToolCallContent> input_call(Session& session, const ParsedInput& input) {
+    if (input.nested) return input.nested_call.call;
+    return read_model_call(session, input);
 }
 
 /// The call's arguments as a JSON object; a call without arguments passes none.
@@ -457,7 +463,7 @@ support::ExpectedVoid run_tool(TaskRuntime& runtime,
         const Json& arguments) {
     ToolExecutionContext context{.runtime = &runtime, .session = &session, .call_id = call.id};
     for (const auto& candidate : runtime.callable_tools()) {
-        if (!candidate) continue;
+        if (!candidate || candidate->declaration.name == call.name) continue;
         context.tools.push_back(candidate->declaration);
         if (candidate->deferred) context.deferred_tools.push_back(candidate->declaration.name);
         if (candidate->replay_safe) context.replay_safe_tools.push_back(candidate->declaration.name);
@@ -595,12 +601,9 @@ support::Expected<TaskDefinition> nested_tool_task(Session& session) {
     builder.phase("call", [&session](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
         auto input = parse_input(task.input);
         if (!input) return support::AsyncResult<void>{std::unexpected(input.error())};
-        ai::ToolCallContent call = input->nested ? input->nested_call.call : ai::ToolCallContent{};
-        if (!input->nested) {
-            auto loaded = read_model_call(session, *input);
-            if (!loaded) return support::AsyncResult<void>{std::unexpected(loaded.error())};
-            call = std::move(*loaded);
-        }
+        auto loaded = input_call(session, *input);
+        if (!loaded) return support::AsyncResult<void>{std::unexpected(loaded.error())};
+        const ai::ToolCallContent call = std::move(*loaded);
         auto tool = resolve_tool(runtime, call.name);
         if (tool == nullptr)
             return support::AsyncResult<void>{settle_harness_error(
@@ -631,12 +634,9 @@ support::Expected<TaskDefinition> nested_tool_task(Session& session) {
     builder.phase("execute", [&session](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
         auto input = parse_input(task.input);
         if (!input) return support::AsyncResult<void>{std::unexpected(input.error())};
-        ai::ToolCallContent call = input->nested ? input->nested_call.call : ai::ToolCallContent{};
-        if (!input->nested) {
-            auto loaded = read_model_call(session, *input);
-            if (!loaded) return support::AsyncResult<void>{std::unexpected(loaded.error())};
-            call = std::move(*loaded);
-        }
+        auto loaded = input_call(session, *input);
+        if (!loaded) return support::AsyncResult<void>{std::unexpected(loaded.error())};
+        const ai::ToolCallContent call = std::move(*loaded);
         const Json* checkpoint = task.state.checkpoint.has_value() ? &*task.state.checkpoint : nullptr;
         const Json* arguments = checkpoint == nullptr ? nullptr : member(*checkpoint, "arguments");
         const Json* replay = checkpoint == nullptr ? nullptr : member(*checkpoint, "replay");
@@ -656,12 +656,9 @@ support::Expected<TaskDefinition> nested_tool_task(Session& session) {
     builder.abort([&session](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
         auto input = parse_input(task.input);
         if (!input) return support::AsyncResult<void>{std::unexpected(input.error())};
-        ai::ToolCallContent call = input->nested ? input->nested_call.call : ai::ToolCallContent{};
-        if (!input->nested) {
-            auto loaded = read_model_call(session, *input);
-            if (!loaded) return support::AsyncResult<void>{std::unexpected(loaded.error())};
-            call = std::move(*loaded);
-        }
+        auto loaded = input_call(session, *input);
+        if (!loaded) return support::AsyncResult<void>{std::unexpected(loaded.error())};
+        const ai::ToolCallContent call = std::move(*loaded);
         return support::AsyncResult<void>{settle_harness_error(
                 runtime, *input, call, "aborted", std::format("Tool {} was aborted", call.name), "aborted")};
     });

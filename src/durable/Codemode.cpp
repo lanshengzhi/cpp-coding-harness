@@ -178,6 +178,15 @@ DocumentDefinition run_document() {
     return std::move(*definition);
 }
 
+/// The serial #1094 family: recognized only so an interrupted serial run is
+/// refused instead of being silently replaced by the frozen singleton shape.
+DocumentDefinition serial_run_document() {
+    auto definition = define_document_family(DocumentDefinitionBuilder{"pi.codemode.run:v1"}.task(),
+            [](const chord::Json&) { return chord::Json{chord::Json::Object{}}; });
+    if (!definition) std::terminate(); // fixed valid built-in definition
+    return std::move(*definition);
+}
+
 DocumentDefinition journal_document() {
     auto definition = define_document(DocumentDefinitionBuilder{std::string{kJournalKind}}.task(),
             [] { return chord::Json{chord::Json::Object{{"entries", chord::Json{chord::Json::Array{}}}}}; });
@@ -255,6 +264,13 @@ Json start_value(ToolExecutionContext& context, const codemode::CodemodeSource& 
 /// first attempt. The store snapshot is read only for the first attempt, in the
 /// same commit that records it in `start.store`.
 support::Expected<StoredState> load_or_create(ToolExecutionContext& context, const codemode::CodemodeSource& source) {
+    // #1094's family document has different replay semantics. Refuse it before
+    // creating or reading the frozen singleton so an interrupted serial run is
+    // never silently treated as fresh.
+    auto legacy = await_result(context.session->snapshot(
+            serial_run_document(), DocumentAddress{.task_id = context.runtime->task_id(), .key = context.call_id}));
+    if (!legacy) return std::unexpected(legacy.error());
+    if (legacy->has_value()) return std::unexpected(failure("A serial-era codemode run document cannot be continued"));
     StoredState state;
     auto loaded = await_result(context.runtime->commit(
             [&state, &context, &source](
@@ -1096,7 +1112,13 @@ support::Expected<ai::ToolResultMessage> execute(
     auto parsed = codemode::parse_codemode_source(code->get_string());
     if (!parsed) return rejected(parsed.error().message);
     auto state = load_or_create(context, *parsed);
-    if (!state) return std::unexpected(state.error());
+    if (!state) {
+        // An unusable stored document is a model-visible tool error, not a task
+        // fault; the caller still receives the explicit refusal.
+        if (state.error().message == "A serial-era codemode run document cannot be continued")
+            return rejected(state.error().message);
+        return std::unexpected(state.error());
+    }
     if (!valid_run(state->run) || !valid_journal(state->journal)) return rejected("Invalid persisted codemode state");
     return Execution{sandbox, std::move(context), std::move(*state)}.execute(*parsed);
 }
