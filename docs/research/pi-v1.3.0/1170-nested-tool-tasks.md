@@ -198,23 +198,23 @@ no live task thread (`CODING_STANDARDS.md` §11.10).
   `cch_durable` sources changed: `ctest --preset vcpkg -L architecture`
   selected **43** cases and passed **43/43**; the configure and build phases of
   the Parity Architecture Gate report PASS.
-- Full Validation, final tree: `ctest --preset vcpkg -j 2` with
-  `TERM_PROGRAM=herdr` (the prerequisite the PTY evidence case declares)
-  selected **4,111** cases: **4,110 passed, 1 failed, 8 skipped**. The single
-  failure was `Durable local environment reports file process and watch
-  outcomes`, a wall-clock watch/timeout case in an unrelated module that passes
-  on isolated rerun (0.67 s) while a sibling lane was compiling. The 8 skipped
-  cases are the existing optional live-pi/SQLite interchange, realtime-clock and
+- Full Validation: `ctest --preset vcpkg -j 2` with `TERM_PROGRAM=herdr` (the
+  prerequisite the PTY evidence case declares) on the final tree selected
+  **4,111** cases: **4,104 passed, 7 failed, 8 skipped** while sibling lanes held
+  the host at a load average above 7 on 8 cores. Every failure is a
+  wall-clock-sensitive case outside this slice's changed behavior and passes on
+  isolated rerun: the `[issue1163]` attempt-publication backstop, the alternate
+  screen post-drain probe, bounded parallel cancellation, the codemode
+  interrupt budget, the quarantined projection cost bound, the quarantined
+  streaming-block benchmark and the `[issue1163]` case again. The 8 skipped cases
+  are the existing optional live-pi/SQLite interchange, realtime-clock and
   Native TUI differential skips.
-- Two earlier full runs on the same code are recorded for honesty. At `-j 4`
-  (default preset) the suite selected 4,111: 4,106 passed, 5 failed, 8 skipped;
-  at `-j 2` without the PTY prerequisite: 4,108 passed, 3 failed, 8 skipped.
-  Every failing case in both runs — the alternate-screen restore probe, the
-  codemode interrupt-budget and worker-exit cases, the quarantined projection
-  cost bound, the real PTY capture, the bounded parallel cancellation case and
-  the `[issue1163]` attempt-publication case — passed on isolated rerun, and
-  none is in this slice's changed behavior. One of those runs also reported a
-  `[issue1170]` hook-order failure that led to a test-robustness fix: the case
+- Two earlier full runs on the same code are recorded for honesty. At `-j 2`
+  with the same PTY prerequisite: **4,110 passed, 1 failed, 8 skipped**, the
+  failure being a durable environment watch/timeout case that passes on isolated
+  rerun (0.67 s). At `-j 4` (default preset): **4,106 passed, 5 failed, 8
+  skipped**, all five passing on isolated rerun. Those runs also reported one
+  `[issue1170]` hook-order failure, which led to a test-robustness fix: the case
   now waits for the released sibling's durable task record instead of a log
   entry, with a 30-second bounded backstop.
 - `scripts/format-check.sh bbd499a4da471ddd0b956f0d74a03c2201d6b8fb` reports
