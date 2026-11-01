@@ -232,12 +232,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml"
         ],
-        "testedRevision": "ff77337347c25e54edf0e0e3ee0f371a0c99c502",
-        "recordedAt": "2026-11-01T05:21:15Z",
+        "testedRevision": "8658bce9ba6eb577dec6900df9279b21254ec9c7",
+        "recordedAt": "2026-11-01T06:41:43Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml",
-          "sha256": "8f819333e420d85877c72b796341e6dc2b8ba971ba7d63085f68cf2b7a805efa"
+          "sha256": "d5f673890c58cd273a77368a6bdaaf651eef6d7b07c705782c30f5ee70925927"
         }
       },
       "rows": [
@@ -365,12 +365,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml"
         ],
-        "testedRevision": "ff77337347c25e54edf0e0e3ee0f371a0c99c502",
-        "recordedAt": "2026-11-01T05:21:15Z",
+        "testedRevision": "8658bce9ba6eb577dec6900df9279b21254ec9c7",
+        "recordedAt": "2026-11-01T06:41:43Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml",
-          "sha256": "8f819333e420d85877c72b796341e6dc2b8ba971ba7d63085f68cf2b7a805efa"
+          "sha256": "d5f673890c58cd273a77368a6bdaaf651eef6d7b07c705782c30f5ee70925927"
         }
       },
       "inputs": [
@@ -896,12 +896,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml"
         ],
-        "testedRevision": "ff77337347c25e54edf0e0e3ee0f371a0c99c502",
-        "recordedAt": "2026-11-01T05:21:15Z",
+        "testedRevision": "8658bce9ba6eb577dec6900df9279b21254ec9c7",
+        "recordedAt": "2026-11-01T06:41:43Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml",
-          "sha256": "8f819333e420d85877c72b796341e6dc2b8ba971ba7d63085f68cf2b7a805efa"
+          "sha256": "d5f673890c58cd273a77368a6bdaaf651eef6d7b07c705782c30f5ee70925927"
         }
       },
       "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -1249,12 +1249,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1170-revalidation-1118.xml"
         ],
-        "testedRevision": "ff77337347c25e54edf0e0e3ee0f371a0c99c502",
-        "recordedAt": "2026-11-01T05:21:15Z",
+        "testedRevision": "8658bce9ba6eb577dec6900df9279b21254ec9c7",
+        "recordedAt": "2026-11-01T06:41:43Z",
         "selected": 19,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1170-revalidation-1118.xml",
-          "sha256": "999c64af8cb3d4bf1bd081ae667b910809cfc689fa8f99840a945fa4d508f0c3"
+          "sha256": "f98644570442676d3b588a272ea8df7367ac27b4973df9e98ec5c6b653f94795"
         }
       },
       "rows": [
