@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "3c5609d629a61e161386162272f874ab063e2e1bcf802d9414d0a1ed1a3a1f64"
+          "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -232,8 +232,8 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
         ],
-        "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
-        "recordedAt": "2026-11-01T20:09:52Z",
+        "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+        "recordedAt": "2026-11-01T22:03:38Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
@@ -383,10 +383,16 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       },
-      "revalidation1159": {
-        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+      "revalidation1175plan": {
+        "reason": "Serial-merger step registered audit-1175 in baselines.json and listed its five comparison scenarios as explicit orphanScenarios (row receipts remain #1180). The plan is a pinned input of this record; digest refreshed and the 36-case selection rerun into deliveries/1090-revalidation-1175r.xml with no rows/scenarios/routing changes.",
         "changedInputs": [
-          "fixtures/pi-v1.3.0/baselines.json",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
+      },
+      "revalidation1159": {
+        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+        "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
@@ -411,8 +417,8 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
         ],
-        "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
-        "recordedAt": "2026-11-01T20:09:52Z",
+        "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+        "recordedAt": "2026-11-01T22:03:38Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
@@ -740,8 +746,20 @@
           "fixtures/pi-v1.3.0/baselines.json"
         ]
       },
+      "revalidation1175r": {
+        "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ],
+        "testedRevision": "7e2ccc288",
+        "selected": 36,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+          "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+        }
+      },
       "revalidation1159": {
-        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
         "changedInputs": [
           "cmake/targets/Durable.cmake",
           "cmake/tests/DurableTests.cmake",
@@ -984,8 +1002,8 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
         ],
-        "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
-        "recordedAt": "2026-11-01T20:09:52Z",
+        "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+        "recordedAt": "2026-11-01T22:03:38Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
@@ -1171,11 +1189,22 @@
           "fixtures/pi-v1.3.0/baselines.json"
         ]
       },
-      "revalidation1159": {
-        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+      "revalidation1175r": {
+        "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
         "changedInputs": [
-          "fixtures/pi-v1.3.0/baselines.json",
-          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          "fixtures/pi-v1.3.0/baselines.json"
+        ],
+        "testedRevision": "7e2ccc288",
+        "selected": 36,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+          "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+        }
+      },
+      "revalidation1159": {
+        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
         ]
       }
     },
@@ -1440,7 +1469,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "3c5609d629a61e161386162272f874ab063e2e1bcf802d9414d0a1ed1a3a1f64"
+          "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1466,8 +1495,8 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1118.xml"
         ],
-        "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
-        "recordedAt": "2026-11-01T20:09:52Z",
+        "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+        "recordedAt": "2026-11-01T22:03:38Z",
         "selected": 19,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1118.xml",
@@ -1702,8 +1731,27 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       },
+      "revalidation1175r": {
+        "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ],
+        "testedRevision": "7e2ccc288",
+        "selected": 36,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+          "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+        }
+      },
+      "revalidation1175plan": {
+        "reason": "Serial-merger step registered audit-1175 in baselines.json and listed its five comparison scenarios as explicit orphanScenarios (row receipts remain #1180). The plan is a pinned input of this record; digest refreshed and the 36-case selection rerun into deliveries/1090-revalidation-1175r.xml with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
+      },
       "revalidation1159": {
-        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/baselines.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
@@ -2793,7 +2841,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "3c5609d629a61e161386162272f874ab063e2e1bcf802d9414d0a1ed1a3a1f64"
+          "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -2815,8 +2863,8 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1181.xml"
         ],
-        "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
-        "recordedAt": "2026-11-01T20:09:52Z",
+        "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+        "recordedAt": "2026-11-01T22:03:38Z",
         "selected": 16,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1181.xml",
@@ -3024,8 +3072,27 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       },
+      "revalidation1175r": {
+        "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ],
+        "testedRevision": "7e2ccc288",
+        "selected": 36,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+          "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+        }
+      },
+      "revalidation1175plan": {
+        "reason": "Serial-merger step registered audit-1175 in baselines.json and listed its five comparison scenarios as explicit orphanScenarios (row receipts remain #1180). The plan is a pinned input of this record; digest refreshed and the 36-case selection rerun into deliveries/1090-revalidation-1175r.xml with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
+      },
       "revalidation1159": {
-        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+        "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/baselines.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
