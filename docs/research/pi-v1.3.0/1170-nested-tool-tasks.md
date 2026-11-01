@@ -186,23 +186,53 @@ no live task thread (`CODING_STANDARDS.md` §11.10).
 ## Validation
 
 - Focused: default strict Debug build of `cch_tests_durable`; CTest label
-  `issue1170` selected **6** cases and passed **6/6**; the JUnit receipt is
+  `issue1170` selected **7** cases and passed **7/7**; the JUnit receipt is
   `deliveries/1170-focused.xml`. The owning module label
-  `ctest --preset vcpkg -L durable` selected **309** cases and passed
-  **309/309** (6 skipped optional frozen-checkout interchange cases).
-- The #1094 label re-ran on the new code: **14** selected, **14/14** passed.
+  `ctest --preset vcpkg -L durable` selected **310** cases: **309** passed, 6
+  skipped optional frozen-checkout interchange cases, and one pre-existing
+  `[issue1163]` workflow case whose 10-second in-test backstop timed out under
+  host contention; it passes on isolated rerun (0.01 s) and is unrelated to this
+  slice. The #1094 label re-ran on the new code: **14** selected, **14/14**
+  passed.
 - Architecture selection, required because `TaskRuntime` and the built
   `cch_durable` sources changed: `ctest --preset vcpkg -L architecture`
   selected **43** cases and passed **43/43**; the configure and build phases of
   the Parity Architecture Gate report PASS.
-- Full Validation: see the measured run recorded below.
+- Full Validation, final tree: `ctest --preset vcpkg -j 2` with
+  `TERM_PROGRAM=herdr` (the prerequisite the PTY evidence case declares)
+  selected **4,111** cases: **4,110 passed, 1 failed, 8 skipped**. The single
+  failure was `Durable local environment reports file process and watch
+  outcomes`, a wall-clock watch/timeout case in an unrelated module that passes
+  on isolated rerun (0.67 s) while a sibling lane was compiling. The 8 skipped
+  cases are the existing optional live-pi/SQLite interchange, realtime-clock and
+  Native TUI differential skips.
+- Two earlier full runs on the same code are recorded for honesty. At `-j 4`
+  (default preset) the suite selected 4,111: 4,106 passed, 5 failed, 8 skipped;
+  at `-j 2` without the PTY prerequisite: 4,108 passed, 3 failed, 8 skipped.
+  Every failing case in both runs — the alternate-screen restore probe, the
+  codemode interrupt-budget and worker-exit cases, the quarantined projection
+  cost bound, the real PTY capture, the bounded parallel cancellation case and
+  the `[issue1163]` attempt-publication case — passed on isolated rerun, and
+  none is in this slice's changed behavior. One of those runs also reported a
+  `[issue1170]` hook-order failure that led to a test-robustness fix: the case
+  now waits for the released sibling's durable task record instead of a log
+  entry, with a 30-second bounded backstop.
 - `scripts/format-check.sh bbd499a4da471ddd0b956f0d74a03c2201d6b8fb` reports
-  clean after `git clang-format` on the changed files.
-- Named evidence: `audit-1170` verifies through
-  `scripts/evidence/audit_evidence.py verify` (47 bundles, 103 artifacts, 570
-  scenarios) and the six scenarios are registered as explicit consolidation
-  orphans; `consolidate_audits.py build` and `check` are run in the evidence
-  commit with the refreshed delivery pins.
+  clean after `git clang-format` on the changed files; `git diff --check`
+  passes.
+- Named evidence: `scripts/evidence/audit_evidence.py verify` reports 47
+  bundles, 103 artifacts and 571 scenarios verified for the named baseline. The
+  six audit-1170 scenarios are registered as explicit consolidation orphans;
+  `consolidate_audits.py build` and `check` pass (1,464 rows, zero uncovered
+  scenarios), and `ctest --preset vcpkg -R cch_pi_v130_consolidation` selected
+  **2** and passed **2/2**.
+- Delivery pins: the four existing records whose pinned inputs moved with this
+  slice (#1090, #1101, #1104, #1118) are revalidated on commit
+  `8658bce9ba6eb577dec6900df9279b21254ec9c7`; the shared
+  `^(issue1090|issue1101|issue1104)$` selection selected **36** and passed
+  **36/36**, and `issue1118` selected **19** and passed **19/19**. Receipts:
+  `deliveries/1170-revalidation-existing.xml`,
+  `deliveries/1170-revalidation-1118.xml`.
 
 ## Capability status
 

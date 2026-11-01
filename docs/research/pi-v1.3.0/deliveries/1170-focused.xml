@@ -1,76 +1,87 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="(empty)"
-	tests="6"
+	tests="7"
 	failures="0"
 	disabled="0"
 	skipped="0"
 	hostname=""
-	time="2"
-	timestamp="2026-11-01T14:13:59"
+	time="7"
+	timestamp="2026-11-01T16:00:58"
 	>
-	<testcase name="A script that ends without awaiting its nested call admits no call" classname="A script that ends without awaiting its nested call admits no call" time="1.36624" status="run">
+	<testcase name="A recovered nested call applies its recorded replay policy" classname="A recovered nested call applies its recorded replay policy" time="7.80697" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "A recovered nested call applies its recorded replay policy"
+Randomness seeded to: 2608222182
+===============================================================================
+All tests passed (40 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="A script that ends without awaiting its nested call admits no call" classname="A script that ends without awaiting its nested call admits no call" time="2.04633" status="run">
 		<properties>
 			<property name="cmake_labels" value="codemode;durable;issue1170"/>
 		</properties>
 		<system-out>Filters: "A script that ends without awaiting its nested call admits no call"
-Randomness seeded to: 573496789
+Randomness seeded to: 194378549
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Cancelling an observer wait does not cancel the nested call" classname="Cancelling an observer wait does not cancel the nested call" time="2.72053" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "Cancelling an observer wait does not cancel the nested call"
+Randomness seeded to: 2920339530
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Cancelling one nested task leaves its sibling and the script running" classname="Cancelling one nested task leaves its sibling and the script running" time="2.30313" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "Cancelling one nested task leaves its sibling and the script running"
+Randomness seeded to: 50623705
 ===============================================================================
 All tests passed (14 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="Cancelling an observer wait does not cancel the nested call" classname="Cancelling an observer wait does not cancel the nested call" time="1.57968" status="run">
-		<properties>
-			<property name="cmake_labels" value="codemode;durable;issue1170"/>
-		</properties>
-		<system-out>Filters: "Cancelling an observer wait does not cancel the nested call"
-Randomness seeded to: 623998983
-===============================================================================
-All tests passed (19 assertions in 1 test case)
-
-</system-out>
-	</testcase>
-	<testcase name="Cancelling one nested task leaves its sibling and the script running" classname="Cancelling one nested task leaves its sibling and the script running" time="1.55337" status="run">
-		<properties>
-			<property name="cmake_labels" value="codemode;durable;issue1170"/>
-		</properties>
-		<system-out>Filters: "Cancelling one nested task leaves its sibling and the script running"
-Randomness seeded to: 3266231614
-===============================================================================
-All tests passed (17 assertions in 1 test case)
-
-</system-out>
-	</testcase>
-	<testcase name="Cancelling the parent codemode call aborts its nested work" classname="Cancelling the parent codemode call aborts its nested work" time="1.53556" status="run">
+	<testcase name="Cancelling the parent codemode call aborts its nested work" classname="Cancelling the parent codemode call aborts its nested work" time="2.12817" status="run">
 		<properties>
 			<property name="cmake_labels" value="codemode;durable;issue1170"/>
 		</properties>
 		<system-out>Filters: "Cancelling the parent codemode call aborts its nested work"
-Randomness seeded to: 2015835476
+Randomness seeded to: 192772330
 ===============================================================================
-All tests passed (19 assertions in 1 test case)
+All tests passed (16 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="Independent nested calls run concurrently and deliver in completion order" classname="Independent nested calls run concurrently and deliver in completion order" time="1.35061" status="run">
+	<testcase name="Independent nested calls run concurrently and deliver in completion order" classname="Independent nested calls run concurrently and deliver in completion order" time="2.21067" status="run">
 		<properties>
 			<property name="cmake_labels" value="codemode;durable;issue1170"/>
 		</properties>
 		<system-out>Filters: "Independent nested calls run concurrently and deliver in completion order"
-Randomness seeded to: 1961239047
+Randomness seeded to: 1202821924
 ===============================================================================
-All tests passed (17 assertions in 1 test case)
+All tests passed (14 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="Nested calls use the public tool hooks with their parent" classname="Nested calls use the public tool hooks with their parent" time="1.61663" status="run">
+	<testcase name="Nested calls use the public tool hooks with their parent" classname="Nested calls use the public tool hooks with their parent" time="2.78149" status="run">
 		<properties>
 			<property name="cmake_labels" value="codemode;durable;issue1170"/>
 		</properties>
 		<system-out>Filters: "Nested calls use the public tool hooks with their parent"
-Randomness seeded to: 146711633
+Randomness seeded to: 3228865927
 ===============================================================================
-All tests passed (19 assertions in 1 test case)
+All tests passed (18 assertions in 1 test case)
 
 </system-out>
 	</testcase>

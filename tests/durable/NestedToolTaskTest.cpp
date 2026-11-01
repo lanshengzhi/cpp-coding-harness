@@ -441,10 +441,12 @@ void compare_with_frozen(std::string_view scenario_name, const support::JsonValu
     CHECK(*observed == *expected);
 }
 
-/// Poll until `done()` reports the state the frozen observation recorded.
+/// Poll until `done()` reports the state the frozen observation recorded, with a
+/// bounded backstop so a failure cannot hang a teardown join.
 template <typename Done> void until(Done done) {
-    for (int attempt = 0; attempt < 500; ++attempt) {
-        if (done()) return;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{30};
+    while (!done()) {
+        if (std::chrono::steady_clock::now() >= deadline) return;
         std::this_thread::sleep_for(std::chrono::milliseconds{10});
     }
 }
