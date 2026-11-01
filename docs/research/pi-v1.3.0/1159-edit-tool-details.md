@@ -127,28 +127,40 @@ as frozen pi's does.
 
 ## Validation
 
-Measured with the default strict Debug preset on the delivered tree, which merges
-`origin/main` at `7e2ccc288` (the #1175 abandon-on-restart slice) over
-`e8d813a0c` (where the focused, durable-label, architecture and first full runs
-were made; the merged tree reruns the affected selections and the full suite).
+Measured with the default strict Debug preset on the delivered tree, whose base
+is the merge of `origin/main` at `7e2ccc288` (the #1175 abandon-on-restart slice)
+into `e8d813a0c`. Every selection below was rerun on that merged tree after the
+review fixes.
 
 - Focused Validation: `ctest --preset vcpkg -L issue1159` selected **3** cases
   and passed **3/3**.
-- Owning module: `ctest --preset vcpkg -L durable -j4` selected **320** cases and
-  passed **320/320**.
+- Owning module: `ctest --preset vcpkg -L durable -j4` selected **330** cases and
+  passed **330/330** on the merged tree.
 - JS-diff parity probe: `src/durable/EditDiff.cpp` was compiled standalone and
   compared against frozen `edit-diff.ts` over **2,510** generated line pairs
   (duplicate lines, blank lines, missing trailing newlines, empty inputs,
   insertions and deletions): **0** differing outputs for `diff`, `patch` and
-  `firstChangedLine`. A 5,000-line file with one changed line matched exactly in
-  5 ms, and a 3,000-line rewrite took the bounded fallback in 0.08 s.
+  `firstChangedLine`, re-checked after the review fixes. A 5,000-line file with
+  one changed line matched exactly in 5 ms, and a 3,000-line rewrite took the
+  bounded fallback in 0.08 s.
 - Architecture: `ctest --preset vcpkg -L architecture` selected **43** and passed
   **43/43**.
 - Full Validation: `TERM_PROGRAM=herdr PI_CHECKOUT=<frozen> ctest --preset vcpkg
-  -j1` selected **4,165**, passed **4,165**, failed **0**, skipped **2**
-  (790.45 seconds). The 10 live frozen-pi continuation cases ran and passed; the
-  two skips are the documented changed-realtime-clock and Native TUI differential
-  cases that require absent capture environments.
+  -j1` ran twice on the delivered tree: **4,175** selected, **4,169** passed
+  (first run) and **4,171** passed (second run, 1,086 seconds). The 10 live
+  frozen-pi continuation cases ran and passed, and the two documented
+  capture-environment cases skipped. The failures move between runs and are this
+  host's documented runner-sensitive cases: the #1170 nested-call case that
+  asserts a recorded completion order of two gated calls (it failed only as
+  `completionOrder ["B","A"]` against the frozen `["A","B"]`, and passed 8/10
+  isolated reruns), its cancelled-sibling case (`Subprocess aborted`, passes in
+  the same reruns), the two #1019 `Process Terminal` PTY races, the documented
+  #632 `[quarantine]` projection cost bound, and one or two Native TUI or E2E
+  cases (`mcp reconnect with no name`, the focused-editor turn, cursor protocol)
+  that pass in isolation. Both runs overlapped another worktree's full validation
+  on this host (load average 9-13), which is exactly the condition those cases
+  are recorded as sensitive to. No case in `src/durable`, `tests/durable` or any
+  file this slice touches failed in either run.
 - Delivery revalidation, because the new bundle and the added durable sources
   changed inputs pinned by existing receipts (all rerun on the merged tree): the
   exact
@@ -161,18 +173,19 @@ were made; the merged tree reruns the affected selections and the full suite).
   `revalidation1159`.
 - Consolidated evidence: `audit_evidence.py check` accepts the candidate
   manifest (`c5b503ce…`), `register` pins `audit-1159` in `baselines.json`, and
-  `verify` reports **49** bundles, **105** artifacts and **592** scenarios
-  (previously 48 / 104 / 582). `consolidate_audits.py build` and `check
+  `verify` reports **50** bundles, **106** artifacts and **597** scenarios
+  (previously 48 / 104 / 582 before the #1175 merge). `consolidate_audits.py build` and `check
   --pi-root <frozen>` pass (1,464 rows), and
   `tests/evidence/ConsolidationAuditTest.py` ran **42** tests and passed.
 - Inherited consolidation debt, repaired because this slice rebuilds the ledger:
-  on this branch's base, `consolidate_audits.py check` was red (the #1172 family
-  registration had no plan routing entry, so its eleven captured scenarios read
-  as orphans, and the #1090 receipt pinned the pre-registration `baselines.json`
-  digest). The #1175 merge arrived with the same shape for its five scenarios.
-  This slice classifies the #1172 and #1175 observations as explicit orphans
-  naming their ledger rows, refreshes the #1090 digest, and rebuilds the ledger.
-  No capability row, membership or routing changed.
+  `consolidate_audits.py check` was red at this branch's base (the #1172 family
+  had no plan routing entry, so its eleven captured scenarios read as orphans,
+  and the #1090 receipt pinned the pre-registration `baselines.json` digest).
+  The #1175 merge classified the #1172 scenarios but arrived with the same shape
+  for its own five, and left the ledger unbuilt. This slice records the #1175
+  observations as explicit orphans naming `cch_durable:abandon-on-restart` and
+  its neighbours, refreshes the #1090 digest, and rebuilds the ledger. No
+  capability row, membership or routing changed.
 - `scripts/format-check.sh origin/main` and `git diff --check` are clean.
 
 ## Capability status
