@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="3"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="17"
+	timestamp="2026-11-02T03:08:55"
+	>
+	<testcase name="Cancelled codemode output publishes no file references" classname="Cancelled codemode output publishes no file references" time="1.88704" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1172"/>
+		</properties>
+		<system-out>Filters: "Cancelled codemode output publishes no file references"
+Randomness seeded to: 1648027884
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable codemode output matches frozen budgets spill and saved images" classname="Durable codemode output matches frozen budgets spill and saved images" time="17.247" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1172"/>
+		</properties>
+		<system-out>Filters: "Durable codemode output matches frozen budgets spill and saved images"
+Randomness seeded to: 2169927723
+===============================================================================
+All tests passed (268 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Failed codemode output writes keep truthful labels" classname="Failed codemode output writes keep truthful labels" time="1.99221" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1172"/>
+		</properties>
+		<system-out>Filters: "Failed codemode output writes keep truthful labels"
+Randomness seeded to: 3948473433
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>
