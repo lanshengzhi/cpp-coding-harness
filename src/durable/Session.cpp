@@ -1864,6 +1864,7 @@ support::Expected<TaskId> Transaction::create_task(
             .input = input,
             .owner = options.owner,
             .background = options.background,
+            .abandon_on_restart = options.abandon_on_restart,
             .abort_requested = false,
             .abort_reason = std::nullopt,
             .started_at = std::nullopt,

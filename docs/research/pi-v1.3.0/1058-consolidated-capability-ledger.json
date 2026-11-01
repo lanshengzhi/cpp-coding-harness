@@ -425,14 +425,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "/tmp/1105-existing-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1175-1090-revalidation.xml"
           ],
-          "testedRevision": "78dca1567d7df15ad1115f5471d5fdd79583deec",
-          "recordedAt": "2026-11-01T14:07:53Z",
+          "testedRevision": "ef2f15034f2c4724ea289f08f76944e4ec4b0c0a",
+          "recordedAt": "2026-11-01T17:58:25Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
-            "sha256": "f8b5ddb1299bfd81475a8e7e40ed08296cc3480e2a185cfec321dc41c7eb3ce5"
+            "path": "docs/research/pi-v1.3.0/deliveries/1175-1090-revalidation.xml",
+            "sha256": "b1302a2bc0891c817843185dcee2abc37cfb1ca00ceb06a529f22451bb14c65a"
           }
         },
         "inputs": [
@@ -442,7 +442,7 @@
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "4150e8e022eb9247f56c868e3379bf11c1b0e693bb66ded2f107f85f4b77c985"
+            "sha256": "3d2c63b8d4011c3155e61b3e5c8ab67c61f70fc7e5beee0fd464de48ac9906f5"
           },
           {
             "path": "docs/agents/architecture.md",
@@ -724,6 +724,31 @@
             "docs/agents/architecture.md",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1175": {
+          "reason": "#1175 adds the audit-1175 abandon-on-restart family and registers its C++ comparison test in cmake/tests/DurableTests.cmake, a pinned input of this record. The delivered image rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "cmake/tests/DurableTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "/tmp/1105-existing-revalidation.xml"
+            ],
+            "testedRevision": "78dca1567d7df15ad1115f5471d5fdd79583deec",
+            "recordedAt": "2026-11-01T14:07:53Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+              "sha256": "f8b5ddb1299bfd81475a8e7e40ed08296cc3480e2a185cfec321dc41c7eb3ce5"
+            }
+          }
         }
       },
       {

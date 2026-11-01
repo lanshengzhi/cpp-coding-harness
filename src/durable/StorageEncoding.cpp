@@ -235,6 +235,9 @@ chord::Json encode_task_record(const TaskRecord& task) {
         obj.emplace("owner", chord::Json(static_cast<double>(task.owner->value)));
     }
     obj.emplace("background", chord::Json(task.background));
+    if (task.abandon_on_restart) {
+        obj.emplace("abandonOnRestart", chord::Json(true));
+    }
     obj.emplace("abortRequested", chord::Json(task.abort_requested));
     if (task.abort_reason.has_value()) {
         obj.emplace("abortReason", chord::Json(*task.abort_reason));
@@ -392,6 +395,7 @@ support::Expected<TaskRecord> decode_task_record(const chord::Json& json) {
             .input = input_it->second,
             .owner = std::nullopt,
             .background = false,
+            .abandon_on_restart = false,
             .abort_requested = false,
             .abort_reason = std::nullopt,
             .started_at = std::nullopt,
@@ -407,6 +411,10 @@ support::Expected<TaskRecord> decode_task_record(const chord::Json& json) {
     const auto bg_it = obj->find("background");
     if (bg_it != obj->end() && bg_it->second.as_boolean() != nullptr) {
         record.background = *bg_it->second.as_boolean();
+    }
+    const auto abandon_it = obj->find("abandonOnRestart");
+    if (abandon_it != obj->end() && abandon_it->second.as_boolean() != nullptr) {
+        record.abandon_on_restart = *abandon_it->second.as_boolean();
     }
     const auto abort_it = obj->find("abortRequested");
     if (abort_it != obj->end() && abort_it->second.as_boolean() != nullptr) {

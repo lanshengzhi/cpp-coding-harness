@@ -22,6 +22,7 @@ include_guard(GLOBAL)
         tests/durable/SessionWatchTest.cpp
         tests/durable/SubmissionStorageTest.cpp
         tests/durable/TaskExecutionTest.cpp
+        tests/durable/AbandonOnRestartTest.cpp
         tests/durable/CrashRecoveryTest.cpp
         tests/durable/HarnessWorkflowTest.cpp
         tests/durable/HarnessSubmissionsTest.cpp
@@ -55,6 +56,7 @@ include_guard(GLOBAL)
     # Bound the whole live continuation process, including Harness operations whose
     # completion or cleanup cannot be interrupted by a waiter's stop token.
     catch_discover_tests(cch_tests_durable TEST_SPEC "~[issue1086live]~[issue1084]~[issue1094]~[issue1171live]" ADD_TAGS_AS_LABELS)
+    catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1175]" PROPERTIES TIMEOUT 90 ADD_TAGS_AS_LABELS)
     catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1094]" PROPERTIES TIMEOUT 30 ADD_TAGS_AS_LABELS)
     catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1084]" PROPERTIES TIMEOUT 90 ADD_TAGS_AS_LABELS)
     catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1086live]" PROPERTIES TIMEOUT 90 ADD_TAGS_AS_LABELS)
