@@ -127,15 +127,17 @@ as frozen pi's does.
 
 ## Validation
 
-Measured with the default strict Debug preset on the delivered tree, whose base
-is the merge of `origin/main` at `7e2ccc288` (the #1175 abandon-on-restart slice)
-into `e8d813a0c`. Every selection below was rerun on that merged tree after the
-review fixes.
+Measured with the default strict Debug preset on the delivered tree: the merge of
+`origin/main` at `706ac9a3f` (the #1175 abandon-on-restart slice and its receipt
+repair, evidence-only over `7e2ccc288`) into `e8d813a0c`. Every selection below
+was rerun on that merged tree after the review fixes and after the final merge.
 
 - Focused Validation: `ctest --preset vcpkg -L issue1159` selected **3** cases
   and passed **3/3**.
 - Owning module: `ctest --preset vcpkg -L durable -j4` selected **330** cases and
-  passed **330/330** on the merged tree.
+  passed **330/330** on the merged tree (one rerun during another worktree's full
+  validation, at load average 15, hit two of the runner-sensitive cases below;
+  both passed on repeat).
 - JS-diff parity probe: `src/durable/EditDiff.cpp` was compiled standalone and
   compared against frozen `edit-diff.ts` over **2,510** generated line pairs
   (duplicate lines, blank lines, missing trailing newlines, empty inputs,
@@ -170,7 +172,8 @@ review fixes.
   (`deliveries/1159-revalidation-1118.xml`); the #1181 `-R` selection reran
   **16** and passed **16** (`deliveries/1159-revalidation-1181.xml`). Each
   record keeps its retained artifact and records the reviewed changed inputs in
-  `revalidation1159`.
+  `revalidation1159`. The final `706ac9a3f` merge is evidence-only over
+  `7e2ccc288`, so those rerun artifacts still describe the delivered binaries.
 - Consolidated evidence: `audit_evidence.py check` accepts the candidate
   manifest (`c5b503ce…`), `register` pins `audit-1159` in `baselines.json`, and
   `verify` reports **50** bundles, **106** artifacts and **597** scenarios
