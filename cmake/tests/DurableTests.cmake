@@ -33,6 +33,7 @@ include_guard(GLOBAL)
         tests/durable/HarnessObservationTest.cpp
         tests/durable/HarnessImagesTest.cpp
         tests/durable/HarnessCodemodeTest.cpp
+        tests/durable/NestedToolTaskTest.cpp
         tests/durable/HarnessToolSearchTest.cpp
         tests/durable/ImagesTest.cpp
         tests/support/ImagePixels.cpp

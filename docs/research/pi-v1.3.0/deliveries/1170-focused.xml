@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="7"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="7"
+	timestamp="2026-11-01T16:29:49"
+	>
+	<testcase name="A recovered nested call applies its recorded replay policy" classname="A recovered nested call applies its recorded replay policy" time="7.71236" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "A recovered nested call applies its recorded replay policy"
+Randomness seeded to: 3423193930
+===============================================================================
+All tests passed (40 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="A script that ends without awaiting its nested call admits no call" classname="A script that ends without awaiting its nested call admits no call" time="2.33092" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "A script that ends without awaiting its nested call admits no call"
+Randomness seeded to: 2771474134
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Cancelling an observer wait does not cancel the nested call" classname="Cancelling an observer wait does not cancel the nested call" time="2.28304" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "Cancelling an observer wait does not cancel the nested call"
+Randomness seeded to: 1073502360
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Cancelling one nested task leaves its sibling and the script running" classname="Cancelling one nested task leaves its sibling and the script running" time="2.41166" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "Cancelling one nested task leaves its sibling and the script running"
+Randomness seeded to: 1791322961
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Cancelling the parent codemode call aborts its nested work" classname="Cancelling the parent codemode call aborts its nested work" time="2.30249" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "Cancelling the parent codemode call aborts its nested work"
+Randomness seeded to: 4228417174
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Independent nested calls run concurrently and deliver in completion order" classname="Independent nested calls run concurrently and deliver in completion order" time="2.48471" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "Independent nested calls run concurrently and deliver in completion order"
+Randomness seeded to: 980790176
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Nested calls use the public tool hooks with their parent" classname="Nested calls use the public tool hooks with their parent" time="2.53047" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;durable;issue1170"/>
+		</properties>
+		<system-out>Filters: "Nested calls use the public tool hooks with their parent"
+Randomness seeded to: 3883059074
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

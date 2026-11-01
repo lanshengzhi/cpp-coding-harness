@@ -33,6 +33,8 @@ cch_parity_declare_target(
         src/durable/StorageEncoding.cpp
         src/durable/StorageState.cpp
         src/durable/Task.cpp
+        src/durable/ToolContent.cpp
+        src/durable/ToolTask.cpp
         src/durable/ToolSearch.cpp
         src/durable/WorkflowRuntime.cpp
     DEPENDS

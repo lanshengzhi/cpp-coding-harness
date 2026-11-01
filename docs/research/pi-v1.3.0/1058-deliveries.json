@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "c584781145875d2ff72c7077298cd75de6dc8ac1738cefcc20e13fe08fa5bf67"
+          "sha256": "d039123cb19f4ff685fc705b4a2ebc632970d3a20c53c614e8d513bcb24d8ae6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -363,6 +363,12 @@
             "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
           }
         }
+      },
+      "revalidation1170": {
+        "reason": "#1170 added two durable sources and a test file, updated the architecture line, registered the audit-1170 nested-ToolTask family and its six orphan scenarios, and moved the codemode run state to shape version 3. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -396,15 +402,15 @@
       "inputs": [
         {
           "path": "cmake/targets/Durable.cmake",
-          "sha256": "f62d74aaaef8ee9301b6a2a08b9bafcc35ef366593d32e63a22a9910cb72cf39"
+          "sha256": "b79a02a65c62e8acd874daed2f83ae76bbb9c5d6803a802a28dd6f47e301e2a5"
         },
         {
           "path": "cmake/tests/DurableTests.cmake",
-          "sha256": "b58e63e652461108593e51461ed5bb07ef1cea8fd9bebb57f3f3b4d428ed400d"
+          "sha256": "a64465389c1441702a7731e236781d2098c5306e1c5bc9fd71f5577e32cb8d61"
         },
         {
           "path": "docs/agents/architecture.md",
-          "sha256": "3b8fb4e49ea48f2de12a4531e7496cf852726cd1549c301a477a0f944653fd1d"
+          "sha256": "3bd4465fd9f9cfad6a010908814fcdb2571d188a682f55bfa5f4cadbde14696f"
         },
         {
           "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
@@ -436,7 +442,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "3416ef812c4c0e9fe79dfc52a0ea00ea1a51d93c435caf5fe57ee75eb0218be3"
+          "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -673,6 +679,15 @@
             "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
           }
         }
+      },
+      "revalidation1170": {
+        "reason": "#1170 added two durable sources and a test file, updated the architecture line, registered the audit-1170 nested-ToolTask family and its six orphan scenarios, and moved the codemode run state to shape version 3. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "cmake/targets/Durable.cmake",
+          "cmake/tests/DurableTests.cmake",
+          "docs/agents/architecture.md",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -817,7 +832,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "3416ef812c4c0e9fe79dfc52a0ea00ea1a51d93c435caf5fe57ee75eb0218be3"
+          "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1030,6 +1045,12 @@
             "sha256": "6ff02ac7faa8982246bb6a2ab1228082e5f7246418efc519fdc1f165fe467673"
           }
         }
+      },
+      "revalidation1170": {
+        "reason": "#1170 added two durable sources and a test file, updated the architecture line, registered the audit-1170 nested-ToolTask family and its six orphan scenarios, and moved the codemode run state to shape version 3. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1289,11 +1310,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "3416ef812c4c0e9fe79dfc52a0ea00ea1a51d93c435caf5fe57ee75eb0218be3"
+          "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "c584781145875d2ff72c7077298cd75de6dc8ac1738cefcc20e13fe08fa5bf67"
+          "sha256": "d039123cb19f4ff685fc705b4a2ebc632970d3a20c53c614e8d513bcb24d8ae6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1489,6 +1510,12 @@
             "sha256": "14530c81f91f6aed7ec1d207259cce0f3bcb9c8c4ebb5c043e54e4c30e84fa33"
           }
         }
+      },
+      "revalidation1170": {
+        "reason": "#1170 added two durable sources and a test file, updated the architecture line, registered the audit-1170 nested-ToolTask family and its six orphan scenarios, and moved the codemode run state to shape version 3. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1840,7 +1867,7 @@
           "discriminatingCase": {
             "test": "a multi-byte character is cut only on a character boundary",
             "testSource": "tests/chord/OutputTest.cpp",
-            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"a\u00e9\ud83d\ude00\"; the boundary case separates the byte length from a code-point count."
+            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
           }
         },
         {

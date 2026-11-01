@@ -109,6 +109,35 @@ support::JsonValue last_result(Harness& harness, ConversationId conversation = C
     return found->at("data").at("model").get_array().front();
 }
 
+/// The nested calls one abort left behind: the call name and terminal outcome of
+/// every `pi.tool` task whose input is a nested call (frozen pi `NestedCallDoc`
+/// history, read through the task records). The scan runs on the Session line, so
+/// it cannot race the Harness's own storage access.
+std::vector<support::JsonValue> nested_task_records(Harness& harness) {
+    auto rows = std::make_shared<std::vector<support::JsonValue>>();
+    auto read = consume(harness.session().read_committed([rows](Storage& storage) -> support::Expected<chord::Json> {
+        auto tasks = storage.scan_tasks(1024);
+        if (!tasks) return std::unexpected(tasks.error());
+        for (const auto& task : *tasks) {
+            if (task.kind != "pi.tool") continue;
+            const auto input = task.input.to_support();
+            if (input.at("kind").get_string() != "nested") continue;
+            rows->push_back(support::JsonValue{support::JsonValue::object_t{{"key", input.at("key")},
+                    {"name", input.at("call").at("name")},
+                    {"ownerPresent", task.owner.has_value()},
+                    {"outcome",
+                            task.state.outcome.has_value() ? support::JsonValue{task.state.outcome->status}
+                                                           : support::JsonValue{}}}});
+        }
+        std::ranges::sort(*rows, [](const support::JsonValue& left, const support::JsonValue& right) {
+            return left.at("key").get_string() < right.at("key").get_string();
+        });
+        return chord::Json{chord::Json::Object{}};
+    }));
+    if (!read.has_value()) return {};
+    return *rows;
+}
+
 void install(Registry& registry) {
     auto sandbox = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path());
     REQUIRE(sandbox.has_value());
@@ -325,11 +354,16 @@ TEST_CASE(
     REQUIRE(consume(harness->abort_conversation(root.value())).has_value());
     const auto result = last_result(*harness);
     CHECK(result.at("isError").get_boolean());
-    const auto& rows = result.at("details").at("calls").get_array();
-    REQUIRE(rows.size() == 2);
-    CHECK(rows.at(0).at("status").get_string() == "ok");
-    CHECK(rows.at(1).at("status").get_string() == "cancelled");
-    CHECK(result_text(result).find("double (ok), pause (cancelled)") != std::string::npos);
+    // The parent's abort reports one harness error and no nested details (frozen
+    // pi `ToolTask.abort`); the nested calls' own durable records carry the history.
+    CHECK(result_text(result) == "<harness>\n[error] Tool codemode was aborted\n</harness>");
+    const auto nested = nested_task_records(*harness);
+    REQUIRE(nested.size() == 2);
+    CHECK(nested.at(0).at("name").get_string() == "double");
+    CHECK(nested.at(0).at("ownerPresent").get_boolean());
+    CHECK(nested.at(0).at("outcome").get_string() == "completed");
+    CHECK(nested.at(1).at("name").get_string() == "pause");
+    CHECK(nested.at(1).at("outcome").get_string() == "aborted");
     const auto store = consume(
             harness->session().snapshot(codemode_store_document(), DocumentAddress{.conversation_id = root.value()}));
     REQUIRE(store.has_value());
@@ -639,10 +673,14 @@ TEST_CASE("A nested result completed during durable abort retains its successful
     REQUIRE(abort_result.has_value());
     CHECK(abort_result->has_value());
     const auto result = last_result(*harness);
-    const auto& calls = result.at("details").at("calls").get_array();
-    REQUIRE(calls.size() == 1);
-    CHECK(calls.front().at("status").get_string() == "ok");
-    CHECK(result_text(result).find("late (ok)") != std::string::npos);
+    // The completed nested call keeps its own terminal record even though the
+    // parent's abort decided the call's outcome.
+    CHECK(result.at("isError").get_boolean());
+    CHECK(result_text(result) == "<harness>\n[error] Tool codemode was aborted\n</harness>");
+    const auto nested = nested_task_records(*harness);
+    REQUIRE(nested.size() == 1);
+    CHECK(nested.front().at("name").get_string() == "late");
+    CHECK(nested.front().at("outcome").get_string() == "completed");
     const auto store = consume(
             harness->session().snapshot(codemode_store_document(), DocumentAddress{.conversation_id = root.value()}));
     REQUIRE(store.has_value());
