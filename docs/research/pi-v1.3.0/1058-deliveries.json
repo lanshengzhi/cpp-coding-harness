@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "77452e31cf3d0f194d1d119828c2fc38eb38be94127589e5302329df005a8a2b"
+          "sha256": "a79d8a3142c8d783b03f63fe29c446ffb4a3531e1f53fe3e5c79a3c67167de95"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -382,6 +382,13 @@
           "fixtures/pi-v1.3.0/baselines.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1175plan": {
+        "reason": "Serial-merger step registered audit-1175 in baselines.json and listed its five comparison scenarios as explicit orphanScenarios (row receipts remain #1180). The plan is a pinned input of this record; digest refreshed and the 36-case selection rerun into deliveries/1090-revalidation-1175r.xml with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -455,7 +462,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
+          "sha256": "acf423e42a39b8887cc2c7bfa61872aa8bbc4dfc711e93b4ceceebbbcc32d078"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -732,6 +739,18 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1175r": {
+        "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ],
+        "testedRevision": "7e2ccc288",
+        "selected": 36,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+          "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+        }
       }
     },
     {
@@ -876,7 +895,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
+          "sha256": "acf423e42a39b8887cc2c7bfa61872aa8bbc4dfc711e93b4ceceebbbcc32d078"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1152,6 +1171,18 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1175r": {
+        "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ],
+        "testedRevision": "7e2ccc288",
+        "selected": 36,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+          "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+        }
       }
     },
     {
@@ -1411,11 +1442,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
+          "sha256": "acf423e42a39b8887cc2c7bfa61872aa8bbc4dfc711e93b4ceceebbbcc32d078"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "77452e31cf3d0f194d1d119828c2fc38eb38be94127589e5302329df005a8a2b"
+          "sha256": "a79d8a3142c8d783b03f63fe29c446ffb4a3531e1f53fe3e5c79a3c67167de95"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1675,6 +1706,25 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/baselines.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1175r": {
+        "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ],
+        "testedRevision": "7e2ccc288",
+        "selected": 36,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+          "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+        }
+      },
+      "revalidation1175plan": {
+        "reason": "Serial-merger step registered audit-1175 in baselines.json and listed its five comparison scenarios as explicit orphanScenarios (row receipts remain #1180). The plan is a pinned input of this record; digest refreshed and the 36-case selection rerun into deliveries/1090-revalidation-1175r.xml with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
         ]
       }
     },
@@ -2027,7 +2077,7 @@
           "discriminatingCase": {
             "test": "a multi-byte character is cut only on a character boundary",
             "testSource": "tests/chord/OutputTest.cpp",
-            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
+            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"a\u00e9\ud83d\ude00\"; the boundary case separates the byte length from a code-point count."
           }
         },
         {
@@ -2761,7 +2811,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "77452e31cf3d0f194d1d119828c2fc38eb38be94127589e5302329df005a8a2b"
+          "sha256": "a79d8a3142c8d783b03f63fe29c446ffb4a3531e1f53fe3e5c79a3c67167de95"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -2769,7 +2819,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
+          "sha256": "acf423e42a39b8887cc2c7bfa61872aa8bbc4dfc711e93b4ceceebbbcc32d078"
         }
       ],
       "validation": {
@@ -2990,6 +3040,25 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/baselines.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1175r": {
+        "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ],
+        "testedRevision": "7e2ccc288",
+        "selected": 36,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+          "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+        }
+      },
+      "revalidation1175plan": {
+        "reason": "Serial-merger step registered audit-1175 in baselines.json and listed its five comparison scenarios as explicit orphanScenarios (row receipts remain #1180). The plan is a pinned input of this record; digest refreshed and the 36-case selection rerun into deliveries/1090-revalidation-1175r.xml with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
         ]
       }
     }
