@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="35"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-01T19:50:48"
+	>
+	<testcase name="compaction tool text follows frozen UTF-16 limits through the model request" classname="compaction tool text follows frozen UTF-16 limits through the model request" time="0.0904976" status="run">
+		<properties>
+			<property name="cmake_labels" value="compaction;durable;issue1083;review1044"/>
+		</properties>
+		<system-out>Filters: "compaction tool text follows frozen UTF-16 limits through the model request"
+Randomness seeded to: 2108717554
+===============================================================================
+All tests passed (56 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a persisted session reopened through the frontend seam compacts without rewriting its transcript" classname="a persisted session reopened through the frontend seam compacts without rewriting its transcript" time="0.144924" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue1069;session;spec"/>
+		</properties>
+		<system-out>Filters: "a persisted session reopened through the frontend seam compacts without rewriting its transcript"
+Randomness seeded to: 549919577
+===============================================================================
+All tests passed (47 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a resumed session whose summarization fails leaves the transcript untouched" classname="a resumed session whose summarization fails leaves the transcript untouched" time="0.139031" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue1069;session;spec"/>
+		</properties>
+		<system-out>Filters: "a resumed session whose summarization fails leaves the transcript untouched"
+Randomness seeded to: 3070596700
+===============================================================================
+All tests passed (52 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a second overflow after the compact-and-retry fails with pi&apos;s verbatim recovery message" classname="a second overflow after the compact-and-retry fails with pi&apos;s verbatim recovery message" time="0.062651" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;compat-pi;issue359"/>
+		</properties>
+		<system-out>Filters: "a second overflow after the compact-and-retry fails with pi's verbatim recovery message"
+Randomness seeded to: 1114093133
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="between-turn threshold compaction replaces the run context before the next response" classname="between-turn threshold compaction replaces the run context before the next response" time="0.0492267" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;compat-pi"/>
+		</properties>
+		<system-out>Filters: "between-turn threshold compaction replaces the run context before the next response"
+Randomness seeded to: 2472307527
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="compaction persistence and rebuild goldens match pi&apos;s CompactionEntry wire fields" classname="compaction persistence and rebuild goldens match pi&apos;s CompactionEntry wire fields" time="0.0184719" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;compat-pi;fixture;issue358;issue541"/>
+		</properties>
+		<system-out>Filters: "compaction persistence and rebuild goldens match pi's CompactionEntry wire fields"
+Randomness seeded to: 3583882839
+===============================================================================
+All tests passed (38 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="compaction token estimation matches pi&apos;s conservative char/4 heuristic" classname="compaction token estimation matches pi&apos;s conservative char/4 heuristic" time="0.0129293" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;spec"/>
+		</properties>
+		<system-out>Filters: "compaction token estimation matches pi's conservative char/4 heuristic"
+Randomness seeded to: 453038085
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="disabled compaction settings suppress both automatic triggers" classname="disabled compaction settings suppress both automatic triggers" time="0.0362954" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;compat-pi;issue359"/>
+		</properties>
+		<system-out>Filters: "disabled compaction settings suppress both automatic triggers"
+Randomness seeded to: 201735431
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="estimateContextTokens uses the last assistant usage plus trailing estimate" classname="estimateContextTokens uses the last assistant usage plus trailing estimate" time="0.0134979" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "estimateContextTokens uses the last assistant usage plus trailing estimate"
+Randomness seeded to: 3726552841
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="isContextOverflow detects provider overflow errors, silent usage overflow, and length-stop overflow" classname="isContextOverflow detects provider overflow errors, silent usage overflow, and length-stop overflow" time="0.0302351" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue359;spec"/>
+		</properties>
+		<system-out>Filters: "isContextOverflow detects provider overflow errors\, silent usage overflow\, and length-stop overflow"
+Randomness seeded to: 1449672663
+===============================================================================
+All tests passed (40 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="manual compaction aborts an in-flight run before compacting" classname="manual compaction aborts an in-flight run before compacting" time="0.0510795" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;spec"/>
+		</properties>
+		<system-out>Filters: "manual compaction aborts an in-flight run before compacting"
+Randomness seeded to: 495068917
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="manual compaction exposes is_compacting while is_streaming stays false (reload refusal signal)" classname="manual compaction exposes is_compacting while is_streaming stays false (reload refusal signal)" time="0.0542244" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue418;reload;spec"/>
+		</properties>
+		<system-out>Filters: "manual compaction exposes is_compacting while is_streaming stays false (reload refusal signal)"
+Randomness seeded to: 2471744439
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="manual compaction on an idle session persists a CompactionEntry and rebuilds context" classname="manual compaction on an idle session persists a CompactionEntry and rebuilds context" time="0.058209" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;spec"/>
+		</properties>
+		<system-out>Filters: "manual compaction on an idle session persists a CompactionEntry and rebuilds context"
+Randomness seeded to: 2277836841
+===============================================================================
+All tests passed (56 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="manual compaction rejects sessions too small to compact and in-memory sessions" classname="manual compaction rejects sessions too small to compact and in-memory sessions" time="0.053824" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;spec"/>
+		</properties>
+		<system-out>Filters: "manual compaction rejects sessions too small to compact and in-memory sessions"
+Randomness seeded to: 326674155
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="overflow terminal compacts and retries the turn exactly once; success continues normally" classname="overflow terminal compacts and retries the turn exactly once; success continues normally" time="0.0684384" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;compat-pi;issue359"/>
+		</properties>
+		<system-out>Filters: "overflow terminal compacts and retries the turn exactly once; success continues normally"
+Randomness seeded to: 2429541440
+===============================================================================
+All tests passed (31 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pre-prompt compaction check catches an aborted response over the threshold" classname="pre-prompt compaction check catches an aborted response over the threshold" time="0.0645478" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;compat-pi;issue359"/>
+		</properties>
+		<system-out>Filters: "pre-prompt compaction check catches an aborted response over the threshold"
+Randomness seeded to: 1652276746
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="shouldCompact mirrors pi&apos;s threshold arithmetic" classname="shouldCompact mirrors pi&apos;s threshold arithmetic" time="0.0162491" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue359;spec"/>
+		</properties>
+		<system-out>Filters: "shouldCompact mirrors pi's threshold arithmetic"
+Randomness seeded to: 454957688
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="split-turn compaction issues two requests with distinct fresh session ids" classname="split-turn compaction issues two requests with distinct fresh session ids" time="0.0125053" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "split-turn compaction issues two requests with distinct fresh session ids"
+Randomness seeded to: 3236791528
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="summarization requests carry cacheRetention none and a fresh session id" classname="summarization requests carry cacheRetention none and a fresh session id" time="0.0180494" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;fixture;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "summarization requests carry cacheRetention none and a fresh session id"
+Randomness seeded to: 3671572588
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="summary requests omit thinking while reopen preserves the original transcript" classname="summary requests omit thinking while reopen preserves the original transcript" time="0.216377" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue1116;session;spec"/>
+		</properties>
+		<system-out>Filters: "summary requests omit thinking while reopen preserves the original transcript"
+Randomness seeded to: 2628419876
+===============================================================================
+All tests passed (91 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the compaction door appends pi&apos;s file-operation tags and details to the summary" classname="the compaction door appends pi&apos;s file-operation tags and details to the summary" time="0.0159697" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "the compaction door appends pi's file-operation tags and details to the summary"
+Randomness seeded to: 3099925767
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the compaction door carries the latest compaction summary into the update prompt" classname="the compaction door carries the latest compaction summary into the update prompt" time="0.0172754" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "the compaction door carries the latest compaction summary into the update prompt"
+Randomness seeded to: 2464304920
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the compaction door keeps the recent-token budget and never cuts before the boundary" classname="the compaction door keeps the recent-token budget and never cuts before the boundary" time="0.0173059" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "the compaction door keeps the recent-token budget and never cuts before the boundary"
+Randomness seeded to: 2306958008
+===============================================================================
+All tests passed (47 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the compaction door never splits a turn when the cut lands on a user message" classname="the compaction door never splits a turn when the cut lands on a user message" time="0.0154366" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "the compaction door never splits a turn when the cut lands on a user message"
+Randomness seeded to: 1155091648
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the compaction door retains every system-message update before the recent tail" classname="the compaction door retains every system-message update before the recent tail" time="0.0163093" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;session-resume;spec"/>
+		</properties>
+		<system-out>Filters: "the compaction door retains every system-message update before the recent tail"
+Randomness seeded to: 2896723137
+===============================================================================
+All tests passed (30 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the compaction door serializes pi&apos;s verbatim conversation text" classname="the compaction door serializes pi&apos;s verbatim conversation text" time="0.014319" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "the compaction door serializes pi's verbatim conversation text"
+Randomness seeded to: 3872984650
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the compaction door skips inapplicable branches with typed reasons" classname="the compaction door skips inapplicable branches with typed reasons" time="0.0138794" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "the compaction door skips inapplicable branches with typed reasons"
+Randomness seeded to: 4261643291
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the compaction door summarizes custom and branch summary entries" classname="the compaction door summarizes custom and branch summary entries" time="0.0146804" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;fixture;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "the compaction door summarizes custom and branch summary entries"
+Randomness seeded to: 3970214146
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the compaction door surfaces summarization-failed, aborted, and missing-stream errors" classname="the compaction door surfaces summarization-failed, aborted, and missing-stream errors" time="0.0130978" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue358;issue541;spec"/>
+		</properties>
+		<system-out>Filters: "the compaction door surfaces summarization-failed\, aborted\, and missing-stream errors"
+Randomness seeded to: 4252509060
+===============================================================================
+All tests passed (30 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the final turn skips the between-turn trigger; window-exceeding usage reports the post-run overflow reason" classname="the final turn skips the between-turn trigger; window-exceeding usage reports the post-run overflow reason" time="0.0441055" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;compat-pi;issue745"/>
+		</properties>
+		<system-out>Filters: "the final turn skips the between-turn trigger; window-exceeding usage reports the post-run overflow reason"
+Randomness seeded to: 4110337811
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="threshold compaction fires over contextWindow - reserveTokens and never retries" classname="threshold compaction fires over contextWindow - reserveTokens and never retries" time="0.0579148" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;compat-pi;issue359"/>
+		</properties>
+		<system-out>Filters: "threshold compaction fires over contextWindow - reserveTokens and never retries"
+Randomness seeded to: 2036620189
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Native TUI /reload refuses during a manual compaction with pi&apos;s compaction warning" classname="Native TUI /reload refuses during a manual compaction with pi&apos;s compaction warning" time="0.134246" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue418;reload;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Native TUI /reload refuses during a manual compaction with pi's compaction warning"
+Randomness seeded to: 3454905638
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Native TUI /reload refuses during auto-compaction with pi&apos;s streaming warning" classname="Native TUI /reload refuses during auto-compaction with pi&apos;s streaming warning" time="0.180321" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue418;reload;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Native TUI /reload refuses during auto-compaction with pi's streaming warning"
+Randomness seeded to: 2355659507
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Native TUI shows the overflow Compaction indicator and rebuilds the chat on compaction end" classname="Native TUI shows the overflow Compaction indicator and rebuilds the chat on compaction end" time="0.189663" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue411;spec;status;tui"/>
+		</properties>
+		<system-out>Filters: "Native TUI shows the overflow Compaction indicator and rebuilds the chat on compaction end"
+Randomness seeded to: 3373750700
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tree navigation while compacting refuses with pi&apos;s verbatim error and keeps the compaction UI" classname="tree navigation while compacting refuses with pi&apos;s verbatim error and keeps the compaction UI" time="0.522267" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;e2e;issue788;spec;tree-selector;tui"/>
+		</properties>
+		<system-out>Filters: "tree navigation while compacting refuses with pi's verbatim error and keeps the compaction UI"
+Randomness seeded to: 741886990
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

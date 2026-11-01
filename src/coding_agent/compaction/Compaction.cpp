@@ -828,27 +828,17 @@ void extract_file_ops_from_message(const ai::MessageVariant& message, FileOperat
                 parts.push_back("[User]: " + content);
             }
         } else if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
-            std::vector<std::string> thinking_parts;
+            // #1116 / pi v1.3.0 serializeConversation: summaries include
+            // assistant text and tool calls, while transcript thinking stays
+            // untouched in the Session store.
             std::vector<std::string> tool_calls;
             bool has_text = false;
             for (const auto& block : assistant->content) {
-                if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
-                    thinking_parts.push_back(thinking->thinking);
-                } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+                if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
                     tool_calls.push_back(call->name + "(" + tool_call_arguments_text(*call) + ")");
                 } else if (std::holds_alternative<ai::TextContent>(block)) {
                     has_text = true;
                 }
-            }
-            if (!thinking_parts.empty()) {
-                std::string thinking = "[Assistant thinking]: ";
-                for (std::size_t i = 0; i < thinking_parts.size(); ++i) {
-                    if (i > 0) {
-                        thinking += "\n";
-                    }
-                    thinking += thinking_parts[i];
-                }
-                parts.push_back(std::move(thinking));
             }
             if (has_text) {
                 parts.push_back("[Assistant]: " + ai::text_from_assistant_content(assistant->content));

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="1"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-01T19:39:14"
+	>
+	<testcase name="summary requests omit thinking while reopen preserves the original transcript" classname="summary requests omit thinking while reopen preserves the original transcript" time="0.145632" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compaction;issue1116;session;spec"/>
+		</properties>
+		<system-out>Filters: "summary requests omit thinking while reopen preserves the original transcript"
+Randomness seeded to: 1019188759
+===============================================================================
+All tests passed (91 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>
