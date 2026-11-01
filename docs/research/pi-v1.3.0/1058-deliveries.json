@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "d039123cb19f4ff685fc705b4a2ebc632970d3a20c53c614e8d513bcb24d8ae6"
+          "sha256": "77452e31cf3d0f194d1d119828c2fc38eb38be94127589e5302329df005a8a2b"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -375,6 +375,13 @@
         "changedInputs": [
           "tests/coding_agent/McpHttpSessionTest.cpp"
         ]
+      },
+      "revalidation1172": {
+        "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry, and the consolidation plan now lists its unrouted observations as explicit orphans. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -397,12 +404,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1175-1090-revalidation.xml"
         ],
-        "testedRevision": "ef2f15034f2c4724ea289f08f76944e4ec4b0c0a",
-        "recordedAt": "2026-11-01T17:58:25Z",
+        "testedRevision": "e8d813a0c28f6ea5a3eef999b8432907befd9729",
+        "recordedAt": "2026-11-01T18:43:53Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1175-1090-revalidation.xml",
-          "sha256": "b1302a2bc0891c817843185dcee2abc37cfb1ca00ceb06a529f22451bb14c65a"
+          "sha256": "8cdfbe54c5ce7ff444a4e97e12591cdcf8318f19f1463b8f6af64c815ad5641a"
         }
       },
       "inputs": [
@@ -416,7 +423,7 @@
         },
         {
           "path": "docs/agents/architecture.md",
-          "sha256": "7f6a566a9419d46f961eff5b783f69f3c4651262ca350b9e64ef6a56e821e90f"
+          "sha256": "8fec5cb90a27825ddc16a9df7e4c4a1c803d43ca6b125a9ce7c1a875c303fdf1"
         },
         {
           "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
@@ -448,7 +455,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
+          "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -460,7 +467,7 @@
         },
         {
           "path": "src/durable/include/cch/durable/Environment.hpp",
-          "sha256": "046653e8c20107c6fe6c19077d0a4a7391a3ab7b49358dd22fa09b8658a2a137"
+          "sha256": "330f4143c285b6aa7d157fee0207567b37f3e4bed5f61f6af9170bd6b2c824d1"
         },
         {
           "path": "src/durable/include/cch/durable/Images.hpp",
@@ -711,14 +718,20 @@
             "--output-junit",
             "/tmp/1105-existing-revalidation.xml"
           ],
-          "testedRevision": "78dca1567d7df15ad1115f5471d5fdd79583deec",
-          "recordedAt": "2026-11-01T14:07:53Z",
+          "testedRevision": "ef2f15034f2c4724ea289f08f76944e4ec4b0c0a",
+          "recordedAt": "2026-11-01T18:13:36Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
-            "sha256": "f8b5ddb1299bfd81475a8e7e40ed08296cc3480e2a185cfec321dc41c7eb3ce5"
+            "sha256": "b13dcaae13a5697cb18e4b19173eab6bc81ecb1669cea21a826c3f0ceae1f9f8"
           }
         }
+      },
+      "revalidation1172": {
+        "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered image rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -863,7 +876,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
+          "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1133,6 +1146,12 @@
             "sha256": "5c8a16c2b78a1be87f73db1579263324be0789753d4fe619cc8b77f11131b124"
           }
         }
+      },
+      "revalidation1172": {
+        "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1392,11 +1411,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
+          "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "d039123cb19f4ff685fc705b4a2ebc632970d3a20c53c614e8d513bcb24d8ae6"
+          "sha256": "77452e31cf3d0f194d1d119828c2fc38eb38be94127589e5302329df005a8a2b"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1650,6 +1669,13 @@
             "sha256": "688d6f5eed76493bfe5fd74b0a10c9c99d3a6527bef51a00cb4cf1bce5b0a5eb"
           }
         }
+      },
+      "revalidation1172": {
+        "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry, and the consolidation plan now lists its unrouted observations as explicit orphans. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -2735,7 +2761,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "d039123cb19f4ff685fc705b4a2ebc632970d3a20c53c614e8d513bcb24d8ae6"
+          "sha256": "77452e31cf3d0f194d1d119828c2fc38eb38be94127589e5302329df005a8a2b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -2743,7 +2769,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
+          "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
         }
       ],
       "validation": {
@@ -2958,7 +2984,14 @@
           }
         }
       ],
-      "routingSha256": "016612d68f1eb7ff67b288e072b7fc7ea06486e3fdaa45d4048abbb9c2b9304a"
+      "routingSha256": "016612d68f1eb7ff67b288e072b7fc7ea06486e3fdaa45d4048abbb9c2b9304a",
+      "revalidation1172": {
+        "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry, and the consolidation plan now lists its unrouted observations as explicit orphans. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      }
     }
   ]
 }

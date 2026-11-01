@@ -313,6 +313,23 @@ public:
         }
         return result;
     }
+    support::Expected<std::string> create_temp_dir(std::string_view prefix, std::stop_token stop) override {
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        std::error_code error;
+        auto root = fs::temp_directory_path(error);
+        if (error) root = fs::path{"/tmp"};
+        auto pattern = (root / (std::string{prefix} + "XXXXXX")).string();
+        std::vector<char> buffer(pattern.begin(), pattern.end());
+        buffer.push_back('\0');
+        char* made = ::mkdtemp(buffer.data());
+        if (made == nullptr) return std::unexpected(system_failure("mkdtemp"));
+        if (stop.stop_requested()) {
+            std::error_code ignored;
+            fs::remove_all(made, ignored);
+            return std::unexpected(cancelled());
+        }
+        return std::string{made};
+    }
     support::Expected<ShellResult> exec(const ShellCommand& command,
             std::chrono::milliseconds timeout,
             OutputSink output,

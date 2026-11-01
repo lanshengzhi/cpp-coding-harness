@@ -138,38 +138,44 @@ the persisted field.
   discriminator (a mark at open would leave `abortRequested:true` while paused)
   and the created-after-open discriminator (a scanner that abandons every
   flagged record would abort it instead of running it).
-- Owning module: `ctest --preset vcpkg -L durable -j1`: **324 selected, 315
-  passed, 9 skipped, 0 failed**. The skips are the frozen-pi durable
-  continuation prerequisites.
-- Architecture-sensitive selection: `ctest --preset vcpkg -L architecture -j1`:
-  **43 selected, 43 passed**, including the build-phase Parity Architecture Gate
-  on the changed Header/CMake surface.
-- Full Validation (serial, as requested by the lane):
+- Owning module on the merged tree: `ctest --preset vcpkg -L durable -j1`:
+  **327 selected, 318 passed, 9 skipped, 0 failed**. The skips are the
+  frozen-pi durable continuation prerequisites; #1172 contributes three
+  additional durable cases.
+- Architecture-sensitive selection on the merged tree:
+  `ctest --preset vcpkg -L architecture -j1`: **43 selected, 43 passed**,
+  including the build-phase Parity Architecture Gate after the #1172 interface
+  merge.
+- Full Validation (serial, as requested by the lane) on the merged tree:
   `TERM_PROGRAM=herdr ctest --preset vcpkg -j1 --output-on-failure`:
-  **4169 selected, 4158 passed, 11 skipped, 0 failed** in 653.66 seconds. The
+  **4172 selected, 4161 passed, 11 skipped, 0 failed** in 754.19 seconds. The
   skips are nine frozen-pi durable continuation cases, the realtime-clock
   adjustment case and the native terminal differential capture; none can run in
   this environment.
-- A default four-job `-L durable` run transiently failed the timing-sensitive
-  #1170 nested-call ordering case and the #1163 generation-publication case on
-  this loaded host. Both passed alone, the durable module passed completely
-  serially, and the serial full run above is green. No bound, timeout or
-  quarantine policy changed.
-- The default four-job full preset was also run as a cross-check:
-  **4169 selected, 4157 passed, 11 skipped, 1 failed** (99%). The single failure
-  was the unrelated #1019 TUI atomic-drain assertion on this loaded host; it
-  passed in isolation and in the serial full run above. No TUI source or policy
-  was changed by this ticket.
+- Two earlier full serial attempts ran while the #1159 worktree compiled the
+  warning/architecture gate and reported four runner-sensitive failures outside
+  this slice: #990 TUI late-reply timing, #497 bounded-tool-cancellation timing,
+  the #884 MCP reconnect case, and the documented #617 `[quarantine]` projection
+  cost bound. Each passed in isolation once the host was quiet, and the final
+  serial run above passed all four. No bound, timeout or quarantine policy
+  changed by this ticket.
 - Delivery reconciliation: adding the new C++ test to
   `cmake/tests/DurableTests.cmake` changes a pinned input of the #1090
-  delivery. The exact `^(issue1090|issue1101|issue1104)$` selection was rerun
+  delivery. After merging `origin/main` `e8d813a0c` (the #1172 registration),
+  the exact `^(issue1090|issue1101|issue1104)$` selection was rebuilt and rerun
   (**36 selected, 36 passed**) into
   `docs/research/pi-v1.3.0/deliveries/1175-1090-revalidation.xml` (SHA-256
-  `b1302a2bc0891c817843185dcee2abc37cfb1ca00ceb06a529f22451bb14c65a`), the
-  pinned digest was refreshed, and a `revalidation1175` entry records the
-  change. `consolidate_audits.py build` and `check` pass (1464 source rows,
-  41 receipt-backed rows, 568 scenarios, 150 explicit orphans, 0 uncovered).
-- `python3 tests/evidence/NamedEvidenceTest.py`: 24 tests, OK (2 skipped),
+  `8cdfbe54c5ce7ff444a4e97e12591cdcf8318f19f1463b8f6af64c815ad5641a`), with
+  `testedRevision` `e8d813a0c28f6ea5a3eef999b8432907befd9729`. The pinned
+  digests for `cmake/tests/DurableTests.cmake` and
+  `fixtures/pi-v1.3.0/baselines.json` were refreshed; a `revalidation1175`
+  entry records this slice and a `revalidation1172` entry records the shared
+  registry/plan changes. The audit-1172 observations are listed as eleven
+  explicit orphans because #1172's whole-row routing stays with #1180.
+  `consolidate_audits.py build` and `check` pass (1464 source rows, 41
+  receipt-backed rows, 579 scenarios, 161 explicit orphans, 0 uncovered).
+- `audit_evidence.py check` accepts the unregistered `audit-1175` manifest;
+  `python3 tests/evidence/NamedEvidenceTest.py`: 24 tests, OK (2 skipped),
   including the offline bundle and negative cases.
 - `scripts/format-check.sh origin/main`: clean.
 

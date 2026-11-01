@@ -7,6 +7,7 @@
 #include "support/Json.hpp"
 
 #include <cch/codemode/Declarations.hpp>
+#include <cch/durable/Environment.hpp>
 #include <cch/durable/Records.hpp>
 #include <cch/codemode/Source.hpp>
 #include <cch/support/OutputLimiter.hpp>
@@ -18,6 +19,8 @@
 #include <cmath>
 #include <condition_variable>
 #include <deque>
+#include <filesystem>
+#include <functional>
 #include <thread>
 #include <format>
 #include <map>
@@ -40,7 +43,7 @@ constexpr std::string_view kRunKind{"pi.codemode.run"};
 constexpr std::string_view kJournalKind{"pi.codemode.journal"};
 /// Frozen pi `CODEMODE_MODULE_VERSION`: the start shape a replay accepts.
 constexpr double kModuleVersion = 2;
-constexpr double kDefaultMaxOutputTokens = 10000;
+constexpr std::int64_t kDefaultMaxOutputTokens = 10000;
 
 support::Error failure(std::string message) {
     return support::make_error(support::ErrorCode::Tool, std::move(message));
@@ -208,6 +211,12 @@ support::ExpectedVoid write_run(chord::Draft& document, const Json& run) {
         auto stored = chord::Json::from_support(*result);
         if (!stored) return std::unexpected(stored.error());
         if (auto changed = document.set({chord::path_key("result")}, *stored); !changed)
+            return std::unexpected(changed.error());
+    }
+    if (const auto* output = field(run, "outputDir")) {
+        auto stored = chord::Json::from_support(*output);
+        if (!stored) return std::unexpected(stored.error());
+        if (auto changed = document.set({chord::path_key("outputDir")}, *stored); !changed)
             return std::unexpected(changed.error());
     }
     return {};
@@ -444,7 +453,8 @@ codemode::CodemodeOutcome nested_outcome(const NestedCallResult& result, std::st
 
 /// The model-visible `details.calls` rows, in issue order; a call still running
 /// when the script ends is reported cancelled (frozen pi `CodemodeToolDetails`).
-Json details(const std::map<std::int64_t, Json>& calls) {
+Json details(
+        const std::map<std::int64_t, Json>& calls, const std::optional<std::string>& full_output_path = std::nullopt) {
     Array rows;
     for (const auto& [id, stored] : calls) {
         (void)id;
@@ -457,7 +467,9 @@ Json details(const std::map<std::int64_t, Json>& calls) {
         if (const auto* duration = field(stored, "durationMs")) row.emplace("durationMs", *duration);
         rows.push_back(Json{std::move(row)});
     }
-    return Json{Object{{"calls", Json{std::move(rows)}}}};
+    Object value{{"calls", Json{std::move(rows)}}};
+    if (full_output_path) value.emplace("fullOutputPath", *full_output_path);
+    return Json{std::move(value)};
 }
 
 std::string error_text(const codemode::CodemodeError& error, const Json& call_details) {
@@ -487,72 +499,369 @@ std::string error_text(const codemode::CodemodeError& error, const Json& call_de
     return text;
 }
 
-void append_text(std::vector<ai::Content>& output, std::string text) {
-    if (!output.empty()) {
-        if (auto* previous = std::get_if<ai::TextContent>(&output.back())) {
-            if (!previous->text.empty() && !previous->text.ends_with('\n')) previous->text += '\n';
-            previous->text += text;
-            return;
+/// Frozen pi `CHARS_PER_TOKEN`.
+constexpr std::size_t kCharsPerToken = 4;
+/// Frozen pi codemode `OUTPUT_LIMITS`.
+constexpr std::size_t kOutputMaxBytes = 4 * 1024 * 1024;
+constexpr std::size_t kOutputMaxLines = 100000;
+/// Header, markers and notes around the script's own text (frozen `LINE_MARGIN`).
+constexpr std::size_t kOutputLineMargin = 100;
+
+/// JS strings count and slice UTF-16 code units. Invalid UTF-8 decodes as
+/// U+FFFD, matching a JS string boundary.
+std::u16string to_utf16(std::string_view text) {
+    std::u16string units;
+    units.reserve(text.size());
+    for (std::size_t offset = 0; offset < text.size();) {
+        const auto lead = static_cast<unsigned char>(text[offset]);
+        std::size_t length = 0;
+        std::uint32_t codepoint = 0;
+        if (lead < 0x80) {
+            length = 1;
+            codepoint = lead;
+        } else if (lead >= 0xc2 && lead <= 0xdf) {
+            length = 2;
+            codepoint = lead & 0x1f;
+        } else if (lead >= 0xe0 && lead <= 0xef) {
+            length = 3;
+            codepoint = lead & 0x0f;
+        } else if (lead >= 0xf0 && lead <= 0xf4) {
+            length = 4;
+            codepoint = lead & 0x07;
+        }
+        bool valid = length != 0 && offset + length <= text.size();
+        for (std::size_t index = 1; valid && index < length; ++index) {
+            const auto byte = static_cast<unsigned char>(text[offset + index]);
+            if ((byte & 0xc0) != 0x80) {
+                valid = false;
+                break;
+            }
+            codepoint = (codepoint << 6) | (byte & 0x3f);
+        }
+        if (valid) {
+            if ((length == 2 && codepoint < 0x80) || (length == 3 && codepoint < 0x800) ||
+                    (length == 4 && codepoint < 0x10000) || (codepoint >= 0xd800 && codepoint <= 0xdfff) ||
+                    codepoint > 0x10ffff)
+                valid = false;
+        }
+        if (!valid) {
+            units.push_back(static_cast<char16_t>(0xfffd));
+            ++offset;
+            continue;
+        }
+        offset += length;
+        if (codepoint >= 0x10000) {
+            const auto adjusted = codepoint - 0x10000;
+            units.push_back(static_cast<char16_t>(0xd800 + (adjusted >> 10)));
+            units.push_back(static_cast<char16_t>(0xdc00 + (adjusted & 0x3ff)));
+        } else {
+            units.push_back(static_cast<char16_t>(codepoint));
         }
     }
-    output.push_back(ai::text_content(std::move(text)));
+    return units;
 }
 
-std::size_t image_byte_count(std::string_view data) {
-    // The guest has already validated base64. Count its bytes without decoding.
-    const std::size_t padding = data.ends_with("==") ? 2 : data.ends_with('=') ? 1 : 0;
-    return data.size() * 3 / 4 >= padding ? data.size() * 3 / 4 - padding : 0;
-}
-
-ai::ToolResultMessage format_result(
-        const RunResult& result, const Json& start, const std::map<std::int64_t, Json>& calls) {
-    auto output = result.output;
-    if (!result.error && result.value_json) {
-        auto value = support::read_json(*result.value_json);
-        output.push_back(codemode::CodemodeOutputItem{
-                .data = value && value->holds<std::string>() ? value->get_string() : *result.value_json,
-                .mime_type = {}});
+std::string to_utf8(std::u16string_view units) {
+    std::string text;
+    text.reserve(units.size());
+    for (std::size_t index = 0; index < units.size(); ++index) {
+        std::uint32_t codepoint = units[index];
+        if (codepoint >= 0xd800 && codepoint <= 0xdbff && index + 1 < units.size() && units[index + 1] >= 0xdc00 &&
+                units[index + 1] <= 0xdfff) {
+            codepoint = 0x10000 + ((codepoint - 0xd800) << 10) + (units[index + 1] - 0xdc00);
+            ++index;
+        } else if (codepoint >= 0xd800 && codepoint <= 0xdfff) {
+            codepoint = 0xfffd;
+        }
+        if (codepoint < 0x80) {
+            text.push_back(static_cast<char>(codepoint));
+        } else if (codepoint < 0x800) {
+            text.push_back(static_cast<char>(0xc0 | (codepoint >> 6)));
+            text.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+        } else if (codepoint < 0x10000) {
+            text.push_back(static_cast<char>(0xe0 | (codepoint >> 12)));
+            text.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f)));
+            text.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+        } else {
+            text.push_back(static_cast<char>(0xf0 | (codepoint >> 18)));
+            text.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3f)));
+            text.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f)));
+            text.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+        }
     }
-    ai::ToolResultMessage tool{.details = details(calls), .is_error = result.error.has_value()};
-    append_text(tool.content,
-            std::format("Script {}\nWall time {:.1f} seconds\nOutput:\n",
-                    result.error ? "failed" : "completed",
-                    (clock_ms() - start.at("startedAt").get_number()) / 1000.0));
-    std::vector<ai::Content> body;
-    const auto count = std::ranges::count_if(output,
-            [](const auto& item) { return item.kind == codemode::CodemodeOutputItem::Kind::Text && !item.console; });
+    return text;
+}
+
+std::vector<std::u16string> split_utf16_lines(std::u16string_view text) {
+    std::vector<std::u16string> lines;
+    std::size_t start = 0;
+    while (true) {
+        const auto newline = text.find(u'\n', start);
+        if (newline == std::u16string_view::npos) {
+            lines.emplace_back(text.substr(start));
+            return lines;
+        }
+        lines.emplace_back(text.substr(start, newline - start));
+        start = newline + 1;
+    }
+}
+
+std::u16string join_utf16_lines(const std::vector<std::u16string>& lines, std::size_t begin, std::size_t end) {
+    std::u16string text;
+    for (std::size_t index = begin; index < end; ++index) {
+        if (index > begin) text.push_back(u'\n');
+        text.append(lines[index]);
+    }
+    return text;
+}
+
+/// pi `valueText`: strings as-is, other values as compact JSON.
+std::string value_text(std::string_view value_json) {
+    auto parsed = support::read_json(value_json);
+    if (parsed && parsed->holds<std::string>()) return parsed->get_string();
+    return std::string{value_json};
+}
+
+bool is_text(const codemode::CodemodeOutputItem& item) { return item.kind == codemode::CodemodeOutputItem::Kind::Text; }
+
+/// pi `formatItems`: number non-console text when there are several, then put
+/// every console line after the other output in one block.
+std::vector<ai::Content> format_items(const std::vector<codemode::CodemodeOutputItem>& items) {
+    const auto total = std::ranges::count_if(items, [](const auto& item) { return is_text(item) && !item.console; });
+    std::vector<ai::Content> formatted;
+    std::vector<std::string> console_lines;
     std::size_t index = 0;
-    std::string console;
-    for (const auto& item : output) {
-        if (item.kind == codemode::CodemodeOutputItem::Kind::Image) {
-            append_text(body,
-                    std::format("[Image ({}, {} bytes) could not be saved: no execution environment]",
-                            item.mime_type,
-                            image_byte_count(item.data)));
-            body.push_back(ai::image_content(item.data, item.mime_type));
+    for (const auto& item : items) {
+        if (!is_text(item)) {
+            formatted.push_back(ai::image_content(item.data, item.mime_type));
         } else if (item.console) {
-            if (!console.empty()) console += '\n';
-            console += item.data;
+            console_lines.push_back(item.data);
         } else {
             ++index;
-            append_text(body, count > 1 ? std::format("==> text {}/{} <==\n{}", index, count, item.data) : item.data);
+            auto text = item.data;
+            if (total > 1) text = std::format("==> text {}/{} <==\n{}", index, total, text);
+            formatted.push_back(ai::text_content(std::move(text)));
         }
     }
-    if (!console.empty()) append_text(body, "<console_output>\n" + console + "\n</console_output>");
-    if (result.error) append_text(body, "Script error:\n" + error_text(*result.error, *tool.details));
-    std::size_t remaining_bytes = 4 * 1024 * 1024;
-    std::size_t remaining_lines = 100000;
-    for (auto& block : body) {
-        if (auto* text = std::get_if<ai::TextContent>(&block)) {
-            auto bounded = support::truncate_output_head(
-                    text->text, support::OutputLimit{.max_bytes = remaining_bytes, .max_lines = remaining_lines});
-            remaining_bytes -= bounded.output_bytes;
-            remaining_lines -= bounded.output_lines;
-            text->text = std::move(bounded.text);
+    if (!console_lines.empty()) {
+        std::string block = "<console_output>\n";
+        for (std::size_t line = 0; line < console_lines.size(); ++line) {
+            if (line > 0) block += '\n';
+            block += console_lines[line];
         }
-        tool.content.push_back(std::move(block));
+        block += "\n</console_output>";
+        formatted.push_back(ai::text_content(std::move(block)));
     }
-    return tool;
+    return formatted;
+}
+
+/// pi `joinAdjacentText`: one text item per run, each part starting on its own
+/// line unless the previous non-empty part already ends in a newline; images
+/// flush the current run.
+std::vector<ai::Content> join_adjacent_text(const std::vector<ai::Content>& items) {
+    std::vector<ai::Content> joined;
+    std::string parts;
+    std::string last_part;
+    const auto flush = [&] {
+        if (!parts.empty()) joined.push_back(ai::text_content(std::move(parts)));
+        parts.clear();
+        last_part.clear();
+    };
+    for (const auto& item : items) {
+        if (const auto* text = std::get_if<ai::TextContent>(&item)) {
+            if (!last_part.empty() && last_part.back() != '\n') {
+                parts += '\n';
+                last_part = "\n";
+            }
+            parts += text->text;
+            if (!text->text.empty()) last_part = text->text;
+        } else {
+            flush();
+            joined.push_back(item);
+        }
+    }
+    flush();
+    return joined;
+}
+
+std::optional<std::string_view> image_extension(std::string_view mime_type) {
+    if (mime_type == "image/png") return ".png";
+    if (mime_type == "image/jpeg") return ".jpg";
+    if (mime_type == "image/gif") return ".gif";
+    if (mime_type == "image/webp") return ".webp";
+    return std::nullopt;
+}
+
+support::Expected<std::string> decode_base64(std::string_view text) {
+    std::string bytes;
+    bytes.reserve(text.size() / 4 * 3);
+    std::uint32_t accumulator = 0;
+    int bits = 0;
+    for (const char character : text) {
+        if (character == '=') break;
+        int value = -1;
+        if (character >= 'A' && character <= 'Z')
+            value = character - 'A';
+        else if (character >= 'a' && character <= 'z')
+            value = character - 'a' + 26;
+        else if (character >= '0' && character <= '9')
+            value = character - '0' + 52;
+        else if (character == '+')
+            value = 62;
+        else if (character == '/')
+            value = 63;
+        else if (character == '\n' || character == '\r' || character == ' ' || character == '\t')
+            continue;
+        if (value < 0) return std::unexpected(failure("invalid image data"));
+        accumulator = (accumulator << 6) | static_cast<std::uint32_t>(value);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            bytes.push_back(static_cast<char>((accumulator >> bits) & 0xff));
+        }
+    }
+    return bytes;
+}
+
+/// One output file under the run's directory: its path, or why it was not
+/// written (frozen pi `OutputFile`).
+using OutputWriter = std::move_only_function<support::Expected<std::string>(std::string_view, std::string_view)>;
+
+struct TruncatedOutput {
+    std::vector<ai::Content> items;
+    std::optional<std::string> full_output_path;
+};
+
+/// pi `truncate`: over the token or line budget, keep the start and end of all
+/// text, move images after it, and spill the complete text through `write`.
+TruncatedOutput truncate_output(std::vector<ai::Content> items, std::int64_t max_tokens, OutputWriter& write) {
+    std::vector<std::string> texts;
+    for (const auto& item : items) {
+        if (const auto* text = std::get_if<ai::TextContent>(&item)) texts.push_back(text->text);
+    }
+    std::string combined;
+    for (std::size_t index = 0; index < texts.size(); ++index) {
+        if (index > 0) combined += '\n';
+        combined += texts[index];
+    }
+    const auto units = to_utf16(combined);
+    const auto budget =
+            std::min<std::size_t>(static_cast<std::size_t>(std::max<std::int64_t>(max_tokens, 0)) * kCharsPerToken,
+                    kOutputMaxBytes / kCharsPerToken);
+    const auto line_budget = (kOutputMaxLines - kOutputLineMargin) / 2;
+    const auto lines = split_utf16_lines(units).size();
+    if (texts.empty() || (units.size() <= budget && lines <= 2 * line_budget))
+        return TruncatedOutput{.items = std::move(items), .full_output_path = std::nullopt};
+
+    const auto head_chars = budget / 2;
+    const auto tail_chars = budget - head_chars;
+    const auto head_part = std::u16string_view{units}.substr(0, head_chars);
+    const auto head_lines = split_utf16_lines(head_part);
+    const auto head = join_utf16_lines(head_lines, 0, std::min(head_lines.size(), line_budget));
+    std::u16string tail;
+    if (tail_chars > 0) {
+        // The line budget alone can trigger truncation with a budget larger than
+        // the text, where a JS negative slice starts at 0 instead of underflowing.
+        const auto tail_start = units.size() > tail_chars ? units.size() - tail_chars : 0;
+        const auto tail_part = std::u16string_view{units}.substr(tail_start);
+        const auto tail_lines = split_utf16_lines(tail_part);
+        const auto begin = tail_lines.size() > line_budget ? tail_lines.size() - line_budget : 0;
+        tail = join_utf16_lines(tail_lines, begin, tail_lines.size());
+    }
+    const auto removed = units.size() - head.size() - tail.size();
+    const auto total_tokens = (units.size() + kCharsPerToken - 1) / kCharsPerToken;
+    const auto removed_tokens = (removed + kCharsPerToken - 1) / kCharsPerToken;
+    std::string text =
+            std::format("Warning: truncated output (original token count: {})\nTotal output lines: {}\n\n{}…{} tokens "
+                        "truncated…{}",
+                    total_tokens,
+                    lines,
+                    to_utf8(head),
+                    removed_tokens,
+                    to_utf8(tail));
+    TruncatedOutput truncated;
+    truncated.items.push_back(ai::text_content(std::move(text)));
+    for (auto& item : items) {
+        if (std::holds_alternative<ai::ImageContent>(item)) truncated.items.push_back(std::move(item));
+    }
+    auto spilled = write("output.txt", combined);
+    if (spilled) {
+        truncated.full_output_path = *spilled;
+        auto& warning = std::get<ai::TextContent>(truncated.items.front());
+        warning.text += std::format("\n\n[Full output: {} (read with offset/limit)]", *spilled);
+    } else {
+        auto& warning = std::get<ai::TextContent>(truncated.items.front());
+        warning.text += std::format("\n\n[Could not save the full output: {}]", spilled.error().message);
+    }
+    return truncated;
+}
+
+/// pi `saveImages`: save each image's bytes once, put its path label before it,
+/// and keep the image even when the write fails.
+std::vector<ai::Content> save_images(std::vector<ai::Content> items, OutputWriter& write) {
+    std::map<std::string, std::string> labels;
+    std::vector<ai::Content> saved;
+    for (const auto& item : items) {
+        const auto* image = std::get_if<ai::ImageContent>(&item);
+        if (image == nullptr) {
+            saved.push_back(item);
+            continue;
+        }
+        auto found = labels.find(image->data);
+        if (found == labels.end()) {
+            auto bytes = decode_base64(image->data);
+            std::string label;
+            if (!bytes) {
+                label = std::format(
+                        "[Image ({}, 0 bytes) could not be saved: {}]", image->mime_type, bytes.error().message);
+            } else {
+                const std::string kind = image->mime_type + ", " + std::to_string(bytes->size()) + " bytes";
+                const auto extension = image_extension(image->mime_type);
+                const std::string name =
+                        std::format("image-{}{}", labels.size() + 1, extension.value_or(std::string_view{".bin"}));
+                auto written = write(name, *bytes);
+                label = written ? std::format("[Image saved to {} ({})]", *written, kind)
+                                : std::format("[Image ({}) could not be saved: {}]", kind, written.error().message);
+            }
+            found = labels.emplace(image->data, std::move(label)).first;
+        }
+        saved.push_back(ai::text_content(found->second));
+        saved.push_back(item);
+    }
+    return saved;
+}
+
+struct FormattedResult {
+    ai::ToolResultMessage message;
+    std::optional<std::string> full_output_path;
+};
+
+FormattedResult format_result(const RunResult& result,
+        const Json& start,
+        const std::map<std::int64_t, Json>& calls,
+        std::int64_t max_tokens,
+        OutputWriter write) {
+    auto output = result.output;
+    if (!result.error && result.value_json) {
+        output.push_back(codemode::CodemodeOutputItem{
+                .data = value_text(*result.value_json),
+                .mime_type = {},
+        });
+    }
+    auto formatted = format_items(output);
+    const auto call_details = details(calls);
+    if (result.error)
+        formatted.push_back(ai::text_content("Script error:\n" + error_text(*result.error, call_details)));
+    auto truncated = truncate_output(join_adjacent_text(formatted), max_tokens, write);
+    auto content = join_adjacent_text(save_images(std::move(truncated.items), write));
+    ai::ToolResultMessage message{
+            .details = details(calls, truncated.full_output_path), .is_error = result.error.has_value()};
+    message.content.push_back(ai::text_content(std::format("Script {}\nWall time {:.1f} seconds\nOutput:\n",
+            result.error ? "failed" : "completed",
+            (clock_ms() - start.at("startedAt").get_number()) / 1000.0)));
+    for (auto& item : content)
+        message.content.push_back(std::move(item));
+    return FormattedResult{.message = std::move(message), .full_output_path = truncated.full_output_path};
 }
 
 Json encoded_result(const ai::ToolResultMessage& result) {
@@ -640,9 +949,12 @@ struct Waiting {
 
 class Execution final {
 public:
-    Execution(codemode::CodemodeSandbox& sandbox, ToolExecutionContext context, StoredState state)
+    Execution(codemode::CodemodeSandbox& sandbox,
+            ToolExecutionContext context,
+            StoredState state,
+            std::shared_ptr<Environment> environment)
         : sandbox_(sandbox), context_(std::move(context)), run_(std::move(state.run)),
-          journal_(std::move(state.journal)), rerun_(state.rerun) {}
+          journal_(std::move(state.journal)), rerun_(state.rerun), environment_(std::move(environment)) {}
 
     support::Expected<ai::ToolResultMessage> execute(const codemode::CodemodeSource& source) {
         if (const auto* result = field(run_, "result")) return decoded_result(*result);
@@ -1050,6 +1362,34 @@ private:
         return save(context_, run_, journal_);
     }
 
+    /// The run's output directory, created once and recorded before a file is
+    /// written so a rerun writes the same fixed names (frozen pi `outputDir`).
+    support::Expected<std::string> ensure_output_dir() {
+        if (const auto* recorded = field(run_, "outputDir"); recorded != nullptr && recorded->holds<std::string>())
+            return recorded->get_string();
+        if (!environment_) return std::unexpected(failure("no execution environment"));
+        auto created = environment_->create_temp_dir("pi-codemode-", context_.runtime->stop_token());
+        if (!created) return std::unexpected(created.error());
+        run_.get_object().insert_or_assign("outputDir", *created);
+        if (auto saved = save(context_, run_, journal_); !saved) return std::unexpected(saved.error());
+        return *created;
+    }
+
+    /// One output file under the run's directory; a failed write returns its
+    /// reason so the caller can keep a truthful label (frozen pi `outputFiles`).
+    support::Expected<std::string> write_output(std::string_view name, std::string_view data) {
+        // A recorded `outputDir` is not enough to write: the run may continue in
+        // a Harness whose extension has no environment at all (frozen pi checks
+        // `env === undefined` before it reads the directory).
+        if (!environment_) return std::unexpected(failure("no execution environment"));
+        auto directory = ensure_output_dir();
+        if (!directory) return std::unexpected(directory.error());
+        const auto path = (std::filesystem::path{*directory} / std::string{name}).string();
+        if (auto written = environment_->write(path, data, context_.runtime->stop_token()); !written)
+            return std::unexpected(written.error());
+        return path;
+    }
+
     support::Expected<ai::ToolResultMessage> finish_error(std::string message) {
         if (context_.runtime->stop_token().stop_requested())
             return std::unexpected(
@@ -1066,7 +1406,16 @@ private:
             return std::unexpected(
                     support::make_error(support::ErrorCode::Cancelled, "Codemode invocation was interrupted"));
         decided_ = true;
-        auto tool = format_result(result, run_.at("start"), calls_);
+        const Json start = run_.at("start");
+        const auto* max_tokens = field(start, "maxOutputTokens");
+        auto formatted = format_result(result,
+                start,
+                calls_,
+                max_tokens != nullptr && max_tokens->holds<double>()
+                        ? static_cast<std::int64_t>(max_tokens->get_number())
+                        : kDefaultMaxOutputTokens,
+                [this](std::string_view name, std::string_view data) { return write_output(name, data); });
+        auto tool = std::move(formatted.message);
         run_.get_object().insert_or_assign("result", encoded_result(tool));
         if (auto saved = save(context_, run_, journal_, result.error ? std::nullopt : result.store_writes); !saved)
             return std::unexpected(saved.error());
@@ -1079,6 +1428,7 @@ private:
     Json journal_;
     bool rerun_{false};
     bool replaying_{false};
+    std::shared_ptr<Environment> environment_;
     std::size_t journal_length_{0};
     std::size_t next_entry_{0};
     std::optional<std::int64_t> first_issued_;
@@ -1104,8 +1454,10 @@ ai::ToolResultMessage rejected(std::string message) {
     return ai::ToolResultMessage{.content = {ai::text_content(std::move(message))}, .is_error = true};
 }
 
-support::Expected<ai::ToolResultMessage> execute(
-        codemode::CodemodeSandbox& sandbox, Json arguments, ToolExecutionContext context) {
+support::Expected<ai::ToolResultMessage> execute(codemode::CodemodeSandbox& sandbox,
+        Json arguments,
+        ToolExecutionContext context,
+        std::shared_ptr<Environment> environment) {
     if (!context.runtime || !context.session) return rejected("No durable tool execution context");
     const auto* code = field(arguments, "code");
     if (!code || !code->holds<std::string>()) return rejected("Invalid codemode source");
@@ -1120,12 +1472,13 @@ support::Expected<ai::ToolResultMessage> execute(
         return std::unexpected(state.error());
     }
     if (!valid_run(state->run) || !valid_journal(state->journal)) return rejected("Invalid persisted codemode state");
-    return Execution{sandbox, std::move(context), std::move(*state)}.execute(*parsed);
+    return Execution{sandbox, std::move(context), std::move(*state), std::move(environment)}.execute(*parsed);
 }
 
 } // namespace
 
-Extension codemode_extension(std::unique_ptr<codemode::CodemodeSandbox> sandbox) {
+Extension codemode_extension(
+        std::unique_ptr<codemode::CodemodeSandbox> sandbox, std::shared_ptr<Environment> environment) {
     Extension extension{.name = "codemode"};
     extension.tools.push_back(ToolRegistration{
             .declaration = ai::Tool{.name = "codemode",
@@ -1133,10 +1486,10 @@ Extension codemode_extension(std::unique_ptr<codemode::CodemodeSandbox> sandbox)
                     .parameters = Json{Object{{"type", "object"},
                             {"properties", Json{Object{{"code", Json{Object{{"type", "string"}}}}}}},
                             {"required", Json{Array{"code"}}}}}},
-            .execute_durable = [sandbox = std::move(sandbox)](Json arguments,
+            .execute_durable = [sandbox = std::move(sandbox), environment = std::move(environment)](Json arguments,
                                        ToolExecutionContext context) -> support::Expected<ai::ToolResultMessage> {
                 if (!sandbox) return std::unexpected(failure("No codemode sandbox is configured"));
-                return execute(*sandbox, std::move(arguments), std::move(context));
+                return execute(*sandbox, std::move(arguments), std::move(context), environment);
             },
             .replay_safe = true});
     return extension;

@@ -18,8 +18,10 @@
 #include <chrono>
 #include <condition_variable>
 #include <csignal>
+#include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <regex>
 #include <semaphore>
 #include <memory>
 #include <string>
@@ -138,10 +140,16 @@ std::vector<support::JsonValue> nested_task_records(Harness& harness) {
     return *rows;
 }
 
-void install(Registry& registry) {
+namespace {
+void install_codemode(Registry& registry, std::shared_ptr<Environment> environment = nullptr) {
     auto sandbox = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path());
     REQUIRE(sandbox.has_value());
-    REQUIRE(registry.install(codemode_extension(std::move(*sandbox))).has_value());
+    REQUIRE(registry.install(codemode_extension(std::move(*sandbox), std::move(environment))).has_value());
+}
+} // namespace
+
+void install(Registry& registry) {
+    install_codemode(registry);
     Extension extension{.name = "arithmetic"};
     extension.tools.push_back(ToolRegistration{.declaration = ai::Tool{.name = "double", .description = "Double n"},
             .execute = [](support::JsonValue args, std::stop_token) -> support::AsyncResult<std::vector<ai::Content>> {
@@ -151,6 +159,56 @@ void install(Registry& registry) {
             }});
     REQUIRE(registry.install(std::move(extension)).has_value());
 }
+
+/// A real temporary directory whose writes can be failed or observed: a failed
+/// spill/image keeps a truthful label instead of naming a file that does not
+/// exist, and a cancelled run must never reach the writer at all.
+class OutputSpyEnvironment final : public Environment {
+public:
+    OutputSpyEnvironment(std::shared_ptr<Environment> inner, bool fail_writes)
+        : inner_(std::move(inner)), fail_writes_(fail_writes) {}
+    support::Expected<std::string> read(std::string_view path, std::stop_token stop) override {
+        return inner_->read(path, stop);
+    }
+    support::ExpectedVoid write(std::string_view path, std::string_view content, std::stop_token stop) override {
+        writes.emplace_back(path);
+        if (fail_writes_)
+            return std::unexpected(support::make_error(support::ErrorCode::Workspace, "injected output failure"));
+        return inner_->write(path, content, stop);
+    }
+    support::ExpectedVoid append(std::string_view path, std::string_view content, std::stop_token stop) override {
+        return inner_->append(path, content, stop);
+    }
+    support::Expected<FileInfo> stat(std::string_view path, std::stop_token stop) override {
+        return inner_->stat(path, stop);
+    }
+    support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
+        return inner_->list(path, stop);
+    }
+    support::Expected<std::string> create_temp_dir(std::string_view prefix, std::stop_token stop) override {
+        auto created = inner_->create_temp_dir(prefix, stop);
+        if (created) created_dirs.push_back(*created);
+        return created;
+    }
+    support::Expected<ShellResult> exec(const ShellCommand& command,
+            std::chrono::milliseconds timeout,
+            OutputSink output,
+            std::stop_token stop,
+            ShellOutputWindow window) override {
+        return inner_->exec(command, timeout, std::move(output), stop, window);
+    }
+    support::Expected<std::unique_ptr<FileWatch>> watch(
+            std::string_view path, WatchChangeSink on_change, WatchOptions options) override {
+        return inner_->watch(path, std::move(on_change), std::move(options));
+    }
+
+    std::vector<std::string> writes;
+    std::vector<std::string> created_dirs;
+
+private:
+    std::shared_ptr<Environment> inner_;
+    bool fail_writes_{};
+};
 
 ToolRegistration paused_tool(std::atomic<bool>& first, std::binary_semaphore& reached) {
     return ToolRegistration{.declaration = ai::Tool{.name = "pause"},
@@ -727,6 +785,261 @@ TEST_CASE("Durable recovery does not re-execute an unsafe ordinary tool", "[dura
     REQUIRE(consume(harness->wait_for_idle(root.value())).has_value());
     CHECK(effects == 1);
     REQUIRE(consume(harness->close()).has_value());
+}
+
+namespace {
+using Json = support::JsonValue;
+using Object = Json::object_t;
+using Array = Json::array_t;
+
+const Json* field(const Json& value, std::string_view key) {
+    const auto* object = value.get_if<Json::object_t>();
+    if (object == nullptr) return nullptr;
+    const auto found = object->find(std::string{key});
+    return found == object->end() ? nullptr : &found->second;
+}
+
+/// The capture records every run of 100 or more newlines as `<newlines:N>`, so
+/// the line-budget scenarios stay readable without losing their exact runs.
+std::string collapse_newline_runs(std::string text) {
+    std::string collapsed;
+    collapsed.reserve(text.size());
+    for (std::size_t index = 0; index < text.size();) {
+        if (text[index] != '\n') {
+            collapsed.push_back(text[index++]);
+            continue;
+        }
+        std::size_t end = index;
+        while (end < text.size() && text[end] == '\n')
+            ++end;
+        if (end - index >= 100)
+            collapsed += std::format("<newlines:{}>", end - index);
+        else
+            collapsed.append(text, index, end - index);
+        index = end;
+    }
+    return collapsed;
+}
+} // namespace
+
+TEST_CASE("Durable codemode output matches frozen budgets spill and saved images", "[durable][codemode][issue1172]") {
+    constexpr std::string_view kArtifact = "fixtures/pi-v1.3.0/audit-1172/codemode-output.json";
+    const std::array<std::string, 11> names{
+            "token budget truncates output and writes the complete text",
+            "text exactly at the token budget is not truncated",
+            "a script image is saved through the execution environment",
+            "no execution environment keeps the frozen unsupported labels",
+            "a failed script keeps partial output and spills it",
+            "unicode truncation keeps whole BMP characters",
+            "ordered text console images and values keep production order",
+            "one character over the token budget truncates",
+            "the line budget exactly at its limit is not truncated",
+            "one line over the line budget truncates and spills",
+            "a token budget larger than the text still clamps the tail to the whole line window",
+    };
+    const auto norm = [](std::string text, std::string_view directory) {
+        text = std::regex_replace(text, std::regex{"Wall time [\\d.]+ seconds"}, "Wall time <seconds>");
+        if (!directory.empty()) {
+            std::size_t position = 0;
+            while ((position = text.find(directory, position)) != std::string::npos) {
+                text.replace(position, directory.size(), "<output-dir>");
+                position += std::string_view{"<output-dir>"}.size();
+            }
+        }
+        return collapse_newline_runs(std::move(text));
+    };
+    for (const auto& name : names) {
+        DYNAMIC_SECTION(name) {
+            const auto frozen = FrozenScenario::load(kArtifact, name);
+            REQUIRE(frozen.has_value());
+            const auto& inputs = frozen->inputs();
+            REQUIRE(inputs.at("source").holds<std::string>());
+            std::string source = inputs.at("source").get_string();
+            if (const auto* max_tokens = field(inputs, "maxTokens")) {
+                source = std::format("// @options: {{\"max_output_tokens\": {}}}\n{}",
+                        static_cast<std::int64_t>(max_tokens->get_number()),
+                        source);
+            }
+            const bool env = field(inputs, "environment") != nullptr && field(inputs, "environment")->get_boolean();
+            tests::TempWorkspace workspace;
+            MemoryStorage storage;
+            Registry registry;
+            std::shared_ptr<Environment> environment;
+            if (env) environment = local_environment(workspace.path().string());
+            install_codemode(registry, environment);
+            auto harness = open(storage, registry, {source});
+            submit(*harness);
+            const auto result = last_result(*harness);
+            REQUIRE(consume(harness->close()).has_value());
+            const auto* details = field(result, "details");
+            const auto* full = details == nullptr ? nullptr : field(*details, "fullOutputPath");
+            std::string directory;
+            if (full != nullptr && full->holds<std::string>())
+                directory = std::filesystem::path{full->get_string()}.parent_path().string();
+            std::string raw_text;
+            for (const auto& block : result.at("content").get_array())
+                if (block.at("type").get_string() == "text") raw_text += block.at("text").get_string();
+            std::vector<std::string> image_paths;
+            const std::regex image_path_pattern{R"(\[Image saved to (.+?) \()"};
+            for (std::sregex_iterator it{raw_text.begin(), raw_text.end(), image_path_pattern}, end; it != end; ++it)
+                image_paths.push_back((*it)[1].str());
+            if (directory.empty() && !image_paths.empty())
+                directory = std::filesystem::path{image_paths.front()}.parent_path().string();
+
+            Array content;
+            std::string text;
+            for (const auto& block : result.at("content").get_array()) {
+                if (block.at("type").get_string() == "text") {
+                    const auto normalized = norm(block.at("text").get_string(), directory);
+                    text += normalized;
+                    content.push_back(Json{Object{{"type", "text"}, {"text", normalized}}});
+                } else {
+                    content.push_back(Json{
+                            Object{{"type", "image"}, {"mimeType", block.at("mimeType")}, {"data", block.at("data")}}});
+                }
+            }
+            Array calls;
+            if (const auto* rows = details == nullptr ? nullptr : field(*details, "calls"); rows != nullptr) {
+                for (const auto& call : rows->get_array()) {
+                    Object row{{"id", call.at("id")},
+                            {"name", call.at("name")},
+                            {"args", call.at("args")},
+                            {"status", call.at("status")},
+                            {"durationPresent", field(call, "durationMs") != nullptr}};
+                    calls.push_back(Json{std::move(row)});
+                }
+            }
+            Json observed_full{nullptr};
+            if (full != nullptr && full->holds<std::string>())
+                observed_full = Json{norm(full->get_string(), directory)};
+            const auto observed = Json{Object{{"isError", result.at("isError")},
+                    {"content", Json{std::move(content)}},
+                    {"text", text},
+                    {"details", Json{Object{{"calls", Json{std::move(calls)}}, {"fullOutputPath", observed_full}}}}}};
+
+            const auto& expected = frozen->expected();
+            CHECK(observed.at("isError").get_boolean() == expected.at("isError").get_boolean());
+            CHECK(support::canonical_json(observed.at("content")).value() ==
+                    support::canonical_json(expected.at("content")).value());
+            CHECK(observed.at("text").get_string() == expected.at("text").get_string());
+            CHECK(support::canonical_json(observed.at("details").at("calls")).value() ==
+                    support::canonical_json(expected.at("details").at("calls")).value());
+            CHECK(support::canonical_json(observed.at("details").at("fullOutputPath")).value() ==
+                    support::canonical_json(expected.at("details").at("fullOutputPath")).value());
+
+            const auto* spill = field(expected, "spill");
+            if (spill == nullptr || spill->holds<std::nullptr_t>()) {
+                CHECK(full == nullptr);
+            } else if (full != nullptr && full->holds<std::string>()) {
+                REQUIRE(environment != nullptr);
+                const auto bytes = environment->read(full->get_string(), {});
+                REQUIRE(bytes.has_value());
+                CHECK(bytes->size() == static_cast<std::size_t>(spill->at("bytes").get_number()));
+                CHECK(norm(*bytes, directory) == spill->at("text").get_string());
+            } else {
+                FAIL("the frozen spill has no output path");
+            }
+
+            const auto* images = field(expected, "images");
+            REQUIRE(images != nullptr);
+            CHECK(image_paths.size() == images->get_array().size());
+            for (std::size_t index = 0; index < std::min(image_paths.size(), images->get_array().size()); ++index) {
+                REQUIRE(environment != nullptr);
+                const auto bytes = environment->read(image_paths[index], {});
+                REQUIRE(bytes.has_value());
+                const auto& image = images->get_array()[index];
+                CHECK(std::filesystem::path{image_paths[index]}.filename().string() == image.at("name").get_string());
+                CHECK(bytes->size() == static_cast<std::size_t>(image.at("bytes").get_number()));
+            }
+            REQUIRE(consume(harness->close()).has_value());
+            if (!directory.empty()) {
+                std::error_code error;
+                std::filesystem::remove_all(directory, error);
+            }
+        }
+    }
+}
+
+TEST_CASE("Failed codemode output writes keep truthful labels", "[durable][codemode][issue1172]") {
+    tests::TempWorkspace workspace;
+    MemoryStorage storage;
+    Registry registry;
+    auto environment = std::make_shared<OutputSpyEnvironment>(local_environment(workspace.path().string()), true);
+    install_codemode(registry, environment);
+    const std::string source =
+            "// @options: {\"max_output_tokens\": 20}\n"
+            "text('x'.repeat(120)); image('data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8kUAAAAASUVORK5CYII=');";
+    auto harness = open(storage, registry, {source});
+    submit(*harness);
+    const auto result = last_result(*harness);
+    REQUIRE(consume(harness->close()).has_value());
+    std::string text;
+    for (const auto& block : result.at("content").get_array())
+        if (block.at("type").get_string() == "text") text += block.at("text").get_string();
+    CHECK_FALSE(result.at("isError").get_boolean());
+    CHECK(text.find("[Could not save the full output: injected output failure]") != std::string::npos);
+    CHECK(text.find("[Image (image/png, 68 bytes) could not be saved: injected output failure]") != std::string::npos);
+    CHECK(text.find("[Full output:") == std::string::npos);
+    CHECK(text.find("[Image saved to ") == std::string::npos);
+    CHECK(field(result, "details") != nullptr);
+    CHECK(field(*field(result, "details"), "fullOutputPath") == nullptr);
+    bool kept_image = false;
+    for (const auto& block : result.at("content").get_array())
+        kept_image |= block.at("type").get_string() == "image";
+    CHECK(kept_image);
+    // One directory, one attempted spill and one attempted image: no retry and
+    // no path that claims a file the environment refused.
+    REQUIRE(environment->created_dirs.size() == 1);
+    CHECK(environment->writes.size() == 2);
+    CHECK_FALSE(std::filesystem::exists(std::filesystem::path{environment->created_dirs.front()} / "output.txt"));
+    std::error_code error;
+    std::filesystem::remove_all(environment->created_dirs.front(), error);
+}
+
+TEST_CASE("Cancelled codemode output publishes no file references", "[durable][codemode][issue1172]") {
+    constexpr std::string_view kAbortArtifact = "fixtures/pi-v1.3.0/audit-1170/codemode-nested.json";
+    tests::TempWorkspace workspace;
+    MemoryStorage storage;
+    Registry registry;
+    auto environment = std::make_shared<OutputSpyEnvironment>(local_environment(workspace.path().string()), false);
+    install_codemode(registry, environment);
+    std::atomic<bool> first{true};
+    std::binary_semaphore reached{0};
+    Extension pause{.name = "pause"};
+    pause.tools.push_back(paused_tool(first, reached));
+    REQUIRE(registry.install(std::move(pause)).has_value());
+    auto harness = open(storage,
+            registry,
+            {"// @options: {\"max_output_tokens\": 20}\ntext('x'.repeat(120)); await tools.pause();"});
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+    auto input =
+            consume(harness->submit(root.value(), SubmissionDraft{.body = InputSubmissionDraft{.content = "start"}}));
+    REQUIRE(input.has_value());
+    // Liveness backstop only: the shard's frozen-comparison case runs a real
+    // WASM sandbox in parallel with this one, so sandbox start can take longer
+    // than a second-scale prompt bound.
+    REQUIRE(reached.try_acquire_for(std::chrono::seconds{30}));
+    auto aborted = consume(harness->abort_conversation(root.value()));
+    REQUIRE(aborted.has_value());
+    const auto result = last_result(*harness);
+    REQUIRE(consume(harness->close()).has_value());
+
+    std::string text;
+    for (const auto& block : result.at("content").get_array())
+        if (block.at("type").get_string() == "text") text += block.at("text").get_string();
+
+    // The aborted call reports the frozen pi harness result, and no spill or
+    // image file is written at all, so no reference can be published.
+    const auto frozen =
+            FrozenScenario::load(kAbortArtifact, "cancelling the parent codemode call aborts its nested work");
+    REQUIRE(frozen.has_value());
+    const auto& expected = frozen->expected();
+    CHECK(result.at("isError").get_boolean() == expected.at("isError").get_boolean());
+    CHECK(text == expected.at("output").get_string());
+    CHECK(environment->created_dirs.empty());
+    CHECK(environment->writes.empty());
 }
 
 } // namespace cch::tests::durable

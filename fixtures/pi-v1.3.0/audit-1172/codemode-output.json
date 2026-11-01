@@ -1,0 +1,442 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1172",
+  "family": "audit-1172",
+  "capturedAt": "2026-11-01T16:22:24.310Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/codemode/output.ts:formatResult",
+    "packages/durable/src/codemode/codemode.ts:CodemodeCall"
+  ],
+  "scenarios": [
+    {
+      "name": "token budget truncates output and writes the complete text",
+      "inputs": {
+        "source": "text('x'.repeat(120)); return 'done'",
+        "maxTokens": 20,
+        "environment": true
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "Warning: truncated output (original token count: 40)\nTotal output lines: 4\n\n==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxx…20 tokens truncated…xxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone\n\n[Full output: <output-dir>/output.txt (read with offset/limit)]"
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\nWarning: truncated output (original token count: 40)\nTotal output lines: 4\n\n==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxx…20 tokens truncated…xxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone\n\n[Full output: <output-dir>/output.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "<output-dir>/output.txt"
+        },
+        "spill": {
+          "text": "==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone",
+          "bytes": 159,
+          "sha256": "ae3a1df84eaae981161e3eef08764da72af2b36b8ba0310c296edbaa9a2d682a"
+        },
+        "images": []
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "text exactly at the token budget is not truncated",
+      "inputs": {
+        "source": "text('y'.repeat(80))",
+        "maxTokens": 20,
+        "environment": false
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\nyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+        "details": {
+          "calls": [],
+          "fullOutputPath": null
+        },
+        "spill": null,
+        "images": []
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "a script image is saved through the execution environment",
+      "inputs": {
+        "source": "image('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8kUAAAAASUVORK5CYII='); return 'ok'",
+        "environment": true
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "[Image saved to <output-dir>/image-1.png (image/png, 68 bytes)]"
+          },
+          {
+            "type": "image",
+            "mimeType": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8kUAAAAASUVORK5CYII="
+          },
+          {
+            "type": "text",
+            "text": "ok"
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\n[Image saved to <output-dir>/image-1.png (image/png, 68 bytes)]ok",
+        "details": {
+          "calls": [],
+          "fullOutputPath": null
+        },
+        "spill": null,
+        "images": [
+          {
+            "name": "image-1.png",
+            "bytes": 68,
+            "sha256": "826a9733b512f939ffc8888f006336cad4160dc17c38d35dddd3b0652200ff69"
+          }
+        ]
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "no execution environment keeps the frozen unsupported labels",
+      "inputs": {
+        "source": "text('z'.repeat(120)); image('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8kUAAAAASUVORK5CYII=')",
+        "maxTokens": 20,
+        "environment": false
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "Warning: truncated output (original token count: 30)\nTotal output lines: 1\n\nzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz…10 tokens truncated…zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\n\n[Could not save the full output: no execution environment]\n[Image (image/png, 68 bytes) could not be saved: no execution environment]"
+          },
+          {
+            "type": "image",
+            "mimeType": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8kUAAAAASUVORK5CYII="
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\nWarning: truncated output (original token count: 30)\nTotal output lines: 1\n\nzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz…10 tokens truncated…zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\n\n[Could not save the full output: no execution environment]\n[Image (image/png, 68 bytes) could not be saved: no execution environment]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": null
+        },
+        "spill": null,
+        "images": []
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "a failed script keeps partial output and spills it",
+      "inputs": {
+        "source": "text('f'.repeat(100)); throw new Error('boom')",
+        "maxTokens": 10,
+        "environment": true
+      },
+      "expected": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script failed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "Warning: truncated output (original token count: 48)\nTotal output lines: 6\n\nffffffffffffffffffff…38 tokens truncated…ool calls were made.\n\n[Full output: <output-dir>/output.txt (read with offset/limit)]"
+          }
+        ],
+        "text": "Script failed\nWall time <seconds>\nOutput:\nWarning: truncated output (original token count: 48)\nTotal output lines: 6\n\nffffffffffffffffffff…38 tokens truncated…ool calls were made.\n\n[Full output: <output-dir>/output.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "<output-dir>/output.txt"
+        },
+        "spill": {
+          "text": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\nScript error:\nError: boom\n    at <anonymous> (codemode.js:2:34)\n\nNo tool calls were made.",
+          "bytes": 190,
+          "sha256": "24d3b0eeda9f4fe4cc7da8a504ad2252ee88713500d15981b73b7bd8dbdd758d"
+        },
+        "images": []
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "unicode truncation keeps whole BMP characters",
+      "inputs": {
+        "source": "text('é'.repeat(60))",
+        "maxTokens": 10,
+        "environment": true
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "Warning: truncated output (original token count: 15)\nTotal output lines: 1\n\néééééééééééééééééééé…5 tokens truncated…éééééééééééééééééééé\n\n[Full output: <output-dir>/output.txt (read with offset/limit)]"
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\nWarning: truncated output (original token count: 15)\nTotal output lines: 1\n\néééééééééééééééééééé…5 tokens truncated…éééééééééééééééééééé\n\n[Full output: <output-dir>/output.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "<output-dir>/output.txt"
+        },
+        "spill": {
+          "text": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+          "bytes": 120,
+          "sha256": "f989aaf52260aef87908350aa746652652166f9013d42e9149d924b4b8be014f"
+        },
+        "images": []
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "ordered text console images and values keep production order",
+      "inputs": {
+        "source": "text('alpha'); image('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8kUAAAAASUVORK5CYII='); console.log('console'); return 'omega'",
+        "environment": true
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "==> text 1/2 <==\nalpha\n[Image saved to <output-dir>/image-1.png (image/png, 68 bytes)]"
+          },
+          {
+            "type": "image",
+            "mimeType": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8kUAAAAASUVORK5CYII="
+          },
+          {
+            "type": "text",
+            "text": "==> text 2/2 <==\nomega\n<console_output>\nconsole\n</console_output>"
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\n==> text 1/2 <==\nalpha\n[Image saved to <output-dir>/image-1.png (image/png, 68 bytes)]==> text 2/2 <==\nomega\n<console_output>\nconsole\n</console_output>",
+        "details": {
+          "calls": [],
+          "fullOutputPath": null
+        },
+        "spill": null,
+        "images": [
+          {
+            "name": "image-1.png",
+            "bytes": 68,
+            "sha256": "826a9733b512f939ffc8888f006336cad4160dc17c38d35dddd3b0652200ff69"
+          }
+        ]
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "one character over the token budget truncates",
+      "inputs": {
+        "source": "text('y'.repeat(81))",
+        "maxTokens": 20,
+        "environment": true
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "Warning: truncated output (original token count: 21)\nTotal output lines: 1\n\nyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy…1 tokens truncated…yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\n\n[Full output: <output-dir>/output.txt (read with offset/limit)]"
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\nWarning: truncated output (original token count: 21)\nTotal output lines: 1\n\nyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy…1 tokens truncated…yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\n\n[Full output: <output-dir>/output.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "<output-dir>/output.txt"
+        },
+        "spill": {
+          "text": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "bytes": 81,
+          "sha256": "6be01b952387faeb7fb8cf454d743b5a43a66169e134093c1da2e273d6f02344"
+        },
+        "images": []
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "the line budget exactly at its limit is not truncated",
+      "inputs": {
+        "source": "text('\\n'.repeat(99899))",
+        "maxTokens": 25000,
+        "environment": false
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "<newlines:99899>"
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\n<newlines:99899>",
+        "details": {
+          "calls": [],
+          "fullOutputPath": null
+        },
+        "spill": null,
+        "images": []
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "one line over the line budget truncates and spills",
+      "inputs": {
+        "source": "text('\\n'.repeat(99900))",
+        "maxTokens": 25000,
+        "environment": true
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "Warning: truncated output (original token count: 24975)\nTotal output lines: 99901<newlines:49951>…1 tokens truncated…<newlines:49951>[Full output: <output-dir>/output.txt (read with offset/limit)]"
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\nWarning: truncated output (original token count: 24975)\nTotal output lines: 99901<newlines:49951>…1 tokens truncated…<newlines:49951>[Full output: <output-dir>/output.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "<output-dir>/output.txt"
+        },
+        "spill": {
+          "text": "<newlines:99900>",
+          "bytes": 99900,
+          "sha256": "7119bf0309bd45ec85c6c87fa4eed6cf5dc3aa6dc9866c53357c82efe4b7780f"
+        },
+        "images": []
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    },
+    {
+      "name": "a token budget larger than the text still clamps the tail to the whole line window",
+      "inputs": {
+        "source": "text('\\n'.repeat(99900))",
+        "maxTokens": 300000,
+        "environment": true
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time <seconds>\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "Warning: truncated output (original token count: 24975)\nTotal output lines: 99901<newlines:49951>…1 tokens truncated…<newlines:49951>[Full output: <output-dir>/output.txt (read with offset/limit)]"
+          }
+        ],
+        "text": "Script completed\nWall time <seconds>\nOutput:\nWarning: truncated output (original token count: 24975)\nTotal output lines: 99901<newlines:49951>…1 tokens truncated…<newlines:49951>[Full output: <output-dir>/output.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "<output-dir>/output.txt"
+        },
+        "spill": {
+          "text": "<newlines:99900>",
+          "bytes": 99900,
+          "sha256": "7119bf0309bd45ec85c6c87fa4eed6cf5dc3aa6dc9866c53357c82efe4b7780f"
+        },
+        "images": []
+      },
+      "normalizations": [
+        "the wall time is recorded as Wall time <seconds>",
+        "the run's temporary output directory is recorded as <output-dir>",
+        "every run of 100 or more newlines is recorded as <newlines:N>"
+      ]
+    }
+  ]
+}
