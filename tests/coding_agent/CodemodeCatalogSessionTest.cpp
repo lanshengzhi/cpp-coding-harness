@@ -41,6 +41,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -92,9 +93,10 @@ struct SessionAttempt {
 [[nodiscard]] SessionAttempt make_session(tests::RuntimeFixture& runtime,
         const tests::TempWorkspace& workspace,
         const std::shared_ptr<tests::ScriptedProvider>& provider,
-        std::optional<std::vector<std::string>> tools = std::nullopt) {
+        std::optional<std::vector<std::string>> tools = std::nullopt,
+        coding_agent::SessionTarget target = coding_agent::InMemorySessionTarget{}) {
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.session_target = std::move(target);
     options.session_facts.no_skills = true;
     options.session_facts.no_prompt_templates = true;
     options.session_facts.tools = std::move(tools);
@@ -200,6 +202,26 @@ private:
         const auto* result = std::get_if<ai::ToolResultMessage>(&message);
         if (result != nullptr && result->tool_name == name) {
             last = ai::text_from_content(result->content);
+        }
+    }
+    return last;
+}
+
+/// The details of the session's latest result for `name` (pi
+/// `ToolResultMessage.details`), which carries the nested-call records and the
+/// spill path.
+[[nodiscard]] std::string read_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+}
+
+[[nodiscard]] std::optional<support::JsonValue> tool_result_details(
+        const coding_agent::AgentSession& session, std::string_view name) {
+    std::optional<support::JsonValue> last;
+    for (const auto& message : session.snapshot().agent_state.messages) {
+        const auto* result = std::get_if<ai::ToolResultMessage>(&message);
+        if (result != nullptr && result->tool_name == name && result->details.has_value()) {
+            last = *result->details;
         }
     }
     return last;
@@ -513,4 +535,116 @@ TEST_CASE("an inline budget omits a namespace's tools with pi's marker",
     CHECK_FALSE(contains(codemode->description, "### `mcp__echo__echo`"));
 
     attempt.session->close();
+}
+
+TEST_CASE("a session resumes codemode store writes and discards failed script writes",
+        "[coding_agent][codemode][issue1119][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    tests::RuntimeFixture runtime;
+    auto provider = std::make_shared<CapturingProvider>();
+    const auto path = workspace.path() / "session.jsonl";
+    auto first = make_session(runtime,
+            workspace,
+            provider,
+            std::vector<std::string>{"codemode", "write", "read"},
+            coding_agent::ExplicitOpenOrCreateSessionTarget{path});
+    provider->arm_script("await tools.write({path: 'answer.txt', content: '42'}); "
+                         "store('answer', await tools.read({path: 'answer.txt'})); return load('answer');");
+    auto written = tests::run_awaitable(runtime, first.session->prompt("save the answer"));
+    const auto initial = tool_result_text(*first.session, "codemode");
+    first.session->close();
+    first.session.reset();
+    auto resumed =
+            make_session(runtime, workspace, provider, std::nullopt, coding_agent::ExplicitResumeSessionTarget{path});
+    provider->arm_script("text(load('answer')); store('answer', 'wrong'); throw new Error('rollback');");
+    auto failed = tests::run_awaitable(runtime, resumed.session->prompt("fail after loading"));
+    const auto failure = tool_result_text(*resumed.session, "codemode");
+    provider->arm_script("return load('answer');");
+    auto loaded = tests::run_awaitable(runtime, resumed.session->prompt("load again"));
+    const auto final = tool_result_text(*resumed.session, "codemode");
+    resumed.session->close();
+    resumed.session.reset();
+    runtime.close();
+    CHECK(written.has_value());
+    CHECK(failed.has_value());
+    CHECK(loaded.has_value());
+    REQUIRE(initial.has_value());
+    REQUIRE(failure.has_value());
+    REQUIRE(final.has_value());
+    CHECK(contains(*initial, "42"));
+    CHECK(contains(*failure, "42"));
+    CHECK(contains(*failure, "rollback"));
+    CHECK(contains(*final, "42"));
+    CHECK_FALSE(contains(*final, "wrong"));
+}
+
+TEST_CASE("a real session presents codemode output and applies the script budget",
+        "[coding_agent][codemode][issue1119][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    tests::RuntimeFixture runtime;
+    auto provider = std::make_shared<CapturingProvider>();
+    auto attempt = make_session(runtime, workspace, provider, std::vector<std::string>{"codemode"});
+
+    provider->arm_script("console.log('log'); text('first'); text('second'); return 'last';");
+    REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("present")).has_value());
+    const auto presentation = tool_result_text(*attempt.session, "codemode");
+
+    provider->arm_script("// @options: {\"max_output_tokens\": 2}\ntext('abcdefghijklmnopqrstuvwxyz');");
+    REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("budget")).has_value());
+    const auto budget = tool_result_text(*attempt.session, "codemode");
+    const auto details = tool_result_details(*attempt.session, "codemode");
+    attempt.session->close();
+    attempt.session.reset();
+    runtime.close();
+
+    REQUIRE(presentation.has_value());
+    // pi's layout: numbered text items, then one console block.
+    CHECK(contains(*presentation, "==> text 1/3 <==\nfirst"));
+    CHECK(contains(*presentation, "==> text 2/3 <==\nsecond"));
+    CHECK(contains(*presentation, "==> text 3/3 <==\nlast"));
+    CHECK(contains(*presentation, "<console_output>\nlog\n</console_output>"));
+
+    REQUIRE(budget.has_value());
+    CHECK(contains(*budget, "Warning: truncated output (original token count: 7)"));
+    REQUIRE(details.has_value());
+    const auto* spilled = details->get_object().at("fullOutputPath").get_if<std::string>();
+    REQUIRE(spilled != nullptr);
+    // The model-visible result names the spill file; the file holds the full
+    // text the budget removed.
+    CHECK(read_file(*spilled) == "abcdefghijklmnopqrstuvwxyz");
+    std::filesystem::remove(*spilled);
+}
+
+TEST_CASE(
+        "a real session reports a timed-out codemode call as cancelled", "[coding_agent][codemode][issue1119][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    tests::RuntimeFixture runtime;
+    auto provider = std::make_shared<CapturingProvider>();
+    auto attempt = make_session(runtime, workspace, provider, std::vector<std::string>{"codemode", "write", "bash"});
+
+    provider->arm_script("// @options: {\"timeout_ms\": 100}\n"
+                         "await tools.write({path: 'before.txt', content: 'kept'});"
+                         "text('before');"
+                         "await tools.bash({command: 'sleep 2'});");
+    REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("timeout")).has_value());
+    const auto result = tool_result_text(*attempt.session, "codemode");
+    const auto details = tool_result_details(*attempt.session, "codemode");
+    attempt.session->close();
+    attempt.session.reset();
+    runtime.close();
+
+    REQUIRE(result.has_value());
+    CHECK(contains(*result, "Script timed out: Execution timed out after 100 ms"));
+    CHECK(contains(*result, "before"));
+    CHECK(contains(*result, "write (ok), bash (cancelled)"));
+    REQUIRE(details.has_value());
+    const auto& calls = details->get_object().at("calls").get_array();
+    REQUIRE(calls.size() == 2);
+    CHECK(calls[0].get_object().at("status").get_string() == "ok");
+    CHECK(calls[1].get_object().at("status").get_string() == "cancelled");
+    CHECK(calls[1].get_object().at("id").get_string() == "call_1/?");
+    CHECK_FALSE(calls[1].get_object().contains("durationMs"));
 }

@@ -30,7 +30,7 @@
         },
         {
           "path": "cmake/targets/CodingAgent.cmake",
-          "sha256": "c765517d529520138ad12be5ff550e93be47fa07f46c6b56ba6ba1f4ee800073"
+          "sha256": "6c80dfa1a69280eb26f528ba04c04eb689f4a8bd0b80f2b74c292dcd26374be8"
         },
         {
           "path": "cmake/targets/Support.cmake",
@@ -46,7 +46,7 @@
         },
         {
           "path": "cmake/tests/CodingAgentTests.cmake",
-          "sha256": "b7330ec5a79a7df4cc82a8a0c1f3df226625cc8acdf522c43e833966f5c43253"
+          "sha256": "a994f645d5580acf433577ed9c803006187abb780545f53663fe5f424bc4597e"
         },
         {
           "path": "src/mcp/Client.cpp",
@@ -230,14 +230,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+          "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml"
         ],
-        "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-        "recordedAt": "2026-10-31T14:20:13Z",
+        "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
+        "recordedAt": "2026-11-01T03:01:32Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-          "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
+          "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml",
+          "sha256": "4061b7996924cad056159944d427b4263c927d04d3f7578b444b68d47d5cea8b"
         }
       },
       "rows": [
@@ -329,6 +329,32 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1111.xml",
             "sha256": "e93ca4fd72d6c6da2177205938a24a9a3a0d9fa3876c7d1db684a8163f6cff8d"
+          }
+        }
+      },
+      "revalidation1119": {
+        "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "cmake/targets/CodingAgent.cmake",
+          "cmake/tests/CodingAgentTests.cmake"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+          ],
+          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
+          "recordedAt": "2026-10-31T14:20:13Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
+            "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
           }
         }
       }
@@ -665,7 +691,7 @@
         },
         {
           "path": "cmake/targets/CodingAgent.cmake",
-          "sha256": "c765517d529520138ad12be5ff550e93be47fa07f46c6b56ba6ba1f4ee800073"
+          "sha256": "6c80dfa1a69280eb26f528ba04c04eb689f4a8bd0b80f2b74c292dcd26374be8"
         },
         {
           "path": "cmake/targets/Mcp.cmake",
@@ -681,7 +707,7 @@
         },
         {
           "path": "cmake/tests/CodingAgentTests.cmake",
-          "sha256": "b7330ec5a79a7df4cc82a8a0c1f3df226625cc8acdf522c43e833966f5c43253"
+          "sha256": "a994f645d5580acf433577ed9c803006187abb780545f53663fe5f424bc4597e"
         },
         {
           "path": "src/coding_agent/AgentSession.cpp",
@@ -689,7 +715,7 @@
         },
         {
           "path": "src/coding_agent/AgentSessionExecution.cpp",
-          "sha256": "4dac844eef3cfc756094753af473750523d10387d87c421869084ffda385e061"
+          "sha256": "f8c6c5434b2a20505956066e10f1f43335014c293c31b67bd922864cf1a4426d"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -709,7 +735,7 @@
         },
         {
           "path": "src/coding_agent/runtime/SessionFactory.cpp",
-          "sha256": "ccb56d2283c9bdea465c016f7ed1c4d194c9df9cfeb30a6e2cefef1da244c45f"
+          "sha256": "31ed3eaf8bced5c18463c3f15fe316137386f04c12ab47b24faa76e69c7e4165"
         },
         {
           "path": "src/coding_agent/runtime/SessionFactory.hpp",
@@ -873,14 +899,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+          "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml"
         ],
-        "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-        "recordedAt": "2026-10-31T14:20:13Z",
+        "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
+        "recordedAt": "2026-11-01T03:01:32Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-          "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
+          "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml",
+          "sha256": "4061b7996924cad056159944d427b4263c927d04d3f7578b444b68d47d5cea8b"
         }
       },
       "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -945,6 +971,34 @@
             "sha256": "ff64512e3fc12d4d752a3ad2a6a355ef2228161bb46b0831810d1769cfe27238"
           }
         }
+      },
+      "revalidation1119": {
+        "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "cmake/targets/CodingAgent.cmake",
+          "cmake/tests/CodingAgentTests.cmake",
+          "src/coding_agent/AgentSessionExecution.cpp",
+          "src/coding_agent/runtime/SessionFactory.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+          ],
+          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
+          "recordedAt": "2026-10-31T14:20:13Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
+            "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
+          }
+        }
       }
     },
     {
@@ -972,7 +1026,7 @@
         },
         {
           "path": "cmake/targets/CodingAgent.cmake",
-          "sha256": "c765517d529520138ad12be5ff550e93be47fa07f46c6b56ba6ba1f4ee800073"
+          "sha256": "6c80dfa1a69280eb26f528ba04c04eb689f4a8bd0b80f2b74c292dcd26374be8"
         },
         {
           "path": "cmake/targets/Codemode.cmake",
@@ -996,7 +1050,7 @@
         },
         {
           "path": "cmake/tests/CodingAgentTests.cmake",
-          "sha256": "b7330ec5a79a7df4cc82a8a0c1f3df226625cc8acdf522c43e833966f5c43253"
+          "sha256": "a994f645d5580acf433577ed9c803006187abb780545f53663fe5f424bc4597e"
         },
         {
           "path": "src/codemode/Declarations.cpp",
@@ -1056,11 +1110,19 @@
         },
         {
           "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
-          "sha256": "e511f6dd5b5db8e83efe5ff31a5642095cda9236d28aa1c9a430cc8eb2169458"
+          "sha256": "5c194e6970a9b15c7d960ba55f6c9a3d39c7b6e940408b9ca74fca5a9b1b0077"
         },
         {
           "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.hpp",
-          "sha256": "949887284243d3da43b78767b2adfb3daa78fad6daab983cbfc68d4ecd366ac0"
+          "sha256": "ebfa80fc4c78b3dc8b835037b8270cac115fbd88e4ea7afb144384164fada573"
+        },
+        {
+          "path": "src/coding_agent/extensions/codemode/CodemodeExecution.cpp",
+          "sha256": "7dd6583560a5ce1c875b82ab88fe943850afdc2273977dfa1f8be17b154b8401"
+        },
+        {
+          "path": "src/coding_agent/extensions/codemode/CodemodeExecution.hpp",
+          "sha256": "fa184b174314242b2f51757f80ecf939c8e3febcce93baa71f01d48bf7ee3b15"
         },
         {
           "path": "src/coding_agent/extensions/tool_search/ToolSearchToolSource.cpp",
@@ -1084,7 +1146,7 @@
         },
         {
           "path": "src/coding_agent/AgentSessionExecution.cpp",
-          "sha256": "4dac844eef3cfc756094753af473750523d10387d87c421869084ffda385e061"
+          "sha256": "f8c6c5434b2a20505956066e10f1f43335014c293c31b67bd922864cf1a4426d"
         },
         {
           "path": "src/coding_agent/AgentSessionInteraction.cpp",
@@ -1108,11 +1170,11 @@
         },
         {
           "path": "src/coding_agent/runtime/RuntimeServices.hpp",
-          "sha256": "a2209169c92bdf59b8caeeb2d5079eda43833d1c351e0bc398091f5e643d3a55"
+          "sha256": "5f2a079153f9bd2f59e25babca7e73684203cdc2331edf62929c939f2c18e6ac"
         },
         {
           "path": "src/coding_agent/runtime/SessionFactory.cpp",
-          "sha256": "ccb56d2283c9bdea465c016f7ed1c4d194c9df9cfeb30a6e2cefef1da244c45f"
+          "sha256": "31ed3eaf8bced5c18463c3f15fe316137386f04c12ab47b24faa76e69c7e4165"
         },
         {
           "path": "tests/Catch2Main.cpp",
@@ -1124,7 +1186,7 @@
         },
         {
           "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-          "sha256": "3aa1bdd0421410df36216ccee122e1ce341943cff5558730ff4528651b4318cc"
+          "sha256": "8868cbf414353edc4083bbf67181b9de5c44e3c35de63a108fb2367613f4afd1"
         },
         {
           "path": "tests/coding_agent/CodemodeParityTest.cpp",
@@ -1220,14 +1282,14 @@
           "issue1118",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml"
+          "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1119.xml"
         ],
-        "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-        "recordedAt": "2026-10-31T14:20:13Z",
+        "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
+        "recordedAt": "2026-11-01T03:01:32Z",
         "selected": 19,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
-          "sha256": "ed55e2d9c856d927b10e31c4f93b8ba37e23af5bc34ab383fe38f8f8183d190e"
+          "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1119.xml",
+          "sha256": "74050417df6e4ce07e3a7ad71fd6b16d76553b256afb8ad7a685d2c9f7474ee0"
         }
       },
       "rows": [
@@ -1324,7 +1386,43 @@
           }
         }
       ],
-      "routingSha256": "69324f2fda0d49ee9f5ecc9c334f5a5ef3f10bc98895ea395dcd416cc99c9d7b"
+      "routingSha256": "69324f2fda0d49ee9f5ecc9c334f5a5ef3f10bc98895ea395dcd416cc99c9d7b",
+      "revalidation1119": {
+        "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the 19-case issue1118 selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "cmake/targets/CodingAgent.cmake",
+          "cmake/tests/CodingAgentTests.cmake",
+          "src/coding_agent/AgentSessionExecution.cpp",
+          "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
+          "src/coding_agent/extensions/codemode/CodemodeToolSource.hpp",
+          "src/coding_agent/runtime/RuntimeServices.hpp",
+          "src/coding_agent/runtime/SessionFactory.cpp",
+          "tests/coding_agent/CodemodeCatalogSessionTest.cpp"
+        ],
+        "addedInputs": [
+          "src/coding_agent/extensions/codemode/CodemodeExecution.cpp",
+          "src/coding_agent/extensions/codemode/CodemodeExecution.hpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1118",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml"
+          ],
+          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
+          "recordedAt": "2026-10-31T14:20:13Z",
+          "selected": 19,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
+            "sha256": "ed55e2d9c856d927b10e31c4f93b8ba37e23af5bc34ab383fe38f8f8183d190e"
+          }
+        }
+      }
     }
   ]
 }

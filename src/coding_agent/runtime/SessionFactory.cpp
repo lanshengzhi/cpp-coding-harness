@@ -1782,8 +1782,12 @@ struct PreparedAssemblyTarget final {
             // the discovery globals only and never advertises `models`.
             .bound_globals = extensions::codemode_discovery_globals(),
     });
+    // #1119: the execution facilities the codemode tool binds to this Session.
+    // The Session fills the store, commitment channel and filesystem after it
+    // opens its journal; the source only retains the shared holder.
+    auto codemode_session = std::make_shared<extensions::CodemodeSessionState>();
     plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>(
-            codemode::default_codemode_guest_wasm_path(), codemode_catalog));
+            codemode::default_codemode_guest_wasm_path(), codemode_catalog, codemode_session));
     plan.extension_tool_sources.push_back(std::make_unique<extensions::ToolSearchToolSource>(
             [manager = mcp_manager](
                     std::string_view query, std::size_t limit) { return manager->search_tools(query, limit); },
@@ -2083,6 +2087,7 @@ struct PreparedAssemblyTarget final {
     services.bash_session_environment = std::move(bash_session_environment);
     services.tools = std::move(tools);
     services.codemode_catalog = std::move(codemode_catalog);
+    services.codemode_session = std::move(codemode_session);
     services.initially_inactive_tool_names = std::move(initially_inactive_tool_names);
     services.default_tool_modifiers = std::move(plan.tool_selection.modifiers);
     services.restore_tools_from_transcript = !plan.tool_selection.allowed.has_value();

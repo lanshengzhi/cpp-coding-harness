@@ -1,5 +1,7 @@
 #include "ImageInput.hpp"
 
+#include "coding_agent/Base64.hpp"
+
 // Vendored stb headers sit outside the project warning contract
 // (ADR 0044): diagnostics they trigger are silenced at this inclusion site
 // so the warning gate (issue #492) stays total over everything the project
@@ -32,8 +34,6 @@
 namespace cch::coding_agent {
 namespace {
 
-constexpr std::string_view kBase64Alphabet =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 constexpr std::string_view kResizeOmission =
     "[Image omitted: could not be resized below the inline image size limit.]";
 
@@ -268,36 +268,6 @@ void apply_orientation(DecodedImage& image, int orientation) {
         encoded.push_back(remaining > 2 ? kBase64Alphabet[value & 0x3fU] : '=');
     }
     return encoded;
-}
-
-[[nodiscard]] std::vector<std::uint8_t> decode_base64(std::string_view encoded) {
-    // Node's Buffer.from(value, "base64") ignores non-alphabet input and
-    // accepts unpadded/base64url data; the decoder mirrors that permissive
-    // view so a payload the baseline accepted is not rejected here.
-    std::array<int, 256> digits{};
-    digits.fill(-1);
-    for (std::size_t index = 0; index < kBase64Alphabet.size(); ++index) {
-        digits[static_cast<unsigned char>(kBase64Alphabet[index])] = static_cast<int>(index);
-    }
-    digits[static_cast<unsigned char>('-')] = 62;
-    digits[static_cast<unsigned char>('_')] = 63;
-
-    std::vector<std::uint8_t> decoded;
-    decoded.reserve(encoded.size() * 3U / 4U);
-    std::uint32_t bits = 0;
-    std::size_t bit_count = 0;
-    for (const auto character : encoded) {
-        if (character == '=') break;
-        const auto digit = digits[static_cast<unsigned char>(character)];
-        if (digit < 0) continue;
-        bits = (bits << 6U) | static_cast<std::uint32_t>(digit);
-        bit_count += 6U;
-        if (bit_count >= 8U) {
-            bit_count -= 8U;
-            decoded.push_back(static_cast<std::uint8_t>((bits >> bit_count) & 0xffU));
-        }
-    }
-    return decoded;
 }
 
 [[nodiscard]] std::optional<DecodedImage> decode_image(

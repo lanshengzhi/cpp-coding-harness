@@ -35,6 +35,11 @@ struct AsyncToolExecutionResult {
     std::optional<support::JsonValue> details{std::nullopt};
     bool is_error{false};
     bool terminate{false};
+    /// pi `AgentToolCallOutcome.toolCall.id`: the call id the result belongs to.
+    /// The Agent's own pipeline leaves it empty; the nested-call seam sets it so
+    /// a tool that dispatches nested calls (codemode) can report each call's
+    /// exact id on its own result.
+    std::string call_id{};
 };
 
 /// Synchronous publication of one cumulative partial tool execution result.

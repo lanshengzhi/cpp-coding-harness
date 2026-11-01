@@ -147,6 +147,7 @@ struct NestedToolCallRunner::Impl {
         }
 
         scopes.erase(nested_id);
+        outcome.call_id = nested_id;
         const auto duration_ms = static_cast<std::int64_t>(
                 std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started_at)
                         .count());

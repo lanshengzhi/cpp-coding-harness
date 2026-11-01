@@ -2,6 +2,7 @@
 
 #include <cch/ai/Message.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -51,6 +52,12 @@ public:
     /// through the Session's serialized mailbox in FIFO order.
     [[nodiscard]] support::ExpectedVoid submit_message_append(
         ai::MessageVariant message);
+
+    /// Admit one Custom entry append (pi `appendCustomEntry`). The codemode
+    /// store persists its write sets through this channel so the entry lands on
+    /// the same ordered commitment line as the transcript, ahead of the tool
+    /// result that reports the run.
+    [[nodiscard]] support::ExpectedVoid submit_custom_entry_append(std::string custom_type, support::JsonValue data);
 
     /// Await until every admitted append settled (the chain is idle). The
     /// recorded first failure is observed separately through failure().

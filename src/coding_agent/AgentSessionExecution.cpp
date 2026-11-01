@@ -200,6 +200,28 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     if (session_.store && session_.store->path() && services_.runtime_target) {
         persistence_ = std::make_shared<runtime::SessionPersistence>(session_.store, services_.runtime_target);
     }
+    // #1119: bind codemode's application Session facilities now that the store
+    // and commitment channel exist. `store()` reads the active branch and a
+    // successful run's writes persist on the same ordered line as the
+    // transcript; the filesystem receives spilled output and saved images.
+    if (services_.codemode_session) {
+        auto codemode = services_.codemode_session;
+        codemode->filesystem = services_.filesystem;
+        codemode->branch =
+                [store = session_.store]() -> support::Expected<std::vector<harness::session::SessionEntry>> {
+            if (!store) return std::vector<harness::session::SessionEntry>{};
+            return store->get_branch();
+        };
+        if (persistence_) {
+            codemode->append_store = [persistence = persistence_](std::string custom_type, support::JsonValue data) {
+                return persistence->submit_custom_entry_append(std::move(custom_type), std::move(data));
+            };
+        } else if (session_.store) {
+            codemode->append_store = [store = session_.store](std::string custom_type, support::JsonValue data) {
+                return store->append_custom_entry(std::nullopt, std::move(custom_type), std::move(data));
+            };
+        }
+    }
     // Seed the session's scoped-model set (pi `scopedModels: config.scopedModels`).
     scoped_models_ = config_.scoped_models;
     agent::AsyncAgentOptions options;
