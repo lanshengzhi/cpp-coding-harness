@@ -1,0 +1,569 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1159",
+  "family": "audit-1159",
+  "capturedAt": "2026-11-01T18:56:05.189Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1159/capture-1159.mts",
+    "sha256": "37e6e7aa5830ea5c3e982b4c2b8fa0cf50fda212f8e582399ea41721c7fed87a",
+    "command": "PI_CHECKOUT=/tmp/pi-1172-frozen PI_BASELINE=pi-v1.3.0 /tmp/pi-1172-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1159/capture-1159.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1159/capture-1159.mts",
+        "sha256": "37e6e7aa5830ea5c3e982b4c2b8fa0cf50fda212f8e582399ea41721c7fed87a"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/pi.mts",
+        "sha256": "45123d51d4d3b281fb7e908bd7f8ee61043ac815d3ae5078c78264d981fe26a2"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/support.mts",
+        "sha256": "6761d8f97de85f6821f77ecb9e33e2aa1dd6ccfb87ea5d6841bcce61da4e349c"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "edit-tool.json",
+      "family": "audit-1159",
+      "bytes": 17564,
+      "sha256": "50052266adaf3a4ca6bdd69309a23e475636ebba63e3d6f70d138668418f241f",
+      "sourceEndpoints": [
+        "packages/durable/src/tools/edit.ts:createEditTool.execute",
+        "packages/durable/src/tools/edit-diff.ts:applyEditsToNormalizedContent,generateDiffString,generateUnifiedPatch",
+        "packages/durable/src/tools/file-mutation-queue.ts:withFileMutationQueue"
+      ],
+      "scenarios": [
+        {
+          "name": "a BOM and CRLF file edits when the old text is LF and leaves the normalized content",
+          "source": "packages/durable/src/tools/edit.ts:createEditTool.execute;packages/durable/src/tools/edit-diff.ts:stripBom,detectLineEnding,normalizeToLF,restoreLineEndings",
+          "inputs": {
+            "seedBytes": {
+              "editing.txt": "9bd216369d88fc0f488e0d60de380cc64066a40731b344333ea49ac50cb0dc50"
+            },
+            "seededText": {
+              "editing.txt": "U+FEFF alpha CRLF beta CRLF gamma CRLF"
+            },
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "editing.txt",
+                  "edits": [
+                    {
+                      "oldText": "beta",
+                      "newText": "omega"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "editing.txt": "﻿alpha\r\nbeta\r\ngamma\r\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": false,
+                "text": "Successfully replaced 1 block(s) in editing.txt.",
+                "details": {
+                  "diff": " 1 alpha\n-2 beta\n+2 omega\n 3 gamma",
+                  "patch": "--- editing.txt\n+++ editing.txt\n@@ -1,3 +1,3 @@\n alpha\n-beta\n+omega\n gamma\n",
+                  "firstChangedLine": 2
+                }
+              }
+            ],
+            "files": {
+              "editing.txt": {
+                "text": "﻿alpha\r\nomega\r\ngamma\r\n",
+                "bytes": 24,
+                "sha256": "ab07970c4c755a2a96201072f01f6e5a4814e2ac3d29ef30a83e43ba3b46e13d"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        },
+        {
+          "name": "a single replacement returns the frozen diff patch and first changed line",
+          "source": "packages/durable/src/tools/edit.ts:createEditTool.execute;packages/durable/src/tools/edit-diff.ts:generateDiffString,generateUnifiedPatch",
+          "inputs": {
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "notes.txt",
+                  "edits": [
+                    {
+                      "oldText": "beta",
+                      "newText": "omega"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "notes.txt": "alpha\nbeta\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": false,
+                "text": "Successfully replaced 1 block(s) in notes.txt.",
+                "details": {
+                  "diff": " 1 alpha\n-2 beta\n+2 omega",
+                  "patch": "--- notes.txt\n+++ notes.txt\n@@ -1,2 +1,2 @@\n alpha\n-beta\n+omega\n",
+                  "firstChangedLine": 2
+                }
+              }
+            ],
+            "files": {
+              "notes.txt": {
+                "text": "alpha\nomega\n",
+                "bytes": 12,
+                "sha256": "b712eddc43eed4e738d7783ddcad4affe6a28788f5150a693250cf6be5d7ac8a"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        },
+        {
+          "name": "a replacement on a two-digit line keeps the frozen diff gutter and context window",
+          "source": "packages/durable/src/tools/edit.ts:createEditTool.execute;packages/durable/src/tools/edit-diff.ts:generateDiffString,generateUnifiedPatch",
+          "inputs": {
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "long.txt",
+                  "edits": [
+                    {
+                      "oldText": "line10\n",
+                      "newText": "line\nadded\n"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "long.txt": "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": false,
+                "text": "Successfully replaced 1 block(s) in long.txt.",
+                "details": {
+                  "diff": "    ...\n  6 line6\n  7 line7\n  8 line8\n  9 line9\n-10 line10\n+10 line\n+11 added",
+                  "patch": "--- long.txt\n+++ long.txt\n@@ -6,5 +6,6 @@\n line6\n line7\n line8\n line9\n-line10\n+line\n+added\n",
+                  "firstChangedLine": 10
+                }
+              }
+            ],
+            "files": {
+              "long.txt": {
+                "text": "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline\nadded\n",
+                "bytes": 65,
+                "sha256": "7a70cdcdb34c818dce02264bc6a0c148db5dcf48aca31fa8089bbdc92e43e6a4"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        },
+        {
+          "name": "two concurrent edits of one file both land without a lost update",
+          "source": "packages/durable/src/tools/file-mutation-queue.ts:withFileMutationQueue;packages/durable/src/tools/edit.ts:createEditTool.execute",
+          "inputs": {
+            "execution": "one assistant message, so both edit tasks run concurrently and the file queue decides the order",
+            "disjointEdits": true,
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "queued.txt",
+                  "edits": [
+                    {
+                      "oldText": "q2\n",
+                      "newText": "second\n"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "e2",
+                "args": {
+                  "path": "queued.txt",
+                  "edits": [
+                    {
+                      "oldText": "q18\n",
+                      "newText": "eighteenth\n"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "queued.txt": "q1\nq2\nq3\nq4\nq5\nq6\nq7\nq8\nq9\nq10\nq11\nq12\nq13\nq14\nq15\nq16\nq17\nq18\nq19\nq20\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": false,
+                "text": "Successfully replaced 1 block(s) in queued.txt.",
+                "details": {
+                  "diff": "  1 q1\n- 2 q2\n+ 2 second\n  3 q3\n  4 q4\n  5 q5\n  6 q6\n    ...",
+                  "patch": "--- queued.txt\n+++ queued.txt\n@@ -1,6 +1,6 @@\n q1\n-q2\n+second\n q3\n q4\n q5\n q6\n",
+                  "firstChangedLine": 2
+                }
+              },
+              {
+                "callId": "e2",
+                "toolName": "edit",
+                "isError": false,
+                "text": "Successfully replaced 1 block(s) in queued.txt.",
+                "details": {
+                  "diff": "    ...\n 14 q14\n 15 q15\n 16 q16\n 17 q17\n-18 q18\n+18 eighteenth\n 19 q19\n 20 q20",
+                  "patch": "--- queued.txt\n+++ queued.txt\n@@ -14,7 +14,7 @@\n q14\n q15\n q16\n q17\n-q18\n+eighteenth\n q19\n q20\n",
+                  "firstChangedLine": 18
+                }
+              }
+            ],
+            "files": {
+              "queued.txt": {
+                "text": "q1\nsecond\nq3\nq4\nq5\nq6\nq7\nq8\nq9\nq10\nq11\nq12\nq13\nq14\nq15\nq16\nq17\neighteenth\nq19\nq20\n",
+                "bytes": 82,
+                "sha256": "c49483bf47655feb8c3a6b7434d1f1797dd88f680e6ce111b3ea3549b98cfbe3"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        },
+        {
+          "name": "an old text that appears twice fails with the frozen uniqueness message",
+          "source": "packages/durable/src/tools/edit-diff.ts:applyEditsToNormalizedContent,getDuplicateError",
+          "inputs": {
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "duplicate.txt",
+                  "edits": [
+                    {
+                      "oldText": "same\n",
+                      "newText": "once\n"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "duplicate.txt": "same\nsame\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": true,
+                "text": "<harness>\n[error] Found 2 occurrences of the text in duplicate.txt. The text must be unique. Please provide more context to make it unique.\n</harness>",
+                "details": null
+              }
+            ],
+            "files": {
+              "duplicate.txt": {
+                "text": "same\nsame\n",
+                "bytes": 10,
+                "sha256": "562db9b7dbd05bedf8f05dba56c17da47886d5eb878a939704463ccc105c1fe8"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        },
+        {
+          "name": "an old text that is absent from a multi-edit call fails with the frozen indexed message",
+          "source": "packages/durable/src/tools/edit-diff.ts:applyEditsToNormalizedContent,getNotFoundError",
+          "inputs": {
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "absent.txt",
+                  "edits": [
+                    {
+                      "oldText": "alpha",
+                      "newText": "gamma"
+                    },
+                    {
+                      "oldText": "delta",
+                      "newText": "epsilon"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "absent.txt": "alpha\nbeta\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": true,
+                "text": "<harness>\n[error] Could not find edits[1] in absent.txt. The oldText must match exactly including all whitespace and newlines.\n</harness>",
+                "details": null
+              }
+            ],
+            "files": {
+              "absent.txt": {
+                "text": "alpha\nbeta\n",
+                "bytes": 11,
+                "sha256": "e49c81e2d2f84e259d40e2fb8192f3bcd198b355184845d76d8f58807d0d78ee"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        },
+        {
+          "name": "an edit that reproduces the original text fails with the frozen no-change message",
+          "source": "packages/durable/src/tools/edit-diff.ts:applyEditsToNormalizedContent,getNoChangeError",
+          "inputs": {
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "unchanged.txt",
+                  "edits": [
+                    {
+                      "oldText": "alpha",
+                      "newText": "alpha"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "unchanged.txt": "alpha\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": true,
+                "text": "<harness>\n[error] No changes made to unchanged.txt. The replacement produced identical content. This might indicate an issue with special characters or the text not existing as expected.\n</harness>",
+                "details": null
+              }
+            ],
+            "files": {
+              "unchanged.txt": {
+                "text": "alpha\n",
+                "bytes": 6,
+                "sha256": "b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        },
+        {
+          "name": "an empty old text fails with the frozen empty-target message",
+          "source": "packages/durable/src/tools/edit-diff.ts:applyEditsToNormalizedContent,getEmptyOldTextError",
+          "inputs": {
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "empty.txt",
+                  "edits": [
+                    {
+                      "oldText": "",
+                      "newText": "beta"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "empty.txt": "alpha\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": true,
+                "text": "<harness>\n[error] oldText must not be empty in empty.txt.\n</harness>",
+                "details": null
+              }
+            ],
+            "files": {
+              "empty.txt": {
+                "text": "alpha\n",
+                "bytes": 6,
+                "sha256": "b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        },
+        {
+          "name": "two edits that target overlapping text fail with the frozen overlap message",
+          "source": "packages/durable/src/tools/edit-diff.ts:applyEditsToNormalizedContent",
+          "inputs": {
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "overlap.txt",
+                  "edits": [
+                    {
+                      "oldText": "one\ntwo\n",
+                      "newText": "ONE\nTWO\n"
+                    },
+                    {
+                      "oldText": "two\nthree\n",
+                      "newText": "TWO\nTHREE\n"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "overlap.txt": "one\ntwo\nthree\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": true,
+                "text": "<harness>\n[error] edits[0] and edits[1] overlap in overlap.txt. Merge them into one edit or target disjoint regions.\n</harness>",
+                "details": null
+              }
+            ],
+            "files": {
+              "overlap.txt": {
+                "text": "one\ntwo\nthree\n",
+                "bytes": 14,
+                "sha256": "b6285c57e8797db5d4c51c80d6f11938afda9b11c6a003549709189e9b4b92a2"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        },
+        {
+          "name": "an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message",
+          "source": "packages/durable/src/tools/edit-diff.ts:applyEditsToNormalizedContent,getDuplicateError",
+          "inputs": {
+            "calls": [
+              {
+                "id": "e1",
+                "args": {
+                  "path": "twice.txt",
+                  "edits": [
+                    {
+                      "oldText": "same\n",
+                      "newText": "once\n"
+                    },
+                    {
+                      "oldText": "absent",
+                      "newText": "x"
+                    }
+                  ]
+                }
+              }
+            ],
+            "seed": {
+              "twice.txt": "same\nsame\n"
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "results": [
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": true,
+                "text": "<harness>\n[error] Found 2 occurrences of edits[0] in twice.txt. Each oldText must be unique. Please provide more context to make it unique.\n</harness>",
+                "details": null
+              }
+            ],
+            "files": {
+              "twice.txt": {
+                "text": "same\nsame\n",
+                "bytes": 10,
+                "sha256": "562db9b7dbd05bedf8f05dba56c17da47886d5eb878a939704463ccc105c1fe8"
+              }
+            }
+          },
+          "normalizations": [
+            "no captured value carries a temporary path",
+            "a round's results are listed in call-id order, because concurrent tool tasks settle in scheduler order"
+          ]
+        }
+      ]
+    }
+  ]
+}

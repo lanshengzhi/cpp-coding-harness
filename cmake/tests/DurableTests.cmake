@@ -23,6 +23,7 @@ include_guard(GLOBAL)
         tests/durable/SubmissionStorageTest.cpp
         tests/durable/TaskExecutionTest.cpp
         tests/durable/CrashRecoveryTest.cpp
+        tests/durable/EditToolTest.cpp
         tests/durable/HarnessWorkflowTest.cpp
         tests/durable/HarnessSubmissionsTest.cpp
         tests/durable/HarnessOwnershipTest.cpp
