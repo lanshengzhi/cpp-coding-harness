@@ -55,6 +55,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <stop_token>
 #include <utility>
 #include <vector>
 
@@ -168,6 +169,9 @@ struct SignInHarness {
     std::optional<std::string> paste_suffix{std::string{"code=pasted-code"}};
     std::optional<std::string> authorization_url{std::nullopt};
     bool prompt_called{false};
+    /// Cancels the sign-in once the authorization URL has been shown, leaving
+    /// the callback wait pending.
+    std::stop_source* cancel_after_url{nullptr};
 
     SignInHarness() { http->responses[kRegistrationUrl] = {{200, kRegistrationResponse}}; }
 
@@ -193,6 +197,9 @@ struct SignInHarness {
                     request.oauth = oauth;
                     request.timeout = std::chrono::seconds{5};
                     request.http = http;
+                    if (cancel_after_url != nullptr) {
+                        request.stop_token = cancel_after_url->get_token();
+                    }
                     request.prompt.show_authorization_url = [this, url_seen](const std::string& url) {
                         authorization_url = url;
                         url_seen->try_send(boost::system::error_code{}, url);
@@ -233,6 +240,19 @@ struct SignInHarness {
                         const auto endpoint = callback_endpoint(redirect);
                         (void)co_await http_get(
                                 endpoint.host, endpoint.port, endpoint.path + "?code=loopback-code&state=" + state);
+                    },
+                    boost::asio::detached);
+        }
+        if (cancel_after_url != nullptr) {
+            boost::asio::co_spawn(
+                    io,
+                    [this, url_seen]() -> boost::asio::awaitable<void> {
+                        boost::system::error_code receive_error;
+                        (void)co_await url_seen->async_receive(
+                                boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
+                        if (!receive_error) {
+                            cancel_after_url->request_stop();
+                        }
                     },
                     boost::asio::detached);
         }
@@ -296,6 +316,35 @@ TEST_CASE("the browser callback completes the MCP OAuth sign-in", "[coding_agent
     REQUIRE(stored.has_value());
     REQUIRE(stored->tokens.has_value());
     CHECK(stored->tokens->access_token == "access-1");
+}
+
+TEST_CASE("a browser callback wait cancelled by the sign-in stop token stops sign-in",
+        "[coding_agent][mcp][issue1102][spec]") {
+    // audit-1052 `oauth-lifecycle.json`, "cancellation while waiting for the
+    // browser callback stops sign-in": the authorization URL has been shown
+    // and the callback/paste wait is pending; the sign-in stop token ends the
+    // flow with no token exchange and no authorization request.
+    SignInHarness harness;
+    harness.paste_suffix = std::nullopt;
+    std::stop_source cancel;
+    harness.cancel_after_url = &cancel;
+
+    auto outcome = harness.run(/* drive_callback */ false);
+    REQUIRE_FALSE(outcome.has_value());
+    CHECK(outcome.error().code == support::ErrorCode::Cancelled);
+
+    REQUIRE(harness.authorization_url.has_value());
+    CHECK(query_param(*harness.authorization_url, "response_type") == "code");
+    CHECK(query_param(*harness.authorization_url, "code_challenge_method") == "S256");
+    CHECK_FALSE(query_param(*harness.authorization_url, "code_challenge").empty());
+    CHECK_FALSE(query_param(*harness.authorization_url, "state").empty());
+    CHECK(query_param(*harness.authorization_url, "redirect_uri").starts_with("http://127.0.0.1:"));
+    CHECK_FALSE(query_param(*harness.authorization_url, "resource").empty());
+
+    // The client registration ran; the token exchange did not.
+    REQUIRE(harness.http->requests.size() == 1);
+    CHECK(harness.http->requests.front().url == kRegistrationUrl);
+    CHECK(harness.http->requests.front().body.find("grant_type=") == std::string::npos);
 }
 
 TEST_CASE("a server-specific Client ID Metadata Document signs in on its callback path",
