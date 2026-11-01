@@ -257,7 +257,7 @@ TEST_CASE("Native TUI reports a failed run's error first line instead of done",
 }
 
 TEST_CASE("Native TUI returns to idle when a run is interrupted, then reports the next run",
-        "[coding_agent][tui][program-status][issue1123][spec]") {
+        "[coding_agent][tui][program-status][issue1123][issue1108][spec]") {
     SessionProbe session_fixture;
     session_fixture.boot();
     session_fixture.scripted.control->gate_at = 0;
@@ -277,6 +277,16 @@ TEST_CASE("Native TUI returns to idle when a run is interrupted, then reports th
         return reported_wire(probe.recording) ==
                std::vector<std::string>{std::string{kIdleWire}, std::string{kWorkingWire}, std::string{kIdleWire}};
     }));
+    // audit-1108 `settled-cancellation.json`: the abort request, not the
+    // assistant terminal, decides idle, and the settled run also leaves the
+    // Session idle. Both facts are checked here because the status report alone
+    // could be produced by a run that is still finishing.
+    CHECK_FALSE(session_fixture.session->is_busy());
+    const auto interrupted = session_fixture.session->snapshot().agent_state.messages;
+    REQUIRE_FALSE(interrupted.empty());
+    const auto* interrupted_assistant = std::get_if<ai::AssistantMessage>(&interrupted.back());
+    REQUIRE(interrupted_assistant != nullptr);
+    CHECK(interrupted_assistant->stop_reason == ai::AssistantStopReason::Aborted);
 
     // The next turn runs normally: a new working report follows the idle one,
     // so the interrupted outcome cannot be mistaken for this turn's result.
@@ -288,6 +298,10 @@ TEST_CASE("Native TUI returns to idle when a run is interrupted, then reports th
                                                          std::string{kWorkingWire},
                                                          std::string{kDoneWire}};
     }));
+    // The next run settled under its own identity: it is not busy, and its
+    // answer replaced the interrupted run's resting outcome.
+    CHECK_FALSE(session_fixture.session->is_busy());
+    CHECK(session_fixture.session->last_assistant_text() == std::optional<std::string>{"after cancel"});
 
     probe.exit();
 }

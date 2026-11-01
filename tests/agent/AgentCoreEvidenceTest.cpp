@@ -462,11 +462,11 @@ TEST_CASE("streamSimple option-forwarding golden matches pi's harness consumer (
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("hello user"));
 
-    // Every knob at its default: the unset level requested pi's
-    // DEFAULT_THINKING_LEVEL ("medium") and was clamped at creation to the
-    // non-reasoning model's only supported level ("off", no reasoning), no
-    // session id, no timeout/retries/headers. Only the active prompt signal is
-    // forwarded, and cacheRetention resolves to the pi "short" default.
+    // Every knob at its default: the unset level is the pi Agent default
+    // ("off", audit-1108), which this non-reasoning model supports as its only
+    // level, no session id, no timeout/retries/headers. Only the active prompt
+    // signal is forwarded, and cacheRetention resolves to the pi "short"
+    // default.
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");

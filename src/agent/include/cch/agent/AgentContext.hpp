@@ -190,14 +190,17 @@ struct AsyncAgentOptions {
     /// Empty (the default) forwards no system prompt, mirroring pi's default
     /// `""` and the adapters' empty-string guard.
     std::string system_prompt{};
-    /// Thinking level for the run. Empty means the pi `DEFAULT_THINKING_LEVEL`
-    /// ("medium") is requested; the loop normalizes it and clamps the request
-    /// against the active model's supported set at construction and on model
-    /// switch (ADR 0034 / #352). Per turn the effective level becomes the
-    /// stream `reasoning` option exactly like pi's harness consumer: `off`
-    /// forwards no reasoning, any other of the seven levels is forwarded as
-    /// the stream reasoning (pi `createLoopConfig` / `agent-harness.ts`
-    /// `thinkingLevel === "off" ? undefined : thinkingLevel`).
+    /// Thinking level for the run. Frozen pi carries the level on the Agent's
+    /// initial state, so `Agent` construction takes `AgentInitialState::
+    /// thinking_level` when it is set; an empty level here and there requests
+    /// the pi Agent default `"off"` (frozen `createMutableAgentState`). The
+    /// loop normalizes the request and clamps it against the active model's
+    /// supported set at construction and on model switch (ADR 0034 / #352).
+    /// Per turn the effective level becomes the stream `reasoning` option
+    /// exactly like pi's harness consumer: `off` forwards no reasoning, any
+    /// other of the seven levels is forwarded as the stream reasoning (pi
+    /// `createLoopConfig` / `agent-harness.ts` `thinkingLevel === "off" ?
+    /// undefined : thinkingLevel`).
     std::string thinking_level;
     /// Per-turn `cacheRetention` streamSimple option. Unset (the default)
     /// resolves to the pi-aligned `"short"` retention; compaction is the only

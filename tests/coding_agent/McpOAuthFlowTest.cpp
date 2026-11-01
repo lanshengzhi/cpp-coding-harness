@@ -423,6 +423,10 @@ TEST_CASE("an authorization code from another issuer never reaches the token end
     auto outcome = harness.run(runtime, options);
     REQUIRE_FALSE(outcome.has_value());
     CHECK(outcome.error().message.find("OAuth issuer mismatch") != std::string::npos);
+    // The frozen observation records the expected issuer, the received
+    // issuer and the absent token request.
+    CHECK(outcome.error().message.find("https://auth.example.com") != std::string::npos);
+    CHECK(outcome.error().message.find("https://attacker.example.com") != std::string::npos);
     CHECK(harness.http->requests.empty());
 
     // The matching `iss` is exchanged.

@@ -475,6 +475,16 @@ TEST_CASE("an MCP HTTP URL must be http or https", "[coding_agent][mcp][issue873
     rejected.name = "rejected";
     rejected.url = "ftp://127.0.0.1/mcp";
 
+    // The frozen scenario accepts both supported schemes; the plain-HTTP
+    // connect below is the http half and the TLS fixture cases are the
+    // https half. Validate both config shapes here too.
+    for (const auto* url : {"http://127.0.0.1:1/mcp", "https://127.0.0.1:1/mcp"}) {
+        coding_agent::mcp::McpHttpServerConfig accepted;
+        accepted.name = "accepted";
+        accepted.url = url;
+        CHECK(cch::mcp::validate_http_server_config(accepted).has_value());
+    }
+
     auto valid = cch::mcp::validate_http_server_config(rejected);
     REQUIRE_FALSE(valid.has_value());
     CHECK(valid.error().code == support::ErrorCode::Validation);

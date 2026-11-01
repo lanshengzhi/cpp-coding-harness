@@ -1,0 +1,277 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1108",
+  "family": "audit-1108",
+  "capturedAt": "2026-11-01T10:06:42.753Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1108/capture-1108.mts",
+    "sha256": "1aef4d15e156705c40b2dcb4447d57a7727dd52f82bf44997fca2e110a9fc9e7",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1108/capture-1108.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1108/capture-1108.mts",
+        "sha256": "1aef4d15e156705c40b2dcb4447d57a7727dd52f82bf44997fca2e110a9fc9e7"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "reset-lifecycle.json",
+      "family": "audit-1108",
+      "bytes": 4051,
+      "sha256": "c9a3b57e44c85c200ffed370d3bda87f08ea2ea92a29feea1444d6a81a3942e1",
+      "sourceEndpoints": [
+        "packages/agent/src/agent.ts:Agent.reset,Agent.prompt,Agent.steer,Agent.followUp,Agent.state",
+        "packages/ai/src/utils/transcript.ts:getCurrentSystemMessage,getCurrentSystemPrompt,getCurrentTools",
+        "packages/agent/test/agent.test.ts:restores the transcript baseline when reset",
+        "packages/agent/test/agent.test.ts:should reject reset while processing without corrupting the transcript"
+      ],
+      "scenarios": [
+        {
+          "name": "reset retains live tools, model and thinking level and restores the message baseline",
+          "inputs": {
+            "initialState": {
+              "systemPrompt": "sys",
+              "tools": [
+                "echo"
+              ],
+              "model": {
+                "id": "reasoning-mock",
+                "reasoning": true
+              },
+              "thinkingLevel": "high"
+            },
+            "prompt": "go",
+            "queuedBeforeReset": [
+              "steer",
+              "follow"
+            ],
+            "promptAfterReset": "again"
+          },
+          "expected": {
+            "beforeReset": {
+              "roles": [
+                "system",
+                "user",
+                "assistant"
+              ],
+              "hasQueuedMessages": true
+            },
+            "afterReset": {
+              "roles": [
+                "system"
+              ],
+              "systemContent": "sys",
+              "systemToolsAdded": [
+                "echo"
+              ],
+              "systemPrompt": "sys",
+              "tools": [
+                "echo"
+              ],
+              "modelId": "reasoning-mock",
+              "thinkingLevel": "high",
+              "hasQueuedMessages": false,
+              "isStreaming": false,
+              "streamingMessage": null,
+              "pendingToolCalls": []
+            },
+            "afterResetRequest": {
+              "roles": [
+                "system",
+                "user"
+              ],
+              "systemToolsAdded": [
+                "echo"
+              ]
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "restores the transcript baseline when reset"
+          }
+        },
+        {
+          "name": "reset during an active run is rejected without changing the run or transcript",
+          "inputs": {
+            "prompt": "Hello",
+            "resetWhen": "assistant stream started, before its terminal"
+          },
+          "expected": {
+            "beforeReset": {
+              "isStreaming": true,
+              "roles": [
+                "user"
+              ]
+            },
+            "resetError": "Agent is already processing. Wait for completion before resetting.",
+            "afterRejectedReset": {
+              "isStreaming": true,
+              "roles": [
+                "user"
+              ]
+            },
+            "afterRun": {
+              "isStreaming": false,
+              "roles": [
+                "user",
+                "assistant"
+              ],
+              "lastAssistantText": "Done"
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should reject reset while processing without corrupting the transcript"
+          }
+        },
+        {
+          "name": "reset renders the replayed sections into the live system prompt",
+          "inputs": {
+            "initialMessages": [
+              "system(content=base, sections=alpha,beta)",
+              "user"
+            ]
+          },
+          "expected": {
+            "afterReset": {
+              "roles": [
+                "system"
+              ],
+              "systemContent": "base",
+              "systemSections": {
+                "alpha": "A",
+                "beta": "B"
+              },
+              "systemPrompt": "base\n\nA\n\nB"
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/src/agent.ts",
+            "case": "AgentState.systemPrompt replays getCurrentSystemPrompt"
+          }
+        }
+      ]
+    },
+    {
+      "path": "settled-cancellation.json",
+      "family": "audit-1108",
+      "bytes": 3989,
+      "sha256": "1bfb5d8b1206a608f4a9ef40e140c7e0b19f3d5eb4b683d8dbce4d2018d966fe",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/program-status-reporter.ts:ProgramStatusReporter.handleEvent",
+        "packages/coding-agent/src/core/agent-session.ts:_emitAgentSettled",
+        "packages/tui/src/program-status.ts:formatProgramStatus"
+      ],
+      "scenarios": [
+        {
+          "name": "agent_settled maps the abort request to idle and the run outcome to done",
+          "inputs": {
+            "run": "agent_start, assistant error terminal, agent_settled aborted=true",
+            "controlRun": "agent_start, assistant stop terminal, agent_settled aborted=false"
+          },
+          "expected": {
+            "interrupted": {
+              "working": "\u001b]7501;state=working:app=pi\u001b\\",
+              "messageEndUnchanged": null,
+              "settled": "\u001b]7501;state=idle:app=pi\u001b\\"
+            },
+            "completed": {
+              "working": "\u001b]7501;state=working:app=pi\u001b\\",
+              "messageEndUnchanged": null,
+              "settled": "\u001b]7501;state=done:app=pi\u001b\\"
+            }
+          },
+          "observedSteps": [
+            {
+              "label": "interrupted_agent_start_working",
+              "wire": "\u001b]7501;state=working:app=pi\u001b\\"
+            },
+            {
+              "label": "interrupted_message_end_error_unchanged",
+              "wire": null
+            },
+            {
+              "label": "interrupted_agent_settled_idle",
+              "wire": "\u001b]7501;state=idle:app=pi\u001b\\"
+            },
+            {
+              "label": "completed_agent_start_working",
+              "wire": "\u001b]7501;state=working:app=pi\u001b\\"
+            },
+            {
+              "label": "completed_message_end_unchanged",
+              "wire": null
+            },
+            {
+              "label": "completed_agent_settled_done",
+              "wire": "\u001b]7501;state=done:app=pi\u001b\\"
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/modes/interactive/program-status-reporter.ts",
+            "case": "agent_settled"
+          }
+        },
+        {
+          "name": "a run aborted before its assistant terminal settles idle and the next run reports working",
+          "inputs": {
+            "run": "agent_start, agent_settled aborted=true (no message_end)",
+            "nextRun": "agent_start, assistant stop terminal, agent_settled aborted=false"
+          },
+          "expected": {
+            "earlyAbort": {
+              "working": "\u001b]7501;state=working:app=pi\u001b\\",
+              "settled": "\u001b]7501;state=idle:app=pi\u001b\\"
+            },
+            "nextRun": {
+              "working": "\u001b]7501;state=working:app=pi\u001b\\",
+              "settled": "\u001b]7501;state=done:app=pi\u001b\\"
+            }
+          },
+          "observedSteps": [
+            {
+              "label": "early_abort_agent_start_working",
+              "wire": "\u001b]7501;state=working:app=pi\u001b\\"
+            },
+            {
+              "label": "early_abort_agent_settled_idle",
+              "wire": "\u001b]7501;state=idle:app=pi\u001b\\"
+            },
+            {
+              "label": "next_run_agent_start_working",
+              "wire": "\u001b]7501;state=working:app=pi\u001b\\"
+            },
+            {
+              "label": "next_run_message_end_unchanged",
+              "wire": null
+            },
+            {
+              "label": "next_run_agent_settled_done",
+              "wire": "\u001b]7501;state=done:app=pi\u001b\\"
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/core/agent-session.ts",
+            "case": "_emitAgentSettled"
+          }
+        }
+      ]
+    }
+  ]
+}

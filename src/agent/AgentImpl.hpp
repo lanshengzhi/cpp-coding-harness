@@ -35,9 +35,27 @@ struct AgentSubscriptionAnchor {
     return support::make_error(support::ErrorCode::Validation, "agent is not initialized");
 }
 
-/// The "run already in flight" rejection shared by prompt and continue_run.
+/// The "prompt run already in flight" rejection (pi `Agent.prompt`:
+/// "Agent is already processing a prompt. Use steer() or followUp() to queue
+/// messages, or wait for completion.").
 [[nodiscard]] inline support::Error agent_busy_error() {
-    return support::make_error(support::ErrorCode::Validation, "agent is busy (prompt already in flight)");
+    return support::make_error(support::ErrorCode::Validation,
+            "Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for "
+            "completion.");
+}
+
+/// The "continuation run already in flight" rejection (pi `Agent.continue`:
+/// "Agent is already processing. Wait for completion before continuing.").
+[[nodiscard]] inline support::Error agent_continue_busy_error() {
+    return support::make_error(
+            support::ErrorCode::Validation, "Agent is already processing. Wait for completion before continuing.");
+}
+
+/// The "reset during a run" rejection (pi `Agent.reset`: "Agent is already
+/// processing. Wait for completion before resetting.").
+[[nodiscard]] inline support::Error agent_reset_busy_error() {
+    return support::make_error(
+            support::ErrorCode::Validation, "Agent is already processing. Wait for completion before resetting.");
 }
 
 /// The continuation rejection for an empty or system-only transcript. The
