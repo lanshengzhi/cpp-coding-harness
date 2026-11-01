@@ -81,6 +81,10 @@ public:
     virtual support::ExpectedVoid append(std::string_view path, std::string_view content, std::stop_token stop) = 0;
     virtual support::Expected<FileInfo> stat(std::string_view path, std::stop_token stop) = 0;
     virtual support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) = 0;
+    /// Create a fresh temporary directory for one run's output files. An
+    /// environment without a temporary area reports that explicitly instead of
+    /// silently writing beside the workspace.
+    virtual support::Expected<std::string> create_temp_dir(std::string_view prefix, std::stop_token stop) = 0;
     /// The callback receives decoded output as it arrives; retained result fields
     /// are independently bounded. No spill file is created.
     virtual support::Expected<ShellResult> exec(const ShellCommand& command,
