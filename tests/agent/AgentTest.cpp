@@ -1104,12 +1104,13 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
     agent::ToolRegistry tools;
     REQUIRE(tools.add(make_read_tool()));
     int prepared_turns = 0;
-    int stop_decisions = 0;
+    int finish_decisions = 0;
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("model-old");
-    options.prepare_next_turn = [&prepared_turns](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [&prepared_turns](
+                    const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepared_turns;
         if (prepared_turns == 1) {
             return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
@@ -1124,17 +1125,20 @@ TEST_CASE("stateful Agent retains applied run-state updates after a later policy
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
     };
-    options.validate_turn_update = [](const agent::AgentLoopTurnUpdate&) -> support::AsyncResult<void> {
+    options.validate_turn_update = [](const agent::AgentRequestUpdate&) -> support::AsyncResult<void> {
         return support::AsyncResult<void>{support::ExpectedVoid{}};
     };
-    options.should_stop_after_turn = [&stop_decisions](
-                                             const agent::PrepareNextTurnContext&) -> support::AsyncResult<bool> {
-        ++stop_decisions;
-        if (stop_decisions == 2) {
-            return support::AsyncResult<bool>{support::Expected<bool>{
-                    std::unexpected(support::make_error(support::ErrorCode::Tool, "stop policy failed"))}};
+    options.finish_turn =
+            [&finish_decisions](
+                    const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentTurnAction>> {
+        ++finish_decisions;
+        if (finish_decisions == 2) {
+            return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                    support::Expected<std::optional<agent::AgentTurnAction>>{
+                            std::unexpected(support::make_error(support::ErrorCode::Tool, "stop policy failed"))}};
         }
-        return support::AsyncResult<bool>{support::Expected<bool>{false}};
+        return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                support::Expected<std::optional<agent::AgentTurnAction>>{std::nullopt}};
     };
 
     agent::Agent subject(client->factory(), std::move(tools), std::move(options));

@@ -37,3 +37,24 @@ delivery). A final turn that crosses the compaction threshold therefore
 reaches the host's post-run dispatch (`overflow` for usage beyond the window,
 `threshold` without overflow) instead of emitting a between-turn
 `threshold` compaction before `agent_end`.
+
+## Addendum: finishTurn replaces stop-after-turn at pi-v1.3.0 (Issue #1107)
+
+pi-v1.3.0 no longer exposes `shouldStopAfterTurn`; `AgentOptions.finishTurn`
+takes its place and runs after the turn's assistant and tool-result messages,
+immediately before `turn_end`. It returns `{ action: "continue" }` or
+`{ action: "end" }` (or nothing). `end` stops the run without polling either
+input queue and without invoking prepare-next-turn; `continue` guarantees one
+next provider request, which a natural tool-result, steering or follow-up
+request satisfies without an extra one. An error or aborted assistant still
+calls the hook before `turn_end`, but its decision cannot extend the hard exit.
+
+`AgentOptions.prepareRequest` also belongs to this lifecycle: it runs after the
+pending messages have been appended and emitted, immediately before every
+provider request including the first, and it never polls an input queue. Its
+returned context, model and thinking level replace the runtime values for that
+request and later requests in the run.
+
+This supersedes the "stop-after-turn" seam name and the claim that the stop
+check runs after `turn_end`; the steering, follow-up, prepare-next-turn and
+final-turn rules above are unchanged.

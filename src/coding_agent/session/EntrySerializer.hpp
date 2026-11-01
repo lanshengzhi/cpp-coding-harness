@@ -52,6 +52,8 @@ public:
             std::optional<bool> from_hook,
             std::optional<ai::Usage> usage = std::nullopt);
     [[nodiscard]] static SessionEntry new_session_info_entry(std::optional<std::string> parent_id, std::string name);
+    [[nodiscard]] static SessionEntry new_custom_entry(
+            std::optional<std::string> parent_id, std::string custom_type, std::optional<support::JsonValue> data);
 
     [[nodiscard]] support::Expected<std::string> serialize_header(const SessionMetadata& metadata) const;
 

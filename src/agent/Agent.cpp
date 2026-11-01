@@ -35,8 +35,9 @@ Agent::Impl::Impl(ai::ModelStreamFactory stream_factory,
               .after_tool_call = std::move(options.after_tool_call),
               .transform_context = std::move(options.transform_context),
               .convert_to_llm = std::move(options.convert_to_llm),
+              .prepare_request = std::move(options.prepare_request),
               .prepare_next_turn = std::move(options.prepare_next_turn),
-              .should_stop_after_turn = std::move(options.should_stop_after_turn),
+              .finish_turn = std::move(options.finish_turn),
               .validate_turn_update = std::move(options.validate_turn_update),
               .tool_execution = options.tool_execution} {
     state.messages = std::move(initial_state.messages);
@@ -92,7 +93,7 @@ Agent::Impl::Impl(ai::ModelStreamFactory stream_factory,
     };
 }
 
-[[nodiscard]] support::Expected<AgentExecutionSnapshot> Agent::Impl::apply_update(AgentLoopTurnUpdate update) {
+[[nodiscard]] support::Expected<AgentExecutionSnapshot> Agent::Impl::apply_update(AgentRequestUpdate update) {
     if (update.model) {
         if (auto valid = ai::validate_model(*update.model); !valid) {
             return std::unexpected(valid.error());
@@ -125,6 +126,31 @@ Agent::Impl::Impl(ai::ModelStreamFactory stream_factory,
         updated.messages = std::move(update.context->messages);
     }
     return updated;
+}
+
+boost::asio::awaitable<support::Expected<AgentExecutionSnapshot>> Agent::Impl::validate_and_apply_update(
+        std::shared_ptr<Impl> impl, AgentRequestUpdate update) {
+    RunPolicy& policy = impl->run_policy;
+    if (update.model && !policy.validate_turn_update) {
+        co_return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "model update requires validation", update.model->id));
+    }
+    if (policy.validate_turn_update) {
+        auto validated = co_await invoke_agent_hook("validateTurnUpdate", *policy.validate_turn_update, update);
+        if (!validated) {
+            co_return std::unexpected(validated.error());
+        }
+    }
+    co_return impl->apply_update(std::move(update));
+}
+
+boost::asio::awaitable<support::Expected<std::optional<AgentTurnAction>>> Agent::Impl::invoke_finish_turn(
+        std::shared_ptr<Impl> impl, AgentTurnContext turn) {
+    auto& hook = impl->run_policy.finish_turn;
+    if (!hook) {
+        co_return std::optional<AgentTurnAction>{};
+    }
+    co_return co_await invoke_agent_hook("finishTurn", *hook, std::move(turn));
 }
 
 [[nodiscard]] std::vector<ai::MessageVariant> Agent::Impl::drain(InputQueueKind queue_kind) {

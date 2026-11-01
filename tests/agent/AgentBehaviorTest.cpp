@@ -451,6 +451,51 @@ ai::AssistantMessage tool_call_response(std::string raw_arguments = R"({"path":"
     return message;
 }
 
+[[nodiscard]] std::string message_role(const ai::MessageVariant& message) {
+    return std::visit(
+            [](const auto& concrete) -> std::string {
+                using Message = std::decay_t<decltype(concrete)>;
+                if constexpr (std::is_same_v<Message, ai::SystemMessage>) {
+                    return "system";
+                } else if constexpr (std::is_same_v<Message, ai::UserMessage>) {
+                    return "user";
+                } else if constexpr (std::is_same_v<Message, ai::AssistantMessage>) {
+                    return "assistant";
+                } else if constexpr (std::is_same_v<Message, ai::ToolResultMessage>) {
+                    return "toolResult";
+                } else if constexpr (std::is_same_v<Message, ai::BashExecutionMessage>) {
+                    return "bashExecution";
+                } else if constexpr (std::is_same_v<Message, ai::CustomMessage>) {
+                    return "custom";
+                } else if constexpr (std::is_same_v<Message, ai::BranchSummaryMessage>) {
+                    return "branchSummary";
+                } else if constexpr (std::is_same_v<Message, ai::CompactionSummaryMessage>) {
+                    return "compactionSummary";
+                }
+                return "unknown";
+            },
+            message);
+}
+
+[[nodiscard]] std::vector<std::string> message_roles(const std::vector<ai::MessageVariant>& messages) {
+    std::vector<std::string> roles;
+    roles.reserve(messages.size());
+    for (const auto& message : messages) {
+        roles.push_back(message_role(message));
+    }
+    return roles;
+}
+
+[[nodiscard]] std::vector<std::string> user_texts(const std::vector<ai::MessageVariant>& messages) {
+    std::vector<std::string> texts;
+    for (const auto& message : messages) {
+        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+            texts.push_back(ai::text_from_user_message(*user));
+        }
+    }
+    return texts;
+}
+
 } // namespace
 
 TEST_CASE("async tool registry owns tools and returns deterministic definitions", "[agent][u6][spec]") {
@@ -2413,13 +2458,13 @@ TEST_CASE("prepareNextTurn model swap changes next request model", "[agent][asyn
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{
                         agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-swapped")}}};
     };
-    options.validate_turn_update = [](const agent::AgentLoopTurnUpdate& update) -> support::AsyncResult<void> {
+    options.validate_turn_update = [](const agent::AgentRequestUpdate& update) -> support::AsyncResult<void> {
         if (update.model && update.model->id == "gpt-swapped") {
             return support::AsyncResult<void>{support::ExpectedVoid{}};
         }
@@ -2447,8 +2492,8 @@ TEST_CASE("prepareNextTurn model update without validator is rejected", "[agent]
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{
                         agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-swapped")}}};
@@ -2471,8 +2516,8 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8][spe
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{
                         agent::AgentLoopTurnUpdate{.thinking_level = std::string{"invalid"}}}};
@@ -2503,8 +2548,8 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [&](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepare_calls;
         if (prepare_calls == 1) {
             return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
@@ -2516,7 +2561,7 @@ TEST_CASE("prepareNextTurn rejected update does not persist partial model change
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
     };
-    options.validate_turn_update = [](const agent::AgentLoopTurnUpdate&) -> support::AsyncResult<void> {
+    options.validate_turn_update = [](const agent::AgentRequestUpdate&) -> support::AsyncResult<void> {
         return support::AsyncResult<void>{support::ExpectedVoid{}};
     };
 
@@ -2543,12 +2588,12 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
             make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     bool prepared = false;
-    bool stop_observed_pre_prepare_context = false;
+    bool finish_observed_pre_prepare_context = false;
     std::size_t first_prepare_new_message_count = 0;
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext& context)
+    options.prepare_next_turn = [&](const agent::AgentTurnContext& context)
             -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         if (prepared) {
             return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
@@ -2563,14 +2608,16 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{
                         agent::AgentLoopTurnUpdate{.context = std::move(replacement)}}};
     };
-    // pi runs `shouldStopAfterTurn` immediately after the turn, before
-    // prepare-next-turn: it observes the pre-prepare context (#745, ADR 0014).
-    options.should_stop_after_turn = [&](const agent::PrepareNextTurnContext& context) -> support::AsyncResult<bool> {
+    // pi runs `finishTurn` immediately after the turn, before prepare-next-turn:
+    // it observes the pre-prepare context (#745, ADR 0014).
+    options.finish_turn =
+            [&](const agent::AgentTurnContext& context) -> support::AsyncResult<std::optional<agent::AgentTurnAction>> {
         if (context.context.system_prompt && context.context.system_prompt->empty() &&
                 context.context.messages.size() == 4) {
-            stop_observed_pre_prepare_context = true;
+            finish_observed_pre_prepare_context = true;
         }
-        return support::AsyncResult<bool>{support::Expected<bool>{false}};
+        return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                support::Expected<std::optional<agent::AgentTurnAction>>{std::nullopt}};
     };
 
     agent::Agent subject(client->factory(), std::move(registry), std::move(options));
@@ -2579,7 +2626,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     CHECK(run.result);
     CHECK(prepared);
     CHECK(first_prepare_new_message_count == 3);
-    CHECK(stop_observed_pre_prepare_context);
+    CHECK(finish_observed_pre_prepare_context);
     REQUIRE(client->requests.size() == 2);
     REQUIRE(client->requests[1].context.system_prompt.has_value());
     CHECK(*client->requests[1].context.system_prompt == "replacement prompt");
@@ -2631,8 +2678,9 @@ TEST_CASE("between-turn context replacement keeps the invocation window valid", 
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [subject_holder, &replaced_once](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [subject_holder, &replaced_once](
+                    const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         // The hook runs only when the loop continues, so the run's final turn
         // never re-replaces the context (#745; the session's estimate gate
         // behaves the same way).
@@ -2705,8 +2753,9 @@ TEST_CASE(
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     int prepare_calls = 0;
-    options.prepare_next_turn = [&prepare_calls](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [&prepare_calls](
+                    const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepare_calls;
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
@@ -2741,8 +2790,8 @@ TEST_CASE("prepareNextTurn runs once per continuing turn before the next turn_st
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [&](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepare_calls;
         std::size_t turn_starts = 0;
         for (const auto& event : *events) {
@@ -2794,8 +2843,9 @@ TEST_CASE("steering queued while prepare-next-turn runs is injected before the n
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [subject_holder, &prepare_calls](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [subject_holder, &prepare_calls](
+                    const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepare_calls;
         // Simulate steering queued during a long preparation: nothing was
         // queued when the earlier end-of-turn poll ran, so the re-poll after
@@ -2830,8 +2880,8 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
     };
@@ -2859,8 +2909,8 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
     // A full-map reasoning model supports "high", so the level-only update
     // passes through creation and re-clamp unchanged (#352).
     options.model = tests::make_full_thinking_model("gpt-test");
-    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{
                         agent::AgentLoopTurnUpdate{.thinking_level = std::string{"high"}}}};
@@ -2888,13 +2938,13 @@ TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[a
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
-    options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+    options.prepare_next_turn =
+            [](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{
                         agent::AgentLoopTurnUpdate{.model = tests::make_model("missing-model")}}};
     };
-    options.validate_turn_update = [](const agent::AgentLoopTurnUpdate& update) -> support::AsyncResult<void> {
+    options.validate_turn_update = [](const agent::AgentRequestUpdate& update) -> support::AsyncResult<void> {
         if (update.model && update.model->id != "gpt-test") {
             return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(
                     support::make_error(support::ErrorCode::Validation, "unknown model", update.model->id))}};
@@ -2919,8 +2969,8 @@ TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
         options.model = tests::make_model("gpt-test");
-        options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-                -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        options.prepare_next_turn =
+                [](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
             return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                     support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::unexpected(support::make_error(
                             support::ErrorCode::Tool, "prepareNextTurn hook failed", "prepare boom"))}};
@@ -2945,13 +2995,13 @@ TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "
         agent::AsyncAgentOptions options;
         options.max_turns = 4;
         options.model = tests::make_model("gpt-test");
-        options.prepare_next_turn = [](const agent::PrepareNextTurnContext&)
-                -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        options.prepare_next_turn =
+                [](const agent::AgentTurnContext&) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
             return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                     support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{
                             agent::AgentLoopTurnUpdate{.model = tests::make_model("gpt-next")}}};
         };
-        options.validate_turn_update = [](const agent::AgentLoopTurnUpdate&) -> support::AsyncResult<void> {
+        options.validate_turn_update = [](const agent::AgentRequestUpdate&) -> support::AsyncResult<void> {
             return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(support::make_error(
                     support::ErrorCode::Tool, "validateTurnUpdate hook failed", "validator boom"))}};
         };
@@ -2964,6 +3014,506 @@ TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "
         CHECK(run.result.error().message == "validateTurnUpdate hook failed");
         CHECK(run.result.error().detail.find("validator boom") != std::string::npos);
     }
+}
+
+// ── #1107 / audit-1107 loop-hook lifecycle ──────────────────────────────────
+// Each case compares one frozen `fixtures/pi-v1.3.0/audit-1107/turn-hooks.json`
+// scenario through the public Agent seam.
+
+TEST_CASE("prepareRequest observes the emitted pending prompt and replaces the request state",
+        "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    agent::ToolRegistry registry;
+    std::vector<std::string> completed_roles;
+    std::vector<std::string> completed_roles_at_prepare;
+    std::vector<std::string> context_roles_at_prepare;
+    std::size_t prepare_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.prepare_request = [&](agent::PrepareRequestContext request)
+            -> support::AsyncResult<std::optional<agent::AgentRequestUpdate>> {
+        ++prepare_calls;
+        completed_roles_at_prepare = completed_roles;
+        context_roles_at_prepare = message_roles(request.context.messages);
+        agent::AgentLoopContextReplacement replacement;
+        replacement.messages.push_back(ai::user_text_message("canonical projection"));
+        return support::AsyncResult<std::optional<agent::AgentRequestUpdate>>{
+                support::Expected<std::optional<agent::AgentRequestUpdate>>{agent::AgentRequestUpdate{
+                        .context = std::move(replacement),
+                        .model = tests::make_full_thinking_model("replacement"),
+                        .thinking_level = std::string{"high"},
+                }}};
+    };
+    options.validate_turn_update = [](const agent::AgentRequestUpdate&) -> support::AsyncResult<void> {
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto observed = subject.subscribe([&completed_roles](const agent::AgentLifecycleEvent& event) {
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            completed_roles.push_back(message_role(end->message));
+        }
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(observed);
+    REQUIRE(subject.steer(ai::user_text_message("steering")));
+    auto run = run_agent(subject, "go");
+
+    CHECK(run.result);
+    CHECK(prepare_calls == 1);
+    CHECK(completed_roles_at_prepare == std::vector<std::string>{"user", "user"});
+    CHECK(context_roles_at_prepare == std::vector<std::string>{"user", "user"});
+    REQUIRE(client->requests.size() == 1);
+    CHECK(client->requests[0].model.id == "replacement");
+    REQUIRE(client->requests[0].options.reasoning.has_value());
+    CHECK(*client->requests[0].options.reasoning == ai::ThinkingLevel::High);
+    CHECK(message_roles(client->requests[0].context.messages) == std::vector<std::string>{"user"});
+    REQUIRE(std::holds_alternative<ai::UserMessage>(client->requests[0].context.messages[0]));
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(client->requests[0].context.messages[0])) ==
+            "canonical projection");
+}
+
+TEST_CASE("prepareRequest replacement state carries into the next request of the run",
+        "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+
+    std::size_t prepare_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.prepare_request =
+            [&prepare_calls](
+                    agent::PrepareRequestContext) -> support::AsyncResult<std::optional<agent::AgentRequestUpdate>> {
+        ++prepare_calls;
+        if (prepare_calls == 1) {
+            return support::AsyncResult<std::optional<agent::AgentRequestUpdate>>{
+                    support::Expected<std::optional<agent::AgentRequestUpdate>>{agent::AgentRequestUpdate{
+                            .model = tests::make_full_thinking_model("replacement"),
+                            .thinking_level = std::string{"high"},
+                    }}};
+        }
+        return support::AsyncResult<std::optional<agent::AgentRequestUpdate>>{
+                support::Expected<std::optional<agent::AgentRequestUpdate>>{std::nullopt}};
+    };
+    options.validate_turn_update = [](const agent::AgentRequestUpdate&) -> support::AsyncResult<void> {
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
+
+    CHECK(run.result);
+    CHECK(prepare_calls == 2);
+    REQUIRE(client->requests.size() == 2);
+    CHECK(client->requests[0].model.id == "replacement");
+    CHECK(client->requests[1].model.id == "replacement");
+    REQUIRE(client->requests[0].options.reasoning.has_value());
+    REQUIRE(client->requests[1].options.reasoning.has_value());
+    CHECK(*client->requests[0].options.reasoning == ai::ThinkingLevel::High);
+    CHECK(*client->requests[1].options.reasoning == ai::ThinkingLevel::High);
+}
+
+TEST_CASE("prepareRequest does not poll the steering queue", "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+    client->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::ToolRegistry registry;
+    auto subject_holder = std::make_shared<agent::Agent*>(nullptr);
+    support::ExpectedVoid steer_result;
+    std::size_t prepare_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.prepare_request =
+            [subject_holder, &steer_result, &prepare_calls](
+                    agent::PrepareRequestContext) -> support::AsyncResult<std::optional<agent::AgentRequestUpdate>> {
+        ++prepare_calls;
+        if (prepare_calls == 1) {
+            steer_result = (**subject_holder).steer(ai::user_text_message("late steering"));
+        }
+        return support::AsyncResult<std::optional<agent::AgentRequestUpdate>>{
+                support::Expected<std::optional<agent::AgentRequestUpdate>>{std::nullopt}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    *subject_holder = &subject;
+    auto run = run_agent(subject, "go");
+
+    CHECK(run.result);
+    CHECK(steer_result.has_value());
+    CHECK(prepare_calls == 2);
+    REQUIRE(client->requests.size() == 2);
+    CHECK(user_texts(client->requests[0].context.messages) == std::vector<std::string>{"go"});
+    CHECK(user_texts(client->requests[1].context.messages) == std::vector<std::string>{"go", "late steering"});
+}
+
+TEST_CASE("prepareRequest model replacement without a validator is rejected", "[agent][async][u8][issue1107][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.prepare_request =
+            [](agent::PrepareRequestContext) -> support::AsyncResult<std::optional<agent::AgentRequestUpdate>> {
+        return support::AsyncResult<std::optional<agent::AgentRequestUpdate>>{
+                support::Expected<std::optional<agent::AgentRequestUpdate>>{
+                        agent::AgentRequestUpdate{.model = tests::make_model("gpt-swapped")}}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "go");
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().code == support::ErrorCode::Validation);
+    CHECK(run.result.error().message == "model update requires validation");
+    CHECK(client->requests.empty());
+}
+
+TEST_CASE("prepareRequest failure ends the run before the provider request", "[agent][async][u8][issue1107][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.prepare_request =
+            [](agent::PrepareRequestContext) -> support::AsyncResult<std::optional<agent::AgentRequestUpdate>> {
+        return support::AsyncResult<std::optional<agent::AgentRequestUpdate>>{
+                support::Expected<std::optional<agent::AgentRequestUpdate>>{
+                        std::unexpected(support::make_error(support::ErrorCode::Tool, "request policy failed"))}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "go");
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().message == "request policy failed");
+    CHECK(client->requests.empty());
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("finishTurn runs after the tool-result message and before turn_end",
+        "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+
+    std::vector<std::string> ordering;
+    std::optional<agent::AgentTurnContext> first_finish_context;
+    std::size_t finish_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.finish_turn =
+            [&](agent::AgentTurnContext turn) -> support::AsyncResult<std::optional<agent::AgentTurnAction>> {
+        ++finish_calls;
+        if (!first_finish_context) {
+            first_finish_context = turn;
+        }
+        ordering.push_back("finishTurn");
+        return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                support::Expected<std::optional<agent::AgentTurnAction>>{std::nullopt}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto observed = subject.subscribe([&ordering](const agent::AgentLifecycleEvent& event) {
+        if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            ordering.push_back("message_end:" + message_role(end->message));
+        } else if (std::holds_alternative<agent::TurnEndEvent>(event)) {
+            ordering.push_back("turn_end");
+        }
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(observed);
+    auto run = run_agent(subject, "read");
+
+    CHECK(run.result);
+    CHECK(finish_calls == 2);
+    const auto first_turn_end = std::find(ordering.begin(), ordering.end(), "turn_end");
+    REQUIRE(first_turn_end != ordering.end());
+    REQUIRE(std::distance(ordering.begin(), first_turn_end) >= 2);
+    CHECK(*(first_turn_end - 1) == "finishTurn");
+    CHECK(*(first_turn_end - 2) == "message_end:toolResult");
+    REQUIRE(first_finish_context);
+    REQUIRE(first_finish_context->tool_results.size() == 1);
+    CHECK(message_role(first_finish_context->context.messages.back()) == "toolResult");
+    CHECK(first_finish_context->new_messages.size() == 3);
+}
+
+TEST_CASE("finishTurn end stops before queue polling and next-turn preparation",
+        "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+    client->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::ToolRegistry registry;
+    std::size_t finish_calls = 0;
+    std::size_t prepare_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.finish_turn =
+            [&finish_calls](agent::AgentTurnContext) -> support::AsyncResult<std::optional<agent::AgentTurnAction>> {
+        ++finish_calls;
+        return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                support::Expected<std::optional<agent::AgentTurnAction>>{agent::AgentTurnAction::End}};
+    };
+    options.prepare_next_turn =
+            [&prepare_calls](
+                    agent::AgentTurnContext) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        ++prepare_calls;
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    REQUIRE(subject.follow_up(ai::user_text_message("queued follow-up")));
+    auto run = run_agent(subject, "go");
+
+    CHECK(run.result);
+    CHECK(finish_calls == 1);
+    CHECK(prepare_calls == 0);
+    REQUIRE(client->requests.size() == 1);
+    CHECK(subject.input_queue_counts().follow_up == 1);
+}
+
+TEST_CASE("finishTurn continue makes exactly one context-only request",
+        "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+    client->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::ToolRegistry registry;
+    std::size_t finish_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.finish_turn =
+            [&finish_calls](agent::AgentTurnContext) -> support::AsyncResult<std::optional<agent::AgentTurnAction>> {
+        ++finish_calls;
+        return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                support::Expected<std::optional<agent::AgentTurnAction>>{
+                        finish_calls == 1 ? std::optional{agent::AgentTurnAction::Continue} : std::nullopt}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "go");
+
+    CHECK(run.result);
+    CHECK(finish_calls == 2);
+    REQUIRE(client->requests.size() == 2);
+    CHECK(message_roles(client->requests[1].context.messages) == std::vector<std::string>{"user", "assistant"});
+    CHECK(user_texts(client->requests[1].context.messages) == std::vector<std::string>{"go"});
+}
+
+TEST_CASE("finishTurn continue is satisfied by the natural tool-result request",
+        "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+
+    std::size_t finish_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.finish_turn =
+            [&finish_calls](agent::AgentTurnContext) -> support::AsyncResult<std::optional<agent::AgentTurnAction>> {
+        ++finish_calls;
+        return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                support::Expected<std::optional<agent::AgentTurnAction>>{
+                        finish_calls == 1 ? std::optional{agent::AgentTurnAction::Continue} : std::nullopt}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "read");
+
+    CHECK(run.result);
+    CHECK(finish_calls == 2);
+    CHECK(client->requests.size() == 2);
+}
+
+TEST_CASE("finishTurn observes an aborted assistant before turn_end without continuing",
+        "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    auto aborted = ai::assistant_text_message("aborted");
+    aborted.stop_reason = ai::AssistantStopReason::Aborted;
+    aborted.error_message = "Request was aborted";
+    client->responses.push_back(aborted);
+
+    agent::ToolRegistry registry;
+    std::vector<std::string> ordering;
+    std::size_t finish_calls = 0;
+    bool finish_observed_aborted = false;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.finish_turn =
+            [&](agent::AgentTurnContext turn) -> support::AsyncResult<std::optional<agent::AgentTurnAction>> {
+        ++finish_calls;
+        finish_observed_aborted = turn.assistant_message.stop_reason == ai::AssistantStopReason::Aborted;
+        ordering.push_back("finishTurn");
+        return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                support::Expected<std::optional<agent::AgentTurnAction>>{agent::AgentTurnAction::Continue}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto observed = subject.subscribe([&ordering](const agent::AgentLifecycleEvent& event) {
+        if (std::holds_alternative<agent::TurnEndEvent>(event)) {
+            ordering.push_back("turn_end");
+        }
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(observed);
+    REQUIRE(subject.follow_up(ai::user_text_message("queued follow-up")));
+    auto run = run_agent(subject, "go");
+
+    CHECK(run.result);
+    CHECK(finish_calls == 1);
+    CHECK(finish_observed_aborted);
+    CHECK(ordering == std::vector<std::string>{"finishTurn", "turn_end"});
+    CHECK(client->requests.size() == 1);
+    CHECK(subject.input_queue_counts().follow_up == 1);
+}
+
+TEST_CASE("finishTurn failure ends the run before turn_end", "[agent][async][u8][issue1107][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.finish_turn = [](agent::AgentTurnContext) -> support::AsyncResult<std::optional<agent::AgentTurnAction>> {
+        return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                support::Expected<std::optional<agent::AgentTurnAction>>{
+                        std::unexpected(support::make_error(support::ErrorCode::Tool, "finish policy failed"))}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "go");
+
+    REQUIRE_FALSE(run.result);
+    CHECK(run.result.error().message == "finish policy failed");
+    CHECK(count_events<agent::TurnEndEvent>(run.events) == 0);
+    CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("prepareNextTurn appended messages are emitted before the next request",
+        "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+
+    std::vector<std::string> ordering;
+    std::size_t prepare_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.prepare_next_turn =
+            [&](agent::AgentTurnContext) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        ++prepare_calls;
+        ordering.push_back("prepareNextTurn");
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{agent::AgentLoopTurnUpdate{
+                        .messages = {ai::user_text_message("prepared")},
+                }}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto observed = subject.subscribe([&ordering](const agent::AgentLifecycleEvent& event) {
+        if (std::holds_alternative<agent::TurnStartEvent>(event)) {
+            ordering.push_back("turn_start");
+        } else if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            ordering.push_back("message_start:" + message_role(start->message));
+        } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+            ordering.push_back("message_end:" + message_role(end->message));
+        }
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(observed);
+    auto run = run_agent(subject, "read");
+
+    CHECK(run.result);
+    CHECK(prepare_calls == 1);
+    REQUIRE(client->requests.size() == 2);
+    CHECK(message_roles(client->requests[1].context.messages) ==
+            std::vector<std::string>{"system", "user", "assistant", "toolResult", "user"});
+    CHECK(user_texts(client->requests[1].context.messages) == std::vector<std::string>{"read", "prepared"});
+    const auto prepare_it = std::find(ordering.begin(), ordering.end(), "prepareNextTurn");
+    REQUIRE(prepare_it != ordering.end());
+    REQUIRE(std::distance(prepare_it, ordering.end()) >= 5);
+    CHECK(std::vector<std::string>(prepare_it, prepare_it + 5) == std::vector<std::string>{"prepareNextTurn",
+                                                                          "turn_start",
+                                                                          "message_start:user",
+                                                                          "message_end:user",
+                                                                          "message_start:assistant"});
+}
+
+TEST_CASE("prepareNextTurn replacement context and appended messages both reach the next request",
+        "[agent][async][u8][issue1107][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+    client->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::ToolRegistry registry;
+    std::size_t finish_calls = 0;
+    std::size_t prepare_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.finish_turn =
+            [&finish_calls](agent::AgentTurnContext) -> support::AsyncResult<std::optional<agent::AgentTurnAction>> {
+        ++finish_calls;
+        return support::AsyncResult<std::optional<agent::AgentTurnAction>>{
+                support::Expected<std::optional<agent::AgentTurnAction>>{
+                        finish_calls == 1 ? std::optional{agent::AgentTurnAction::Continue} : std::nullopt}};
+    };
+    options.prepare_next_turn =
+            [&prepare_calls](
+                    agent::AgentTurnContext) -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        ++prepare_calls;
+        agent::AgentLoopContextReplacement replacement;
+        replacement.messages.push_back(ai::user_text_message("replacement"));
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{agent::AgentLoopTurnUpdate{
+                        .context = std::move(replacement),
+                        .messages = {ai::user_text_message("prepared")},
+                }}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "go");
+
+    CHECK(run.result);
+    CHECK(prepare_calls == 1);
+    REQUIRE(client->requests.size() == 2);
+    CHECK(message_roles(client->requests[1].context.messages) == std::vector<std::string>{"user", "user"});
+    CHECK(user_texts(client->requests[1].context.messages) == std::vector<std::string>{"replacement", "prepared"});
 }
 
 TEST_CASE("tool execution policy defaults to bounded parallel", "[agent][async][u8][spec]") {

@@ -140,4 +140,4 @@ User Bash output is ANSI-stripped and bounded to a 2,000-line/50 KiB tail, with 
 
 ## Print-mode outcomes
 
-On success, print mode writes only the final assistant text to stdout and exits 0. Terminal error or abort outcomes write a diagnostic to stderr and exit 1. A run with no prompt prints nothing and exits 0. SIGTERM and SIGHUP dispose the session and exit 143 and 129 respectively.
+On success, print mode writes only the final assistant text to stdout and exits 0. If the model reaches its output token limit, print mode keeps the partial text on stdout, writes `Response was truncated: the model reached its output token limit.` to stderr, and exits 1. Terminal error or abort outcomes write a diagnostic to stderr and exit 1. A run with no prompt prints nothing and exits 0. SIGTERM and SIGHUP dispose the session and exit 143 and 129 respectively.

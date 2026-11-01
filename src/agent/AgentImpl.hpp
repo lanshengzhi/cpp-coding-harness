@@ -191,8 +191,9 @@ struct RunPolicy {
     std::optional<AfterToolCallHook> after_tool_call{std::nullopt};
     std::optional<TransformContextHook> transform_context{std::nullopt};
     std::optional<ConvertToLlmHook> convert_to_llm{std::nullopt};
+    std::optional<PrepareRequestHook> prepare_request{std::nullopt};
     std::optional<PrepareNextTurnHook> prepare_next_turn{std::nullopt};
-    std::optional<ShouldStopAfterTurnHook> should_stop_after_turn{std::nullopt};
+    std::optional<FinishTurnHook> finish_turn{std::nullopt};
     std::optional<ValidateTurnUpdateHook> validate_turn_update{std::nullopt};
     ToolExecutionPolicy tool_execution{BoundedParallelToolExecution{}};
 };
@@ -209,6 +210,36 @@ struct StreamEventState {
     context.messages = std::move(snapshot.messages);
     context.tools = std::move(snapshot.tools);
     return context;
+}
+
+/// The turn machine's working request state: the model, thinking level and
+/// model-facing context the next provider request uses, plus whether a policy
+/// replaced that context during the run.
+struct TurnRequestState {
+    ai::Model model{};
+    std::string thinking_level;
+    ai::AiContext context{};
+    bool context_replaced{false};
+};
+
+/// Fold one applied request update into the turn machine's working state. A
+/// replacement context becomes the model-facing context for the rest of the
+/// run; otherwise only the system prompt (until a replacement exists) and the
+/// live executable tool set advance.
+[[nodiscard]] inline TurnRequestState adopt_turn_update(
+        TurnRequestState state, AgentExecutionSnapshot applied, bool replaced_context) {
+    state.model = std::move(applied.model);
+    state.thinking_level = std::move(applied.thinking_level);
+    if (replaced_context) {
+        state.context_replaced = true;
+        state.context = context_from_snapshot(std::move(applied));
+        return state;
+    }
+    if (!state.context_replaced) {
+        state.context.system_prompt = std::move(applied.system_prompt);
+    }
+    state.context.tools = std::move(applied.tools);
+    return state;
 }
 
 [[nodiscard]] inline support::ExpectedVoid append_message_with_lifecycle(
@@ -252,13 +283,26 @@ struct Agent::Impl {
 
     [[nodiscard]] AgentExecutionSnapshot snapshot() const;
 
-    [[nodiscard]] support::Expected<AgentExecutionSnapshot> apply_update(AgentLoopTurnUpdate update);
+    [[nodiscard]] support::Expected<AgentExecutionSnapshot> apply_update(AgentRequestUpdate update);
+
+    /// Validate one policy-supplied request update and apply it to live state.
+    /// The coroutine owns `impl`, so its `run_policy` and validator outlive
+    /// every suspension.
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<AgentExecutionSnapshot>> validate_and_apply_update(
+            std::shared_ptr<Impl> impl, AgentRequestUpdate update);
+
+    /// Invoke the pi `finishTurn` policy for one completed turn. A missing
+    /// policy is an empty decision; the caller owns `turn_end` and the
+    /// decision's effect. The coroutine owns `impl`, so its `run_policy`
+    /// outlives every suspension.
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<std::optional<AgentTurnAction>>> invoke_finish_turn(
+            std::shared_ptr<Impl> impl, AgentTurnContext turn);
 
     [[nodiscard]] std::vector<ai::MessageVariant> drain(InputQueueKind queue_kind);
 
     /// The messages produced by this invocation: the live-history slice since
     /// run start. The single authority behind delivered `AgentEndEvent`
-    /// payloads (see `process_event`) and `PrepareNextTurnContext.new_messages`.
+    /// payloads (see `process_event`) and `AgentTurnContext.new_messages`.
     [[nodiscard]] std::vector<ai::MessageVariant> invocation_messages() const {
         return std::vector<ai::MessageVariant>(
                 state.messages.begin() + static_cast<std::ptrdiff_t>(invocation_message_offset), state.messages.end());

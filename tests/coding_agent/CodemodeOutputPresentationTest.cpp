@@ -128,25 +128,32 @@ TEST_CASE("a codemode tool's text and image output render through the fallback a
         "[coding_agent][codemode][issue877][spec]") {
     auto result = run_inline_tool();
 
-    // The stored content: the pi result header, the script's text output, its
-    // image, and the return value appended last. This is the cheap check the
-    // rendered assertions below are not.
+    // The stored content in pi-v1.3.0's layout (#1119): the result header, the
+    // numbered `text()` item, the saved-image label, the image itself, and the
+    // returned value numbered as the second text item. The script runs without
+    // a Session filesystem here, so the label reports the failed save instead
+    // of naming a path. This is the cheap check the rendered assertions below
+    // are not.
     REQUIRE_FALSE(result.is_error);
-    REQUIRE(result.content.size() == 4);
+    REQUIRE(result.content.size() == 5);
     const auto* header = std::get_if<ai::TextContent>(&result.content[0]);
     REQUIRE(header != nullptr);
     CHECK(header->text.starts_with("Script completed\nWall time "));
     CHECK(header->text.ends_with(" seconds\nOutput:\n"));
     const auto* text_block = std::get_if<ai::TextContent>(&result.content[1]);
     REQUIRE(text_block != nullptr);
-    CHECK(text_block->text == "summarize: 3 files");
-    const auto* image_block = std::get_if<ai::ImageContent>(&result.content[2]);
+    CHECK(text_block->text == "==> text 1/2 <==\nsummarize: 3 files");
+    const auto* image_label = std::get_if<ai::TextContent>(&result.content[2]);
+    REQUIRE(image_label != nullptr);
+    CHECK(image_label->text.starts_with("[Image (image/png, "));
+    CHECK(image_label->text.find("could not be saved") != std::string::npos);
+    const auto* image_block = std::get_if<ai::ImageContent>(&result.content[3]);
     REQUIRE(image_block != nullptr);
     CHECK(image_block->mime_type == "image/png");
     CHECK(image_block->data == tests::kTinyPngBase64);
-    const auto* value_text = std::get_if<ai::TextContent>(&result.content[3]);
+    const auto* value_text = std::get_if<ai::TextContent>(&result.content[4]);
     REQUIRE(value_text != nullptr);
-    CHECK(value_text->text == "{\"files\":3}");
+    CHECK(value_text->text == "==> text 2/2 <==\n{\"files\":3}");
 
     const auto rendered = render_tool("codemode", std::move(result));
 

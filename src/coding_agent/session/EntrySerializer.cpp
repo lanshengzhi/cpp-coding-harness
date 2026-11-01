@@ -1235,6 +1235,16 @@ SessionEntry EntrySerializer::new_session_info_entry(std::optional<std::string> 
             SessionInfoEntryValue{.name = std::move(name)});
 }
 
+SessionEntry EntrySerializer::new_custom_entry(
+        std::optional<std::string> parent_id, std::string custom_type, std::optional<support::JsonValue> data) {
+    return make_entry(fresh_entry_base(std::move(parent_id)),
+            SessionEntryKind::Custom,
+            CustomEntryValue{
+                    .custom_type = std::move(custom_type),
+                    .data = std::move(data),
+            });
+}
+
 support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry& entry) const {
     // Round-trip writer: re-emits a parsed entry byte-identically (pi field
     // presence, null-vs-missing, ordering) using the stored id/timestamp so a

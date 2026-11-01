@@ -201,6 +201,18 @@ support::ExpectedVoid SessionStore::append_session_info(std::optional<std::strin
     return {};
 }
 
+support::ExpectedVoid SessionStore::append_custom_entry(
+        std::optional<std::string> parent_id, std::string custom_type, std::optional<support::JsonValue> data) {
+    std::lock_guard lock(impl_->mutex);
+    if (auto& jsonl = impl_->persistence) {
+        return impl_->record_persisted(
+                jsonl->append_custom_entry(std::move(parent_id), std::move(custom_type), std::move(data)));
+    }
+    impl_->record(EntrySerializer::new_custom_entry(
+            impl_->typed_parent(std::move(parent_id)), std::move(custom_type), std::move(data)));
+    return {};
+}
+
 // --- Live tree queries (snapshots taken under the append lock) ---
 
 std::vector<SessionTreeNode> SessionStore::tree() const {

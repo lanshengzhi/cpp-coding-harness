@@ -42,6 +42,7 @@ cch_parity_declare_target(
         src/coding_agent/extensions/codemode/CodemodeCatalog.cpp
         src/coding_agent/extensions/codemode/CodemodeCatalogState.cpp
         src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp
+        src/coding_agent/extensions/codemode/CodemodeExecution.cpp
         src/coding_agent/extensions/codemode/CodemodeTool.cpp
         src/coding_agent/extensions/codemode/CodemodeToolSource.cpp
         src/coding_agent/GitIgnoreMatcher.cpp

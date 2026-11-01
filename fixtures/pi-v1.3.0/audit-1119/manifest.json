@@ -1,0 +1,555 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-01T04:08:04.582Z",
+  "environment": {
+    "node": "v26.3.0",
+    "bun": "1.4.4",
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44"
+  },
+  "ticket": "1119",
+  "family": "audit-1119",
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1119/capture.mts",
+    "sha256": "227c7a83010e081f4c9d28602bf1b163e20761f12704fee570505aa2b8f4b7fc",
+    "command": "PI_CHECKOUT=<pi-v1.3.0 checkout> bun --conditions=source fixtures/pi-v1.3.0/audit-1119/capture.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1119/capture.mts",
+        "sha256": "227c7a83010e081f4c9d28602bf1b163e20761f12704fee570505aa2b8f4b7fc"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "execution.json",
+      "family": "audit-1119",
+      "bytes": 17520,
+      "sha256": "3152c0a7cab336dea7e62475ddeca8d22194d69dfc0375c9bc88dbab2fea1620",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/extensions/codemode/execute.ts:executeCodemode,readCodemodeStore",
+        "packages/coding-agent/src/core/session-manager.ts:SessionManager"
+      ],
+      "scenarios": [
+        {
+          "name": "persist",
+          "inputs": {
+            "code": "await tools.write({path: 'answer.txt', content: '42'}); store('answer', await tools.read({path: 'answer.txt'})); return load('answer');"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script completed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "42"
+                }
+              ],
+              "details": {
+                "calls": [
+                  {
+                    "id": "call_1/1",
+                    "name": "write",
+                    "args": "{\"path\":\"answer.txt\",\"content\":\"42\"}",
+                    "status": "ok",
+                    "durationMs": "<elapsed>"
+                  },
+                  {
+                    "id": "call_1/2",
+                    "name": "read",
+                    "args": "{\"path\":\"answer.txt\"}",
+                    "status": "ok",
+                    "durationMs": "<elapsed>"
+                  }
+                ]
+              }
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "resume-failure",
+          "inputs": {
+            "code": "text(load('answer')); store('answer', 'wrong'); throw 'rollback';"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script failed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "42\nScript error:\nError: rollback\n\nNo tool calls were made."
+                }
+              ],
+              "details": {
+                "calls": []
+              },
+              "isError": true
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "resume-load",
+          "inputs": {
+            "code": "return load('answer');"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script completed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "42"
+                }
+              ],
+              "details": {
+                "calls": []
+              }
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "presentation",
+          "inputs": {
+            "code": "console.log('log'); text('first'); text('second'); return 'last';"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script completed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "==> text 1/3 <==\nfirst\n==> text 2/3 <==\nsecond\n==> text 3/3 <==\nlast\n<console_output>\nlog\n</console_output>"
+                }
+              ],
+              "details": {
+                "calls": []
+              }
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "prior-calls",
+          "inputs": {
+            "code": "await tools.write({path:'before.txt',content:'kept'}); console.log('log'); text('before'); throw 'boom';"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script failed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "before\n<console_output>\nlog\n</console_output>\nScript error:\nError: boom\n\nTool calls made before the failure (they are not undone): write (ok)"
+                }
+              ],
+              "details": {
+                "calls": [
+                  {
+                    "id": "call_1/1",
+                    "name": "write",
+                    "args": "{\"path\":\"before.txt\",\"content\":\"kept\"}",
+                    "status": "ok",
+                    "durationMs": "<elapsed>"
+                  }
+                ]
+              },
+              "isError": true
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "budget",
+          "inputs": {
+            "code": "// @options: {\"max_output_tokens\": 2}\ntext('abcdefghijklmnopqrstuvwxyz');"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script completed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "Warning: truncated output (original token count: 7)\nTotal output lines: 1\n\nabcd…5 tokens truncated…wxyz\n\n[Full output: <output-file> (read with offset/limit)]"
+                }
+              ],
+              "details": {
+                "calls": [],
+                "fullOutputPath": "<output-file>"
+              },
+              "fullText": "abcdefghijklmnopqrstuvwxyz"
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "unicode-budget",
+          "inputs": {
+            "code": "// @options: {\"max_output_tokens\": 1}\ntext('猫'.repeat(12));"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script completed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "Warning: truncated output (original token count: 3)\nTotal output lines: 1\n\n猫猫…2 tokens truncated…猫猫\n\n[Full output: <output-file> (read with offset/limit)]"
+                }
+              ],
+              "details": {
+                "calls": [],
+                "fullOutputPath": "<output-file>"
+              },
+              "fullText": "猫猫猫猫猫猫猫猫猫猫猫猫"
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "zero-error-budget",
+          "inputs": {
+            "code": "// @options: {\"max_output_tokens\": 0}\nthrow 'boom';"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script failed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "Warning: truncated output (original token count: 13)\nTotal output lines: 4\n\n…13 tokens truncated…\n\n[Full output: <output-file> (read with offset/limit)]"
+                }
+              ],
+              "details": {
+                "calls": [],
+                "fullOutputPath": "<output-file>"
+              },
+              "isError": true,
+              "fullText": "Script error:\nError: boom\n\nNo tool calls were made."
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "nested-failure",
+          "inputs": {
+            "code": "await tools.write({path:'before.txt',content:'kept'}); await tools.read({path:'missing.txt'});"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script failed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "Script error:\nError: ENOENT: no such file or directory, access '<workspace>/missing.txt'\n\nTool calls made before the failure (they are not undone): write (ok), read (error)"
+                }
+              ],
+              "details": {
+                "calls": [
+                  {
+                    "id": "call_1/1",
+                    "name": "write",
+                    "args": "{\"path\":\"before.txt\",\"content\":\"kept\"}",
+                    "status": "ok",
+                    "durationMs": "<elapsed>"
+                  },
+                  {
+                    "id": "call_1/2",
+                    "name": "read",
+                    "args": "{\"path\":\"missing.txt\"}",
+                    "status": "error",
+                    "durationMs": "<elapsed>",
+                    "error": "ENOENT: no such file or directory, access '<workspace>/missing.txt'"
+                  }
+                ]
+              },
+              "isError": true
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "nested-failure-fixed",
+          "inputs": {
+            "code": "await tools.write({path:'before.txt',content:'kept'}); await tools.fail({});"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script failed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "Script error:\nError: boom\n\nTool calls made before the failure (they are not undone): write (ok), fail (error)"
+                }
+              ],
+              "details": {
+                "calls": [
+                  {
+                    "id": "call_1/1",
+                    "name": "write",
+                    "args": "{\"path\":\"before.txt\",\"content\":\"kept\"}",
+                    "status": "ok",
+                    "durationMs": "<elapsed>"
+                  },
+                  {
+                    "id": "call_1/2",
+                    "name": "fail",
+                    "args": "{}",
+                    "status": "error",
+                    "durationMs": "<elapsed>",
+                    "error": "boom"
+                  }
+                ]
+              },
+              "isError": true
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "timeout",
+          "inputs": {
+            "code": "// @options: {\"timeout_ms\": 100}\nawait tools.write({path:'before.txt',content:'kept'}); text('before'); await tools.bash({command:'sleep 30'});"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script failed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "before\nScript error:\nScript timed out: Execution timed out after 100 ms\n\nTool calls made before the failure (they are not undone): write (ok), bash (cancelled)"
+                }
+              ],
+              "details": {
+                "calls": [
+                  {
+                    "id": "call_1/1",
+                    "name": "write",
+                    "args": "{\"path\":\"before.txt\",\"content\":\"kept\"}",
+                    "status": "ok",
+                    "durationMs": "<elapsed>"
+                  },
+                  {
+                    "id": "call_1/?",
+                    "name": "bash",
+                    "args": "{\"command\":\"sleep 30\"}",
+                    "status": "cancelled"
+                  }
+                ]
+              },
+              "isError": true
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "missing-discovery",
+          "inputs": {
+            "code": "return [typeof await describeTool('missing'), typeof await describeNamespace('missing')];"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script completed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "[\"undefined\",\"undefined\"]"
+                }
+              ],
+              "details": {
+                "calls": []
+              }
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "image",
+          "inputs": {
+            "code": "image('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script completed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "[Image saved to <output-file> (image/png, 68B)]"
+                },
+                {
+                  "type": "image",
+                  "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+                  "mimeType": "image/png"
+                }
+              ],
+              "details": {
+                "calls": []
+              }
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "delete",
+          "inputs": {
+            "code": "store('answer', undefined); return load('answer');"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script completed\nWall time <elapsed> seconds\nOutput:\n"
+                }
+              ],
+              "details": {
+                "calls": []
+              }
+            },
+            "store": {}
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        }
+      ]
+    }
+  ]
+}

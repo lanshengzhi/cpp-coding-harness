@@ -2,9 +2,12 @@
 
 #include <cch/ai/Message.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
+#include <cstddef>
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -52,6 +55,12 @@ public:
     [[nodiscard]] support::ExpectedVoid submit_message_append(
         ai::MessageVariant message);
 
+    /// Admit one Custom entry append (pi `appendCustomEntry`). The codemode
+    /// store persists its write sets through this channel so the entry lands on
+    /// the same ordered commitment line as the transcript, ahead of the tool
+    /// result that reports the run.
+    [[nodiscard]] support::ExpectedVoid submit_custom_entry_append(std::string custom_type, support::JsonValue data);
+
     /// Await until every admitted append settled (the chain is idle). The
     /// recorded first failure is observed separately through failure().
     [[nodiscard]] boost::asio::awaitable<void> drain();
@@ -62,6 +71,12 @@ public:
 private:
     struct State;
     struct PendingOp;
+
+    /// Admit one typed append: charge the reservation, reject on the latched
+    /// failure or saturation, then run the append on the shared worker line in
+    /// FIFO admission order.
+    [[nodiscard]] support::ExpectedVoid submit_append(std::size_t byte_charge,
+            std::move_only_function<support::ExpectedVoid(harness::session::SessionStore&)> append);
 
     /// Post one pending operation to a Runtime worker (requires the state
     /// lock). The admission always completes exactly once.

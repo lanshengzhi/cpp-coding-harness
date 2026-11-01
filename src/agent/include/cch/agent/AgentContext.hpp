@@ -80,7 +80,11 @@ struct AgentInputQueues {
     AgentInputQueue follow_up;
 };
 
-struct PrepareNextTurnContext {
+/// Completed-turn facts passed to the loop policies that decide or prepare the
+/// next request (pi `AgentTurnContext`): the assistant message that completed
+/// the turn, its tool-result messages, the run context after both were
+/// appended, and the messages this invocation produced so far.
+struct AgentTurnContext {
     ai::AssistantMessage assistant_message;
     std::vector<ai::ToolResultMessage> tool_results;
     ai::AiContext context;
@@ -94,24 +98,53 @@ struct AgentLoopContextReplacement {
     std::vector<ai::MessageVariant> messages;
 };
 
-struct AgentLoopTurnUpdate {
+/// Replacement runtime state immediately before one provider request (pi
+/// `AgentRequestUpdate`): the request context and the model/thinking level for
+/// this and later requests in the run. A request policy cannot append
+/// messages; `AgentLoopTurnUpdate::messages` is the between-turn capability.
+struct AgentRequestUpdate {
     std::optional<AgentLoopContextReplacement> context{std::nullopt};
     std::optional<ai::Model> model{std::nullopt};
     std::optional<std::string> thinking_level{std::nullopt};
 };
 
-using PrepareNextTurnHook = std::move_only_function<
-    support::AsyncResult<std::optional<AgentLoopTurnUpdate>>(
-        PrepareNextTurnContext)>;
+/// Replacement runtime state before the next turn (pi `AgentLoopTurnUpdate`):
+/// the request fields plus messages to append before the next provider
+/// request, each emitted through the ordinary message lifecycle.
+struct AgentLoopTurnUpdate {
+    std::optional<AgentLoopContextReplacement> context{std::nullopt};
+    std::optional<ai::Model> model{std::nullopt};
+    std::optional<std::string> thinking_level{std::nullopt};
+    std::vector<ai::MessageVariant> messages{};
+};
 
-using ShouldStopAfterTurnHook = std::move_only_function<
-    support::AsyncResult<bool>(PrepareNextTurnContext)>;
+using PrepareNextTurnHook =
+        std::move_only_function<support::AsyncResult<std::optional<AgentLoopTurnUpdate>>(AgentTurnContext)>;
+
+/// One completed turn's disposition (pi `AgentTurnDecision`). `Continue`
+/// guarantees one further provider request; a natural tool-result, steering or
+/// follow-up request satisfies it without an extra one. `End` stops the run
+/// without polling either input queue or preparing another turn.
+enum class AgentTurnAction { Continue, End };
+
+using FinishTurnHook = std::move_only_function<support::AsyncResult<std::optional<AgentTurnAction>>(AgentTurnContext)>;
+
+/// Runtime state available immediately before one conversational provider
+/// request (pi `PrepareRequestContext`). Pending messages have already been
+/// appended and emitted when this value is built.
+struct PrepareRequestContext {
+    ai::AiContext context{};
+    ai::Model model{};
+    std::string thinking_level{};
+};
+
+using PrepareRequestHook =
+        std::move_only_function<support::AsyncResult<std::optional<AgentRequestUpdate>>(PrepareRequestContext)>;
 
 // Validates high-privilege turn updates before they are applied. Model changes
 // require this hook until a provider/model registry validator is wired directly
-// into the agent loop.
-using ValidateTurnUpdateHook = std::move_only_function<
-    support::AsyncResult<void>(AgentLoopTurnUpdate)>;
+// into the agent loop. Appended messages are not part of validation.
+using ValidateTurnUpdateHook = std::move_only_function<support::AsyncResult<void>(AgentRequestUpdate)>;
 
 struct SequentialToolExecution {};
 
@@ -131,7 +164,7 @@ using ToolExecutionPolicy = std::variant<
 struct AsyncAgentOptions {
     /// Maximum model turns for one run. std::nullopt (the default) imposes no
     /// turn cap: a run stops through pi-aligned terminal conditions, the
-    /// stop-after-turn policy, termination decisions, or cancellation
+    /// finish-turn policy, termination decisions, or cancellation
     /// (ADR 0015). An explicitly set cap ends the run with a validation error
     /// once the budget is exhausted; exhaustion is never reported as a
     /// provider error.
@@ -190,8 +223,25 @@ struct AsyncAgentOptions {
     std::optional<AfterToolCallHook> after_tool_call;
     std::optional<TransformContextHook> transform_context;
     std::optional<ConvertToLlmHook> convert_to_llm;
+    /// pi `prepareRequest`: runs after the pending messages have been appended
+    /// and emitted, immediately before every provider request including the
+    /// first. The returned context, model and thinking level replace the
+    /// runtime values for this and later requests in the run. The hook does
+    /// not poll either input queue.
+    std::optional<PrepareRequestHook> prepare_request;
+    /// pi `prepareNextTurn`: runs after `turn_end` when the loop will continue,
+    /// immediately before the next turn starts. The returned context, model
+    /// and thinking level replace the runtime values for that turn, and
+    /// `messages` are appended with the ordinary lifecycle before the next
+    /// provider request.
     std::optional<PrepareNextTurnHook> prepare_next_turn;
-    std::optional<ShouldStopAfterTurnHook> should_stop_after_turn;
+    /// pi `finishTurn`: runs after the completed assistant turn and all of its
+    /// tool-result messages, immediately before `turn_end`. `End` ends the run
+    /// without polling either queue or preparing another turn; `Continue`
+    /// guarantees one next provider request, which a natural tool-result,
+    /// steering or follow-up request satisfies without an extra one. An error
+    /// or aborted assistant remains a hard exit whose decision is ignored.
+    std::optional<FinishTurnHook> finish_turn;
     std::optional<ValidateTurnUpdateHook> validate_turn_update;
     /// Tool scheduling policy for each assistant tool-call batch. Defaults to
     /// bounded parallel with no explicit cap (pi's parallel default): calls in

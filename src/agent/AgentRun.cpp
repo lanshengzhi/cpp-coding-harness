@@ -161,10 +161,7 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
         co_return std::unexpected(continuation_from_assistant_error());
     }
 
-    ai::Model model;
-    std::string thinking_level;
-    ai::AiContext context;
-    bool context_replaced = false;
+    TurnRequestState request_state;
 
     auto emit = std::make_shared<AgentEventSink>([impl, commitment_state](const AgentLifecycleEvent& event) {
         return impl->process_event(event, commitment_state->commitment, commitment_state->failure);
@@ -189,12 +186,12 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
             ++turn) {
         CCH_TRY_VOID(emit_agent_event(*emit, TurnStartEvent{}));
         auto turn_snapshot = impl->snapshot();
-        model = turn_snapshot.model;
-        thinking_level = turn_snapshot.thinking_level;
-        if (!context_replaced || turn == 1) {
-            context = context_from_snapshot(std::move(turn_snapshot));
+        request_state.model = turn_snapshot.model;
+        request_state.thinking_level = turn_snapshot.thinking_level;
+        if (!request_state.context_replaced || turn == 1) {
+            request_state.context = context_from_snapshot(std::move(turn_snapshot));
         } else {
-            context.tools = std::move(turn_snapshot.tools);
+            request_state.context.tools = std::move(turn_snapshot.tools);
         }
 
         if (turn == 1) {
@@ -222,13 +219,42 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
         // the transcript's declared tool state and the run's executable set
         // becomes a system message, so what the model may call and what it is
         // told it may call cannot drift apart.
-        pending_messages = declare_tool_changes(context.messages, std::move(pending_messages), context.tools);
+        pending_messages = declare_tool_changes(
+                request_state.context.messages, std::move(pending_messages), request_state.context.tools);
 
         if (!pending_messages.empty()) {
             for (auto& message : pending_messages) {
-                CCH_TRY_VOID(append_message_with_lifecycle(context, *emit, std::move(message)));
+                CCH_TRY_VOID(append_message_with_lifecycle(request_state.context, *emit, std::move(message)));
             }
             pending_messages.clear();
+        }
+
+        // pi `prepareRequest`: the request policy runs after the pending
+        // messages have been appended and emitted, immediately before the
+        // provider request, and may replace the request context and the
+        // model/thinking level for this and later requests in the run. It does
+        // not poll either input queue.
+        if (policy.prepare_request) {
+            auto update = co_await invoke_agent_hook("prepareRequest",
+                    *policy.prepare_request,
+                    PrepareRequestContext{
+                            .context = request_state.context,
+                            .model = request_state.model,
+                            .thinking_level = request_state.thinking_level,
+                    });
+            if (!update) {
+                CCH_TRY_VOID(emit_agent_end());
+                co_return std::unexpected(update.error());
+            }
+            if (*update) {
+                const bool replaced_context = (**update).context.has_value();
+                auto applied = co_await Impl::validate_and_apply_update(impl, std::move(**update));
+                if (!applied) {
+                    CCH_TRY_VOID(emit_agent_end());
+                    co_return std::unexpected(applied.error());
+                }
+                request_state = adopt_turn_update(std::move(request_state), std::move(*applied), replaced_context);
+            }
         }
 
         ai::SimpleStreamOptions stream_options;
@@ -247,14 +273,14 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
         if (!policy.session_id.empty()) {
             stream_options.session_id = policy.session_id;
         }
-        stream_options.reasoning = ai::parse_stream_thinking_level(thinking_level);
+        stream_options.reasoning = ai::parse_stream_thinking_level(request_state.thinking_level);
         stream_options.cache_retention = policy.cache_retention;
         stream_options.timeout_ms = policy.timeout_ms;
         stream_options.max_retries = policy.max_retries;
         stream_options.max_retry_delay_ms = policy.max_retry_delay_ms;
         stream_options.headers = policy.headers;
 
-        ai::AiContext request_context = context;
+        ai::AiContext request_context = request_state.context;
         {
             bool transform_cancelled = false;
             if (policy.transform_context) {
@@ -269,7 +295,7 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
                     // through the hook error value. Keep cancellation on the
                     // ordinary provider path so it can produce the one
                     // authoritative aborted Assistant Message.
-                    request_context = context;
+                    request_context = request_state.context;
                     transform_cancelled = true;
                 } else {
                     request_context.messages = std::move(*transformed);
@@ -300,7 +326,7 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
         if (stop_token.stop_requested()) {
             cancellation_completion_attempted = true;
         }
-        auto stream = policy.stream_factory(model, std::move(request_context), std::move(stream_options));
+        auto stream = policy.stream_factory(request_state.model, std::move(request_context), std::move(stream_options));
         auto assistant = co_await support::detail::await_async_result(std::move(stream).run(
                 [emit, stream_event_state](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
                     return std::visit(
@@ -340,22 +366,36 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
             co_return std::unexpected(assistant.error());
         }
 
-        context.messages.push_back(ai::MessageVariant{*assistant});
+        request_state.context.messages.push_back(ai::MessageVariant{*assistant});
         if (!stream_event_state->assistant_start_emitted) {
             // A conforming host provider may reach its terminal event before
             // any assistant start event. Synthesize the missing start from the
             // authoritative final message so consumers observe exactly one
             // complete assistant lifecycle.
-            CCH_TRY_VOID(emit_agent_event(*emit, MessageStartEvent{context.messages.back()}));
+            CCH_TRY_VOID(emit_agent_event(*emit, MessageStartEvent{request_state.context.messages.back()}));
         }
         CCH_TRY_VOID(emit_agent_event(*emit,
                 MessageEndEvent{
-                        .message = context.messages.back(),
+                        .message = request_state.context.messages.back(),
                         .inference_failure = stream_event_state->inference_failure,
                 }));
 
         if (assistant->stop_reason == ai::AssistantStopReason::Error ||
                 assistant->stop_reason == ai::AssistantStopReason::Aborted) {
+            // pi calls `finishTurn` for an error or aborted assistant before
+            // `turn_end`; the decision cannot extend a hard exit, so it is
+            // observed and discarded.
+            auto decision = co_await Impl::invoke_finish_turn(impl,
+                    AgentTurnContext{
+                            .assistant_message = *assistant,
+                            .tool_results = {},
+                            .context = request_state.context,
+                            .new_messages = impl->invocation_messages(),
+                    });
+            if (!decision) {
+                CCH_TRY_VOID(emit_agent_end());
+                co_return std::unexpected(decision.error());
+            }
             CCH_TRY_VOID(emit_agent_event(*emit,
                     TurnEndEvent{
                             .message = ai::MessageVariant{*assistant},
@@ -408,7 +448,7 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
             executor_options.execution = policy.tool_execution;
             ToolCallExecutor executor{policy.registry, std::move(executor_options)};
 
-            auto execution = co_await executor.execute(ToolCallBatchRequest{*assistant, context}, *emit);
+            auto execution = co_await executor.execute(ToolCallBatchRequest{*assistant, request_state.context}, *emit);
             if (!execution) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(execution.error());
@@ -420,9 +460,27 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
 
         if (!tool_results.empty()) {
             for (const auto& result : tool_results) {
-                context.messages.push_back(ai::MessageVariant{result});
+                request_state.context.messages.push_back(ai::MessageVariant{result});
             }
         }
+
+        AgentTurnContext turn_context{
+                .assistant_message = *assistant,
+                .tool_results = tool_results,
+                .context = request_state.context,
+                .new_messages = impl->invocation_messages(),
+        };
+
+        // pi `finishTurn`: after the turn's assistant and tool-result messages
+        // and before `turn_end`. `End` stops the run without polling either
+        // queue or preparing another turn; `Continue` guarantees one next
+        // provider request. An error or aborted assistant never reaches here.
+        auto decision = co_await Impl::invoke_finish_turn(impl, turn_context);
+        if (!decision) {
+            CCH_TRY_VOID(emit_agent_end());
+            co_return std::unexpected(decision.error());
+        }
+        const std::optional<AgentTurnAction> finish_action = *decision;
 
         CCH_TRY_VOID(emit_agent_event(*emit,
                 TurnEndEvent{
@@ -430,27 +488,11 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
                         .tool_results = tool_results,
                 }));
 
-        PrepareNextTurnContext next_turn_context;
-        next_turn_context.assistant_message = *assistant;
-        next_turn_context.tool_results = tool_results;
-        next_turn_context.context = context;
-        next_turn_context.new_messages = impl->invocation_messages();
-
-        // pi runs `shouldStopAfterTurn` immediately after the turn, before
-        // prepare-next-turn and the queue drains, so the hook observes the
-        // turn's pre-prepare context (#745, ADR 0014).
-        if (!stop_token.stop_requested() && policy.should_stop_after_turn) {
-            auto should_stop = co_await invoke_agent_hook(
-                    "shouldStopAfterTurn", *policy.should_stop_after_turn, next_turn_context);
-            if (!should_stop) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return std::unexpected(should_stop.error());
-            }
-            if (*should_stop) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return support::ExpectedVoid{};
-            }
+        if (finish_action == AgentTurnAction::End) {
+            CCH_TRY_VOID(emit_agent_end());
+            co_return support::ExpectedVoid{};
         }
+        const bool explicit_continuation = finish_action == AgentTurnAction::Continue;
 
         if (!stop_token.stop_requested()) {
             pending_messages = impl->drain(InputQueueKind::Steering);
@@ -461,63 +503,58 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
             pending_messages = impl->drain(InputQueueKind::FollowUp);
         }
 
-        if (!has_more_tool_calls && pending_messages.empty()) {
+        if (!has_more_tool_calls && pending_messages.empty() && !explicit_continuation) {
             CCH_TRY_VOID(emit_agent_end());
             co_return support::ExpectedVoid{};
         }
 
+        std::vector<ai::MessageVariant> prepared_messages;
         // pi invokes `prepareNextTurn` only at the top of a continuing
         // inner-loop iteration: the run's final turn never invokes it, and a
         // final threshold crossing is handled by the host's post-run dispatch
         // instead (#745). The hook's update must land before the next stream
         // call, so it runs here, after the continuation decision.
         if (!stop_token.stop_requested() && policy.prepare_next_turn) {
-            auto update = co_await invoke_agent_hook("prepareNextTurn", *policy.prepare_next_turn, next_turn_context);
+            auto update = co_await invoke_agent_hook("prepareNextTurn", *policy.prepare_next_turn, turn_context);
             if (!update) {
                 CCH_TRY_VOID(emit_agent_end());
                 co_return std::unexpected(update.error());
             }
             if (*update) {
-                if ((**update).model && !policy.validate_turn_update) {
-                    auto error = support::make_error(
-                            support::ErrorCode::Validation, "model update requires validation", (**update).model->id);
-                    CCH_TRY_VOID(emit_agent_end());
-                    co_return std::unexpected(error);
-                }
-                if (policy.validate_turn_update) {
-                    auto validated =
-                            co_await invoke_agent_hook("validateTurnUpdate", *policy.validate_turn_update, **update);
-                    if (!validated) {
-                        CCH_TRY_VOID(emit_agent_end());
-                        co_return std::unexpected(validated.error());
-                    }
-                }
-                const bool replaced_context = (**update).context.has_value();
-                auto applied = impl->apply_update(std::move(**update));
+                // pi `AgentLoopTurnUpdate`: appended messages ride with the
+                // request update but are emitted by the next turn, so they are
+                // split off before validation and application.
+                prepared_messages = std::move((**update).messages);
+                AgentRequestUpdate request_update{
+                        .context = std::move((**update).context),
+                        .model = std::move((**update).model),
+                        .thinking_level = std::move((**update).thinking_level),
+                };
+                const bool replaced_context = request_update.context.has_value();
+                auto applied = co_await Impl::validate_and_apply_update(impl, std::move(request_update));
                 if (!applied) {
                     CCH_TRY_VOID(emit_agent_end());
                     co_return std::unexpected(applied.error());
                 }
-                model = applied->model;
-                thinking_level = applied->thinking_level;
-                if (replaced_context) {
-                    context_replaced = true;
-                    context = context_from_snapshot(std::move(*applied));
-                } else {
-                    if (!context_replaced) {
-                        context.system_prompt = std::move(applied->system_prompt);
-                    }
-                    context.tools = std::move(applied->tools);
-                }
+                request_state = adopt_turn_update(std::move(request_state), std::move(*applied), replaced_context);
             }
         }
 
         // Preparation can be long-running (for example, compaction). Pick up
         // steering queued while it ran. Only poll again if the earlier poll
         // returned nothing; otherwise one-at-a-time mode would deliver two
-        // messages before one assistant response (pi agent-loop).
+        // messages before one assistant response (pi agent-loop). Prepared
+        // messages do not satisfy that poll: pi appends them after it.
         if (!stop_token.stop_requested() && pending_messages.empty()) {
             pending_messages = impl->drain(InputQueueKind::Steering);
+        }
+
+        // pi `declareToolChanges(currentContext, [...preparedMessages, ...pendingMessages])`:
+        // the hook's appended messages precede anything queued while it ran.
+        if (!prepared_messages.empty()) {
+            pending_messages.insert(pending_messages.begin(),
+                    std::make_move_iterator(prepared_messages.begin()),
+                    std::make_move_iterator(prepared_messages.end()));
         }
     }
 

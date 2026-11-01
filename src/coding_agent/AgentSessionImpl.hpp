@@ -261,7 +261,7 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// Skips silently for in-memory sessions, the placeholder model, unknown
     /// context windows, and disabled settings.
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<agent::AgentLoopTurnUpdate>>>
-    compact_before_next_assistant_response(agent::PrepareNextTurnContext turn);
+    compact_before_next_assistant_response(agent::AgentTurnContext turn);
 
     // ── State accessors & Projection Stream (ADR 0052) ───────────────────
 

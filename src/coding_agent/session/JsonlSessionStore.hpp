@@ -78,7 +78,7 @@ public:
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_thinking_level_change(
             std::optional<std::string> parent_id, std::string thinking_level);
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_custom_entry(
-            std::optional<std::string> parent_id, std::string custom_type, support::JsonValue data);
+            std::optional<std::string> parent_id, std::string custom_type, std::optional<support::JsonValue> data);
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_custom_message_entry(
             std::optional<std::string> parent_id,
             std::string custom_type,

@@ -94,6 +94,7 @@ include_guard(GLOBAL)
         tests/coding_agent/CodemodeCatalogTest.cpp
         tests/coding_agent/CodemodeCatalogSessionTest.cpp
         tests/coding_agent/CodemodeRoutingTest.cpp
+        tests/coding_agent/CodemodeExecutionTest.cpp
         tests/coding_agent/CodemodeSandboxTest.cpp
         tests/coding_agent/CodemodeOutputPresentationTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp

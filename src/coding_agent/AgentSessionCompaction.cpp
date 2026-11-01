@@ -381,7 +381,7 @@ boost::asio::awaitable<AgentSession::Impl::AutoCompactionOutcome> AgentSession::
 }
 
 boost::asio::awaitable<support::Expected<std::optional<agent::AgentLoopTurnUpdate>>>
-AgentSession::Impl::compact_before_next_assistant_response(agent::PrepareNextTurnContext turn) {
+AgentSession::Impl::compact_before_next_assistant_response(agent::AgentTurnContext turn) {
     if (!agent_ || !session_.store || !session_.store->path()) {
         // In-memory sessions have no tree/entry surface: the between-turn
         // trigger is skipped silently, like the other automatic triggers.
