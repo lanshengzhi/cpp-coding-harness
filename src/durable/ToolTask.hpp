@@ -31,6 +31,14 @@ struct NestedCallDiagnostic {
 /// script sees; `content` replaces the frozen `structuredOutput`.
 struct NestedCallResult {
     bool is_error{false};
+    /// The value programs see (frozen pi `NestedToolExecutionResult.structuredOutput`).
+    /// A schema-less tool stores its output: one text item as a string, one
+    /// image as an image block, nothing as `""`, and anything else as the
+    /// content list. A tool with a schema stores its validated value.
+    std::optional<support::JsonValue> structured_output{std::nullopt};
+    /// The same output decoded as model content blocks, for hooks and the
+    /// caller's transcript path. Reconstructed from `structured_output` when a
+    /// frozen pi runtime wrote the result.
     std::vector<ai::Content> content{};
     std::optional<support::JsonValue> details{std::nullopt};
     std::optional<std::int64_t> duration_ms{std::nullopt};

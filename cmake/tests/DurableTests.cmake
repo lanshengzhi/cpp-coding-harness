@@ -33,6 +33,7 @@ include_guard(GLOBAL)
         tests/durable/HarnessObservationTest.cpp
         tests/durable/HarnessImagesTest.cpp
         tests/durable/HarnessCodemodeTest.cpp
+        tests/durable/CodemodeContinuationTest.cpp
         tests/durable/NestedToolTaskTest.cpp
         tests/durable/HarnessToolSearchTest.cpp
         tests/durable/ImagesTest.cpp
@@ -53,8 +54,9 @@ include_guard(GLOBAL)
     # discovery spec; it runs only when a spec names its tag explicitly.
     # Bound the whole live continuation process, including Harness operations whose
     # completion or cleanup cannot be interrupted by a waiter's stop token.
-    catch_discover_tests(cch_tests_durable TEST_SPEC "~[issue1086live]~[issue1084]~[issue1094]" ADD_TAGS_AS_LABELS)
+    catch_discover_tests(cch_tests_durable TEST_SPEC "~[issue1086live]~[issue1084]~[issue1094]~[issue1171live]" ADD_TAGS_AS_LABELS)
     catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1094]" PROPERTIES TIMEOUT 30 ADD_TAGS_AS_LABELS)
     catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1084]" PROPERTIES TIMEOUT 90 ADD_TAGS_AS_LABELS)
     catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1086live]" PROPERTIES TIMEOUT 90 ADD_TAGS_AS_LABELS)
+    catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1171live]" PROPERTIES TIMEOUT 90 ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_durable ${CCH_PARITY_BUILD_GATE_TARGET})

@@ -548,9 +548,8 @@ struct SqliteStorage::Impl {
                                                          : std::nullopt;
                     const auto* kind = object->contains("kind") ? object->at("kind").as_string() : nullptr;
                     const auto* data = object->contains("data") ? &object->at("data") : nullptr;
-                    if (!id || !conversation_id || kind == nullptr || data == nullptr ||
-                            *id != sqlite3_column_int64(row, 0) || *conversation_id != sqlite3_column_int64(row, 1) ||
-                            sqlite3_column_int64(row, 3) < 1) {
+                    if (!id || !conversation_id || kind == nullptr || *id != sqlite3_column_int64(row, 0) ||
+                            *conversation_id != sqlite3_column_int64(row, 1) || sqlite3_column_int64(row, 3) < 1) {
                         return std::unexpected(corrupt("Invalid persisted entry"));
                     }
                     std::optional<EntryId> head;
@@ -589,11 +588,27 @@ struct SqliteStorage::Impl {
                                     .target = EntryId{*target}, .action = *action, .messages = *raw_messages});
                         }
                     }
+                    // Frozen pi stores the entry payload flattened beside `model`;
+                    // this runtime's own record keeps the whole payload under
+                    // `data`. Recognize both so either can continue the other.
+                    chord::Json payload;
+                    const bool has_model = object->contains("model");
+                    const bool data_is_payload =
+                            data != nullptr &&
+                            (!has_model || (data->as_object() != nullptr && data->as_object()->contains("model")));
+                    if (data_is_payload) {
+                        payload = *data;
+                    } else {
+                        chord::Json::Object fields;
+                        if (data != nullptr) fields.emplace("data", *data);
+                        if (has_model) fields.emplace("model", object->at("model"));
+                        payload = chord::Json{std::move(fields)};
+                    }
                     const std::array write{StorageWrite{.type = "entry",
                             .entry = EntryRecord{.id = EntryId{*id},
                                     .conversation_id = ConversationId{*conversation_id},
                                     .kind = *kind,
-                                    .data = *data,
+                                    .data = std::move(payload),
                                     .head = head,
                                     .model = std::move(model),
                                     .edits = std::move(edits),
@@ -618,7 +633,7 @@ struct SqliteStorage::Impl {
 
         loaded = load_rows(
                 std::format("SELECT id,kind,created_at,retired_at,owner_id,record,scope_kind,family,key_value FROM "
-                            "{} ORDER BY created_at,id",
+                            "{} WHERE retired_at IS NULL ORDER BY created_at,id",
                         documents),
                 [this, &revisions, &restore_record_id, &sqlite_integer, &json_int](
                         sqlite3_stmt* row) -> support::ExpectedVoid {
@@ -874,8 +889,8 @@ struct SqliteStorage::Impl {
                         "(r.record_type='submission' AND (s.id IS NULL OR c.id IS NOT NULL OR e.id IS NOT NULL OR "
                         "d.id IS NOT NULL)))+"
                         "(SELECT count(*) FROM {} r LEFT JOIN {} d ON d.id=r.document_id WHERE d.id IS NULL)+"
-                        "(SELECT count(*) FROM {} d WHERE NOT EXISTS (SELECT 1 FROM {} r WHERE r.document_id=d.id AND "
-                        "r.kind='base'))",
+                        "(SELECT count(*) FROM {} d WHERE d.retired_at IS NULL AND NOT EXISTS "
+                        "(SELECT 1 FROM {} r WHERE r.document_id=d.id AND r.kind='base'))",
                         conversations,
                         record_ids,
                         entries,

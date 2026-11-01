@@ -3,6 +3,7 @@
 #include "durable/AwaitResult.hpp"
 #include "durable/JsonFields.hpp"
 #include "durable/ToolContent.hpp"
+#include "durable/ToolContent.hpp"
 #include "support/Json.hpp"
 
 #include <cch/durable/Records.hpp>
@@ -85,6 +86,93 @@ support::Expected<NestedCall> parse_call(const Json& input) {
     return parsed;
 }
 
+/// One `pi.tool` task input: a model-issued call read from its assistant entry,
+/// or a nested call whose arguments the input itself carries (frozen pi
+/// `ToolTaskInput`).
+struct ParsedInput {
+    bool nested{false};
+    NestedCall nested_call{};
+    std::int64_t assistant{0};
+    std::string call_id{};
+};
+
+support::Expected<ParsedInput> parse_input(const Json& input) {
+    const Json* kind = member(input, "kind");
+    if (kind == nullptr || kind->as_string() == nullptr)
+        return std::unexpected(validation("A tool task needs a complete input"));
+    if (*kind->as_string() == "nested") {
+        auto nested = parse_call(input);
+        if (!nested) return std::unexpected(nested.error());
+        ParsedInput parsed{.nested = true, .nested_call = std::move(*nested)};
+        return parsed;
+    }
+    if (*kind->as_string() != "model") return std::unexpected(validation("A tool task input kind is unknown"));
+    const Json* assistant = member(input, "assistant");
+    const Json* call_id = member(input, "callId");
+    if (assistant == nullptr || call_id == nullptr || call_id->as_string() == nullptr)
+        return std::unexpected(validation("A model tool task needs an assistant entry and call ID"));
+    auto entry = as_integer(*assistant);
+    if (!entry) return std::unexpected(validation("A model tool task needs an assistant entry ID"));
+    ParsedInput parsed{.nested = false, .assistant = *entry, .call_id = *call_id->as_string()};
+    return parsed;
+}
+
+std::int64_t now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
+}
+
+const support::JsonValue* support_field(const support::JsonValue& value, std::string_view key) {
+    const auto* object = value.get_if<support::JsonValue::object_t>();
+    if (object == nullptr) return nullptr;
+    const auto found = object->find(std::string{key});
+    return found == object->end() ? nullptr : &found->second;
+}
+
+/// The model-issued call from its committed assistant entry (frozen pi
+/// `ToolTask.readCall` for a `model` input).
+support::Expected<ai::ToolCallContent> read_model_call(Session& session, const ParsedInput& input) {
+    support::JsonValue data;
+    auto loaded =
+            await_result(session.commit([&data, assistant = input.assistant](Transaction& tx) -> support::ExpectedVoid {
+                auto entry = tx.entry(EntryId{.value = assistant});
+                if (!entry) return std::unexpected(entry.error());
+                if (!entry->has_value())
+                    return std::unexpected(validation("A tool task names a missing assistant entry"));
+                data = (*entry)->data.to_support();
+                return {};
+            }));
+    if (!loaded) return std::unexpected(loaded.error());
+    const auto* model = support_field(data, "model");
+    if (model == nullptr || !model->holds<support::JsonValue::array_t>() || model->get_array().empty())
+        return std::unexpected(validation("A tool task names an assistant entry without a message"));
+    const auto& message = model->get_array().front();
+    const auto* content = support_field(message, "content");
+    if (content == nullptr || !content->holds<support::JsonValue::array_t>())
+        return std::unexpected(validation("An assistant entry has no content"));
+    for (const auto& block : content->get_array()) {
+        const auto* type = support_field(block, "type");
+        const auto* id = support_field(block, "id");
+        if (type == nullptr || !type->holds<std::string>() || type->get_string() != "toolCall" || id == nullptr ||
+                !id->holds<std::string>() || id->get_string() != input.call_id)
+            continue;
+        const auto* name = support_field(block, "name");
+        if (name == nullptr || !name->holds<std::string>())
+            return std::unexpected(validation("A tool call block has no name"));
+        ai::ToolCallContent call{.id = input.call_id, .name = name->get_string()};
+        if (const auto* arguments = support_field(block, "arguments");
+                arguments != nullptr && arguments->holds<support::JsonValue::object_t>())
+            call.arguments = *arguments;
+        else if (arguments != nullptr && !arguments->holds<std::nullptr_t>())
+            call.arguments_valid = false;
+        if (const auto* signature = support_field(block, "thoughtSignature");
+                signature != nullptr && signature->holds<std::string>())
+            call.thought_signature = signature->get_string();
+        return call;
+    }
+    return std::unexpected(validation("An assistant entry has no such tool call"));
+}
+
 /// The call's arguments as a JSON object; a call without arguments passes none.
 Json arguments_of(const ai::ToolCallContent& call) {
     return call.arguments ? *Json::from_support(*call.arguments) : Json{Object{}};
@@ -100,16 +188,30 @@ Json diagnostic_json(const NestedCallDiagnostic& diagnostic) {
     return Json{Object{{"severity", "error"}, {"code", diagnostic.code}, {"message", diagnostic.message}}};
 }
 
+/// What programs get of a tool's output when it declares no schema (frozen
+/// pi `outputValue`): one text item as its string, one image as itself,
+/// nothing as `""`, and anything else as the content list.
+Json output_value(const std::vector<ai::Content>& content) {
+    if (content.empty()) return Json{std::string{}};
+    if (content.size() > 1) return content_json(content);
+    const auto& only = content.front();
+    if (const auto* text = std::get_if<ai::TextContent>(&only)) return Json{text->text};
+    return content_block_json(only);
+}
+
 /// The stored result of one nested call (frozen pi `NestedToolExecutionResult`).
-Json result_json(const std::vector<ai::Content>& content,
+/// `taskId` and `structuredOutput` are the frozen members a pi run reads when it
+/// continues this call; the harness keeps no separate `content` member.
+Json result_json(std::int64_t task_id,
+        const std::vector<ai::Content>& content,
         bool is_error,
         const std::optional<support::JsonValue>& details,
         std::optional<std::int64_t> duration_ms,
         const std::vector<NestedCallDiagnostic>& diagnostics) {
-    Object value{{"isError", is_error}, {"content", content_json(content)}};
+    Object value{{"taskId", numeric(task_id)}, {"structuredOutput", output_value(content)}, {"isError", is_error}};
     if (details) value.emplace("details", *Json::from_support(*details));
     if (duration_ms) value.emplace("durationMs", numeric(*duration_ms));
-    if (!diagnostics.empty()) {
+    {
         Array listed;
         for (const auto& diagnostic : diagnostics)
             listed.push_back(diagnostic_json(diagnostic));
@@ -144,21 +246,68 @@ support::ExpectedVoid settle(TaskRuntime& runtime, const NestedCall& call, Json 
             }));
 }
 
+/// One model-issued tool result entry's message (frozen pi `appendToolResult`).
+Json tool_result_json(const ai::ToolCallContent& call, const ai::ToolResultMessage& message) {
+    Object value{{"role", "toolResult"},
+            {"toolCallId", call.id},
+            {"toolName", call.name},
+            {"content", content_json(message.content)},
+            {"isError", message.is_error},
+            {"timestamp", numeric(now_ms())}};
+    if (message.details) value.emplace("details", *Json::from_support(*message.details));
+    if (message.duration_ms) value.emplace("durationMs", numeric(*message.duration_ms));
+    return Json{std::move(value)};
+}
+
+Json diagnostic_list(const std::vector<NestedCallDiagnostic>& diagnostics) {
+    Array listed;
+    for (const auto& diagnostic : diagnostics)
+        listed.push_back(diagnostic_json(diagnostic));
+    return Json{std::move(listed)};
+}
+
+/// Settle a model-issued call: append its `pi.tool-result` entry and end with
+/// the frozen `{kind: "model", entryId}` receipt (frozen pi `ToolTask.settle`).
+support::ExpectedVoid settle_model(TaskRuntime& runtime,
+        const ai::ToolCallContent& call,
+        ai::ToolResultMessage message,
+        std::vector<NestedCallDiagnostic> diagnostics,
+        std::string status) {
+    Json entry_message = tool_result_json(call, message);
+    Json payload{Object{{"model", Json{Array{entry_message}}},
+            {"data", Json{Object{{"diagnostics", diagnostic_list(diagnostics)}}}}}};
+    const auto conversation = runtime.conversation_id();
+    const auto task_id = runtime.task_id();
+    return await_result(runtime.commit_result(
+            [payload = std::move(payload),
+                    message = std::move(entry_message),
+                    status = std::move(status),
+                    conversation,
+                    task_id](Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                auto entry = tx.append_entry(conversation, "pi.tool-result", payload, std::nullopt, {message}, task_id);
+                if (!entry) return std::unexpected(entry.error());
+                return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{.status = status,
+                        .result = Json{Object{{"kind", "model"}, {"entryId", numeric(entry->id.value)}}}})};
+            }));
+}
+
 /// Settle an error result the harness itself decided: its diagnostic is what the
 /// caller reports, as a model-visible call would show it (frozen pi `harnessError`).
 support::ExpectedVoid settle_harness_error(TaskRuntime& runtime,
-        const NestedCall& call,
+        const ParsedInput& input,
+        const ai::ToolCallContent& call,
         std::string code,
         std::string message,
         std::string status = "completed") {
-    return settle(runtime,
-            call,
-            result_json({},
-                    true,
-                    std::nullopt,
-                    std::nullopt,
-                    {NestedCallDiagnostic{.code = std::move(code), .message = std::move(message)}}),
-            std::move(status));
+    std::vector<NestedCallDiagnostic> diagnostics{
+            NestedCallDiagnostic{.code = std::move(code), .message = std::move(message)}};
+    if (input.nested)
+        return settle(runtime,
+                input.nested_call,
+                result_json(runtime.task_id().value, {}, true, std::nullopt, std::nullopt, diagnostics),
+                std::move(status));
+    ai::ToolResultMessage error{.content = harness_error_content(diagnostics.front().message), .is_error = true};
+    return settle_model(runtime, call, std::move(error), std::move(diagnostics), std::move(status));
 }
 
 } // namespace
@@ -221,8 +370,7 @@ namespace {
 /// Run the `beforeTool` hooks of one nested call: the first block wins and every
 /// `arguments` decision replaces the call's arguments (frozen pi `ToolTask.call`).
 support::ExpectedVoid before_tool_hooks(
-        TaskRuntime& runtime, const NestedCall& call, Json& arguments, std::optional<std::string>& block) {
-    Json hook_input = hook_call_json(call, arguments);
+        TaskRuntime& runtime, Json hook_input, Json& arguments, std::optional<std::string>& block) {
     // `arguments` and `block` are borrowed into the completion lambda: the
     // `await_result` below blocks this frame until the hook completes, so they
     // outlive every invocation of it (CODING_STANDARDS.md §7.5).
@@ -258,14 +406,14 @@ support::ExpectedVoid before_tool_hooks(
 /// Apply the `afterTool` hooks to one nested call's result: every replacement
 /// becomes the next handler's result (frozen pi `ToolTask.finalResult`).
 support::Expected<ai::ToolResultMessage> after_tool_hooks(TaskRuntime& runtime,
-        const NestedCall& call,
-        const Json& arguments,
+        const ai::ToolCallContent& call,
+        Json call_view,
         ai::ToolResultMessage message,
         std::optional<std::int64_t> duration_ms) {
     Object fields{{"output", content_json(message.content)}, {"isError", message.is_error}};
     if (message.details) fields.emplace("details", *Json::from_support(*message.details));
     Json final{std::move(fields)};
-    Json hook_input{Object{{"call", hook_call_json(call, arguments)}, {"result", final}}};
+    Json hook_input{Object{{"call", std::move(call_view)}, {"result", final}}};
     // `final_ptr` is borrowed into the completion lambda: the `await_result`
     // below blocks this frame until the hook completes (CODING_STANDARDS.md §7.5).
     auto* final_ptr = &final;
@@ -287,7 +435,7 @@ support::Expected<ai::ToolResultMessage> after_tool_hooks(TaskRuntime& runtime,
                         }}};
             }));
     if (!hooked) return std::unexpected(hooked.error());
-    ai::ToolResultMessage result{.tool_call_id = call.call.id, .tool_name = call.call.name};
+    ai::ToolResultMessage result{.tool_call_id = call.id, .tool_name = call.name};
     if (const Json* blocks = member(final, "output"); blocks != nullptr) {
         auto decoded = content_from_json(*blocks);
         if (!decoded) return std::unexpected(decoded.error());
@@ -303,10 +451,11 @@ support::Expected<ai::ToolResultMessage> after_tool_hooks(TaskRuntime& runtime,
 /// Run the resolved tool, then settle its (hook-replaced) result.
 support::ExpectedVoid run_tool(TaskRuntime& runtime,
         Session& session,
-        const NestedCall& call,
+        const ParsedInput& input,
+        const ai::ToolCallContent& call,
         const std::shared_ptr<ToolRegistration>& tool,
         const Json& arguments) {
-    ToolExecutionContext context{.runtime = &runtime, .session = &session, .call_id = call.call.id};
+    ToolExecutionContext context{.runtime = &runtime, .session = &session, .call_id = call.id};
     for (const auto& candidate : runtime.callable_tools()) {
         if (!candidate) continue;
         context.tools.push_back(candidate->declaration);
@@ -336,31 +485,67 @@ support::ExpectedVoid run_tool(TaskRuntime& runtime,
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
     // The hooks see the call the script made; the intent's rewritten arguments
     // are what executed (frozen pi `finalResult` reads the original call).
-    auto final = after_tool_hooks(runtime, call, arguments_of(call.call), std::move(*output), duration);
+    Json call_view =
+            input.nested ? hook_call_json(input.nested_call, arguments_of(call)) : call_json(call, arguments_of(call));
+    auto final = after_tool_hooks(runtime, call, std::move(call_view), std::move(*output), duration);
     if (!final) return std::unexpected(final.error());
-    return settle(runtime,
-            call,
-            result_json(final->content, final->is_error, final->details, final->duration_ms, {}),
-            "completed");
+    if (input.nested)
+        return settle(runtime,
+                input.nested_call,
+                result_json(runtime.task_id().value,
+                        final->content,
+                        final->is_error,
+                        final->details,
+                        final->duration_ms,
+                        {}),
+                "completed");
+    return settle_model(runtime, call, std::move(*final), {}, "completed");
 }
 
 } // namespace
 
 DocumentDefinition nested_call_document() {
-    auto definition = define_document_family(DocumentDefinitionBuilder{"pi.tool.nested-call:v1"}.task(),
+    auto definition = define_document_family(DocumentDefinitionBuilder{"pi.tool.nested-call"}.task(),
             [](const chord::Json&) { return chord::Json{chord::Json::Object{}}; });
     if (!definition) std::terminate(); // fixed valid built-in definition
     return std::move(*definition);
 }
 
+/// The model content a stored `structuredOutput` represents. A value a
+/// schema-less tool could not produce (an object other than an image block) is
+/// rendered as JSON text so a caller still sees it.
+support::Expected<std::vector<ai::Content>> structured_content(const Json& value) {
+    if (const auto* text = value.as_string()) return std::vector<ai::Content>{ai::text_content(*text)};
+    if (const auto* blocks = value.as_array(); blocks != nullptr) return content_from_json(value);
+    if (const Json* type = member(value, "type");
+            type != nullptr && type->as_string() != nullptr && *type->as_string() == "image") {
+        return content_from_json(Json{Array{value}});
+    }
+    auto text = support::write_json(value.to_support());
+    if (!text) return std::unexpected(text.error());
+    return std::vector<ai::Content>{ai::text_content(std::move(*text))};
+}
+
 support::Expected<NestedCallResult> decode_nested_result(const chord::Json& result) {
     const Json* is_error = member(result, "isError");
-    const Json* content = member(result, "content");
-    if (is_error == nullptr || is_error->as_boolean() == nullptr || content == nullptr)
+    if (is_error == nullptr || is_error->as_boolean() == nullptr)
         return std::unexpected(validation("A nested call result is incomplete"));
-    auto decoded = content_from_json(*content);
-    if (!decoded) return std::unexpected(decoded.error());
-    NestedCallResult nested{.is_error = *is_error->as_boolean(), .content = std::move(*decoded)};
+    NestedCallResult nested{.is_error = *is_error->as_boolean()};
+    if (const Json* structured = member(result, "structuredOutput"); structured != nullptr) {
+        nested.structured_output = structured->to_support();
+        auto decoded = structured_content(*structured);
+        if (!decoded) return std::unexpected(decoded.error());
+        nested.content = std::move(*decoded);
+    } else if (const Json* content = member(result, "content"); content != nullptr) {
+        // A result written before the frozen member existed carries content
+        // only; derive the value programs see from what it holds.
+        auto decoded = content_from_json(*content);
+        if (!decoded) return std::unexpected(decoded.error());
+        nested.structured_output = output_value(*decoded).to_support();
+        nested.content = std::move(*decoded);
+    } else {
+        return std::unexpected(validation("A nested call result has no value"));
+    }
     if (const Json* details = member(result, "details")) nested.details = details->to_support();
     if (const Json* duration = member(result, "durationMs"); duration != nullptr) {
         if (auto parsed = as_integer(*duration)) nested.duration_ms = *parsed;
@@ -408,22 +593,29 @@ support::Expected<TaskDefinition> nested_tool_task(Session& session) {
     builder.hook("afterTool");
     // The call phase: resolve, hook, record intent, execute (frozen pi `ToolTask.call`).
     builder.phase("call", [&session](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        auto call = parse_call(task.input);
-        if (!call) return support::AsyncResult<void>{std::unexpected(call.error())};
-        auto tool = resolve_tool(runtime, call->call.name);
+        auto input = parse_input(task.input);
+        if (!input) return support::AsyncResult<void>{std::unexpected(input.error())};
+        ai::ToolCallContent call = input->nested ? input->nested_call.call : ai::ToolCallContent{};
+        if (!input->nested) {
+            auto loaded = read_model_call(session, *input);
+            if (!loaded) return support::AsyncResult<void>{std::unexpected(loaded.error())};
+            call = std::move(*loaded);
+        }
+        auto tool = resolve_tool(runtime, call.name);
         if (tool == nullptr)
             return support::AsyncResult<void>{settle_harness_error(
-                    runtime, *call, "tool_unavailable", std::format("Tool {} is not available", call->call.name))};
-        if (!call->call.arguments_valid)
+                    runtime, *input, call, "tool_unavailable", std::format("Tool {} is not available", call.name))};
+        if (!call.arguments_valid)
             return support::AsyncResult<void>{
-                    settle_harness_error(runtime, *call, "invalid_arguments", "Invalid tool arguments")};
-        Json arguments = arguments_of(call->call);
+                    settle_harness_error(runtime, *input, call, "invalid_arguments", "Invalid tool arguments")};
+        Json arguments = arguments_of(call);
+        Json hook_call = input->nested ? hook_call_json(input->nested_call, arguments) : call_json(call, arguments);
         std::optional<std::string> block;
-        auto hooked = before_tool_hooks(runtime, *call, arguments, block);
+        auto hooked = before_tool_hooks(runtime, std::move(hook_call), arguments, block);
         if (!hooked) return support::AsyncResult<void>{std::unexpected(hooked.error())};
         if (block.has_value())
-            return support::AsyncResult<void>{
-                    settle_harness_error(runtime, *call, "blocked", std::format("Tool call blocked: {}", *block))};
+            return support::AsyncResult<void>{settle_harness_error(
+                    runtime, *input, call, "blocked", std::format("Tool call blocked: {}", *block))};
         // The intent commits before the physical operation, so a recovery
         // knows whether the call may have run.
         auto intended = await_result(runtime.commit([&arguments, &tool](Transaction&, const TaskRecord&)
@@ -433,31 +625,45 @@ support::Expected<TaskDefinition> nested_tool_task(Session& session) {
             return std::optional<NextTaskState>{NextTaskState::running(Json{std::move(checkpoint)})};
         }));
         if (!intended) return support::AsyncResult<void>{std::unexpected(intended.error())};
-        return support::AsyncResult<void>{run_tool(runtime, session, *call, tool, arguments)};
+        return support::AsyncResult<void>{run_tool(runtime, session, *input, call, tool, arguments)};
     });
     // The execute phase is reached only by recovery after the intent (frozen pi `ToolTask.execute`).
     builder.phase("execute", [&session](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        auto call = parse_call(task.input);
-        if (!call) return support::AsyncResult<void>{std::unexpected(call.error())};
+        auto input = parse_input(task.input);
+        if (!input) return support::AsyncResult<void>{std::unexpected(input.error())};
+        ai::ToolCallContent call = input->nested ? input->nested_call.call : ai::ToolCallContent{};
+        if (!input->nested) {
+            auto loaded = read_model_call(session, *input);
+            if (!loaded) return support::AsyncResult<void>{std::unexpected(loaded.error())};
+            call = std::move(*loaded);
+        }
         const Json* checkpoint = task.state.checkpoint.has_value() ? &*task.state.checkpoint : nullptr;
         const Json* arguments = checkpoint == nullptr ? nullptr : member(*checkpoint, "arguments");
         const Json* replay = checkpoint == nullptr ? nullptr : member(*checkpoint, "replay");
-        auto tool = resolve_tool(runtime, call->call.name);
+        auto tool = resolve_tool(runtime, call.name);
         const bool safe = arguments != nullptr && replay != nullptr && replay->as_string() != nullptr &&
                           *replay->as_string() == "safe" && tool != nullptr && tool->replay_safe;
         if (!safe)
             return support::AsyncResult<void>{settle_harness_error(runtime,
-                    *call,
+                    *input,
+                    call,
                     "interrupted",
-                    std::format("Tool {} was interrupted and may have partially run", call->call.name))};
-        return support::AsyncResult<void>{run_tool(runtime, session, *call, tool, *arguments)};
+                    std::format("Tool {} was interrupted and may have partially run", call.name),
+                    "failed")};
+        return support::AsyncResult<void>{run_tool(runtime, session, *input, call, tool, *arguments)};
     });
     // The abort handler settles the result its caller waits on (frozen pi `ToolTask.abort`).
-    builder.abort([](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        auto call = parse_call(task.input);
-        if (!call) return support::AsyncResult<void>{std::unexpected(call.error())};
+    builder.abort([&session](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        auto input = parse_input(task.input);
+        if (!input) return support::AsyncResult<void>{std::unexpected(input.error())};
+        ai::ToolCallContent call = input->nested ? input->nested_call.call : ai::ToolCallContent{};
+        if (!input->nested) {
+            auto loaded = read_model_call(session, *input);
+            if (!loaded) return support::AsyncResult<void>{std::unexpected(loaded.error())};
+            call = std::move(*loaded);
+        }
         return support::AsyncResult<void>{settle_harness_error(
-                runtime, *call, "aborted", std::format("Tool {} was aborted", call->call.name), "aborted")};
+                runtime, *input, call, "aborted", std::format("Tool {} was aborted", call.name), "aborted")};
     });
     return builder.build();
 }
