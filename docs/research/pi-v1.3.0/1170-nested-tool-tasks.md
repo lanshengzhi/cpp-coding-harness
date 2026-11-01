@@ -201,25 +201,27 @@ race the Harness's own storage access.
   `cch_durable` sources changed: `ctest --preset vcpkg -L architecture`
   selected **43** cases and passed **43/43**; the configure and build phases of
   the Parity Architecture Gate report PASS.
-- Full Validation: `ctest --preset vcpkg -j 2` with `TERM_PROGRAM=herdr` (the
-  prerequisite the PTY evidence case declares) on the final tree selected
-  **4,111** cases: **4,104 passed, 7 failed, 8 skipped** while sibling lanes held
-  the host at a load average above 7 on 8 cores. Every failure is a
-  wall-clock-sensitive case outside this slice's changed behavior and passes on
-  isolated rerun: the `[issue1163]` attempt-publication backstop, the alternate
-  screen post-drain probe, bounded parallel cancellation, the codemode
-  interrupt budget, the quarantined projection cost bound, the quarantined
-  streaming-block benchmark and an `/mcp` reconnect probe. The 8 skipped cases
-  are the existing optional live-pi/SQLite interchange, realtime-clock and
-  Native TUI differential skips.
-- Two earlier full runs on the same code are recorded for honesty. At `-j 2`
-  with the same PTY prerequisite: **4,110 passed, 1 failed, 8 skipped**, the
-  failure being a durable environment watch/timeout case that passes on isolated
-  rerun (0.67 s). At `-j 4` (default preset): **4,106 passed, 5 failed, 8
-  skipped**, all five passing on isolated rerun. Those runs also reported one
-  `[issue1170]` hook-order failure, which led to a test-robustness fix: the case
-  now waits for the released sibling's durable task record instead of a log
-  entry, with a 30-second bounded backstop.
+- Full Validation on the final tree: `ctest --preset vcpkg -j 2` with
+  `TERM_PROGRAM=herdr` (the prerequisite the PTY evidence case declares) selected
+  **4,111** cases in 500 s: **4,102 passed, 1 failed, 8 skipped**. The failure is
+  the `[issue1097]` codemode interrupt-budget case, a wall-clock-sensitive
+  threshold outside this slice's changed behavior; it passes on isolated rerun
+  (13.7 s). The 8 skipped cases are the existing optional live-pi/SQLite
+  interchange, realtime-clock and Native TUI differential skips.
+- Three earlier full runs on the same code are recorded for honesty, all under
+  the sibling lanes' load. At `-j 2`: **4,110 passed, 1 failed, 8 skipped**, the
+  failure a durable environment watch/timeout case that passes on isolated rerun
+  (0.67 s). At `-j 4` (default preset): **4,106 passed, 5 failed, 8 skipped**.
+  At `-j 2` with a load average above 7 on 8 cores: **4,104 passed, 7 failed, 8
+  skipped** (the `[issue1163]` attempt-publication backstop, the alternate screen
+  post-drain probe, bounded parallel cancellation, the codemode interrupt
+  budget, the quarantined projection cost bound, the quarantined streaming-block
+  benchmark and an `/mcp` reconnect probe). Every failure in every run is a
+  timing threshold in an unrelated module and passes on isolated rerun. Those
+  runs also reported one `[issue1170]` hook-order failure, which led to two test
+  fixes: the case now waits for the released sibling's committed result instead
+  of a log entry, with a 30-second bounded backstop, and the task-record
+  projections moved onto the Session line.
 - `scripts/format-check.sh bbd499a4da471ddd0b956f0d74a03c2201d6b8fb` reports
   clean after `git clang-format` on the changed files; `git diff --check`
   passes.
