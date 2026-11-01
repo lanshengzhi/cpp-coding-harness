@@ -9,6 +9,8 @@ promoted here: whole-row Agent/application receipts are owned by #1176 (issue re
 - **Frozen checkout:** `/tmp/pi-1113-frozen` (clean `HEAD` at the baseline; installed
   dependencies only)
 - **Integration base:** `4790e9e3c2d61f31ad31b8a742352389018ad4b6`
+- **Implementation commit:** `44784909befc10b5ae181f6a19bf17f7190d37c2`
+- **Merge commit:** `05850774f` (merges `origin/main` `f840fc445`, the #1171 continuation slice)
 - **Evidence family:** `fixtures/pi-v1.3.0/audit-1113/` — one artifact, two scenarios
 - **Registered reuse:** `fixtures/pi-v1.3.0/audit-1047/queue-admission.json` (manifest
   `0d146159a27ceaf1e657cd22997c1ebdc972818215054a860d88226e7d58d59a`) for the default modes,
@@ -148,37 +150,48 @@ ctest --preset vcpkg -L architecture -j2 --output-on-failure
 # 43 selected, 43 passed
 ```
 
-Full Validation on the default Debug preset, on the reviewed tree:
+Final-tree selections after merging `origin/main` `f840fc445`:
 
 ```bash
-cmake --build --preset vcpkg
-TERM_PROGRAM=herdr ctest --preset vcpkg --output-on-failure
-# 4155 selected, 4141 passed, 6 failed, 8 skipped (364.98 s)
+TERM_PROGRAM=herdr ctest --preset vcpkg -L issue1113 --output-on-failure
+# 15 selected, 15 passed
+TERM_PROGRAM=herdr ctest --preset vcpkg -L architecture -j2 --output-on-failure
+# 43 selected, 43 passed
+TERM_PROGRAM=herdr ctest --preset vcpkg -L '^agent$' --output-on-failure
+# 242 selected, 241 passed, 1 failed
 ```
 
-The host was concurrently building another worktree during the run (load average 11–21 on 8
-cores). All six failures are pre-existing runner-sensitive or quarantined cases, not queue
-admission:
+The `^agent$` failure is the pre-existing timing-sensitive
+`bounded parallel cancellation leaves queued tool capabilities unstarted` (`agent issue40
+issue497 tool-executor`): it waits 30 ms for two concurrent tool invocations, so a loaded host can
+make the second miss the window. Immediate isolated reruns on the merged tree were mixed (2/3
+passed); the same case had passed 10/10 isolated reruns earlier and passed in one earlier full
+run. It does not touch Agent queue admission.
 
-- `generation publishes the attempt before the model stream and usage with the final answer`
-  (durable/issue1163) passed alone;
-- `a timed-out query resolves partial results and later replies advance state` (theme/issue990)
-  passed 3/3 alone;
-- `pi-shaped exec returns shell_unavailable when bash is disabled` (u3) passed alone;
-- `Streaming assistant incremental block freeze maintains flat processing time across chunks`
-  (active #603 quarantine) passed alone;
-- `Native TUI fullscreen scroll-to-end indicator paints on a direct-fullscreen launch while the
-  transcript is scrolled` (issue1039) passed alone;
-- `Projection publishes 100 message-update chunks inside the issue cost bound over a long history`
-  is the active #632 quarantine and is the only case that still failed alone (3/3). Its bound is
-  not relaxed here.
+The requested isolated #632 quarantine rerun on the merged tree remains the known cost-bound
+failure, with all functional assertions passing:
 
-An earlier full run on the same code path selected 4155, passed 4146, failed 1
-(`bounded parallel cancellation leaves queued tool capabilities unstarted`), skipped 8; that
-tool-executor case passed 10/10 isolated reruns. It waits 30 ms for two concurrent tool
-invocations, so full-suite load can make the second miss the window. Across the runs, every
-non-quarantined failure passed in isolation. The focused #1113 selection, architecture selection
-and Session/TUI selections were green.
+```text
+100-chunk projection publication loop: 2299000ns processor, 2348609ns wall
+CHECK( processor < std::chrono::milliseconds{2} ) failed
+173 assertions: 172 passed, 1 failed
+```
+
+Full Validation history on the pre-merge reviewed tree (the merge with `origin/main` is purely
+additive for this slice):
+
+- Run A: 4155 selected, 4146 passed, 1 failed, 8 skipped. The failure was
+  `bounded parallel cancellation leaves queued tool capabilities unstarted`, which passed 10/10
+  isolated reruns.
+- Run B: 4155 selected, 4141 passed, 6 failed, 8 skipped (364.98 s), while the host was also
+  building another worktree (load average 11–21 on 8 cores). The six failures were
+  `generation publishes the attempt before the model stream and usage with the final answer`
+  (passed alone), `a timed-out query resolves partial results and later replies advance state`
+  (passed 3/3 alone), `pi-shaped exec returns shell_unavailable when bash is disabled` (passed
+  alone), `Streaming assistant incremental block freeze maintains flat processing time across
+  chunks` (#603 quarantine, passed alone), `Native TUI fullscreen scroll-to-end indicator paints
+  on a direct-fullscreen launch while the transcript is scrolled` (passed alone), and the #632
+  projection cost bound (the only repeated isolated failure). None touches Agent queue admission.
 
 Other checks:
 
