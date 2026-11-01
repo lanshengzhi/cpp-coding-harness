@@ -87,8 +87,10 @@ order the queue runs them in, while the final file still proves both landed.
 file for the whole process, keyed by the environment's absolute path canonicalized
 where the host resolves it (`stat` gives the resolved path; an unresolvable path
 falls back to its given spelling). `edit` takes the slot for its whole
-read-modify-write and `write` takes it too, so a concurrent pair applies in
-arrival order instead of losing an update; other files never wait. The slot is
+read-modify-write and `write` takes it too (frozen `write.ts` shares the queue,
+so a write and an edit of one file cannot interleave either), so a concurrent
+pair applies in arrival order instead of losing an update; other files never
+wait. The slot is
 retired when the last holder leaves, so a long-lived process holds one entry per
 file being written rather than one per file ever written.
 
@@ -125,8 +127,10 @@ as frozen pi's does.
 
 ## Validation
 
-Measured on checkout base `e8d813a0c28f6ea5a3eef999b8432907befd9729` (the current
-`origin/main`) with the default strict Debug preset.
+Measured with the default strict Debug preset on the delivered tree, which merges
+`origin/main` at `7e2ccc288` (the #1175 abandon-on-restart slice) over
+`e8d813a0c` (where the focused, durable-label, architecture and first full runs
+were made; the merged tree reruns the affected selections and the full suite).
 
 - Focused Validation: `ctest --preset vcpkg -L issue1159` selected **3** cases
   and passed **3/3**.
@@ -146,7 +150,8 @@ Measured on checkout base `e8d813a0c28f6ea5a3eef999b8432907befd9729` (the curren
   two skips are the documented changed-realtime-clock and Native TUI differential
   cases that require absent capture environments.
 - Delivery revalidation, because the new bundle and the added durable sources
-  changed inputs pinned by existing receipts: the exact
+  changed inputs pinned by existing receipts (all rerun on the merged tree): the
+  exact
   `^(issue1090|issue1101|issue1104)$` selection reran **36** selected, **36**
   passed (`deliveries/1159-revalidation-1090-1104.xml`, shared by #1090, #1104
   and #1101); `-L issue1118` reran **19** and passed **19**
@@ -160,14 +165,14 @@ Measured on checkout base `e8d813a0c28f6ea5a3eef999b8432907befd9729` (the curren
   (previously 48 / 104 / 582). `consolidate_audits.py build` and `check
   --pi-root <frozen>` pass (1,464 rows), and
   `tests/evidence/ConsolidationAuditTest.py` ran **42** tests and passed.
-- Inherited consolidation debt, repaired here because this slice rebuilds the
-  ledger: `main` at this base did not satisfy `consolidate_audits.py check`. The
-  #1172 family registration reached `main` without a plan routing entry, so its
-  eleven captured scenarios read as orphans, and the #1090 record still pinned
-  the pre-registration `baselines.json` digest. Both are now classified: the
-  `audit-1172` observations are explicit orphans naming
-  `cch_durable:codemode-output`, and the #1090 digest is refreshed with the
-  rerun selection. No capability row, membership or routing changed.
+- Inherited consolidation debt, repaired because this slice rebuilds the ledger:
+  on this branch's base, `consolidate_audits.py check` was red (the #1172 family
+  registration had no plan routing entry, so its eleven captured scenarios read
+  as orphans, and the #1090 receipt pinned the pre-registration `baselines.json`
+  digest). The #1175 merge arrived with the same shape for its five scenarios.
+  This slice classifies the #1172 and #1175 observations as explicit orphans
+  naming their ledger rows, refreshes the #1090 digest, and rebuilds the ledger.
+  No capability row, membership or routing changed.
 - `scripts/format-check.sh origin/main` and `git diff --check` are clean.
 
 ## Capability status

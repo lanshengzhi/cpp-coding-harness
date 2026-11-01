@@ -1,6 +1,6 @@
-#include "EditDiff.hpp"
-#include "FileMutationQueue.hpp"
-#include "ToolContent.hpp"
+#include "durable/EditDiff.hpp"
+#include "durable/FileMutationQueue.hpp"
+#include "durable/ToolContent.hpp"
 
 #include <cch/durable/Environment.hpp>
 #include <cch/durable/Images.hpp>
@@ -188,11 +188,11 @@ ai::ToolResultMessage run_edit(const support::JsonValue& args, Environment& env,
         auto content = env.read(*path, stop);
         if (!content) return edit_failure(content.error().message);
         const auto stripped = strip_bom(*content);
-        const auto original_ending = detect_line_ending(stripped.second);
-        auto current = apply_edits_to_normalized_content(normalize_to_lf(stripped.second), replacements, *path);
+        const auto original_ending = detect_line_ending(stripped.text);
+        auto current = apply_edits_to_normalized_content(normalize_to_lf(stripped.text), replacements, *path);
         if (!current) return edit_failure(current.error().message);
         auto written =
-                env.write(*path, stripped.first + restore_line_endings(current->new_content, original_ending), stop);
+                env.write(*path, stripped.bom + restore_line_endings(current->new_content, original_ending), stop);
         if (!written) return edit_failure(written.error().message);
         applied = std::move(*current);
     }

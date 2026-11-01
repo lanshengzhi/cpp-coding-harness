@@ -20,11 +20,11 @@ struct FileMutationSlot;
 /// another process.
 class FileMutationGuard {
 public:
-    FileMutationGuard(const FileMutationGuard&) = delete;
-    FileMutationGuard& operator=(const FileMutationGuard&) = delete;
     FileMutationGuard(FileMutationGuard&&) = delete;
     FileMutationGuard& operator=(FileMutationGuard&&) = delete;
     ~FileMutationGuard();
+    FileMutationGuard(const FileMutationGuard&) = delete;
+    FileMutationGuard& operator=(const FileMutationGuard&) = delete;
 
 private:
     friend FileMutationGuard acquire_file_mutation(std::string key);

@@ -40,8 +40,13 @@ struct DisplayDiff {
 
 [[nodiscard]] std::string restore_line_endings(std::string_view text, std::string_view ending);
 
-/// Split off a UTF-8 BOM. Returns {bom, text without bom} (frozen pi `stripBom`).
-[[nodiscard]] std::pair<std::string, std::string> strip_bom(std::string_view content);
+/// The UTF-8 BOM a file carried and its text without it (frozen pi `stripBom`).
+struct StrippedContent {
+    std::string bom;
+    std::string text;
+};
+
+[[nodiscard]] StrippedContent strip_bom(std::string_view content);
 
 /// Apply the frozen edit rules to LF-normalized content: every edit is matched
 /// against the original content (not incrementally), a text that is absent or

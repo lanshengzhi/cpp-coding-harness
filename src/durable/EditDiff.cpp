@@ -75,6 +75,8 @@ struct MyersPath {
 /// The walk is bounded so a pathological rewrite cannot spend unbounded time or
 /// memory: beyond either bound the caller keeps a coarse whole-region
 /// replacement instead of a minimal line diff.
+// debt: a bounded greedy Myers window can show one coarser hunk where frozen pi shows a minimal diff;
+// upgrade to a linear-space middle-snake walk if a real edit exceeds the window.
 inline constexpr std::ptrdiff_t kMaxEditLength = 2048;
 inline constexpr std::size_t kMaxComponents = 1U << 21;
 
@@ -343,11 +345,11 @@ std::string restore_line_endings(std::string_view text, std::string_view ending)
     return result;
 }
 
-std::pair<std::string, std::string> strip_bom(std::string_view content) {
+StrippedContent strip_bom(std::string_view content) {
     if (content.starts_with("\xef\xbb\xbf")) {
-        return {std::string("\xef\xbb\xbf"), std::string(content.substr(3))};
+        return StrippedContent{.bom = std::string("\xef\xbb\xbf"), .text = std::string(content.substr(3))};
     }
-    return {{}, std::string(content)};
+    return StrippedContent{.bom = {}, .text = std::string(content)};
 }
 
 support::Expected<AppliedEdits> apply_edits_to_normalized_content(
@@ -366,10 +368,9 @@ support::Expected<AppliedEdits> apply_edits_to_normalized_content(
             continue;
         }
         if (normalized_edits.size() == 1) {
-            return std::unexpected(edit_error("oldText must not be empty in " + std::string(path) + "."));
+            return std::unexpected(edit_error(std::format("oldText must not be empty in {}.", path)));
         }
-        return std::unexpected(edit_error(
-                "edits[" + std::to_string(index) + "].oldText must not be empty in " + std::string(path) + "."));
+        return std::unexpected(edit_error(std::format("edits[{}].oldText must not be empty in {}.", index, path)));
     }
 
     std::vector<MatchedEdit> matched;
@@ -379,13 +380,16 @@ support::Expected<AppliedEdits> apply_edits_to_normalized_content(
         const auto found = normalized_content.find(edit.old_text);
         if (found == std::string_view::npos) {
             if (normalized_edits.size() == 1) {
-                return std::unexpected(
-                        edit_error("Could not find the exact text in " + std::string(path) +
-                                   ". The old text must match exactly including all whitespace and newlines."));
+                return std::unexpected(edit_error(
+                        std::format("Could not find the exact text in {}. The old text must match exactly including "
+                                    "all whitespace and newlines.",
+                                path)));
             }
-            return std::unexpected(
-                    edit_error("Could not find edits[" + std::to_string(index) + "] in " + std::string(path) +
-                               ". The oldText must match exactly including all whitespace and newlines."));
+            return std::unexpected(edit_error(
+                    std::format("Could not find edits[{}] in {}. The oldText must match exactly including all "
+                                "whitespace and newlines.",
+                            index,
+                            path)));
         }
         // Frozen pi counts non-overlapping occurrences (`split`), not every
         // starting offset.
@@ -397,13 +401,17 @@ support::Expected<AppliedEdits> apply_edits_to_normalized_content(
         if (occurrences > 1) {
             if (normalized_edits.size() == 1) {
                 return std::unexpected(edit_error(
-                        "Found " + std::to_string(occurrences) + " occurrences of the text in " + std::string(path) +
-                        ". The text must be unique. Please provide more context to make it unique."));
+                        std::format("Found {} occurrences of the text in {}. The text must be unique. Please provide "
+                                    "more context to make it unique.",
+                                occurrences,
+                                path)));
             }
-            return std::unexpected(
-                    edit_error("Found " + std::to_string(occurrences) + " occurrences of edits[" +
-                               std::to_string(index) + "] in " + std::string(path) +
-                               ". Each oldText must be unique. Please provide more context to make it unique."));
+            return std::unexpected(edit_error(
+                    std::format("Found {} occurrences of edits[{}] in {}. Each oldText must be unique. Please provide "
+                                "more context to make it unique.",
+                            occurrences,
+                            index,
+                            path)));
         }
         matched.push_back(MatchedEdit{
                 .edit_index = index,
@@ -420,9 +428,12 @@ support::Expected<AppliedEdits> apply_edits_to_normalized_content(
         const auto& previous = matched[index - 1];
         const auto& current = matched[index];
         if (previous.match_index + previous.match_length > current.match_index) {
-            return std::unexpected(edit_error("edits[" + std::to_string(previous.edit_index) + "] and edits[" +
-                                              std::to_string(current.edit_index) + "] overlap in " + std::string(path) +
-                                              ". Merge them into one edit or target disjoint regions."));
+            return std::unexpected(edit_error(
+                    std::format("edits[{}] and edits[{}] overlap in {}. Merge them into one edit or target disjoint "
+                                "regions.",
+                            previous.edit_index,
+                            current.edit_index,
+                            path)));
         }
     }
 
@@ -439,12 +450,13 @@ support::Expected<AppliedEdits> apply_edits_to_normalized_content(
     const std::string base_content(normalized_content);
     if (base_content == new_content) {
         if (normalized_edits.size() == 1) {
-            return std::unexpected(edit_error("No changes made to " + std::string(path) +
-                                              ". The replacement produced identical content. This might indicate an "
-                                              "issue with special characters or the text not existing as expected."));
+            return std::unexpected(edit_error(
+                    std::format("No changes made to {}. The replacement produced identical content. This might "
+                                "indicate an issue with special characters or the text not existing as expected.",
+                            path)));
         }
-        return std::unexpected(edit_error(
-                "No changes made to " + std::string(path) + ". The replacements produced identical content."));
+        return std::unexpected(
+                edit_error(std::format("No changes made to {}. The replacements produced identical content.", path)));
     }
     return AppliedEdits{
             .base_content = std::move(base_content),
@@ -464,6 +476,8 @@ DisplayDiff generate_diff_string(
     std::size_t old_line_num = 1;
     std::size_t new_line_num = 1;
     bool last_was_change = false;
+    // Frozen pi keeps the first changed line as a JavaScript number; the detail
+    // stays absent for a line count the reported width cannot hold.
     std::optional<int> first_changed_line;
 
     auto emit = [&](std::string line) { output.push_back(std::move(line)); };
@@ -491,7 +505,7 @@ DisplayDiff generate_diff_string(
         }
 
         if (part.kind == DiffPartKind::Added || part.kind == DiffPartKind::Removed) {
-            if (!first_changed_line) {
+            if (!first_changed_line && std::in_range<int>(new_line_num)) {
                 first_changed_line = static_cast<int>(new_line_num);
             }
             for (const auto& line : raw) {
@@ -649,7 +663,7 @@ std::string generate_unified_patch(
         new_line += lines.size();
     }
 
-    std::string patch = "--- " + std::string(path) + "\n+++ " + std::string(path) + "\n";
+    std::string patch = std::format("--- {0}\n+++ {0}\n", path);
     for (auto& hunk : hunks) {
         if (hunk.old_lines == 0) {
             --hunk.old_start;
@@ -657,8 +671,7 @@ std::string generate_unified_patch(
         if (hunk.new_lines == 0) {
             --hunk.new_start;
         }
-        patch += "@@ -" + std::to_string(hunk.old_start) + "," + std::to_string(hunk.old_lines) + " +" +
-                 std::to_string(hunk.new_start) + "," + std::to_string(hunk.new_lines) + " @@\n";
+        patch += std::format("@@ -{},{} +{},{} @@\n", hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines);
         std::vector<std::string> rendered;
         rendered.reserve(hunk.lines.size() + 1);
         for (auto& line : hunk.lines) {
