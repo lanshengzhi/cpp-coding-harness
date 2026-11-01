@@ -3,6 +3,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Tool.hpp>
 
+#include <optional>
 #include <vector>
 
 namespace cch::agent {
@@ -42,6 +43,14 @@ struct ToolStateChanges {
 /// `toolsAdded` in transcript order. A redeclared name keeps the position of
 /// its first declaration, which is the order the model has seen.
 [[nodiscard]] std::vector<ai::Tool> current_tools(const std::vector<ai::MessageVariant>& messages);
+
+/// pi `getCurrentSystemMessage` (`packages/ai/src/utils/transcript.ts`): replay
+/// every System Message into one leading baseline message. Prompt text is
+/// joined in transcript order, section patches apply in order (a named section
+/// keeps its first position; `nullopt` removes it), and the tool declarations
+/// are the replayed `current_tools` set. Absent when the transcript carries no
+/// System Message and no declared tool.
+[[nodiscard]] std::optional<ai::SystemMessage> current_system_message(const std::vector<ai::MessageVariant>& messages);
 
 /// pi `declareToolChanges` (`packages/agent/src/agent-loop.ts`): the pending
 /// messages for the next request, with the delta between the transcript's

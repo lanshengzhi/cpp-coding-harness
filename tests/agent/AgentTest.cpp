@@ -496,6 +496,184 @@ TEST_CASE("stateful Agent retains a scripted fake-provider prompt in its passive
     CHECK(subject.state().messages.size() == 2);
 }
 
+TEST_CASE("the Agent default thinking level is off for a reasoning-capable model",
+        "[agent][stateful][thinking][issue1108][spec]") {
+    // audit-1108 / pi `createMutableAgentState`: `initialState?.thinkingLevel ??
+    // "off"`. A model that supports every level keeps `off`, so the result is
+    // the Agent default and not a clamp-to-off effect.
+    auto runtime = std::make_shared<tests::FakeModelStream>();
+    runtime->responses.push_back(ai::assistant_text_message("ok"));
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_full_thinking_model("reasoning-model");
+    agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
+
+    CHECK(subject.state().thinking_level == "off");
+    REQUIRE(run_prompt(subject, "hi"));
+    REQUIRE(runtime->calls.size() == 1);
+    CHECK(runtime->calls[0].options.reasoning == std::nullopt);
+
+    // The separating case: the same model carries an explicitly requested
+    // "medium" unchanged. An implementation that still defaulted to "medium"
+    // and relied on clamping would pass the check above only for a model that
+    // cannot reason, which this model is not.
+    auto requested_runtime = std::make_shared<tests::FakeModelStream>();
+    requested_runtime->responses.push_back(ai::assistant_text_message("ok"));
+    agent::AsyncAgentOptions requested_options;
+    requested_options.model = tests::make_full_thinking_model("reasoning-model");
+    agent::Agent requested(requested_runtime->factory(),
+            agent::ToolRegistry{},
+            std::move(requested_options),
+            agent::AgentInitialState{.messages = {}, .thinking_level = "medium"});
+
+    CHECK(requested.state().thinking_level == "medium");
+}
+
+TEST_CASE("reset restores the System Message baseline and clears queues while retaining live policy",
+        "[agent][stateful][reset][issue1108][spec]") {
+    // audit-1108 `reset-lifecycle.json`: after a completed run with queued
+    // input, reset replays the transcript's System Messages into one baseline,
+    // clears both queues and the transient run facts, and leaves the live
+    // tools, model and thinking level alone.
+    auto runtime = std::make_shared<tests::FakeModelStream>();
+    runtime->responses.push_back(ai::assistant_text_message("ok"));
+    runtime->responses.push_back(ai::assistant_text_message("again"));
+
+    agent::ToolRegistry tools;
+    REQUIRE(tools.add(tests::make_fake_tool(ai::Tool{.name = "echo",
+                                                    .description = "Echo input",
+                                                    .parameters = test::permissive_object_tool_argument_contract()},
+            agent::ToolConcurrency::Exclusive,
+            [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                co_return agent::AsyncToolExecutionResult{.content = std::vector<ai::Content>{ai::text_content("ok")},
+                        .details = std::nullopt,
+                        .is_error = false};
+            })));
+
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_full_thinking_model("reasoning-model");
+    options.system_prompt = "sys";
+    agent::Agent subject(runtime->factory(),
+            std::move(tools),
+            std::move(options),
+            agent::AgentInitialState{.messages = {}, .thinking_level = "high"});
+    CHECK(subject.state().thinking_level == "high");
+
+    REQUIRE(run_prompt(subject, "go"));
+    REQUIRE(subject.steer(ai::user_text_message("steer")));
+    REQUIRE(subject.follow_up(ai::user_text_message("follow")));
+    CHECK(subject.input_queue_counts().steering == 1);
+    CHECK(subject.input_queue_counts().follow_up == 1);
+
+    REQUIRE(subject.reset());
+
+    const auto state = subject.state();
+    REQUIRE(state.messages.size() == 1);
+    const auto* baseline = std::get_if<ai::SystemMessage>(&state.messages[0]);
+    REQUIRE(baseline != nullptr);
+    CHECK(baseline->content == "sys");
+    REQUIRE(baseline->tools_added.size() == 1);
+    CHECK(baseline->tools_added[0].name == "echo");
+    CHECK(state.system_prompt == "sys");
+    // Retained live policy: tools, model and thinking level are not transcript
+    // state (frozen pi `reset` clears only the message/system baseline).
+    CHECK(subject.active_tools() == std::vector<std::string>{"echo"});
+    CHECK(state.model.id == "reasoning-model");
+    CHECK(state.thinking_level == "high");
+    // Cleared transient facts and queues.
+    CHECK_FALSE(state.is_running);
+    CHECK_FALSE(state.streaming_message.has_value());
+    CHECK(state.pending_tool_call_ids.empty());
+    CHECK(subject.input_queue_counts().steering == 0);
+    CHECK(subject.input_queue_counts().follow_up == 0);
+
+    // The next run starts from the baseline: one System Message followed by the
+    // new prompt, with the retained tool still declared.
+    REQUIRE(run_prompt(subject, "again"));
+    REQUIRE(runtime->calls.size() == 2);
+    const auto& request = runtime->calls[1].context;
+    REQUIRE(request.messages.size() == 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(request.messages[0]));
+    CHECK(std::holds_alternative<ai::UserMessage>(request.messages[1]));
+    REQUIRE(request.tools.size() == 1);
+    CHECK(request.tools[0].name == "echo");
+}
+
+TEST_CASE("reset renders replayed System Message sections into the live prompt",
+        "[agent][stateful][reset][issue1108][spec]") {
+    // audit-1108 `reset-lifecycle.json`: pi `AgentState.systemPrompt` is the
+    // `getCurrentSystemPrompt` replay, so retained section text is part of the
+    // live prompt and not only of the baseline message's `content`.
+    auto runtime = std::make_shared<tests::FakeModelStream>();
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("fake-model");
+    ai::SystemMessage system;
+    system.content = "base";
+    system.sections = {{.name = "alpha", .text = "A"}, {.name = "beta", .text = "B"}};
+    std::vector<ai::MessageVariant> messages;
+    messages.push_back(system);
+    messages.push_back(ai::user_text_message("go"));
+    agent::Agent subject(runtime->factory(),
+            agent::ToolRegistry{},
+            std::move(options),
+            agent::AgentInitialState{.messages = std::move(messages)});
+
+    REQUIRE(subject.reset());
+    const auto state = subject.state();
+    REQUIRE(state.messages.size() == 1);
+    const auto* baseline = std::get_if<ai::SystemMessage>(&state.messages[0]);
+    REQUIRE(baseline != nullptr);
+    CHECK(baseline->content == "base");
+    REQUIRE(baseline->sections.size() == 2);
+    CHECK(baseline->sections[0].name == "alpha");
+    CHECK(baseline->sections[1].name == "beta");
+    CHECK(state.system_prompt == "base\n\nA\n\nB");
+}
+
+TEST_CASE("reset during an active run is rejected without changing the run or transcript",
+        "[agent][stateful][reset][issue1108][spec]") {
+    // audit-1108 `reset-lifecycle.json`: pi `Agent.reset` throws while a run is
+    // active and leaves the streaming state and transcript untouched; the same
+    // run then completes normally.
+    boost::asio::io_context io;
+    auto client = std::make_shared<GatedModelRuntime>();
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("fake-model");
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
+
+    std::optional<support::ExpectedVoid> prompted;
+    boost::asio::co_spawn(
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                prompted = co_await support::detail::await_async_result(subject.prompt("Hello"));
+                co_return;
+            },
+            boost::asio::detached);
+    REQUIRE(io.run_one() == 1);
+    REQUIRE(client->started);
+    REQUIRE(subject.state().is_running);
+
+    auto rejected = subject.reset();
+    REQUIRE_FALSE(rejected);
+    CHECK(rejected.error().code == support::ErrorCode::Validation);
+    CHECK(rejected.error().message == "Agent is already processing. Wait for completion before resetting.");
+    // The active run and its transcript are unchanged by the rejection.
+    CHECK(subject.state().is_running);
+    REQUIRE(subject.state().messages.size() == 1);
+    CHECK(std::holds_alternative<ai::UserMessage>(subject.state().messages[0]));
+
+    client->release();
+    io.run();
+    REQUIRE(prompted.has_value());
+    REQUIRE(*prompted);
+    CHECK_FALSE(subject.state().is_running);
+    const auto completed = subject.state();
+    REQUIRE(completed.messages.size() == 2);
+    const auto* assistant = std::get_if<ai::AssistantMessage>(&completed.messages[1]);
+    REQUIRE(assistant != nullptr);
+    CHECK(ai::text_from_assistant_content(assistant->content) == "released");
+}
+
 TEST_CASE("stateful Agent gives awaitable policies its active run stop token", "[agent][stateful][issue82][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncAgentOptions options;
@@ -1028,9 +1206,15 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     REQUIRE(second_prompt.has_value());
     REQUIRE_FALSE(*second_prompt);
     CHECK(second_prompt->error().code == support::ErrorCode::Validation);
-    CHECK(second_prompt->error().message == "agent is busy (prompt already in flight)");
+    // audit-1047 `a second prompt while a run is active is rejected without
+    // replacing the run`: the diagnostic is pi's exact text, and the run that
+    // was active before the rejection is the one that completes afterwards.
+    CHECK(second_prompt->error().message ==
+            "Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for "
+            "completion.");
     CHECK(subject.state().is_running);
     CHECK(subject.state().messages.size() == 1);
+    CHECK(client->request_count == 1);
 
     client->release();
     io.run();
@@ -1038,7 +1222,12 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     REQUIRE(first_prompt.has_value());
     REQUIRE(*first_prompt);
     CHECK_FALSE(subject.state().is_running);
-    REQUIRE(subject.state().messages.size() == 2);
+    const auto completed = subject.state();
+    REQUIRE(completed.messages.size() == 2);
+    const auto* assistant = std::get_if<ai::AssistantMessage>(&completed.messages[1]);
+    REQUIRE(assistant != nullptr);
+    CHECK(ai::text_from_assistant_content(assistant->content) == "released");
+    CHECK(client->request_count == 1);
 }
 
 TEST_CASE("stateful Agent keeps a suspended run valid when its handle is moved", "[agent][stateful][issue35][spec]") {

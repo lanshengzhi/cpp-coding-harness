@@ -1,0 +1,117 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "recordKind": "source-probe",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-01T10:06:42.753Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "probe": "ProgramStatusReporter driven directly with a recording Terminal stub; the agent_settled events carry the abort request; no model turn, no gateway",
+  "sourceEndpoints": [
+    "packages/coding-agent/src/modes/interactive/program-status-reporter.ts:ProgramStatusReporter.handleEvent",
+    "packages/coding-agent/src/core/agent-session.ts:_emitAgentSettled",
+    "packages/tui/src/program-status.ts:formatProgramStatus"
+  ],
+  "scenarios": [
+    {
+      "name": "agent_settled maps the abort request to idle and the run outcome to done",
+      "inputs": {
+        "run": "agent_start, assistant error terminal, agent_settled aborted=true",
+        "controlRun": "agent_start, assistant stop terminal, agent_settled aborted=false"
+      },
+      "expected": {
+        "interrupted": {
+          "working": "\u001b]7501;state=working:app=pi\u001b\\",
+          "messageEndUnchanged": null,
+          "settled": "\u001b]7501;state=idle:app=pi\u001b\\"
+        },
+        "completed": {
+          "working": "\u001b]7501;state=working:app=pi\u001b\\",
+          "messageEndUnchanged": null,
+          "settled": "\u001b]7501;state=done:app=pi\u001b\\"
+        }
+      },
+      "observedSteps": [
+        {
+          "label": "interrupted_agent_start_working",
+          "wire": "\u001b]7501;state=working:app=pi\u001b\\"
+        },
+        {
+          "label": "interrupted_message_end_error_unchanged",
+          "wire": null
+        },
+        {
+          "label": "interrupted_agent_settled_idle",
+          "wire": "\u001b]7501;state=idle:app=pi\u001b\\"
+        },
+        {
+          "label": "completed_agent_start_working",
+          "wire": "\u001b]7501;state=working:app=pi\u001b\\"
+        },
+        {
+          "label": "completed_message_end_unchanged",
+          "wire": null
+        },
+        {
+          "label": "completed_agent_settled_done",
+          "wire": "\u001b]7501;state=done:app=pi\u001b\\"
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/modes/interactive/program-status-reporter.ts",
+        "case": "agent_settled"
+      }
+    },
+    {
+      "name": "a run aborted before its assistant terminal settles idle and the next run reports working",
+      "inputs": {
+        "run": "agent_start, agent_settled aborted=true (no message_end)",
+        "nextRun": "agent_start, assistant stop terminal, agent_settled aborted=false"
+      },
+      "expected": {
+        "earlyAbort": {
+          "working": "\u001b]7501;state=working:app=pi\u001b\\",
+          "settled": "\u001b]7501;state=idle:app=pi\u001b\\"
+        },
+        "nextRun": {
+          "working": "\u001b]7501;state=working:app=pi\u001b\\",
+          "settled": "\u001b]7501;state=done:app=pi\u001b\\"
+        }
+      },
+      "observedSteps": [
+        {
+          "label": "early_abort_agent_start_working",
+          "wire": "\u001b]7501;state=working:app=pi\u001b\\"
+        },
+        {
+          "label": "early_abort_agent_settled_idle",
+          "wire": "\u001b]7501;state=idle:app=pi\u001b\\"
+        },
+        {
+          "label": "next_run_agent_start_working",
+          "wire": "\u001b]7501;state=working:app=pi\u001b\\"
+        },
+        {
+          "label": "next_run_message_end_unchanged",
+          "wire": null
+        },
+        {
+          "label": "next_run_agent_settled_done",
+          "wire": "\u001b]7501;state=done:app=pi\u001b\\"
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/core/agent-session.ts",
+        "case": "_emitAgentSettled"
+      }
+    }
+  ]
+}

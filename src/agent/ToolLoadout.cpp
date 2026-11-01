@@ -96,6 +96,52 @@ std::vector<ai::Tool> current_tools(const std::vector<ai::MessageVariant>& messa
     return tools;
 }
 
+std::optional<ai::SystemMessage> current_system_message(const std::vector<ai::MessageVariant>& messages) {
+    std::string content;
+    std::vector<ai::SystemMessageSection> sections;
+    std::optional<ai::TimestampMs> timestamp;
+    for (const auto& message : messages) {
+        const auto* system = std::get_if<ai::SystemMessage>(&message);
+        if (system == nullptr) {
+            continue;
+        }
+        if (!timestamp) {
+            timestamp = system->timestamp;
+        }
+        if (!system->content.empty()) {
+            if (!content.empty()) {
+                content += "\n\n";
+            }
+            content += system->content;
+        }
+        // pi patches the section map in place: a named section keeps the
+        // position of its first set, and an explicit removal drops it.
+        for (const auto& section : system->sections) {
+            const auto existing = std::ranges::find(sections, section.name, &ai::SystemMessageSection::name);
+            if (!section.text) {
+                if (existing != sections.end()) {
+                    sections.erase(existing);
+                }
+            } else if (existing != sections.end()) {
+                existing->text = section.text;
+            } else {
+                sections.push_back(section);
+            }
+        }
+    }
+
+    auto tools = current_tools(messages);
+    if (!timestamp && tools.empty()) {
+        return std::nullopt;
+    }
+    ai::SystemMessage baseline;
+    baseline.content = std::move(content);
+    baseline.sections = std::move(sections);
+    baseline.tools_added = std::move(tools);
+    baseline.timestamp = timestamp.value_or(0);
+    return baseline;
+}
+
 std::vector<ai::MessageVariant> declare_tool_changes(const std::vector<ai::MessageVariant>& transcript,
         std::vector<ai::MessageVariant> pending,
         const std::vector<ai::Tool>& executable_tools) {

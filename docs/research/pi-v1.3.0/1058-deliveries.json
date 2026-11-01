@@ -721,7 +721,7 @@
         },
         {
           "path": "src/coding_agent/AgentSessionExecution.cpp",
-          "sha256": "6d35e6c611802602e82a824262ce7cca5f1920123784fd77c7b1ba9bac89dccb"
+          "sha256": "03b012d727e040f0cb4c30581dc9baf79e01d890c928a131f20a5870ebac733b"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -905,14 +905,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml"
+          "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1108.xml"
         ],
-        "testedRevision": "dc55f9b820aa974429579699b6110ca3e2069d07",
-        "recordedAt": "2026-11-01T06:36:56Z",
+        "testedRevision": "0087b09fc7ae8990d505ec4c5fe13498e09e0fc2",
+        "recordedAt": "2026-11-01T10:43:45Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml",
-          "sha256": "a454200e6ff87c0048e32ed8240a0bb0ead4af67cf728307ef5b9322caad86df"
+          "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1108.xml",
+          "sha256": "5bfe76796b5b4354ea4481b11e313825c6959a3560e325d5d5f8938c34ce0045"
         }
       },
       "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -1028,6 +1028,31 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml",
             "sha256": "6ff02ac7faa8982246bb6a2ab1228082e5f7246418efc519fdc1f165fe467673"
+          }
+        }
+      },
+      "revalidation1108": {
+        "reason": "#1108 aligns the application Session's streaming prompt rejection with pi's `AgentSession.prompt` text (`Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.`) instead of the legacy busy string. AgentSessionExecution.cpp carries that diagnostic change. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "src/coding_agent/AgentSessionExecution.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml"
+          ],
+          "testedRevision": "dc55f9b820aa974429579699b6110ca3e2069d07",
+          "recordedAt": "2026-11-01T06:36:56Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml",
+            "sha256": "a454200e6ff87c0048e32ed8240a0bb0ead4af67cf728307ef5b9322caad86df"
           }
         }
       }
@@ -1169,7 +1194,7 @@
         },
         {
           "path": "src/coding_agent/AgentSessionExecution.cpp",
-          "sha256": "6d35e6c611802602e82a824262ce7cca5f1920123784fd77c7b1ba9bac89dccb"
+          "sha256": "03b012d727e040f0cb4c30581dc9baf79e01d890c928a131f20a5870ebac733b"
         },
         {
           "path": "src/coding_agent/AgentSessionInteraction.cpp",
@@ -1317,14 +1342,14 @@
           "issue1118",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1107.xml"
+          "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1108.xml"
         ],
-        "testedRevision": "dc55f9b820aa974429579699b6110ca3e2069d07",
-        "recordedAt": "2026-11-01T06:36:56Z",
+        "testedRevision": "0087b09fc7ae8990d505ec4c5fe13498e09e0fc2",
+        "recordedAt": "2026-11-01T10:43:45Z",
         "selected": 19,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1107.xml",
-          "sha256": "0874a35fbe6f38cee5539a50992178d1be2a67bd33a35d874c579f1df28cba2a"
+          "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1108.xml",
+          "sha256": "b8679fe4f10cff948971fe572aa6d5e0fc99c63dc52c36e1dee10fd62a62dd9c"
         }
       },
       "rows": [
@@ -1487,6 +1512,31 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1119.xml",
             "sha256": "14530c81f91f6aed7ec1d207259cce0f3bcb9c8c4ebb5c043e54e4c30e84fa33"
+          }
+        }
+      },
+      "revalidation1108": {
+        "reason": "#1108 aligns the application Session's streaming prompt rejection with pi's `AgentSession.prompt` text (`Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.`) instead of the legacy busy string. AgentSessionExecution.cpp carries that diagnostic change. The delivered rows, scenarios and routing digest are unchanged; the 19-case issue1118 selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "src/coding_agent/AgentSessionExecution.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1118",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1107.xml"
+          ],
+          "testedRevision": "dc55f9b820aa974429579699b6110ca3e2069d07",
+          "recordedAt": "2026-11-01T06:36:56Z",
+          "selected": 19,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1107.xml",
+            "sha256": "0874a35fbe6f38cee5539a50992178d1be2a67bd33a35d874c579f1df28cba2a"
           }
         }
       }

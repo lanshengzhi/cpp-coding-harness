@@ -622,8 +622,11 @@ support::ExpectedVoid AgentSession::Impl::reject_if_closed() const {
 
 support::ExpectedVoid AgentSession::Impl::reject_if_busy() const {
     if (prompt_active_) {
-        return std::unexpected(
-                support::make_error(support::ErrorCode::Validation, "session is busy (prompt already in flight)"));
+        // pi `AgentSession.prompt` while streaming without a `streamingBehavior`
+        // names the queue choices instead of the bare Agent's busy text.
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the "
+                "message."));
     }
     if (reload_active_) {
         return std::unexpected(support::make_error(support::ErrorCode::Busy, "session reload is already in flight"));

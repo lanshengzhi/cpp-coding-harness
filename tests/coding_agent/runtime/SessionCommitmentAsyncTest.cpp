@@ -285,6 +285,51 @@ TEST_CASE("an aborted prompt settles the commitment channel with a consistent se
     session.close();
 }
 
+TEST_CASE("a second session prompt is rejected with pi's application text without replacing the run",
+        "[coding_agent][runtime][busy][issue1108][spec]") {
+    // pi `AgentSession.prompt` while streaming without a streamingBehavior
+    // names the queue choices, and the admitted run stays the one that
+    // completes (audit-1108 `settled-cancellation.json` run identity).
+    tests::RuntimeFixture runtime;
+    PersistentSession fixture{runtime};
+    auto provider = std::make_shared<tests::GatedChatProvider>();
+    auto* gated = provider.get();
+    auto options = fixture.options(std::move(provider));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
+    REQUIRE(created.has_value());
+    auto& session = runtime.adopt_session(std::move(created->session));
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    boost::asio::io_context io;
+    PromptResult first;
+    spawn_prompt(io, session, "first", first);
+    drain_ready(io);
+    REQUIRE(gated->requests.size() == 1);
+
+    PromptResult second;
+    spawn_prompt(io, session, "second", second);
+    REQUIRE(pump_until(io, [&] { return second.has_value(); }));
+    REQUIRE_FALSE(*second);
+    CHECK(second->error().code == support::ErrorCode::Validation);
+    CHECK(second->error().message ==
+            "Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.");
+    // The rejected prompt did not replace the admitted run: one provider
+    // request, the same two-message transcript, and the first run's answer.
+    CHECK(gated->requests.size() == 1);
+    CHECK(session.message_count() == 2);
+
+    gated->release();
+    REQUIRE(pump_until(io, [&] { return first.has_value(); }));
+    REQUIRE(first.has_value());
+    CHECK(first->has_value());
+    CHECK(gated->requests.size() == 1);
+    CHECK(session.last_assistant_text() == std::optional<std::string>{"turn 1"});
+    session.close();
+}
+
 TEST_CASE("interaction and timers progress while session persistence is slow",
         "[coding_agent][runtime][commitment][issue464][spec]") {
     tests::RuntimeFixture runtime;

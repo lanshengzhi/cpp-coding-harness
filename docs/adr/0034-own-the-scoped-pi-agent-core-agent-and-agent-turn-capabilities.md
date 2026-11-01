@@ -59,3 +59,31 @@ unicode-space normalization, leading-`@` stripping, and `~` expansion against `$
 policy and atomic writes apply uniformly in both scopes; only containment is lifted for writes.
 ADR 0026:23's "containment" divergence is henceforth scoped to the addressed-path and read scopes,
 shell-cwd containment, and bash authorization — it no longer covers the write path scope.
+
+## Addendum: the bare Agent default is `off`, and `reset` replays the prompt baseline (Issue #1108)
+
+pi v1.3.0 keeps two different thinking-level defaults. The bare `Agent` carries
+`createMutableAgentState`'s `initialState?.thinkingLevel ?? "off"`, while the application Session
+resolves the settings default, then `DEFAULT_THINKING_LEVEL` ("medium"), and clamps
+(`packages/coding-agent/src/core/sdk.ts`). The "default `medium`" wording above describes the
+application Session chain, not `Agent` construction; the port previously requested `medium` in the
+bare Agent too, so a reasoning-capable initial model kept `medium` where pi keeps `off`. That was a
+default divergence, not a clamping difference.
+
+`AgentInitialState::thinking_level` is now empty by default, meaning the pi Agent default `off`.
+`AsyncAgentOptions::thinking_level` is honored when the initial state does not name a level (pi
+carries the level on the initial state, so this is the C++ convenience alternative, not a second
+pi surface). The application Session still passes its own resolved level explicitly, so a fresh or
+resumed session keeps the v1.3.0 `medium` chain and this addendum changes no session behavior.
+
+`Agent::reset` is implemented with the frozen `Agent.reset` contract. It is rejected while a run is
+active (`Agent is already processing. Wait for completion before resetting.`) without touching the
+run or transcript. Otherwise it replays every System Message into one leading baseline message
+(pi `getCurrentSystemMessage`: prompt text joined in order, section patches in order, current tool
+declarations), restores the live System Prompt from that replay, clears the transient run facts and
+both input queues, and retains the tools, Model and thinking level. The busy diagnostics for
+`prompt`, `continue` and `reset` adopt pi's exact per-operation text.
+
+Frozen observations: `fixtures/pi-v1.3.0/audit-1047/lifecycle.json` (defaults, busy prompt, reset
+baseline) and the new `fixtures/pi-v1.3.0/audit-1108/` family (reset retention/busy rejection and
+the `agent_settled` abort mapping).

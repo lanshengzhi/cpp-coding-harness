@@ -23,12 +23,18 @@ class AgentPromptAccess;
 /// Agent's run options and owned tool registry.
 struct AgentInitialState {
     std::vector<ai::MessageVariant> messages;
-    /// Requested thinking level before model-aware clamping, defaulting to pi's
-    /// `DEFAULT_THINKING_LEVEL` ("medium", ADR 0034 / #352). The Agent clamps
-    /// this against the active model's supported set at creation, so the
-    /// effective level can differ (e.g. "off" while the Agent still holds
-    /// `kDefaultModel`, which supports no reasoning).
-    std::string thinking_level{"medium"};
+    /// Requested thinking level before model-aware clamping. Empty requests
+    /// pi's Agent default `"off"` (frozen `createMutableAgentState`:
+    /// `initialState?.thinkingLevel ?? "off"`), unless AsyncAgentOptions names
+    /// a level. The default is the Agent's own policy, not a clamp result: a
+    /// reasoning-capable initial model keeps `"off"` until the caller or the
+    /// application Session requests another level. The Agent still clamps the
+    /// requested level against the active model's supported set at creation
+    /// (ADR 0034 / #352), so the effective level can differ from the request.
+    /// The application Session passes its own resolved policy (pi `sdk.ts`
+    /// falls back to the application's `DEFAULT_THINKING_LEVEL` = "medium" and
+    /// clamps).
+    std::string thinking_level{};
 };
 
 /// RAII handle for one weak Agent lifecycle observer.
@@ -178,6 +184,20 @@ public:
 
     /// Remove all pending steering and follow-up messages.
     [[nodiscard]] support::ExpectedVoid clear_input_queues();
+
+    /// Reset the conversation to its System Message baseline (pi
+    /// `Agent.reset`). Every System Message is replayed into one leading
+    /// baseline message (pi `getCurrentSystemMessage`: prompt text joined in
+    /// order, section patches applied in order, current tool declarations
+    /// kept), the live System Prompt is restored from that replay, and the
+    /// transient run facts (running/streaming state, pending tool calls) plus
+    /// both input queues are cleared. Tools, the Model and the thinking level
+    /// are live policy rather than transcript state and are retained, exactly
+    /// like frozen pi.
+    ///
+    /// Rejected while a run is active, with the same guarantee as a rejected
+    /// `prompt`: the active run and the transcript are unchanged.
+    [[nodiscard]] support::ExpectedVoid reset();
 
     /// Return an independent passive snapshot of current live Agent state.
     [[nodiscard]] AgentState state() const;

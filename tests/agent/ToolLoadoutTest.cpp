@@ -114,6 +114,54 @@ TEST_CASE(
     CHECK_FALSE(agent::declarations_equal(make_tool("a"), make_tool("a", "different")));
 }
 
+TEST_CASE("current_system_message replays prompt text, section patches and tool declarations",
+        "[agent][tool-loadout][issue1108][spec]") {
+    // pi `getCurrentSystemMessage` (`packages/ai/src/utils/transcript.ts`):
+    // every System Message folds into one baseline. Text joins in order, a
+    // named section keeps its first position while later values replace it, an
+    // explicit removal drops it, and the tool fields are the replayed current
+    // declarations. The first System Message's timestamp wins.
+    ai::SystemMessage first;
+    first.content = "base";
+    first.timestamp = 5;
+    first.tools_added.push_back(make_tool("a"));
+    ai::SystemMessage second;
+    second.content = "next";
+    second.timestamp = 9;
+    second.sections.push_back(ai::SystemMessageSection{.name = "one", .text = "first value"});
+    second.sections.push_back(ai::SystemMessageSection{.name = "two", .text = "second value"});
+    second.tools_removed.push_back(ai::ToolReference{.name = "a"});
+    second.tools_added.push_back(make_tool("b"));
+    ai::SystemMessage third;
+    third.timestamp = 11;
+    third.sections.push_back(ai::SystemMessageSection{.name = "one", .text = std::nullopt});
+    third.sections.push_back(ai::SystemMessageSection{.name = "two", .text = "patched"});
+    third.sections.push_back(ai::SystemMessageSection{.name = "three", .text = "added"});
+    const std::vector<ai::MessageVariant> messages{
+            ai::MessageVariant{first},
+            ai::MessageVariant{ai::user_text_message("go")},
+            ai::MessageVariant{second},
+            ai::MessageVariant{third},
+    };
+
+    const auto baseline = agent::current_system_message(messages);
+    REQUIRE(baseline.has_value());
+    CHECK(baseline->content == "base\n\nnext");
+    CHECK(baseline->timestamp == 5);
+    REQUIRE(baseline->sections.size() == 2);
+    CHECK(baseline->sections[0].name == "two");
+    CHECK(baseline->sections[0].text == std::optional<std::string>{"patched"});
+    CHECK(baseline->sections[1].name == "three");
+    CHECK(baseline->sections[1].text == std::optional<std::string>{"added"});
+    CHECK(names_of(baseline->tools_added) == std::vector<std::string>{"b"});
+    CHECK(baseline->tools_removed.empty());
+
+    // A transcript without a System Message has no baseline, and an empty
+    // transcript likewise (pi: `timestamp === undefined && tools.length === 0`).
+    CHECK_FALSE(agent::current_system_message({}).has_value());
+    CHECK_FALSE(agent::current_system_message({ai::MessageVariant{ai::user_text_message("go")}}).has_value());
+}
+
 TEST_CASE("declare_tool_changes inserts the delta before the first non-system message",
         "[agent][tool-loadout][issue1110][spec]") {
     const std::vector<ai::MessageVariant> transcript{system_with({make_tool("a"), make_tool("b")})};

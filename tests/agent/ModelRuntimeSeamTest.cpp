@@ -225,10 +225,10 @@ TEST_CASE("default turns forward pi's harness-consumer defaults through streamSi
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    // The unset level requested pi's DEFAULT_THINKING_LEVEL ("medium") and was
-    // clamped at creation to the non-reasoning model's only supported level
-    // ("off", #352); every retry/header/timeout knob stays at its default and
-    // only the active prompt signal is forwarded.
+    // The unset level is the pi Agent default ("off", audit-1108), which this
+    // non-reasoning model supports as its only level (#352); every
+    // retry/header/timeout knob stays at its default and only the active prompt
+    // signal is forwarded.
     agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, std::move(options));
 
     REQUIRE(run_prompt(subject, "hi"));
@@ -610,10 +610,10 @@ TEST_CASE("the Agent holds kDefaultModel with no special-casing until a real mod
     runtime->responses.push_back(ai::assistant_text_message("ok"));
 
     // No model configured: the loop forwards the concrete unknown kDefaultModel
-    // exactly as configured, and the unset level requests pi's
-    // DEFAULT_THINKING_LEVEL ("medium") which clamps to kDefaultModel's only
-    // supported level ("off") — a fresh Agent's first turn carries no
-    // reasoning, matching pi's `if (!model) thinkingLevel = "off"`.
+    // exactly as configured, and the unset level is the pi Agent default
+    // ("off"), which kDefaultModel supports as its only level — a fresh
+    // Agent's first turn carries no reasoning, matching pi's
+    // `initialState?.thinkingLevel ?? "off"`.
     agent::Agent subject(runtime->factory(), agent::ToolRegistry{}, {});
     auto run = run_agent(subject, "hi");
 

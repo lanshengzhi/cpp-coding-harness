@@ -1,0 +1,149 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-01T10:06:42.753Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/agent/src/agent.ts:Agent.reset,Agent.prompt,Agent.steer,Agent.followUp,Agent.state",
+    "packages/ai/src/utils/transcript.ts:getCurrentSystemMessage,getCurrentSystemPrompt,getCurrentTools",
+    "packages/agent/test/agent.test.ts:restores the transcript baseline when reset",
+    "packages/agent/test/agent.test.ts:should reject reset while processing without corrupting the transcript"
+  ],
+  "scenarios": [
+    {
+      "name": "reset retains live tools, model and thinking level and restores the message baseline",
+      "inputs": {
+        "initialState": {
+          "systemPrompt": "sys",
+          "tools": [
+            "echo"
+          ],
+          "model": {
+            "id": "reasoning-mock",
+            "reasoning": true
+          },
+          "thinkingLevel": "high"
+        },
+        "prompt": "go",
+        "queuedBeforeReset": [
+          "steer",
+          "follow"
+        ],
+        "promptAfterReset": "again"
+      },
+      "expected": {
+        "beforeReset": {
+          "roles": [
+            "system",
+            "user",
+            "assistant"
+          ],
+          "hasQueuedMessages": true
+        },
+        "afterReset": {
+          "roles": [
+            "system"
+          ],
+          "systemContent": "sys",
+          "systemToolsAdded": [
+            "echo"
+          ],
+          "systemPrompt": "sys",
+          "tools": [
+            "echo"
+          ],
+          "modelId": "reasoning-mock",
+          "thinkingLevel": "high",
+          "hasQueuedMessages": false,
+          "isStreaming": false,
+          "streamingMessage": null,
+          "pendingToolCalls": []
+        },
+        "afterResetRequest": {
+          "roles": [
+            "system",
+            "user"
+          ],
+          "systemToolsAdded": [
+            "echo"
+          ]
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "restores the transcript baseline when reset"
+      }
+    },
+    {
+      "name": "reset during an active run is rejected without changing the run or transcript",
+      "inputs": {
+        "prompt": "Hello",
+        "resetWhen": "assistant stream started, before its terminal"
+      },
+      "expected": {
+        "beforeReset": {
+          "isStreaming": true,
+          "roles": [
+            "user"
+          ]
+        },
+        "resetError": "Agent is already processing. Wait for completion before resetting.",
+        "afterRejectedReset": {
+          "isStreaming": true,
+          "roles": [
+            "user"
+          ]
+        },
+        "afterRun": {
+          "isStreaming": false,
+          "roles": [
+            "user",
+            "assistant"
+          ],
+          "lastAssistantText": "Done"
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should reject reset while processing without corrupting the transcript"
+      }
+    },
+    {
+      "name": "reset renders the replayed sections into the live system prompt",
+      "inputs": {
+        "initialMessages": [
+          "system(content=base, sections=alpha,beta)",
+          "user"
+        ]
+      },
+      "expected": {
+        "afterReset": {
+          "roles": [
+            "system"
+          ],
+          "systemContent": "base",
+          "systemSections": {
+            "alpha": "A",
+            "beta": "B"
+          },
+          "systemPrompt": "base\n\nA\n\nB"
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/src/agent.ts",
+        "case": "AgentState.systemPrompt replays getCurrentSystemPrompt"
+      }
+    }
+  ]
+}

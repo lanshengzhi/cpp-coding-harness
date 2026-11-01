@@ -786,7 +786,7 @@ TEST_CASE("Agent continuation during an active run is rejected before consuming 
     auto second_run = run_agent(subject, subject.continue_run());
     REQUIRE_FALSE(second_run.result);
     CHECK(second_run.result.error().code == support::ErrorCode::Validation);
-    CHECK(second_run.result.error().message == "agent is busy (prompt already in flight)");
+    CHECK(second_run.result.error().message == "Agent is already processing. Wait for completion before continuing.");
 
     // The rejection consumed no queued input beyond the active run's own
     // selection and emitted no lifecycle events.
@@ -2891,9 +2891,9 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
 
     CHECK(run.result);
     CHECK(run.state.model.id == "gpt-test");
-    // The unset level requested pi's DEFAULT_THINKING_LEVEL ("medium") and was
-    // clamped at creation against the non-reasoning model's only supported
-    // level (#352). The no-update turn leaves that clamped level unchanged.
+    // The unset level is the pi Agent default ("off", audit-1108), which this
+    // non-reasoning model also supports as its only level (#352). The
+    // no-update turn leaves that level unchanged.
     CHECK(run.state.thinking_level == "off");
 }
 

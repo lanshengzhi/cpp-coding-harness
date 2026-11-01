@@ -42,7 +42,11 @@ Agent::Impl::Impl(ai::ModelStreamFactory stream_factory,
               .tool_execution = options.tool_execution} {
     state.messages = std::move(initial_state.messages);
     state.model = std::move(options.model);
-    state.thinking_level = options.thinking_level.empty() ? "medium" : std::move(options.thinking_level);
+    // Frozen pi's Agent default is `off` (`createMutableAgentState`), not the
+    // application's `DEFAULT_THINKING_LEVEL` ("medium"): a bare Agent keeps
+    // `off` even for a reasoning-capable model, and the application Session
+    // passes its own resolved level explicitly.
+    state.thinking_level = options.thinking_level.empty() ? "off" : std::move(options.thinking_level);
     state.thinking_level = ai::clamp_thinking_level_string(state.model, state.thinking_level);
     state.system_prompt = std::move(options.system_prompt);
     state.input_queues.max_messages = options.max_queued_messages;
@@ -206,7 +210,9 @@ Agent::Agent(ai::ModelStreamFactory stream_factory,
         ToolRegistry tools,
         AsyncAgentOptions options,
         AgentInitialState initial_state) {
-    options.thinking_level = initial_state.thinking_level;
+    if (!initial_state.thinking_level.empty()) {
+        options.thinking_level = initial_state.thinking_level;
+    }
     auto definitions = tools.definitions();
     impl_ = std::make_shared<Impl>(std::move(stream_factory),
             std::move(definitions),
@@ -265,8 +271,7 @@ support::AsyncResult<void> Agent::prompt_with_prefix(ai::UserMessage user_messag
                     co_return std::unexpected(agent_not_initialized());
                 }
                 if (impl->active_run) {
-                    co_return std::unexpected(support::make_error(
-                            support::ErrorCode::Validation, "agent is busy (prompt already in flight)"));
+                    co_return std::unexpected(agent_busy_error());
                 }
                 InitialInput initial_input;
                 initial_input.prefix_messages = std::move(prefix);
@@ -293,8 +298,7 @@ support::AsyncResult<void> Agent::continue_run(AgentEventCommitter commitment, s
                     co_return std::unexpected(agent_not_initialized());
                 }
                 if (impl->active_run) {
-                    co_return std::unexpected(support::make_error(
-                            support::ErrorCode::Validation, "agent is busy (prompt already in flight)"));
+                    co_return std::unexpected(agent_continue_busy_error());
                 }
                 co_return co_await Impl::run_loop(
                         impl, std::nullopt, std::move(commitment), std::move(stop_source), InitialInput{});
@@ -311,8 +315,7 @@ support::AsyncResult<void> Agent::continue_run_with_queue_fallback(
                     co_return std::unexpected(agent_not_initialized());
                 }
                 if (impl->active_run) {
-                    co_return std::unexpected(support::make_error(
-                            support::ErrorCode::Validation, "agent is busy (prompt already in flight)"));
+                    co_return std::unexpected(agent_continue_busy_error());
                 }
 
                 const auto snapshot = impl->snapshot();
@@ -352,6 +355,45 @@ void Agent::abort() {
     if (impl_ && impl_->active_stop_source) {
         (void)impl_->active_stop_source->request_stop();
     }
+}
+
+support::ExpectedVoid Agent::reset() {
+    if (!impl_) {
+        return std::unexpected(agent_not_initialized());
+    }
+    if (impl_->active_run) {
+        return std::unexpected(agent_reset_busy_error());
+    }
+
+    // pi `Agent.reset`: replay the transcript's System Messages into one
+    // leading baseline and restore the live System Prompt from it, so the
+    // next request sees the same prompt the baseline message carries.
+    const auto baseline = current_system_message(impl_->state.messages);
+    impl_->state.messages.clear();
+    std::string system_prompt;
+    if (baseline) {
+        // pi `AgentState.systemPrompt` is the `getCurrentSystemPrompt` replay:
+        // the content plus every retained section's text, not `content` alone.
+        system_prompt = baseline->content;
+        for (const auto& section : baseline->sections) {
+            if (!section.text || section.text->empty()) {
+                continue;
+            }
+            if (!system_prompt.empty()) {
+                system_prompt += "\n\n";
+            }
+            system_prompt += *section.text;
+        }
+        impl_->state.messages.push_back(ai::MessageVariant{*baseline});
+    }
+    impl_->state.system_prompt = std::move(system_prompt);
+
+    // Transient run facts do not survive a reset; tools, the Model and the
+    // thinking level are live policy and stay as they are (frozen pi).
+    impl_->state.is_running = false;
+    impl_->state.streaming_message.reset();
+    impl_->state.pending_tool_call_ids.clear();
+    return clear_input_queues();
 }
 
 support::ExpectedVoid Agent::steer(ai::MessageVariant message) {
