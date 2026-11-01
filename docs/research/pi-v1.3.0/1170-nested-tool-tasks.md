@@ -181,7 +181,10 @@ public cancellation calls.
 
 Every case releases its gates, settles, closes the Harness and records its
 observations before the discriminating assertions, so a failing assertion leaves
-no live task thread (`CODING_STANDARDS.md` §11.10).
+no live task thread (`CODING_STANDARDS.md` §11.10). The task-record projections
+run inside `Session::read_committed`, joining the same FIFO line as every commit:
+`MemoryStorage` is unsynchronized, so a direct scan from the test thread would
+race the Harness's own storage access.
 
 ## Validation
 
