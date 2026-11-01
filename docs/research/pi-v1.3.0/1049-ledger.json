@@ -424,11 +424,11 @@
           "extension-triggered run starts from an idle session and retains contributions across a tool turn"
         ]
       },
-      "cppSeam": "No general extension lifecycle hook. `src/coding_agent/AgentSessionExecution.cpp:401` only builds the MCP server system-prompt section; `ExtensionToolRegistry` is a tool-contribution seam, not a `before_agent_start`/`sendMessage` seam.",
-      "cppEvidence": "C++ has no `before_agent_start`, custom-message trigger, or extension-driven run API. The native extension tool seam is wired at Session Assembly, but no native extension lifecycle/runtime is present. ADR 0075 (\u00a7Selected capability additions, Extensions) explicitly selects native registration/hooks/tool wrapping/run triggering and prompt/busy-state semantics; #1044 includes the same native extension behavior. ADR 0066's minimal #865 tool-source ruling cannot veto this later membership decision. Direct third-party TS/JS execution remains excluded.",
+      "cppSeam": "`src/coding_agent/extensions/NativeExtension.hpp` (the `NativeExtension : ExtensionToolSource`, `ExtensionSession`, `BeforeAgentStartEvent/Result` and `ExtensionContext` values), `src/coding_agent/extensions/NativeExtensionHost.hpp/.cpp` (registration order and dispatch), `src/coding_agent/AgentSessionExecution.cpp` (`bind_native_extensions`, `send_extension_message`, `run_trigger_work`, `execute_run`) and `src/coding_agent/runtime/SessionFactory.cpp` (native extensions join the existing `load_extension_tools` source list).",
+      "cppEvidence": "`tests/coding_agent/NativeExtensionTest.cpp` drives the real application Session through `create_agent_session_async`: the extension observes `is_idle == false` in `before_agent_start`, its system-prompt replacement reaches every request of the run through #1107's `prepareRequest` projection, its custom message remains after the extension tool turn, and the bound `send_message` action starts a second run from idle whose triggered request retains the prior tool turn and both contributions. Two additional cases pin registration-order dispatch/replacement visibility and a hook failure. Tools are loaded through the existing #865 Extension Tool Source registry; direct third-party TS/JS execution remains excluded.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Implement bounded native slices: (1) extension registration/event dispatch and `before_agent_start` with busy/idle context; (2) system-prompt and custom-message contributions plus `sendMessage({triggerTurn:true})` run triggering; (3) tool wrapping and contribution retention across a tool turn with settled ordering. Reuse the existing Extension Tool Source registry; do not add a TS/JS plugin loader.",

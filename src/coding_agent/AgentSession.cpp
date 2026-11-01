@@ -702,6 +702,12 @@ boost::asio::awaitable<support::Expected<std::unique_ptr<AgentSession>>> AgentSe
         }
     }
     session->impl_->replay_loaded_tools();
+    // pi extension-factory binding: the compiled-in extensions receive their
+    // session action handle now that the Agent exists. Binding is
+    // registration only; no run starts from it.
+    if (auto bound = session->impl_->bind_native_extensions(); !bound) {
+        co_return std::unexpected(std::move(bound.error()));
+    }
     if (auto persisted = co_await session->impl_->persist_initial_system_message(); !persisted) {
         co_return std::unexpected(persisted.error());
     }

@@ -259,26 +259,37 @@ support::AsyncResult<void> Agent::prompt_with_prefix(ai::UserMessage user_messag
         std::vector<ai::MessageVariant> prefix,
         AgentEventCommitter commitment,
         std::stop_source stop_source) {
-    return support::detail::make_async_result(
-            [impl = impl_,
-                    user_message = std::move(user_message),
-                    prefix = std::move(prefix),
-                    commitment = std::move(commitment),
-                    stop_source = std::move(stop_source)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-                if (!impl) {
-                    co_return std::unexpected(agent_not_initialized());
-                }
-                if (impl->active_run) {
-                    co_return std::unexpected(agent_busy_error());
-                }
-                InitialInput initial_input;
-                initial_input.prefix_messages = std::move(prefix);
-                co_return co_await Impl::run_loop(impl,
-                        std::optional<ai::UserMessage>{std::move(user_message)},
-                        std::move(commitment),
-                        std::move(stop_source),
-                        std::move(initial_input));
-            });
+    return prompt_prepared(std::optional<ai::UserMessage>{std::move(user_message)},
+            std::move(prefix),
+            {},
+            std::move(commitment),
+            std::move(stop_source));
+}
+
+support::AsyncResult<void> Agent::prompt_prepared(std::optional<ai::UserMessage> user_message,
+        std::vector<ai::MessageVariant> prefix,
+        std::vector<ai::MessageVariant> messages,
+        AgentEventCommitter commitment,
+        std::stop_source stop_source) {
+    return support::detail::make_async_result([impl = impl_,
+                                                      user_message = std::move(user_message),
+                                                      prefix = std::move(prefix),
+                                                      messages = std::move(messages),
+                                                      commitment = std::move(commitment),
+                                                      stop_source = std::move(stop_source)]() mutable
+                                                      -> boost::asio::awaitable<support::ExpectedVoid> {
+        if (!impl) {
+            co_return std::unexpected(agent_not_initialized());
+        }
+        if (impl->active_run) {
+            co_return std::unexpected(agent_busy_error());
+        }
+        InitialInput initial_input;
+        initial_input.prefix_messages = std::move(prefix);
+        initial_input.messages = std::move(messages);
+        co_return co_await Impl::run_loop(
+                impl, std::move(user_message), std::move(commitment), std::move(stop_source), std::move(initial_input));
+    });
 }
 
 support::AsyncResult<void> Agent::continue_run() { return continue_run_with_queue_fallback({}, std::stop_source{}); }
