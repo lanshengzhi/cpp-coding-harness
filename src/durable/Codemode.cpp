@@ -702,7 +702,10 @@ private:
         const TaskId task = *created;
         const std::string name = call.name;
         // The wait runs beside the event loop: the VM keeps processing what it
-        // already has while this call runs (frozen pi `launch`).
+        // already has while this call runs (frozen pi `launch`). The thread
+        // borrows `this` and the invocation's runtime and Session; `stop_waiters`
+        // joins every thread before this Execution or the runtime is destroyed
+        // (CODING_STANDARDS.md §7.5).
         waiting.thread = std::jthread([this, events, runtime, session, task, id, key, name, invocation, finish] {
             auto combined = std::stop_source{};
             std::stop_callback interrupted(invocation, [&combined] { combined.request_stop(); });

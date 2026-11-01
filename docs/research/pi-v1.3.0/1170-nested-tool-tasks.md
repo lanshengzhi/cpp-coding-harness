@@ -95,6 +95,9 @@ Frozen behavior implemented here:
 - `src/durable/ToolContent.{hpp,cpp}` (new): the content-block codec and the
   harness error content, extracted from `WorkflowRuntime.cpp` so the nested
   task and the generation path share one encoding.
+- `src/durable/JsonFields.hpp` (new, private): the JSON member/integer/number
+  and validation helpers the generation path already carried, now shared with
+  the nested task and content codec instead of copied a third time.
 - `src/durable/Codemode.cpp`: `Execution` launches every admitted call as a
   nested task and waits for it beside the event loop, records its row and
   journal entry before delivering the answer, delivers recorded entries in
@@ -110,7 +113,7 @@ Frozen behavior implemented here:
   conversation-abort pass reads every reached task from its own scan instead of
   re-reading each record after the commit's first table write.
 - `tests/durable/NestedToolTaskTest.cpp` (new): the six registered frozen
-  comparisons plus the script-ends-while-running case.
+  comparisons plus a direct recovery case for the recorded replay policy.
 - `tests/durable/HarnessCodemodeTest.cpp`: the two #1094 abort cases now assert
   the frozen harness error and the durable nested task records instead of the
   superseded script-history text.
@@ -170,6 +173,11 @@ public cancellation calls.
 - `Cancelling an observer wait does not cancel the nested call`.
 - `Nested calls use the public tool hooks with their parent`.
 - `A script that ends without awaiting its nested call admits no call`.
+- `A recovered nested call applies its recorded replay policy` (generator over
+  `replay_safe`): a gated call is interrupted by a graceful close, the Harness
+  reopens, and the resumed `execute` phase either reruns the call (safe, one
+  completion, the script's value) or reports `Tool gate was interrupted and may
+  have partially run` (unsafe, no completion).
 
 Every case releases its gates, settles, closes the Harness and records its
 observations before the discriminating assertions, so a failing assertion leaves
@@ -211,6 +219,10 @@ this slice.
   runtime; it does not interchange a codemode journal with frozen pi.
 - A model-issued call is still inline in the generation invocation, so the
   generation task owns a script's nested calls (recorded divergence above).
+- A nested call's own `ToolExecutionContext::execute_tool` seam stays unwired.
+  The model-issued call excludes its own tool from a script's tool list, so a
+  script cannot reach a nested codemode call and admit grandchildren; wiring
+  that seam without that change would be unreachable code.
 - Output spilling, image files and full output-limit parity remain #1172.
 - A nested call whose tool ignores cancellation can hold its caller as
   `completing`; no timeout or forced termination is introduced here.

@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "c584781145875d2ff72c7077298cd75de6dc8ac1738cefcc20e13fe08fa5bf67"
+            "sha256": "d039123cb19f4ff685fc705b4a2ebc632970d3a20c53c614e8d513bcb24d8ae6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -260,14 +260,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml"
           ],
-          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-          "recordedAt": "2026-10-31T14:20:13Z",
+          "testedRevision": "ff77337347c25e54edf0e0e3ee0f371a0c99c502",
+          "recordedAt": "2026-11-01T05:21:15Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml",
+            "sha256": "8f819333e420d85877c72b796341e6dc2b8ba971ba7d63085f68cf2b7a805efa"
           }
         },
         "rows": [
@@ -367,6 +367,12 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
+        },
+        "revalidation1170": {
+          "reason": "#1170 added two durable sources and a test file, updated the architecture line, registered the audit-1170 nested-ToolTask family and its six orphan scenarios, and moved the codemode run state to shape version 3. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -387,28 +393,28 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "/tmp/1105-existing-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml"
           ],
-          "testedRevision": "3496ff692ef2c4e4c7aaf2c7ab391594674c5026",
-          "recordedAt": "2026-10-30T13:11:22Z",
+          "testedRevision": "ff77337347c25e54edf0e0e3ee0f371a0c99c502",
+          "recordedAt": "2026-11-01T05:21:15Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
-            "sha256": "272006ac6676509d41cb9014f307a86ba62dff2122c765d56b225a30e4bbfcfd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml",
+            "sha256": "8f819333e420d85877c72b796341e6dc2b8ba971ba7d63085f68cf2b7a805efa"
           }
         },
         "inputs": [
           {
             "path": "cmake/targets/Durable.cmake",
-            "sha256": "f62d74aaaef8ee9301b6a2a08b9bafcc35ef366593d32e63a22a9910cb72cf39"
+            "sha256": "b79a02a65c62e8acd874daed2f83ae76bbb9c5d6803a802a28dd6f47e301e2a5"
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "b58e63e652461108593e51461ed5bb07ef1cea8fd9bebb57f3f3b4d428ed400d"
+            "sha256": "a64465389c1441702a7731e236781d2098c5306e1c5bc9fd71f5577e32cb8d61"
           },
           {
             "path": "docs/agents/architecture.md",
-            "sha256": "3b8fb4e49ea48f2de12a4531e7496cf852726cd1549c301a477a0f944653fd1d"
+            "sha256": "3bd4465fd9f9cfad6a010908814fcdb2571d188a682f55bfa5f4cadbde14696f"
           },
           {
             "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
@@ -440,7 +446,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "3416ef812c4c0e9fe79dfc52a0ea00ea1a51d93c435caf5fe57ee75eb0218be3"
+            "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -677,6 +683,15 @@
               "sha256": "c6b627bd07a06f3fb366fd3e6fb118c42ec19a445129aaca042ba043b4f026b4"
             }
           }
+        },
+        "revalidation1170": {
+          "reason": "#1170 added two durable sources and a test file, updated the architecture line, registered the audit-1170 nested-ToolTask family and its six orphan scenarios, and moved the codemode run state to shape version 3. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "cmake/targets/Durable.cmake",
+            "cmake/tests/DurableTests.cmake",
+            "docs/agents/architecture.md",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -821,7 +836,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "3416ef812c4c0e9fe79dfc52a0ea00ea1a51d93c435caf5fe57ee75eb0218be3"
+            "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -909,14 +924,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml"
           ],
-          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-          "recordedAt": "2026-10-31T14:20:13Z",
+          "testedRevision": "ff77337347c25e54edf0e0e3ee0f371a0c99c502",
+          "recordedAt": "2026-11-01T05:21:15Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1170-revalidation-existing.xml",
+            "sha256": "8f819333e420d85877c72b796341e6dc2b8ba971ba7d63085f68cf2b7a805efa"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -981,6 +996,12 @@
               "sha256": "ff64512e3fc12d4d752a3ad2a6a355ef2228161bb46b0831810d1769cfe27238"
             }
           }
+        },
+        "revalidation1170": {
+          "reason": "#1170 added two durable sources and a test file, updated the architecture line, registered the audit-1170 nested-ToolTask family and its six orphan scenarios, and moved the codemode run state to shape version 3. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -1228,11 +1249,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "3416ef812c4c0e9fe79dfc52a0ea00ea1a51d93c435caf5fe57ee75eb0218be3"
+            "sha256": "3c0953411998c22582cba38927eb9f3898f999fcc0cb26df51a1c03d623705df"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "c584781145875d2ff72c7077298cd75de6dc8ac1738cefcc20e13fe08fa5bf67"
+            "sha256": "d039123cb19f4ff685fc705b4a2ebc632970d3a20c53c614e8d513bcb24d8ae6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1256,14 +1277,14 @@
             "issue1118",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml"
+            "docs/research/pi-v1.3.0/deliveries/1170-revalidation-1118.xml"
           ],
-          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-          "recordedAt": "2026-10-31T14:20:13Z",
+          "testedRevision": "ff77337347c25e54edf0e0e3ee0f371a0c99c502",
+          "recordedAt": "2026-11-01T05:21:15Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
-            "sha256": "ed55e2d9c856d927b10e31c4f93b8ba37e23af5bc34ab383fe38f8f8183d190e"
+            "path": "docs/research/pi-v1.3.0/deliveries/1170-revalidation-1118.xml",
+            "sha256": "999c64af8cb3d4bf1bd081ae667b910809cfc689fa8f99840a945fa4d508f0c3"
           }
         },
         "rows": [
@@ -1365,6 +1386,12 @@
           "reason": "#1178 corrected three inert scenarioLinks whose rows are the consolidated cch_chord:delta:prepare-replace row but whose ticket was 1061; the lane filter never applied them, so the row's recorded obligations omitted the deeply-equal and aborted whole-root preparation scenarios. The link ticket is now 1057 and the #1178 receipt compares all three. The delivered #1118 row, scenarios and routing digest are unchanged, and this change makes no new verification claim about it.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        },
+        "revalidation1170": {
+          "reason": "#1170 added two durable sources and a test file, updated the architecture line, registered the audit-1170 nested-ToolTask family and its six orphan scenarios, and moved the codemode run state to shape version 3. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
           ]
         }
       },
@@ -2438,7 +2465,7 @@
     ],
     "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 562,
+      "scenarios": 568,
       "scenarioNamed": 362,
       "artifactCovered": 56,
       "orphaned": [
@@ -2585,7 +2612,13 @@
         "audit-1168/interchange.json:frozen pi jsonl store with a terminal then live task batch reopens with the pending task",
         "audit-1168/interchange.json:frozen pi jsonl store with a live then terminal task batch reopens with the terminal task and a reclaimed sidecar",
         "audit-1168/interchange.json:frozen pi jsonl store with a revived terminal task reopens with the pending task",
-        "audit-1099/remote-failures.json:remote deterministic delivery rejects duplicates and missing calls remain pending"
+        "audit-1099/remote-failures.json:remote deterministic delivery rejects duplicates and missing calls remain pending",
+        "audit-1170/codemode-nested.json:independent nested calls run concurrently and deliver in completion order",
+        "audit-1170/codemode-nested.json:cancelling one nested task leaves its sibling and the script running",
+        "audit-1170/codemode-nested.json:cancelling the parent codemode call aborts its nested work",
+        "audit-1170/codemode-nested.json:cancelling an observer wait does not cancel the nested call",
+        "audit-1170/codemode-nested.json:nested calls use the public tool hooks with their parent",
+        "audit-1170/codemode-nested.json:a script that ends without awaiting its nested call admits no call"
       ],
       "uncovered": []
     }
@@ -6213,6 +6246,69 @@
         "cch_codemode:codemode-remote"
       ],
       "disposition": "The #1099 delivery compares against this observation without promoting the row."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "independent nested calls run concurrently and deliver in completion order",
+      "reason": "Captured by #1170 to separate independently gated nested ToolTasks from a serial generation-owned execution.",
+      "rows": [
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the case fails for a serial implementation because both nested calls must be live before either is released. Whole-row verification stays with #1180."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "cancelling one nested task leaves its sibling and the script running",
+      "reason": "Captured by #1170 to separate a single nested task's cancellation from the parent's and an observer wait's.",
+      "rows": [
+        "cch_durable:codemode-failure",
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the sibling call and the script continue after the cancelled task settles."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "cancelling the parent codemode call aborts its nested work",
+      "reason": "Captured by #1170 to pin the parent-cancel effect: nested calls aborted, store writes discarded, one harness error result.",
+      "rows": [
+        "cch_durable:codemode-failure",
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the durable nested task records keep their own outcomes."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "cancelling an observer wait does not cancel the nested call",
+      "reason": "Captured by #1170 to separate cancelling one wait from cancelling the call it waits for.",
+      "rows": [
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; only the wait is rejected and the nested call still completes."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "nested calls use the public tool hooks with their parent",
+      "reason": "Captured by #1170 to pin that nested calls run the public `pi.tool` hooks with their parent identity and that an `afterTool` replacement reaches the script.",
+      "rows": [
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the hook order follows the nested calls' completion order."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "a script that ends without awaiting its nested call admits no call",
+      "reason": "Captured by #1170 to pin that a call is admitted only after the issued frontier commits; an un-awaited call never runs.",
+      "rows": [
+        "cch_durable:codemode-replay",
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the un-admitted call keeps its `cancelled` row and creates no nested task."
     }
   ],
   "correctionsIndex": [

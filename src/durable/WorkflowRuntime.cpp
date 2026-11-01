@@ -4,6 +4,7 @@
 #include "durable/AwaitResult.hpp"
 #include "durable/CodemodeExecution.hpp"
 #include "durable/CommittedContext.hpp"
+#include "durable/JsonFields.hpp"
 #include "durable/ToolContent.hpp"
 #include "durable/Compaction.hpp"
 #include "support/Json.hpp"
@@ -34,8 +35,6 @@ namespace {
 using Json = chord::Json;
 using Object = Json::Object;
 using Array = Json::Array;
-
-Json numeric(std::int64_t value) { return Json{static_cast<double>(value)}; }
 
 Json tool_json(const ai::Tool& tool) {
     Object value{{"name", tool.name}, {"description", tool.description},
@@ -228,26 +227,6 @@ std::vector<DocumentDefinition> initial_document_definitions(const RootOptions& 
             [] { return Json{Object{{"models", Json{Object{}}}, {"tools", Json{Object{}}}}}; },
             always_checkpoint));
     return definitions;
-}
-
-support::Error validation(std::string message) {
-    return support::make_error(support::ErrorCode::Validation, std::move(message));
-}
-
-const Json* member(const Json& value, std::string_view key) {
-    const auto* object = value.as_object();
-    if (object == nullptr) return nullptr;
-    const auto found = object->find(std::string{key});
-    return found == object->end() ? nullptr : &found->second;
-}
-
-support::Expected<std::int64_t> as_integer(const Json& json) {
-    const auto* number = json.as_number();
-    // The strict bounds avoid double rounding INT64_MAX up to 2^63.
-    if (number == nullptr || !(*number >= -0x1p63 && *number < 0x1p63) || std::trunc(*number) != *number) {
-        return std::unexpected(validation("Expected an integer field"));
-    }
-    return static_cast<std::int64_t>(*number);
 }
 
 support::ExpectedVoid convert_partial(Transaction& tx, chord::Draft& live, ConversationId id) {

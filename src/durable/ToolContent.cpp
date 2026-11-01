@@ -1,4 +1,6 @@
-#include "durable/ToolContent.hpp"
+#include "ToolContent.hpp"
+
+#include "durable/JsonFields.hpp"
 
 #include <cch/support/JsonValue.hpp>
 
@@ -13,17 +15,6 @@ namespace {
 using Json = chord::Json;
 using Object = Json::Object;
 using Array = Json::Array;
-
-support::Error validation(std::string message) {
-    return support::make_error(support::ErrorCode::Validation, std::move(message));
-}
-
-const Json* member(const Json& value, std::string_view key) {
-    const auto* object = value.as_object();
-    if (object == nullptr) return nullptr;
-    const auto found = object->find(std::string{key});
-    return found == object->end() ? nullptr : &found->second;
-}
 
 } // namespace
 

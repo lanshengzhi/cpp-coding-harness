@@ -1,12 +1,15 @@
 #include <cch/durable/Codemode.hpp>
+#include <cch/durable/SqliteStorage.hpp>
 #include <cch/durable/Harness.hpp>
 #include <cch/durable/Storage.hpp>
 #include "durable/FrozenExpectation.hpp"
 #include "durable/ToolTask.hpp"
 #include "durable/Outcome.hpp"
 #include "support/Json.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -62,14 +65,20 @@ public:
         bool released{false};
     };
 
+    /// Block only the first invocation of each name, so a recovered call runs to
+    /// completion instead of waiting for a release that never comes.
+    void block_first_only() { first_only_ = true; }
+
     std::shared_ptr<Waiter> enter(std::string name) {
         auto waiter = std::make_shared<Waiter>();
         {
             std::lock_guard lock(mutex_);
             entered_.push_back(name);
+            waiter->released = first_only_ && ++calls_[name] > 1;
             waiters_.insert_or_assign(name, waiter);
         }
         entered_signal_.release();
+        if (waiter->released) waiter->ready.notify_all();
         return waiter;
     }
 
@@ -121,6 +130,8 @@ private:
     std::vector<std::string> entered_;
     std::vector<std::string> completed_;
     std::map<std::string, std::shared_ptr<Waiter>> waiters_;
+    std::map<std::string, std::size_t> calls_;
+    bool first_only_{false};
     std::binary_semaphore entered_signal_{0};
 };
 
@@ -257,21 +268,23 @@ struct Rig {
         return std::move(input.value());
     }
 
-    [[nodiscard]] support::JsonValue last_result() const {
+    /// The last model-visible tool result; absent when the view or the entry is
+    /// missing, so the caller asserts only after the Harness is closed.
+    [[nodiscard]] std::optional<support::JsonValue> last_result() const {
         auto view = consume(harness->conversation_view(root));
-        REQUIRE(view.has_value());
+        if (!view.has_value()) return std::nullopt;
         const auto json = view.value().to_support();
         const auto& entries = json.at("entries").get_array();
         const auto found = std::find_if(entries.rbegin(), entries.rend(), [](const auto& entry) {
             return entry.at("kind").get_string() == "pi.tool-result";
         });
-        REQUIRE(found != entries.rend());
+        if (found == entries.rend()) return std::nullopt;
         return found->at("data").at("model").get_array().front();
     }
 
     [[nodiscard]] std::optional<TaskId> live_nested_parent() const {
         auto inspection = consume(harness->inspect());
-        REQUIRE(inspection.has_value());
+        if (!inspection.has_value()) return std::nullopt;
         for (const auto& task : inspection.value().tasks) {
             const auto input = task.record.input.to_support();
             if (!nested_input(input)) continue;
@@ -282,7 +295,7 @@ struct Rig {
 
     [[nodiscard]] std::vector<support::JsonValue> live_nested() const {
         auto inspection = consume(harness->inspect());
-        REQUIRE(inspection.has_value());
+        if (!inspection.has_value()) return {};
         std::vector<support::JsonValue> rows;
         for (const auto& task : inspection.value().tasks) {
             const auto input = task.record.input.to_support();
@@ -303,7 +316,7 @@ struct Rig {
 
     [[nodiscard]] std::optional<TaskId> live_nested_task(std::string_view key) const {
         auto inspection = consume(harness->inspect());
-        REQUIRE(inspection.has_value());
+        if (!inspection.has_value()) return std::nullopt;
         for (const auto& task : inspection.value().tasks) {
             const auto input = task.record.input.to_support();
             if (!nested_input(input)) continue;
@@ -315,7 +328,7 @@ struct Rig {
 
     [[nodiscard]] std::size_t live_nested_count() const {
         auto inspection = consume(harness->inspect());
-        REQUIRE(inspection.has_value());
+        if (!inspection.has_value()) return 0;
         return static_cast<std::size_t>(std::ranges::count_if(inspection.value().tasks,
                 [](const auto& task) { return nested_input(task.record.input.to_support()); }));
     }
@@ -360,9 +373,10 @@ struct Rig {
     }
 
     /// The terminal task records of the nested calls, normalized to the frozen projection.
-    [[nodiscard]] std::vector<support::JsonValue> nested_records() {
+    /// The terminal nested-call task records; absent when the scan fails.
+    [[nodiscard]] std::optional<std::vector<support::JsonValue>> nested_records() {
         auto tasks = storage.scan_tasks(1024);
-        REQUIRE(tasks.has_value());
+        if (!tasks.has_value()) return std::nullopt;
         std::vector<support::JsonValue> rows;
         for (const auto& task : *tasks) {
             if (task.kind != "pi.tool") continue;
@@ -467,6 +481,8 @@ TEST_CASE(
     REQUIRE(consume(rig.harness->close()).has_value());
     REQUIRE(both);
     REQUIRE(settled.has_value());
+    REQUIRE(result.has_value());
+    REQUIRE(records.has_value());
     compare_with_frozen("independent nested calls run concurrently and deliver in completion order",
             Json{Object{{"bothLiveBeforeRelease", both},
                     {"enteredOrder", strings(rig.gates->entered())},
@@ -474,10 +490,10 @@ TEST_CASE(
                     {"liveTasks", Json{live}},
                     {"docsLive", Json{live_docs}},
                     {"docsPartial", Json{partial_docs}},
-                    {"nestedTaskRecords", Json{records}},
-                    {"isError", result.at("isError")},
-                    {"output", result_view(result).at("output")},
-                    {"calls", result_view(result).at("calls")}}});
+                    {"nestedTaskRecords", Json{*records}},
+                    {"isError", result->at("isError")},
+                    {"output", result_view(*result).at("output")},
+                    {"calls", result_view(*result).at("calls")}}});
 }
 
 TEST_CASE("Cancelling one nested task leaves its sibling and the script running", "[durable][codemode][issue1170]") {
@@ -513,13 +529,14 @@ TEST_CASE("Cancelling one nested task leaves its sibling and the script running"
     REQUIRE(both);
     REQUIRE(settled.has_value());
     REQUIRE(marked.has_value());
+    REQUIRE(result.has_value());
     compare_with_frozen("cancelling one nested task leaves its sibling and the script running",
             Json{Object{{"abortResult", *marked},
                     {"completionOrder", strings(rig.gates->completed())},
                     {"docsAfterCancel", Json{cancelled_docs}},
-                    {"isError", result.at("isError")},
-                    {"output", result_view(result).at("output")},
-                    {"calls", result_view(result).at("calls")}}});
+                    {"isError", result->at("isError")},
+                    {"output", result_view(*result).at("output")},
+                    {"calls", result_view(*result).at("calls")}}});
 }
 
 TEST_CASE("Cancelling the parent codemode call aborts its nested work", "[durable][codemode][issue1170]") {
@@ -545,18 +562,19 @@ TEST_CASE("Cancelling the parent codemode call aborts its nested work", "[durabl
     const auto store = consume(
             rig.harness->session().snapshot(codemode_store_document(), DocumentAddress{.conversation_id = rig.root}));
     const auto live_nested = rig.live_nested_count();
-    const auto view = result_view(result);
     REQUIRE(consume(rig.harness->close()).has_value());
     REQUIRE(entered);
     REQUIRE(settled.has_value());
     REQUIRE(marked.has_value());
+    REQUIRE(result.has_value());
     REQUIRE(store.has_value());
     REQUIRE(store.value().has_value());
+    const auto view = result_view(*result);
     compare_with_frozen("cancelling the parent codemode call aborts its nested work",
             Json{Object{{"abortResult", *marked},
                     {"storeValues", store.value()->to_support().at("values")},
                     {"liveNestedTasks", static_cast<double>(live_nested)},
-                    {"isError", result.at("isError")},
+                    {"isError", result->at("isError")},
                     {"output", view.at("output")},
                     {"calls", view.at("calls")}}});
 }
@@ -582,8 +600,8 @@ TEST_CASE("Cancelling an observer wait does not cancel the nested call", "[durab
                 });
         cancel.request_stop();
         std::unique_lock lock(mutex);
-        ready.wait(lock, [&done] { return done; });
-        if (!outcome.has_value()) wait_error = outcome.error().message;
+        if (!ready.wait_for(lock, kWait, [&done] { return done; })) wait_error = "the wait did not settle";
+        if (wait_error == std::nullopt && !outcome.has_value()) wait_error = outcome.error().message;
     }
     rig.gates->release_all();
     std::optional<SettledSubmission> settled;
@@ -593,17 +611,19 @@ TEST_CASE("Cancelling an observer wait does not cancel the nested call", "[durab
     }
     const auto result = rig.last_result();
     const auto records = rig.nested_records();
-    const auto view = result_view(result);
     REQUIRE(consume(rig.harness->close()).has_value());
     REQUIRE(entered);
     REQUIRE(settled.has_value());
     REQUIRE(nested.has_value());
     REQUIRE(wait_error.has_value());
-    REQUIRE(records.size() == 1);
+    REQUIRE(result.has_value());
+    REQUIRE(records.has_value());
+    REQUIRE(records->size() == 1);
+    const auto view = result_view(*result);
     compare_with_frozen("cancelling an observer wait does not cancel the nested call",
             Json{Object{{"waitRejected", true},
-                    {"nestedOutcome", records.front().at("outcome")},
-                    {"isError", result.at("isError")},
+                    {"nestedOutcome", records->front().at("outcome")},
+                    {"isError", result->at("isError")},
                     {"output", view.at("output")},
                     {"calls", view.at("calls")}}});
 }
@@ -628,10 +648,11 @@ TEST_CASE("Nested calls use the public tool hooks with their parent", "[durable]
     }
     const auto result = rig.last_result();
     const auto logged = rig.hooks->snapshot();
-    const auto view = result_view(result);
     REQUIRE(consume(rig.harness->close()).has_value());
     REQUIRE(both);
     REQUIRE(settled.has_value());
+    REQUIRE(result.has_value());
+    const auto view = result_view(*result);
     Array hook_log;
     for (const auto& entry : logged) {
         if (!entry.starts_with("before:")) continue;
@@ -655,7 +676,7 @@ TEST_CASE("Nested calls use the public tool hooks with their parent", "[durable]
     }
     compare_with_frozen("nested calls use the public tool hooks with their parent",
             Json{Object{{"hookLog", Json{std::move(hook_log)}},
-                    {"isError", result.at("isError")},
+                    {"isError", result->at("isError")},
                     {"output", view.at("output")},
                     {"calls", view.at("calls")}}});
 }
@@ -670,15 +691,85 @@ TEST_CASE("A script that ends without awaiting its nested call admits no call", 
     }
     const auto result = rig.last_result();
     const auto records = rig.nested_records();
-    const auto view = result_view(result);
     REQUIRE(consume(rig.harness->close()).has_value());
     REQUIRE(settled.has_value());
+    REQUIRE(result.has_value());
+    REQUIRE(records.has_value());
+    const auto view = result_view(*result);
     compare_with_frozen("a script that ends without awaiting its nested call admits no call",
             Json{Object{{"entered", strings(rig.gates->entered())},
-                    {"nestedTasks", static_cast<double>(records.size())},
-                    {"isError", result.at("isError")},
+                    {"nestedTasks", static_cast<double>(records->size())},
+                    {"isError", result->at("isError")},
                     {"output", view.at("output")},
                     {"calls", view.at("calls")}}});
+}
+
+TEST_CASE("A recovered nested call applies its recorded replay policy", "[durable][codemode][issue1170]") {
+    const bool replay_safe = GENERATE(true, false);
+    CAPTURE(replay_safe);
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "nested-recovery.sqlite";
+    auto storage = SqliteStorage::open(path);
+    REQUIRE(storage.has_value());
+    auto gates = std::make_shared<Gates>();
+    gates->block_first_only();
+    Registry registry;
+    Extension gated{.name = "gates"};
+    auto tool = gate_tool(gates);
+    tool.replay_safe = replay_safe;
+    gated.tools.push_back(std::move(tool));
+    REQUIRE(registry.install(std::move(gated)).has_value());
+    auto sandbox = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path());
+    REQUIRE(sandbox.has_value());
+    REQUIRE(registry.install(codemode_extension(std::move(*sandbox))).has_value());
+    auto opened = consume(Harness::open(**storage,
+            HarnessOptions{.registry = &registry,
+                    .stream = scripts({"const a = await tools.gate({name:'A'}); store('kept', a); return a;"})}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+    auto input =
+            consume(harness->submit(root.value(), SubmissionDraft{.body = InputSubmissionDraft{.content = "run"}}));
+    REQUIRE(input.has_value());
+    // The interrupted invocation ends with the tool still running; the close
+    // leaves the nested task owned by its parent.
+    const bool entered = gates->wait_entered();
+    REQUIRE(consume(harness->close()).has_value());
+    harness.reset();
+    REQUIRE((*storage)->close().has_value());
+    storage->reset();
+    storage = SqliteStorage::open(path);
+    REQUIRE(storage.has_value());
+    opened = consume(Harness::open(**storage,
+            HarnessOptions{.registry = &registry,
+                    .stream = scripts({"const a = await tools.gate({name:'A'}); store('kept', a); return a;"})}));
+    REQUIRE(opened.has_value());
+    harness = std::move(opened.value());
+    REQUIRE(harness->resume().has_value());
+    REQUIRE(consume(harness->wait_for_idle(root.value())).has_value());
+    const auto result = consume(harness->conversation_view(root.value()));
+    REQUIRE(result.has_value());
+    const auto json = result.value().to_support();
+    const auto& entries = json.at("entries").get_array();
+    const auto found = std::find_if(entries.rbegin(), entries.rend(), [](const auto& entry) {
+        return entry.at("kind").get_string() == "pi.tool-result";
+    });
+    REQUIRE(found != entries.rend());
+    const auto tool_result = found->at("data").at("model").get_array().front();
+    const auto text = result_view(tool_result).at("output").get_string();
+    const auto completed = gates->completed().size();
+    REQUIRE(consume(harness->close()).has_value());
+    REQUIRE(entered);
+    if (replay_safe) {
+        CHECK(completed == 1);
+        CHECK_FALSE(tool_result.at("isError").get_boolean());
+        CHECK(text.ends_with("A-done"));
+    } else {
+        CHECK(completed == 0);
+        CHECK(tool_result.at("isError").get_boolean());
+        CHECK(text.find("Tool gate was interrupted and may have partially run") != std::string::npos);
+    }
 }
 
 } // namespace cch::tests::durable
