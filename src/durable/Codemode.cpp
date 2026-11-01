@@ -2,9 +2,12 @@
 
 #include "durable/AwaitResult.hpp"
 #include "durable/CodemodeExecution.hpp"
+#include "durable/ToolContent.hpp"
+#include "durable/ToolTask.hpp"
 #include "support/Json.hpp"
 
 #include <cch/codemode/Declarations.hpp>
+#include <cch/durable/Records.hpp>
 #include <cch/codemode/Source.hpp>
 #include <cch/support/OutputLimiter.hpp>
 
@@ -15,6 +18,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <deque>
+#include <thread>
 #include <format>
 #include <map>
 #include <mutex>
@@ -28,6 +32,11 @@ using Object = Json::object_t;
 using Array = Json::array_t;
 using RunResult = codemode::CodemodeRunResult;
 using HostCall = codemode::CodemodeHostCall;
+
+/// The stored run-state shape: the nested-call task graph records call identity
+/// in its own members, so a document from the serial #1094 shape is refused
+/// instead of replayed by different semantics.
+constexpr double kStateVersion = 3;
 
 support::Error failure(std::string message) {
     return support::make_error(support::ErrorCode::Tool, std::move(message));
@@ -217,7 +226,7 @@ support::Expected<Json> initial_state(ToolExecutionContext& context, const codem
                         std::ranges::find(context.replay_safe_tools, tool.name) != context.replay_safe_tools.end()}}});
     }
     const auto started = clock_ms();
-    Object state{{"version", 2},
+    Object state{{"version", kStateVersion},
             {"source", source.code},
             {"startedAt", Json{static_cast<double>(started)}},
             {"seed", Json{static_cast<double>(random_seed())}},
@@ -415,7 +424,14 @@ struct Idle {
     std::int64_t seq{0};
     std::int64_t issued{0};
 };
-using EventVariant = std::variant<Started, HostCall, Idle, support::Expected<RunResult>>;
+/// One nested call that ended: its VM call ID, the clock reading at its end, and
+/// the result its caller reads (frozen pi `pump` delivering a finished call).
+struct Completed {
+    std::int64_t id{0};
+    std::int64_t at{0};
+    NestedCallResult result{};
+};
+using EventVariant = std::variant<Started, HostCall, Idle, Completed, support::Expected<RunResult>>;
 
 struct Events {
     std::mutex mutex;
@@ -435,6 +451,61 @@ struct Events {
     }
 };
 
+/// The text of a nested call's content, as a script sees a schema-less tool's
+/// output (frozen pi `textOf`): text blocks joined with newlines.
+std::string content_text(const NestedCallResult& result) {
+    std::string text;
+    for (const auto& block : result.content) {
+        if (const auto* item = std::get_if<ai::TextContent>(&block)) {
+            if (!text.empty()) text += '\n';
+            text += item->text;
+        }
+    }
+    return text;
+}
+
+/// The rejection message of a nested error result: its error diagnostics, else
+/// its text (frozen pi `outcomeOf`).
+std::string error_message_of(const NestedCallResult& result) {
+    std::string message;
+    for (const auto& diagnostic : result.diagnostics) {
+        if (!message.empty()) message += '\n';
+        message += diagnostic.message;
+    }
+    return message.empty() ? content_text(result) : message;
+}
+
+Json outcome_json(const NestedCallResult& result) {
+    return Json{Object{
+            {"ok", !result.is_error}, {"value", result.is_error ? error_message_of(result) : content_text(result)}}};
+}
+
+/// The result of a nested call that ended without storing one: the scheduler
+/// faulted or orphaned it (frozen pi `fallbackResult`).
+NestedCallResult fallback_result(const TaskRecord& record, std::string_view name) {
+    NestedCallResult result{.is_error = true};
+    std::string message;
+    if (record.state.outcome.has_value() && record.state.outcome->status == "faulted" &&
+            record.state.outcome->error.has_value()) {
+        message = std::format("Tool {} failed: {}", name, record.state.outcome->error->message);
+    } else if (record.state.outcome.has_value() && record.state.outcome->status == "orphaned") {
+        message = std::format(
+                "Tool {} could not resume: {}", name, record.state.outcome->reason.value_or("its owner ended"));
+    } else {
+        message = std::format("Tool {} ended without a result", name);
+    }
+    result.diagnostics.push_back(NestedCallDiagnostic{.code = "faulted", .message = std::move(message)});
+    return result;
+}
+
+/// One launched nested call: its task and the thread waiting for it beside the
+/// event loop. The thread ends before the invocation returns, so it may borrow
+/// the invocation's runtime and Session.
+struct Waiting {
+    TaskId task{};
+    std::jthread thread{};
+};
+
 class Execution final {
 public:
     Execution(codemode::CodemodeSandbox& sandbox, ToolExecutionContext context, Json state)
@@ -442,7 +513,7 @@ public:
 
     support::Expected<ai::ToolResultMessage> execute(const codemode::CodemodeSource& source) {
         if (const auto* result = field(state_, "result")) return decoded_result(*result);
-        if (state_.at("source").get_string() != source.code || state_.at("version").get_number() != 2)
+        if (state_.at("source").get_string() != source.code || state_.at("version").get_number() != kStateVersion)
             return finish_error("The script cannot resume: its source or code mode version changed.");
         codemode::CodemodeRunOptions options{};
         options.started_at = static_cast<std::int64_t>(state_.at("startedAt").get_number());
@@ -461,7 +532,8 @@ public:
                     .description = tool.at("description").get_string()});
         if (const auto* fingerprint = field(state_, "fingerprint"))
             options.expected_fingerprint = fingerprint->get_string();
-        auto events = std::make_shared<Events>();
+        events_ = std::make_shared<Events>();
+        auto events = events_;
         options.callbacks.on_started = [events](std::string_view fingerprint) {
             events->push(Started{std::string{fingerprint}});
         };
@@ -472,6 +544,7 @@ public:
         if (!started) return finish_error(started.error().message);
         auto run = std::move(*started);
         run.result().start([events](support::Expected<RunResult> result) noexcept { events->push(std::move(result)); });
+        WaitersGuard guard{*this};
         while (true) {
             auto event = events->pop();
             if (const auto* fingerprint = std::get_if<Started>(&event)) {
@@ -481,19 +554,20 @@ public:
                 state_.get_object().insert_or_assign("fingerprint", fingerprint->fingerprint);
                 if (auto saved = save(context_, state_); !saved) return std::unexpected(saved.error());
             } else if (const auto* call = std::get_if<HostCall>(&event)) {
-                observed_.emplace(call->id, *call);
-                auto& rows = state_.at("calls").get_array();
-                const auto index = static_cast<std::size_t>(call->id - 1);
-                if (index < rows.size()) {
-                    if (!same_call(rows[index], *call))
-                        return finish_error("The script took a different path when resumed after a restart: a nested "
-                                            "call changed.");
-                } else
-                    rows.push_back(call_row(*call));
+                if (auto observed = observe(*call); !observed) return std::unexpected(observed.error());
             } else if (const auto* idle = std::get_if<Idle>(&event)) {
                 if (auto advanced = advance(run, *idle); !advanced) {
                     if (context_.runtime->stop_token().stop_requested()) return std::unexpected(advanced.error());
                     return finish_error(advanced.error().message);
+                }
+            } else if (const auto* completed = std::get_if<Completed>(&event)) {
+                if (auto recorded = record(*completed); !recorded) {
+                    if (context_.runtime->stop_token().stop_requested()) return std::unexpected(recorded.error());
+                    return finish_error(recorded.error().message);
+                }
+                if (auto delivered = deliver(run); !delivered) {
+                    if (context_.runtime->stop_token().stop_requested()) return std::unexpected(delivered.error());
+                    return finish_error(delivered.error().message);
                 }
             } else {
                 auto result = std::move(std::get<support::Expected<RunResult>>(event));
@@ -511,6 +585,52 @@ public:
     }
 
 private:
+    /// Stop the waits before this invocation ends. A script that decided its
+    /// outcome leaves no call running behind it, so those calls are aborted
+    /// (frozen pi `ToolTask.settle` aborting its owned calls). An interrupted
+    /// invocation (close, or the parent's abort) aborts nothing: its nested tasks
+    /// stay owned by the parent, resume after a restart, or are marked by the
+    /// parent's own abort cascade.
+    void stop_waiters() {
+        finish_.request_stop();
+        for (auto& waiting : waiting_) {
+            if (waiting.thread.joinable()) waiting.thread.join();
+        }
+        if (decided_) {
+            std::set<std::int64_t> settled;
+            {
+                std::lock_guard lock(settled_mutex_);
+                settled = settled_tasks_;
+            }
+            for (const auto& waiting : waiting_) {
+                if (settled.contains(waiting.task.value)) continue;
+                (void)await_result(context_.runtime->abort_task(waiting.task));
+            }
+        }
+        waiting_.clear();
+    }
+
+    /// The guard runs before the result is committed: a script that ends while a
+    /// nested call still runs abandons no durable work.
+    struct WaitersGuard {
+        Execution& execution;
+        ~WaitersGuard() { execution.stop_waiters(); }
+    };
+
+    support::ExpectedVoid observe(const HostCall& call) {
+        observed_.insert_or_assign(call.id, call);
+        auto& rows = state_.at("calls").get_array();
+        const auto index = static_cast<std::size_t>(call.id - 1);
+        if (index < rows.size()) {
+            if (!same_call(rows[index], call))
+                return std::unexpected(failure(
+                        "The script took a different path when resumed after a restart: a nested call changed."));
+        } else {
+            rows.push_back(call_row(call));
+        }
+        return {};
+    }
+
     support::ExpectedVoid advance(codemode::CodemodeSandbox::Run& run, Idle idle) {
         if (context_.runtime->stop_token().stop_requested())
             return std::unexpected(
@@ -523,78 +643,120 @@ private:
         acks.insert_or_assign(key, Json{static_cast<double>(idle.issued)});
         // Record the issued frontier and identities before admitting any side effect.
         if (auto saved = save(context_, state_); !saved) return saved;
+        if (auto delivered = deliver(run); !delivered) return delivered;
+        return launch();
+    }
+
+    /// Deliver the journal's results in order, each once the VM has issued the
+    /// call it answers (frozen pi `deliverReplayed`).
+    support::ExpectedVoid deliver(codemode::CodemodeSandbox::Run& run) {
         auto& entries = state_.at("entries").get_array();
-        if (next_entry_ < entries.size()) {
+        while (next_entry_ < entries.size()) {
             const auto& entry = entries[next_entry_];
             const auto id = static_cast<std::int64_t>(entry.at("id").get_number());
-            if (!observed_.contains(id))
-                return std::unexpected(failure(
-                        "The script took a different path when resumed after a restart: a recorded call is missing."));
+            if (!observed_.contains(id)) break;
             auto answer = outcome_from_json(entry.at("outcome"));
             if (!answer) return std::unexpected(answer.error());
-            auto delivered = run.deliver(static_cast<std::int64_t>(++next_entry_),
+            auto delivered = run.deliver(static_cast<std::int64_t>(next_entry_ + 1),
                     static_cast<std::int64_t>(entry.at("at").get_number()),
                     id,
                     std::move(*answer));
             if (delivered) return std::unexpected(failure(delivered->message));
             delivered_.insert(id);
-            return {};
-        }
-        for (const auto& [id, call] : observed_) {
-            if (delivered_.contains(id)) continue;
-            auto args = call.arguments_json ? support::read_json(*call.arguments_json)
-                                            : support::Expected<Json>{Json{Object{}}};
-            if (!args) return std::unexpected(args.error());
-            auto& row = state_.at("calls").get_array().at(static_cast<std::size_t>(id - 1)).get_object();
-            const bool admitted = row.contains("started") && row.at("started").get_boolean();
-            const auto& tools = state_.at("tools").get_array();
-            const auto tool = std::ranges::find_if(
-                    tools, [&call](const Json& value) { return value.at("name").get_string() == call.name; });
-            const bool replay_safe =
-                    tool != tools.end() && tool->at("replaySafe").get_boolean() &&
-                    std::ranges::find(context_.replay_safe_tools, call.name) != context_.replay_safe_tools.end();
-            support::Expected<ai::ToolResultMessage> output;
-            if (admitted && !replay_safe) {
-                output = ai::ToolResultMessage{.content = {ai::text_content(std::format(
-                                                       "Tool {} was interrupted and cannot be replayed", call.name))},
-                        .is_error = true};
-            } else {
-                // Admission commits before the physical operation. An unsafe
-                // interrupted operation is never silently repeated.
-                row.insert_or_assign("started", true);
-                if (auto saved = save(context_, state_); !saved) return saved;
-                if (context_.runtime->stop_token().stop_requested())
-                    return std::unexpected(
-                            support::make_error(support::ErrorCode::Cancelled, "Codemode invocation was interrupted"));
-                // debt: nested operations are serialized on the generation thread;
-                // independent parallel tool tasks replace this when that scheduler slice lands.
-                output = context_.execute_tool(ai::ToolCallContent{.id = context_.call_id + "/c" + std::to_string(id),
-                        .name = call.name,
-                        .arguments = std::move(*args)});
-            }
-            if (!output) return std::unexpected(output.error());
-            const auto outcome = outcome_json(*output);
-            row.insert_or_assign("status", output->is_error ? Json{"error"} : Json{"ok"});
-            if (output->is_error) row.insert_or_assign("error", outcome.at("value"));
-            if (output->duration_ms)
-                row.insert_or_assign("durationMs", Json{static_cast<double>(*output->duration_ms)});
-            const auto at = clock_ms();
-            entries.push_back(Json{Object{{"id", Json{static_cast<double>(id)}},
-                    {"at", Json{static_cast<double>(at)}},
-                    {"outcome", outcome}}});
-            // A restart can replay this answer only after its commit succeeds.
-            if (auto saved = save(context_, state_); !saved) return saved;
-            if (context_.runtime->stop_token().stop_requested())
-                return std::unexpected(
-                        support::make_error(support::ErrorCode::Cancelled, "Codemode invocation was interrupted"));
-            auto answer = outcome_from_json(outcome);
-            if (!answer) return std::unexpected(answer.error());
-            auto delivered = run.deliver(static_cast<std::int64_t>(++next_entry_), at, id, std::move(*answer));
-            if (delivered) return std::unexpected(failure(delivered->message));
-            delivered_.insert(id);
-            return {};
+            ++next_entry_;
         }
         return {};
+    }
+
+    /// Launch every observed call the journal does not answer yet, once the
+    /// replayed part is delivered: each becomes an independent nested task.
+    support::ExpectedVoid launch() {
+        if (next_entry_ < state_.at("entries").get_array().size()) return {};
+        for (const auto& [id, call] : observed_) {
+            if (delivered_.contains(id) || launched_.contains(id)) continue;
+            if (auto started = start_call(id, call); !started) return started;
+        }
+        return {};
+    }
+
+    support::ExpectedVoid start_call(std::int64_t id, const HostCall& call) {
+        ai::ToolCallContent nested{.id = std::format("{}/c{}", context_.call_id, id),
+                .name = call.name,
+                .arguments = support::JsonValue{support::JsonValue::object_t{}}};
+        if (call.arguments_json) {
+            auto parsed = support::read_json(*call.arguments_json);
+            if (!parsed) return std::unexpected(parsed.error());
+            nested.arguments = *parsed;
+        }
+        const std::string key = "c" + std::to_string(id);
+        auto created = start_nested_call(*context_.runtime, context_.runtime->task_id(), context_.call_id, key, nested);
+        if (!created) return std::unexpected(created.error());
+        launched_.insert(id);
+        Waiting waiting;
+        waiting.task = *created;
+        auto events = events_;
+        auto* runtime = context_.runtime;
+        auto* session = context_.session;
+        const auto invocation = runtime->stop_token();
+        const auto finish = finish_.get_token();
+        const TaskId task = *created;
+        const std::string name = call.name;
+        // The wait runs beside the event loop: the VM keeps processing what it
+        // already has while this call runs (frozen pi `launch`). The thread
+        // borrows `this` and the invocation's runtime and Session; `stop_waiters`
+        // joins every thread before this Execution or the runtime is destroyed
+        // (CODING_STANDARDS.md §7.5).
+        waiting.thread = std::jthread([this, events, runtime, session, task, id, key, name, invocation, finish] {
+            auto combined = std::stop_source{};
+            std::stop_callback interrupted(invocation, [&combined] { combined.request_stop(); });
+            std::stop_callback ended(finish, [&combined] { combined.request_stop(); });
+            auto settled = await_result(runtime->wait_for_task(task, combined.get_token()));
+            if (!settled) {
+                if (invocation.stop_requested() || finish.stop_requested()) return;
+                events->push(
+                        Completed{.id = id, .at = clock_ms(), .result = fallback_result(TaskRecord{.id = task}, name)});
+                return;
+            }
+            {
+                std::lock_guard lock(settled_mutex_);
+                settled_tasks_.insert(task.value);
+            }
+            auto document = await_result(session->snapshot(
+                    nested_call_document(), DocumentAddress{.task_id = runtime->task_id(), .key = key}));
+            support::Expected<NestedCallResult> decoded =
+                    support::Expected<NestedCallResult>{fallback_result(*settled, name)};
+            if (document && document->has_value()) {
+                const auto state = (*document)->to_support();
+                if (const Json* stored = field(state, "result")) {
+                    if (auto converted = chord::Json::from_support(*stored)) {
+                        // An unreadable member keeps the fallback error, so the
+                        // script always receives an answer for its call.
+                        if (auto read = decode_nested_result(*converted)) decoded = std::move(*read);
+                    }
+                }
+            }
+            events->push(Completed{.id = id, .at = clock_ms(), .result = std::move(*decoded)});
+        });
+        waiting_.push_back(std::move(waiting));
+        return {};
+    }
+
+    /// Record one finished nested call: its row and its journal entry commit
+    /// before the answer reaches the VM (frozen pi `pump`).
+    support::ExpectedVoid record(const Completed& completed) {
+        auto& rows = state_.at("calls").get_array();
+        const auto index = static_cast<std::size_t>(completed.id - 1);
+        if (index < rows.size()) {
+            auto& row = rows[index].get_object();
+            row.insert_or_assign("status", Json{completed.result.is_error ? "error" : "ok"});
+            if (completed.result.is_error) row.insert_or_assign("error", Json{error_message_of(completed.result)});
+            if (completed.result.duration_ms)
+                row.insert_or_assign("durationMs", Json{static_cast<double>(*completed.result.duration_ms)});
+        }
+        state_.at("entries").get_array().push_back(Json{Object{{"id", Json{static_cast<double>(completed.id)}},
+                {"at", Json{static_cast<double>(completed.at)}},
+                {"outcome", outcome_json(completed.result)}}});
+        return save(context_, state_);
     }
 
     support::Expected<ai::ToolResultMessage> finish_error(std::string message) {
@@ -612,6 +774,7 @@ private:
                 result.error->kind == codemode::CodemodeError::Kind::Aborted)
             return std::unexpected(
                     support::make_error(support::ErrorCode::Cancelled, "Codemode invocation was interrupted"));
+        decided_ = true;
         auto tool = format_result(result, state_);
         state_.get_object().insert_or_assign("result", encoded_result(tool));
         if (auto saved = save(context_, state_, result.error ? std::nullopt : result.store_writes); !saved)
@@ -624,7 +787,17 @@ private:
     Json state_;
     std::map<std::int64_t, HostCall> observed_;
     std::set<std::int64_t> delivered_;
+    std::set<std::int64_t> launched_;
     std::size_t next_entry_{0};
+    std::shared_ptr<Events> events_;
+    /// Requests when this invocation ends, so no wait outlives it.
+    std::stop_source finish_;
+    std::vector<Waiting> waiting_;
+    std::mutex settled_mutex_;
+    std::set<std::int64_t> settled_tasks_;
+    /// Whether this invocation decided the call's outcome; only then do its
+    /// still-running nested calls have to be aborted.
+    bool decided_{false};
 };
 
 ai::ToolResultMessage rejected(std::string message) {
@@ -703,13 +876,13 @@ support::Expected<std::optional<ai::ToolResultMessage>> aborted_codemode_result(
         result.tool_call_id = call_id;
         return result;
     }
-    RunResult aborted{};
-    aborted.error =
-            codemode::CodemodeError{.kind = codemode::CodemodeError::Kind::Aborted, .message = "Execution aborted"};
-    auto result = format_result(aborted, state);
-    result.tool_name = "codemode";
-    result.tool_call_id = call_id;
-    return result;
+    // The abort handler reports what a model-visible call reports when it is
+    // aborted: one harness error, with no details (frozen pi `ToolTask.abort`).
+    ai::ToolResultMessage aborted{.tool_call_id = call_id,
+            .tool_name = "codemode",
+            .content = harness_error_content("Tool codemode was aborted"),
+            .is_error = true};
+    return aborted;
 }
 
 } // namespace cch::durable

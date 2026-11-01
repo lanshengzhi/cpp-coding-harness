@@ -2231,6 +2231,69 @@
       "reason": "Captured for #1099 after the #1058 ledger; the frozen observation pins the delivery refusals the C++ replay slice compares against.",
       "rows": ["cch_codemode:codemode-remote"],
       "disposition": "The #1099 delivery compares against this observation without promoting the row."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "independent nested calls run concurrently and deliver in completion order",
+      "reason": "Captured by #1170 to separate independently gated nested ToolTasks from a serial generation-owned execution.",
+      "rows": [
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the case fails for a serial implementation because both nested calls must be live before either is released. Whole-row verification stays with #1180."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "cancelling one nested task leaves its sibling and the script running",
+      "reason": "Captured by #1170 to separate a single nested task's cancellation from the parent's and an observer wait's.",
+      "rows": [
+        "cch_durable:codemode-failure",
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the sibling call and the script continue after the cancelled task settles."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "cancelling the parent codemode call aborts its nested work",
+      "reason": "Captured by #1170 to pin the parent-cancel effect: nested calls aborted, store writes discarded, one harness error result.",
+      "rows": [
+        "cch_durable:codemode-failure",
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the durable nested task records keep their own outcomes."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "cancelling an observer wait does not cancel the nested call",
+      "reason": "Captured by #1170 to separate cancelling one wait from cancelling the call it waits for.",
+      "rows": [
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; only the wait is rejected and the nested call still completes."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "nested calls use the public tool hooks with their parent",
+      "reason": "Captured by #1170 to pin that nested calls run the public `pi.tool` hooks with their parent identity and that an `afterTool` replacement reaches the script.",
+      "rows": [
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the hook order follows the nested calls' completion order."
+    },
+    {
+      "family": "audit-1170",
+      "artifact": "codemode-nested.json",
+      "scenario": "a script that ends without awaiting its nested call admits no call",
+      "reason": "Captured by #1170 to pin that a call is admitted only after the issued frontier commits; an un-awaited call never runs.",
+      "rows": [
+        "cch_durable:codemode-replay",
+        "cch_durable:codemode-script"
+      ],
+      "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the un-admitted call keeps its `cancelled` row and creates no nested task."
     }
   ],
   "groups": [

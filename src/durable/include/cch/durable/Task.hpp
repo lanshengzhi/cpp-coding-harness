@@ -13,10 +13,15 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace cch::durable {
 
 class Transaction;
+class TaskDefinition;
+/// The callable part of a registered tool; defined in `Workflow.hpp` (frozen
+/// pi `ToolRegistration`).
+class ToolRegistration;
 
 /// Next state a task phase or abort handler commits (frozen pi `NextTaskState`).
 ///
@@ -85,6 +90,11 @@ public:
             std::move_only_function<support::Expected<std::optional<NextTaskState>>(Transaction&, const TaskRecord&)>;
     [[nodiscard]] virtual support::AsyncResult<void> commit(CommitCallback change) = 0;
 
+    /// Commit as if the task carried no abort mark (frozen pi's abort-tolerant
+    /// settlement): a nested call whose tool already returned keeps its observed
+    /// outcome instead of losing it to a concurrent abort.
+    [[nodiscard]] virtual support::AsyncResult<void> commit_result(CommitCallback change) = 0;
+
     /// Forward a non-fatal failure to `HarnessOptions::on_report`.
     virtual void report(const support::Error& error) = 0;
 
@@ -95,6 +105,28 @@ public:
     /// Invoke each matching handler for `name` with `input`.
     [[nodiscard]] virtual support::AsyncResult<void> each_hook(
             std::string_view name, chord::Json input = chord::Json{nullptr}) = 0;
+
+    /// Every tool this invocation may call, in registration order (frozen pi
+    /// `runtime.agent().callable`). A nested call resolves its tool here, so it
+    /// reaches deferred tools the model was never offered.
+    [[nodiscard]] virtual const std::vector<std::shared_ptr<ToolRegistration>>& callable_tools() const noexcept = 0;
+
+    /// Resolve a task definition this invocation can create (frozen pi
+    /// `runtime.registry.task`). The caller creates the child inside one of its
+    /// own commits with `Transaction::create_task`, so the child and the caller's
+    /// own records commit together.
+    [[nodiscard]] virtual const TaskDefinition* task_definition(std::string_view kind) noexcept = 0;
+
+    /// Wait for one task to reach terminal status (frozen pi
+    /// `runtime.waitForTask`). Cancelling `stop` rejects only this wait with a
+    /// "stop waiting" cancellation; the task keeps running and settles on its
+    /// own.
+    [[nodiscard]] virtual support::AsyncResult<TaskRecord> wait_for_task(
+            TaskId id, std::stop_token stop = std::stop_token{}) = 0;
+
+    /// Mark a task abort (frozen pi `runtime.abortOwned`): "marked", or
+    /// "terminal" when it already ended.
+    [[nodiscard]] virtual support::AsyncResult<std::string> abort_task(TaskId id) = 0;
 };
 
 using PhaseHandler = std::move_only_function<support::AsyncResult<void>(const TaskRecord& task, TaskRuntime& runtime)>;

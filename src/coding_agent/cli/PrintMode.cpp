@@ -34,8 +34,8 @@ namespace {
 }
 
 /// pi `runPrintMode` text mode: only the final assistant message's `text`
-/// content blocks reach stdout. Returns false when the final message is a
-/// terminal error/aborted outcome (already reported on stderr with exit 1).
+/// content blocks reach stdout. Returns false for length truncation or a
+/// terminal error/aborted outcome (reported on stderr with exit 1).
 [[nodiscard]] bool print_final_assistant_text(
         const coding_agent::AgentSessionSnapshot& snapshot, PrintModeConfig config) {
     const auto& messages = snapshot.agent_state.messages;
@@ -59,6 +59,11 @@ namespace {
         }
     }
     config.output.flush();
+    if (assistant->stop_reason == ai::AssistantStopReason::Length) {
+        config.error << "Response was truncated: the model reached its output token limit.\n";
+        config.error.flush();
+        return false;
+    }
     return true;
 }
 

@@ -37,6 +37,10 @@
 #include <thread>
 #include <format>
 
+#include <cerrno>
+#include <iostream>
+#include <unistd.h>
+
 #ifndef PIKE_EXECUTABLE
 #define PIKE_EXECUTABLE "./pike"
 #endif
@@ -104,6 +108,73 @@ SplitCommandResult run_command_split(const std::string& command) {
     int status = std::system((command + " > '" + stdout_path.string() + "' 2> '" + stderr_path.string() + "'").c_str());
     int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : status;
     return {exit_code, read_file(stdout_path), read_file(stderr_path)};
+}
+
+/// Exercise the same entry as main(), with real process streams and status.
+/// Only the Magpie transport is scripted; no gateway or live credentials are used.
+SplitCommandResult run_print_cli_subprocess(
+        const cch::tests::TempWorkspace& workspace, cch::tests::TransportAttempt attempt) {
+    const auto stdout_path = workspace.path() / "stdout.txt";
+    const auto stderr_path = workspace.path() / "stderr.txt";
+    std::cout.flush();
+    std::cerr.flush();
+    const auto pid = ::fork();
+    if (pid < 0) {
+        FAIL("could not fork the print CLI subprocess");
+    }
+    if (pid == 0) {
+        // The kernel deadline also bounds a stuck CLI or runtime destructor.
+        ::alarm(20);
+        if (std::freopen(stdout_path.c_str(), "w", stdout) == nullptr ||
+                std::freopen(stderr_path.c_str(), "w", stderr) == nullptr ||
+                std::freopen("/dev/null", "r", stdin) == nullptr) {
+            ::_exit(125);
+        }
+        const auto run = [&]() -> int {
+            std::error_code ec;
+            std::filesystem::current_path(workspace.path(), ec);
+            if (ec || ::setenv("HOME", (workspace.path() / "home").c_str(), 1) != 0 ||
+                    ::setenv("XDG_CONFIG_HOME", (workspace.path() / "config").c_str(), 1) != 0) {
+                return 125;
+            }
+            ::unsetenv("MAGPIE_API_KEY");
+            auto wire = std::make_shared<cch::tests::ScriptedTransport>();
+            wire->attempts.push_back(std::move(attempt));
+            auto models = std::make_shared<cch::ai::Models>();
+            cch::ai::detail::ModelsTestAccess::set_transport(*models, wire);
+            if (!cch::ai::detail::ModelsTestAccess::replace_models(
+                        *models, {cch::tests::make_model("upstream/model", "magpie", "openai-completions")})) {
+                return 125;
+            }
+            auto runtime = cch::coding_agent::ModelRuntimeTestAccess::create(models, workspace.path() / "config");
+            std::vector<std::string> args{
+                    "pike", "--print", "--model", "upstream/model", "--session", "session.jsonl", "hello"};
+            std::vector<char*> argv;
+            for (auto& arg : args) {
+                argv.push_back(arg.data());
+            }
+            const auto argc = static_cast<int>(argv.size());
+            argv.push_back(nullptr);
+            return cch::cli::run_cli_entry(argc,
+                    argv.data(),
+                    {.input = std::cin, .output = std::cout, .error = std::cerr},
+                    {.model_runtime = std::move(runtime)});
+        };
+        const auto exit_code = run();
+        std::cout.flush();
+        std::cerr.flush();
+        ::_exit(exit_code);
+    }
+    int status = 0;
+    pid_t waited;
+    do {
+        waited = ::waitpid(pid, &status, 0);
+    } while (waited == -1 && errno == EINTR);
+    REQUIRE(waited == pid);
+    REQUIRE(WIFEXITED(status));
+    return {.exit_code = WEXITSTATUS(status),
+            .stdout_text = read_file(stdout_path),
+            .stderr_text = read_file(stderr_path)};
 }
 
 std::string bin() { return shell_quote(PIKE_EXECUTABLE); }
@@ -1069,6 +1140,78 @@ TEST_CASE("CLI --session opens-or-creates at the target path", "[cli][u6][spec]"
     CHECK(second.stdout_text == "fake: second\n");
     const auto content = read_file(session);
     CHECK(content.find("\"text\":\"second\"") != std::string::npos);
+}
+
+TEST_CASE("CLI print subprocess preserves length-truncated text and exits 1 with the frozen warning",
+        "[cli][print][issue1117][spec]") {
+    cch::tests::TempWorkspace workspace;
+    // Registered audit-1049/print-mode.json: compare all three process channels.
+    const auto result = run_print_cli_subprocess(workspace,
+            {.chunks = {"data: {\"choices\":[{\"delta\":{\"content\":\"partial "
+                        "answer\"},\"finish_reason\":\"length\"}]}\n\n"}});
+
+    CHECK(result.stdout_text == "partial answer\n");
+    CHECK(result.stderr_text == "Response was truncated: the model reached its output token limit.\n");
+    CHECK(result.exit_code == 1);
+}
+
+TEST_CASE("CLI print subprocess completes normally without a truncation warning", "[cli][print][issue1117][spec]") {
+    cch::tests::TempWorkspace workspace;
+    std::string text;
+    SECTION("the registered complete response") { text = "complete answer"; }
+    SECTION("the same text as the truncated response") { text = "partial answer"; }
+    const auto result = run_print_cli_subprocess(workspace,
+            {.chunks = {std::format(
+                     "data: {{\"choices\":[{{\"delta\":{{\"content\":\"{}\"}},\"finish_reason\":\"stop\"}}]}}\n\n",
+                     text)}});
+
+    CHECK(result.stdout_text == text + '\n');
+    CHECK(result.stderr_text.empty());
+    CHECK(result.exit_code == 0);
+}
+
+TEST_CASE("CLI print subprocess warns even when length truncation has no text", "[cli][print][issue1117][spec]") {
+    cch::tests::TempWorkspace workspace;
+    const auto result = run_print_cli_subprocess(
+            workspace, {.chunks = {"data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}\n\n"}});
+
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text == "Response was truncated: the model reached its output token limit.\n");
+    CHECK(result.exit_code == 1);
+}
+
+TEST_CASE("CLI print subprocess redacts the retained length-truncated text", "[cli][print][issue1117][spec]") {
+    cch::tests::TempWorkspace workspace;
+    const auto result = run_print_cli_subprocess(workspace,
+            {.chunks = {"data: {\"choices\":[{\"delta\":{\"content\":\"partial sk-hostsecret123456789 answer\"},"
+                        "\"finish_reason\":\"length\"}]}\n\n"}});
+
+    CHECK(result.stdout_text == "partial [REDACTED] answer\n");
+    CHECK(result.stderr_text == "Response was truncated: the model reached its output token limit.\n");
+    CHECK(result.exit_code == 1);
+}
+
+TEST_CASE("CLI print subprocess keeps terminal errors redacted and suppresses draft stdout",
+        "[cli][print][issue1117][spec]") {
+    cch::tests::TempWorkspace workspace;
+    const auto result = run_print_cli_subprocess(workspace,
+            {.chunks = {"data: {\"choices\":[{\"delta\":{\"content\":\"private draft\"},"
+                        "\"finish_reason\":\"sk-hostsecret123456789\"}]}\n\n"}});
+
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text == "Provider finish_reason: [REDACTED]\n");
+    CHECK(result.exit_code == 1);
+}
+
+TEST_CASE("CLI print subprocess reports cancellation without a truncation warning", "[cli][print][issue1117][spec]") {
+    cch::tests::TempWorkspace workspace;
+    const auto result = run_print_cli_subprocess(workspace,
+            {.failure = cch::support::make_error(
+                     cch::support::ErrorCode::Cancelled, "cancelled sk-hostsecret123456789")});
+
+    CHECK(result.stdout_text.empty());
+    CHECK(result.stderr_text == "Request was aborted\n");
+    CHECK(result.exit_code == 1);
 }
 
 TEST_CASE("CLI gateway mode uses zero-state credentials without model configuration", "[cli][gateway][spec]") {

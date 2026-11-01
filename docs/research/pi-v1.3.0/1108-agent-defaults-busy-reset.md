@@ -93,6 +93,9 @@ Built the owning shards with the pinned vcpkg preset (`cch_tests_agent`,
 | `ctest --preset vcpkg -L '^(issue1090|issue1101|issue1104)$'` (receipt 1104 revalidation) | 36 | 36 passed |
 | `ctest --preset vcpkg -L issue1118` (receipt 1118 revalidation) | 19 | 19 passed |
 
+The same three selections were re-run on the tree merged with `origin/main` (`6764d6bcf`, #1116 /
+#1117 / #1170): 7/7, 236/236 and 43/43 again.
+
 The Parity Architecture Gate passed during configure and every build phase (include-evidence
 re-derived after the `ToolLoadout` include change). Formatting: `scripts/format-check.sh
 0087b09fc7ae8990d505ec4c5fe13498e09e0fc2` reports `format check: clean`.
@@ -118,6 +121,11 @@ and gained a fresh JUnit artifact (`1104-revalidation-1108.xml` 36/36,
    e2e menu).
 2. Final run with the recorded `TERM_PROGRAM=herdr` precondition: 4133 selected, **4133 passed, 0
    failed, 8 skipped** in 574.61 s.
+
+After merging `origin/main` (`6764d6bcf`, #1116/#1117/#1170) the full preset rebuilt and the same
+unfiltered serial suite selected 4147 cases: **4147 passed, 0 failed, 8 skipped** in 810.97 s. Two
+intermediate merged-tree runs under a concurrent external `-j4` build each had load-sensitive
+failures (#411, #2198, #2200, #1189); every one passed when rerun, and the final run above is clean.
 
 The skipped cases are the suite's standing preconditions (six frozen-pi/durable integration cases,
 the realtime-clock case, and the native TUI differential capture), not #1108 selections.

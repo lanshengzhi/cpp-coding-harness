@@ -220,14 +220,15 @@ struct SessionUnderTest {
     return std::nullopt;
 }
 
-/// Every wire line of the session file, in file order. Used to prove that a
-/// compaction appends a checkpoint without rewriting the transcript lines
-/// already on disk (pi `SessionManager.appendCompaction`).
+/// Every wire line, including its original newline delimiter, in file order.
+/// Used to prove that a compaction appends a checkpoint without rewriting any
+/// transcript bytes already on disk (pi `SessionManager.appendCompaction`).
 [[nodiscard]] std::vector<std::string> session_file_lines(const TestPaths& paths) {
     std::ifstream in(paths.session_file, std::ios::binary);
-    REQUIRE(in);
+    CHECK(in);
     std::vector<std::string> lines;
     for (std::string line; std::getline(in, line);) {
+        if (!in.eof()) line.push_back('\n');
         lines.push_back(std::move(line));
     }
     return lines;
@@ -244,6 +245,113 @@ void check_prefix_lines_unchanged(
 }
 
 } // namespace
+
+TEST_CASE("summary requests omit thinking while reopen preserves the original transcript",
+        "[coding_agent][compaction][session][issue1116][spec]") {
+    // Matched to audit-1048/session-compaction-boundary.json: both the history
+    // request and the split-turn prefix request exclude thinking. Storage must
+    // retain it, so filtering all assistant thinking cannot satisfy this case.
+    bool fail_prefix = false;
+    SECTION("successful history and turn prefix requests append one checkpoint") {}
+    SECTION("a failed turn prefix request appends nothing after history succeeds") { fail_prefix = true; }
+    TestPaths paths;
+    paths.workspace.write("agent/.config/pike/agent/settings.json",
+            R"({"compaction":{"enabled":false,"reserveTokens":1000,"keepRecentTokens":1}})");
+    const tests::EnvVarGuard home{"HOME", (paths.workspace.path() / "agent").string()};
+    tests::RuntimeFixture runtime;
+    auto client = std::make_shared<CompactionScriptedProvider>();
+    for (const auto& [thinking, text] : std::vector<std::pair<std::string, std::string>>{
+                 {"SECRET_THINKING_FIRST", "first answer"}, {"SECRET_THINKING_SECOND", "second answer"}}) {
+        auto response = ai::assistant_text_message(text);
+        response.content.insert(response.content.begin(), ai::thinking_content(thinking));
+        client->responses.push_back(std::move(response));
+    }
+    auto opened =
+            open_session(paths, runtime, coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file}, client);
+    auto first_prompt = run_awaitable(runtime, opened.session->prompt("first request"));
+    auto second_prompt = run_awaitable(runtime, opened.session->prompt("second request"));
+    opened.session->close();
+    opened.session.reset();
+    {
+        // A trailing assistant continuation puts the second thinking block in
+        // the split-turn prefix rather than in the retained tail.
+        auto store = harness::session::SessionStore::open_existing(paths.session_file);
+        CHECK(store.has_value());
+        if (store) {
+            auto tail = ai::assistant_text_message("tail answer");
+            tail.provider = "sdk-host";
+            tail.api = "fake";
+            tail.model = "fake-model";
+            tail.timestamp = 1718000000123;
+            CHECK(store->append(std::move(tail)).has_value());
+        }
+    }
+    opened = open_session(paths, runtime, coding_agent::ExplicitResumeSessionTarget{paths.session_file}, client);
+    const auto before = session_file_lines(paths);
+    client->responses.push_back(ai::assistant_text_message("## Goal\nfrozen history summary"));
+    auto prefix = ai::assistant_text_message("## Original Request\nfrozen turn prefix summary");
+    if (fail_prefix) {
+        prefix.stop_reason = ai::AssistantStopReason::Error;
+        prefix.error_message = "summary unavailable";
+    }
+    client->responses.push_back(std::move(prefix));
+    auto compacted = run_awaitable(runtime, opened.session->compact("focus on persistence"));
+    const auto after = session_file_lines(paths);
+    const auto requests = client->requests;
+    opened.session->close();
+    opened.session.reset();
+
+    auto reopened = open_session(paths, runtime, coding_agent::ExplicitResumeSessionTarget{paths.session_file}, client);
+    auto entries = reopened.session->session_entries();
+    reopened.session->close();
+    reopened.session.reset();
+    runtime.close();
+    const auto after_reopen = session_file_lines(paths);
+
+    CHECK(first_prompt.has_value());
+    CHECK(second_prompt.has_value());
+    CHECK(after_reopen == after);
+    if (fail_prefix) {
+        REQUIRE_FALSE(compacted.has_value());
+        CHECK(compacted.error().message == "Turn prefix summarization failed: summary unavailable");
+        CHECK(before == after);
+    } else {
+        REQUIRE(compacted.has_value());
+        CHECK(compacted->summary ==
+                "## Goal\nfrozen history summary\n\n---\n\n"
+                "**Turn Context (split turn):**\n\n## Original Request\nfrozen turn prefix summary");
+        check_prefix_lines_unchanged(before, after, 1);
+    }
+    REQUIRE(requests.size() == 4);
+    const std::vector<std::string> expected_conversations{"[User]: first request\n\n[Assistant]: first answer",
+            "[User]: second request\n\n[Assistant]: second answer"};
+    for (std::size_t index = 0; index < expected_conversations.size(); ++index) {
+        const auto& request = requests[index + 2];
+        REQUIRE(request.context.messages.size() == 1);
+        const auto* user = std::get_if<ai::UserMessage>(&request.context.messages.front());
+        REQUIRE(user != nullptr);
+        const auto text = ai::text_from_user_message(*user);
+        const auto end = text.find("\n</conversation>");
+        CHECK(end != std::string::npos);
+        CHECK(text.substr(0, end) == "<conversation>\n" + expected_conversations[index]);
+        CHECK(text.find("SECRET_THINKING") == std::string::npos);
+    }
+    REQUIRE(entries.has_value());
+    REQUIRE_FALSE(entries->empty());
+    CHECK((entries->back().kind == harness::session::SessionEntryKind::Compaction) == !fail_prefix);
+    std::vector<std::string> thinking;
+    for (const auto& entry : *entries) {
+        if (!entry.message) continue;
+        const auto* assistant = std::get_if<ai::AssistantMessage>(&*entry.message);
+        if (!assistant) continue;
+        for (const auto& block : assistant->content) {
+            if (const auto* content = std::get_if<ai::ThinkingContent>(&block)) {
+                thinking.push_back(content->thinking);
+            }
+        }
+    }
+    CHECK(thinking == std::vector<std::string>{"SECRET_THINKING_FIRST", "SECRET_THINKING_SECOND"});
+}
 
 TEST_CASE("manual compaction on an idle session persists a CompactionEntry and rebuilds context",
         "[coding_agent][compaction][issue358][spec]") {
