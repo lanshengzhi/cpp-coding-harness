@@ -168,6 +168,10 @@ struct TaskRecord {
     chord::Json input{};
     std::optional<TaskId> owner{std::nullopt};
     bool background{false};
+    /// Set from `TaskOptions::abandon_on_restart` and immutable afterwards
+    /// (frozen `TaskRecord.abandonOnRestart`). A later Harness abort-marks a
+    /// live flagged task with reason `restart` in its first reservation pass.
+    bool abandon_on_restart{false};
     bool abort_requested{false};
     std::optional<std::string> abort_reason{std::nullopt};
     std::optional<std::int64_t> started_at{std::nullopt};
@@ -189,6 +193,10 @@ struct TaskOptions {
     /// Whether the task's subtree is a background one that an ordinary scope
     /// walk does not enter (frozen `TaskOptions.background`).
     bool background{false};
+    /// Its creator awaits it only in memory and does not resume after a
+    /// restart, so a later Harness abort-marks it with reason `restart` once
+    /// scheduling starts, before any of it or its ordinary owned work runs a
+    /// phase again (frozen `TaskOptions.abandonOnRestart`).
     bool abandon_on_restart{false};
     std::optional<chord::Json> checkpoint{std::nullopt};
 };

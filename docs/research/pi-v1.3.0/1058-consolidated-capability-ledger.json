@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "debef4290671ff4d1cdd11344aa4184b048125d8af0bfb488e1041cd03032e0a"
+            "sha256": "3c5609d629a61e161386162272f874ab063e2e1bcf802d9414d0a1ed1a3a1f64"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -262,12 +262,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
           ],
-          "testedRevision": "e8d813a0c28f6ea5a3eef999b8432907befd9729",
-          "recordedAt": "2026-11-01T19:46:02Z",
+          "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
+          "recordedAt": "2026-11-01T20:09:52Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
-            "sha256": "262867c7c98897a6ec20bb9b4af779851825f095a2d5c7019eb9d099b50b149b"
+            "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
           }
         },
         "rows": [
@@ -406,8 +406,15 @@
             "tests/coding_agent/McpHttpSessionTest.cpp"
           ]
         },
+        "revalidation1172": {
+          "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry, and the consolidation plan now lists its unrouted observations as explicit orphans. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        },
         "revalidation1159": {
-          "reason": "#1159 registered the audit-1159 frozen-evidence family and recorded its ten captured edit scenarios as explicit orphan observations, which changes the shared consolidation plan and baseline registry these pinned inputs name. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rerun into the refreshed JUnit artifact.",
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json",
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
@@ -434,12 +441,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
           ],
-          "testedRevision": "e8d813a0c28f6ea5a3eef999b8432907befd9729",
-          "recordedAt": "2026-11-01T19:44:59Z",
+          "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
+          "recordedAt": "2026-11-01T20:09:52Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
-            "sha256": "262867c7c98897a6ec20bb9b4af779851825f095a2d5c7019eb9d099b50b149b"
+            "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
           }
         },
         "inputs": [
@@ -449,7 +456,7 @@
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "c0c5210afac0058cfbbe15ad0f61250d25e0247a6ef0231bc2bfefa6b3c5e9ca"
+            "sha256": "f4fe03f5d75d5be2e84d2af7191950166180ee83f8ba8bc37811b26565539bac"
           },
           {
             "path": "docs/agents/architecture.md",
@@ -485,7 +492,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "178ba4e2a6d8a79c00a25fd2ec54ed297e4dd0f3539fe7bf88939a12fe3a3ae5"
+            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -732,13 +739,45 @@
             "fixtures/pi-v1.3.0/baselines.json"
           ]
         },
+        "revalidation1175": {
+          "reason": "#1175 adds the audit-1175 abandon-on-restart family and registers its C++ comparison test in cmake/tests/DurableTests.cmake, a pinned input of this record. The delivered image rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "cmake/tests/DurableTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "/tmp/1105-existing-revalidation.xml"
+            ],
+            "testedRevision": "ef2f15034f2c4724ea289f08f76944e4ec4b0c0a",
+            "recordedAt": "2026-11-01T18:13:36Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1105-existing-deliveries-revalidation.xml",
+              "sha256": "b13dcaae13a5697cb18e4b19173eab6bc81ecb1669cea21a826c3f0ceae1f9f8"
+            }
+          }
+        },
+        "revalidation1172": {
+          "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered image rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
+        },
         "revalidation1159": {
-          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. Its bundle registration appends a family to the shared baseline registry, and its slice adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun into the refreshed JUnit artifact.",
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
           "changedInputs": [
             "cmake/targets/Durable.cmake",
             "cmake/tests/DurableTests.cmake",
             "docs/agents/architecture.md",
             "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "src/durable/CodingTools.cpp"
           ]
         }
@@ -885,7 +924,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "178ba4e2a6d8a79c00a25fd2ec54ed297e4dd0f3539fe7bf88939a12fe3a3ae5"
+            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -975,12 +1014,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
           ],
-          "testedRevision": "e8d813a0c28f6ea5a3eef999b8432907befd9729",
-          "recordedAt": "2026-11-01T19:44:59Z",
+          "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
+          "recordedAt": "2026-11-01T20:09:52Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
-            "sha256": "262867c7c98897a6ec20bb9b4af779851825f095a2d5c7019eb9d099b50b149b"
+            "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -1156,10 +1195,17 @@
             }
           }
         },
-        "revalidation1159": {
-          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. Its bundle registration appends a family to the shared baseline registry, and its slice adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun into the refreshed JUnit artifact.",
+        "revalidation1172": {
+          "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json"
+          ]
+        },
+        "revalidation1159": {
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
         }
       },
@@ -1420,11 +1466,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "178ba4e2a6d8a79c00a25fd2ec54ed297e4dd0f3539fe7bf88939a12fe3a3ae5"
+            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "debef4290671ff4d1cdd11344aa4184b048125d8af0bfb488e1041cd03032e0a"
+            "sha256": "3c5609d629a61e161386162272f874ab063e2e1bcf802d9414d0a1ed1a3a1f64"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1450,12 +1496,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1118.xml"
           ],
-          "testedRevision": "e8d813a0c28f6ea5a3eef999b8432907befd9729",
-          "recordedAt": "2026-11-01T19:44:59Z",
+          "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
+          "recordedAt": "2026-11-01T20:09:52Z",
           "selected": 19,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1118.xml",
-            "sha256": "d8831063a7911f5c1372aa0f96e4d687289306e20b185c4941669c08b0559dbe"
+            "sha256": "8bf5e618ccbfaa5bb87777f8f43525577ff1fab146cd04bc9bbd1a0d21655343"
           }
         },
         "rows": [
@@ -1679,8 +1725,15 @@
             }
           }
         },
+        "revalidation1172": {
+          "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry, and the consolidation plan now lists its unrouted observations as explicit orphans. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        },
         "revalidation1159": {
-          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. Its bundle registration appends a family to the shared baseline registry, and its slice adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun into the refreshed JUnit artifact.",
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json",
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
@@ -2770,7 +2823,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "debef4290671ff4d1cdd11344aa4184b048125d8af0bfb488e1041cd03032e0a"
+            "sha256": "3c5609d629a61e161386162272f874ab063e2e1bcf802d9414d0a1ed1a3a1f64"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -2778,7 +2831,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "178ba4e2a6d8a79c00a25fd2ec54ed297e4dd0f3539fe7bf88939a12fe3a3ae5"
+            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
           }
         ],
         "validation": {
@@ -2792,12 +2845,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1181.xml"
           ],
-          "testedRevision": "e8d813a0c28f6ea5a3eef999b8432907befd9729",
-          "recordedAt": "2026-11-01T19:44:59Z",
+          "testedRevision": "7e2ccc288295b453c0ee2cdba5c162aff125e92d",
+          "recordedAt": "2026-11-01T20:09:52Z",
           "selected": 16,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1181.xml",
-            "sha256": "7803145415bf41ba04d16987936f409eeb1c148c4a2bbeb5efb5fa62829740d1"
+            "sha256": "235e56241e1b0e10ccf6b6657a27452a22a81ff75af4ef54afda337e5ce47ae3"
           }
         },
         "rows": [
@@ -2994,8 +3047,15 @@
           }
         ],
         "routingSha256": "016612d68f1eb7ff67b288e072b7fc7ea06486e3fdaa45d4048abbb9c2b9304a",
+        "revalidation1172": {
+          "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry, and the consolidation plan now lists its unrouted observations as explicit orphans. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        },
         "revalidation1159": {
-          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. Its bundle registration appends a family to the shared baseline registry, and its slice adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun into the refreshed JUnit artifact.",
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph and the durable test-shard entry, registers the audit-1159 frozen-evidence family and records its ten captured scenarios as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json",
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
@@ -3342,7 +3402,7 @@
     ],
     "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 589,
+      "scenarios": 594,
       "scenarioNamed": 362,
       "artifactCovered": 56,
       "orphaned": [
@@ -3496,16 +3556,6 @@
         "audit-1170/codemode-nested.json:cancelling an observer wait does not cancel the nested call",
         "audit-1170/codemode-nested.json:nested calls use the public tool hooks with their parent",
         "audit-1170/codemode-nested.json:a script that ends without awaiting its nested call admits no call",
-        "audit-1159/edit-tool.json:a BOM and CRLF file edits when the old text is LF and leaves the normalized content",
-        "audit-1159/edit-tool.json:a single replacement returns the frozen diff patch and first changed line",
-        "audit-1159/edit-tool.json:a replacement on a two-digit line keeps the frozen diff gutter and context window",
-        "audit-1159/edit-tool.json:two concurrent edits of one file both land without a lost update",
-        "audit-1159/edit-tool.json:an old text that appears twice fails with the frozen uniqueness message",
-        "audit-1159/edit-tool.json:an old text that is absent from a multi-edit call fails with the frozen indexed message",
-        "audit-1159/edit-tool.json:an edit that reproduces the original text fails with the frozen no-change message",
-        "audit-1159/edit-tool.json:an empty old text fails with the frozen empty-target message",
-        "audit-1159/edit-tool.json:two edits that target overlapping text fail with the frozen overlap message",
-        "audit-1159/edit-tool.json:an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message",
         "audit-1172/codemode-output.json:token budget truncates output and writes the complete text",
         "audit-1172/codemode-output.json:text exactly at the token budget is not truncated",
         "audit-1172/codemode-output.json:a script image is saved through the execution environment",
@@ -3516,7 +3566,22 @@
         "audit-1172/codemode-output.json:one character over the token budget truncates",
         "audit-1172/codemode-output.json:the line budget exactly at its limit is not truncated",
         "audit-1172/codemode-output.json:one line over the line budget truncates and spills",
-        "audit-1172/codemode-output.json:a token budget larger than the text still clamps the tail to the whole line window"
+        "audit-1172/codemode-output.json:a token budget larger than the text still clamps the tail to the whole line window",
+        "audit-1159/edit-tool.json:a BOM and CRLF file edits when the old text is LF and leaves the normalized content",
+        "audit-1159/edit-tool.json:a single replacement returns the frozen diff patch and first changed line",
+        "audit-1159/edit-tool.json:a replacement on a two-digit line keeps the frozen diff gutter and context window",
+        "audit-1159/edit-tool.json:two concurrent edits of one file both land without a lost update",
+        "audit-1159/edit-tool.json:an old text that appears twice fails with the frozen uniqueness message",
+        "audit-1159/edit-tool.json:an old text that is absent from a multi-edit call fails with the frozen indexed message",
+        "audit-1159/edit-tool.json:an edit that reproduces the original text fails with the frozen no-change message",
+        "audit-1159/edit-tool.json:an empty old text fails with the frozen empty-target message",
+        "audit-1159/edit-tool.json:two edits that target overlapping text fail with the frozen overlap message",
+        "audit-1159/edit-tool.json:an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message",
+        "audit-1175/abandon-on-restart.json:a flagged task stays unmarked while the next Harness is paused and is marked restart by its first reservation pass",
+        "audit-1175/abandon-on-restart.json:a restart mark cascades to ordinary owned work with the same reason and stops at background and unflagged work",
+        "audit-1175/abandon-on-restart.json:a restart-marked task with a missing definition waits; an explicit abort orphans it; a restored definition runs its abort with reason restart",
+        "audit-1175/abandon-on-restart.json:an explicit abort above a restart-marked subtree replaces the reason and orphans a blocked leaf",
+        "audit-1175/abandon-on-restart.json:a flagged task created after the Harness opened runs instead of being abandoned"
       ],
       "uncovered": []
     }
@@ -7209,6 +7274,116 @@
       "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the un-admitted call keeps its `cancelled` row and creates no nested task."
     },
     {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "token budget truncates output and writes the complete text",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "text exactly at the token budget is not truncated",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "a script image is saved through the execution environment",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "no execution environment keeps the frozen unsupported labels",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "a failed script keeps partial output and spills it",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "unicode truncation keeps whole BMP characters",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "ordered text console images and values keep production order",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "one character over the token budget truncates",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "the line budget exactly at its limit is not truncated",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "one line over the line budget truncates and spills",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "a token budget larger than the text still clamps the tail to the whole line window",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
       "family": "audit-1159",
       "artifact": "edit-tool.json",
       "scenario": "a BOM and CRLF file edits when the old text is LF and leaves the normalized content",
@@ -7311,115 +7486,57 @@
       "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "token budget truncates output and writes the complete text",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a flagged task stays unmarked while the next Harness is paused and is marked restart by its first reservation pass",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output"
+        "cch_durable:abandon-on-restart"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "text exactly at the token budget is not truncated",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a restart mark cascades to ordinary owned work with the same reason and stops at background and unflagged work",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output"
+        "cch_durable:abandon-on-restart",
+        "cch_durable:abort-task-protocol"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "a script image is saved through the execution environment",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a restart-marked task with a missing definition waits; an explicit abort orphans it; a restored definition runs its abort with reason restart",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output"
+        "cch_durable:abandon-on-restart",
+        "cch_durable:registry-task-definitions"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "no execution environment keeps the frozen unsupported labels",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "an explicit abort above a restart-marked subtree replaces the reason and orphans a blocked leaf",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output"
+        "cch_durable:abandon-on-restart",
+        "cch_durable:abort-task-protocol"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "a failed script keeps partial output and spills it",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a flagged task created after the Harness opened runs instead of being abandoned",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output",
-        "cch_durable:codemode-failure"
+        "cch_durable:abandon-on-restart"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "unicode truncation keeps whole BMP characters",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "ordered text console images and values keep production order",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "one character over the token budget truncates",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "the line budget exactly at its limit is not truncated",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "one line over the line budget truncates and spills",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "a token budget larger than the text still clamps the tail to the whole line window",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     }
   ],
   "correctionsIndex": [

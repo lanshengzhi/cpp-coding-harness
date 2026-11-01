@@ -1,0 +1,367 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-01T17:13:54.979Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/scheduler.ts:TaskScheduler.open,#abandoned,#reserve,#reconcile,abort,#walkDown,withAbortMark",
+    "packages/durable/src/types.ts:TaskOptions.abandonOnRestart,TaskRecord.abandonOnRestart,TaskRecord.abortReason",
+    "packages/durable/src/session/transaction.ts:Transaction.createTask",
+    "packages/durable/test/harness-nested-tools-restart.test.ts:marks nothing when the reopened Harness never starts scheduling",
+    "packages/durable/test/harness-nested-tools-restart.test.ts:leaves background work under an abandoned nested call running, and settles without it",
+    "packages/durable/test/harness-nested-tools-restart.test.ts:keeps an abandoned task whose definition is missing waiting until it is installed, then runs its abort",
+    "packages/durable/test/harness-cancellation-barrier.test.ts:upgrades restart marks down the tree when an abort is requested above them"
+  ],
+  "scenarios": [
+    {
+      "name": "a flagged task stays unmarked while the next Harness is paused and is marked restart by its first reservation pass",
+      "inputs": {
+        "storage": [
+          "MemoryStorage identity (later Harness, first left unclosed)",
+          "SQLite close/reopen"
+        ],
+        "openOnlyWaitMs": 50
+      },
+      "expected": {
+        "created": {
+          "status": "pending",
+          "abandonOnRestart": true,
+          "abortRequested": false,
+          "abortReason": null,
+          "checkpointPhase": "run",
+          "outcomeStatus": null,
+          "outcomeReason": null
+        },
+        "schedulingAfterOpen": "paused",
+        "afterOpen": {
+          "status": "pending",
+          "abandonOnRestart": true,
+          "abortRequested": false,
+          "abortReason": null,
+          "checkpointPhase": "run",
+          "outcomeStatus": null,
+          "outcomeReason": null
+        },
+        "afterOpenWithoutScheduling": {
+          "status": "pending",
+          "abandonOnRestart": true,
+          "abortRequested": false,
+          "abortReason": null,
+          "checkpointPhase": "run",
+          "outcomeStatus": null,
+          "outcomeReason": null
+        },
+        "settlement": {
+          "status": "terminal",
+          "abandonOnRestart": true,
+          "abortRequested": true,
+          "abortReason": "restart",
+          "checkpointPhase": null,
+          "outcomeStatus": "aborted",
+          "outcomeReason": "restart"
+        },
+        "log": [
+          "audit1175.flagged:abort:restart"
+        ]
+      },
+      "normalizations": [
+        "the temporary SQLite path and generated task id are omitted"
+      ],
+      "upstreamTest": {
+        "path": "packages/durable/test/harness-nested-tools-restart.test.ts",
+        "case": "marks nothing when the reopened Harness never starts scheduling"
+      }
+    },
+    {
+      "name": "a restart mark cascades to ordinary owned work with the same reason and stops at background and unflagged work",
+      "inputs": {
+        "storage": "SQLite close/reopen",
+        "parent": "flagged",
+        "child": "ordinary owned",
+        "background": "below a task-owned conversation"
+      },
+      "expected": {
+        "afterOpen": {
+          "parent": {
+            "status": "pending",
+            "abandonOnRestart": true,
+            "abortRequested": false,
+            "abortReason": null,
+            "checkpointPhase": "run",
+            "outcomeStatus": null,
+            "outcomeReason": null
+          },
+          "child": {
+            "status": "pending",
+            "abandonOnRestart": false,
+            "abortRequested": false,
+            "abortReason": null,
+            "checkpointPhase": "run",
+            "outcomeStatus": null,
+            "outcomeReason": null
+          },
+          "background": {
+            "status": "pending",
+            "abandonOnRestart": false,
+            "abortRequested": false,
+            "abortReason": null,
+            "checkpointPhase": "run",
+            "outcomeStatus": null,
+            "outcomeReason": null
+          },
+          "sibling": {
+            "status": "pending",
+            "abandonOnRestart": false,
+            "abortRequested": false,
+            "abortReason": null,
+            "checkpointPhase": "run",
+            "outcomeStatus": null,
+            "outcomeReason": null
+          }
+        },
+        "settlement": {
+          "parent": {
+            "status": "terminal",
+            "abandonOnRestart": true,
+            "abortRequested": true,
+            "abortReason": "restart",
+            "checkpointPhase": null,
+            "outcomeStatus": "aborted",
+            "outcomeReason": "restart"
+          },
+          "child": {
+            "status": "terminal",
+            "abandonOnRestart": false,
+            "abortRequested": true,
+            "abortReason": "restart",
+            "checkpointPhase": null,
+            "outcomeStatus": "aborted",
+            "outcomeReason": "restart"
+          },
+          "background": {
+            "status": "terminal",
+            "abandonOnRestart": false,
+            "abortRequested": false,
+            "abortReason": null,
+            "checkpointPhase": null,
+            "outcomeStatus": "completed",
+            "outcomeReason": null
+          },
+          "sibling": {
+            "status": "terminal",
+            "abandonOnRestart": false,
+            "abortRequested": false,
+            "abortReason": null,
+            "checkpointPhase": null,
+            "outcomeStatus": "completed",
+            "outcomeReason": null
+          }
+        },
+        "abortLog": [
+          "audit1175.child:abort:restart",
+          "audit1175.parent:abort:restart"
+        ],
+        "runLog": [
+          "audit1175.background:run",
+          "audit1175.sibling:run"
+        ]
+      },
+      "normalizations": [
+        "the temporary SQLite path and generated task ids are omitted"
+      ],
+      "upstreamTest": {
+        "path": "packages/durable/test/harness-nested-tools-restart.test.ts",
+        "case": "leaves background work under an abandoned nested call running, and settles without it"
+      }
+    },
+    {
+      "name": "a restart-marked task with a missing definition waits; an explicit abort orphans it; a restored definition runs its abort with reason restart",
+      "inputs": {
+        "storage": "SQLite close/reopen",
+        "definitions": "absent at reopen, installed for one task later"
+      },
+      "expected": {
+        "waitingBeforeAbort": {
+          "missing": {
+            "status": "pending",
+            "abandonOnRestart": true,
+            "abortRequested": true,
+            "abortReason": "restart",
+            "checkpointPhase": "run",
+            "outcomeStatus": null,
+            "outcomeReason": null
+          },
+          "returns": {
+            "status": "pending",
+            "abandonOnRestart": true,
+            "abortRequested": true,
+            "abortReason": "restart",
+            "checkpointPhase": "run",
+            "outcomeStatus": null,
+            "outcomeReason": null
+          },
+          "missingInspection": {
+            "kind": "blocked",
+            "reason": "missing_task"
+          }
+        },
+        "abortResult": "marked",
+        "missingReceipt": {
+          "status": "terminal",
+          "abandonOnRestart": true,
+          "abortRequested": true,
+          "abortReason": "restart",
+          "checkpointPhase": null,
+          "outcomeStatus": "orphaned",
+          "outcomeReason": "missing_task"
+        },
+        "returnsReceipt": {
+          "status": "terminal",
+          "abandonOnRestart": true,
+          "abortRequested": true,
+          "abortReason": "restart",
+          "checkpointPhase": null,
+          "outcomeStatus": "aborted",
+          "outcomeReason": "restart"
+        },
+        "log": [
+          "audit1175.returns:abort:restart"
+        ]
+      },
+      "normalizations": [
+        "the temporary SQLite path and generated task ids are omitted"
+      ],
+      "upstreamTest": {
+        "path": "packages/durable/test/harness-nested-tools-restart.test.ts",
+        "case": "keeps an abandoned task whose definition is missing waiting until it is installed, then runs its abort"
+      }
+    },
+    {
+      "name": "an explicit abort above a restart-marked subtree replaces the reason and orphans a blocked leaf",
+      "inputs": {
+        "storage": "SQLite close/reopen",
+        "top": "unflagged conversation-owned",
+        "middle": "flagged owned by top",
+        "leaf": "unflagged owned by middle, definition missing"
+      },
+      "expected": {
+        "beforeRequest": {
+          "top": {
+            "status": "running",
+            "abandonOnRestart": false,
+            "abortRequested": false,
+            "abortReason": null,
+            "checkpointPhase": "run",
+            "outcomeStatus": null,
+            "outcomeReason": null
+          },
+          "middle": {
+            "status": "pending",
+            "abandonOnRestart": true,
+            "abortRequested": true,
+            "abortReason": "restart",
+            "checkpointPhase": "run",
+            "outcomeStatus": null,
+            "outcomeReason": null
+          },
+          "leaf": {
+            "status": "pending",
+            "abandonOnRestart": false,
+            "abortRequested": true,
+            "abortReason": "restart",
+            "checkpointPhase": "run",
+            "outcomeStatus": null,
+            "outcomeReason": null
+          }
+        },
+        "abortResult": "marked",
+        "settlement": {
+          "leaf": {
+            "status": "terminal",
+            "abandonOnRestart": false,
+            "abortRequested": true,
+            "abortReason": null,
+            "checkpointPhase": null,
+            "outcomeStatus": "orphaned",
+            "outcomeReason": "missing_task"
+          },
+          "middle": {
+            "status": "terminal",
+            "abandonOnRestart": true,
+            "abortRequested": true,
+            "abortReason": null,
+            "checkpointPhase": null,
+            "outcomeStatus": "aborted",
+            "outcomeReason": "requested"
+          },
+          "top": {
+            "status": "terminal",
+            "abandonOnRestart": false,
+            "abortRequested": true,
+            "abortReason": null,
+            "checkpointPhase": null,
+            "outcomeStatus": "aborted",
+            "outcomeReason": "requested"
+          }
+        },
+        "log": [
+          "audit1175.top:run",
+          "audit1175.middle:abort:requested",
+          "audit1175.top:abort:requested"
+        ]
+      },
+      "normalizations": [
+        "the temporary SQLite path and generated task ids are omitted"
+      ],
+      "upstreamTest": {
+        "path": "packages/durable/test/harness-cancellation-barrier.test.ts",
+        "case": "upgrades restart marks down the tree when an abort is requested above them"
+      }
+    },
+    {
+      "name": "a flagged task created after the Harness opened runs instead of being abandoned",
+      "inputs": {
+        "storage": "MemoryStorage",
+        "createdAfterOpen": true
+      },
+      "expected": {
+        "created": {
+          "status": "pending",
+          "abandonOnRestart": true,
+          "abortRequested": false,
+          "abortReason": null,
+          "checkpointPhase": "run",
+          "outcomeStatus": null,
+          "outcomeReason": null
+        },
+        "settlement": {
+          "status": "terminal",
+          "abandonOnRestart": true,
+          "abortRequested": false,
+          "abortReason": null,
+          "checkpointPhase": null,
+          "outcomeStatus": "completed",
+          "outcomeReason": null
+        },
+        "log": [
+          "audit1175.late:run"
+        ]
+      },
+      "normalizations": [
+        "the generated task id is omitted"
+      ],
+      "upstreamTest": {
+        "path": "packages/durable/src/harness/scheduler.ts",
+        "case": "TaskScheduler.open's #abandoned set is populated only from records read at open"
+      }
+    }
+  ]
+}

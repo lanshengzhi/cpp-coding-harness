@@ -2322,6 +2322,116 @@
       "disposition": "Compared through public Harness in tests/durable/NestedToolTaskTest.cpp; the un-admitted call keeps its `cancelled` row and creates no nested task."
     },
     {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "token budget truncates output and writes the complete text",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "text exactly at the token budget is not truncated",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "a script image is saved through the execution environment",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "no execution environment keeps the frozen unsupported labels",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "a failed script keeps partial output and spills it",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "unicode truncation keeps whole BMP characters",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "ordered text console images and values keep production order",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "one character over the token budget truncates",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "the line budget exactly at its limit is not truncated",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "one line over the line budget truncates and spills",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1172",
+      "artifact": "codemode-output.json",
+      "scenario": "a token budget larger than the text still clamps the tail to the whole line window",
+      "reason": "Captured by #1172 after #1058; the original audit rows do not route to this supplemental artifact.",
+      "rows": [
+        "cch_durable:codemode-output"
+      ],
+      "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
       "family": "audit-1159",
       "artifact": "edit-tool.json",
       "scenario": "a BOM and CRLF file edits when the old text is LF and leaves the normalized content",
@@ -2424,115 +2534,57 @@
       "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "token budget truncates output and writes the complete text",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a flagged task stays unmarked while the next Harness is paused and is marked restart by its first reservation pass",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output"
+        "cch_durable:abandon-on-restart"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "text exactly at the token budget is not truncated",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a restart mark cascades to ordinary owned work with the same reason and stops at background and unflagged work",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output"
+        "cch_durable:abandon-on-restart",
+        "cch_durable:abort-task-protocol"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "a script image is saved through the execution environment",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a restart-marked task with a missing definition waits; an explicit abort orphans it; a restored definition runs its abort with reason restart",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output"
+        "cch_durable:abandon-on-restart",
+        "cch_durable:registry-task-definitions"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "no execution environment keeps the frozen unsupported labels",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "an explicit abort above a restart-marked subtree replaces the reason and orphans a blocked leaf",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output"
+        "cch_durable:abandon-on-restart",
+        "cch_durable:abort-task-protocol"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     },
     {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "a failed script keeps partial output and spills it",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a flagged task created after the Harness opened runs instead of being abandoned",
+      "reason": "Captured by #1175 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this slice classifies the observation explicitly.",
       "rows": [
-        "cch_durable:codemode-output",
-        "cch_durable:codemode-failure"
+        "cch_durable:abandon-on-restart"
       ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "unicode truncation keeps whole BMP characters",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "ordered text console images and values keep production order",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "one character over the token budget truncates",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "the line budget exactly at its limit is not truncated",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "one line over the line budget truncates and spills",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
-    },
-    {
-      "family": "audit-1172",
-      "artifact": "codemode-output.json",
-      "scenario": "a token budget larger than the text still clamps the tail to the whole line window",
-      "reason": "Captured by #1172 after the consolidated ledger; its family registration reached `main` without a plan routing entry, so this record classifies the observation explicitly.",
-      "rows": [
-        "cch_durable:codemode-output"
-      ],
-      "disposition": "Compared through the public Harness in tests/durable/HarnessCodemodeTest.cpp and described by docs/research/pi-v1.3.0/1172-codemode-output.md; this observation alone does not promote the referenced ledger row."
+      "disposition": "Compared by tests/durable/AbandonOnRestartTest.cpp and described by docs/research/pi-v1.3.0/1175-abandon-on-restart.md where that record covers the case; this observation alone does not promote the referenced ledger row."
     }
   ],
   "groups": [

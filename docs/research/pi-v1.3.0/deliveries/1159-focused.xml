@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="3"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-02T05:09:43"
+	>
+	<testcase name="Durable edit and write calls of one file apply one after another" classname="Durable edit and write calls of one file apply one after another" time="0.109824" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1159;tools"/>
+		</properties>
+		<system-out>Filters: "Durable edit and write calls of one file apply one after another"
+Randomness seeded to: 4022980774
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable edit rejects text that appears twice or is absent" classname="Durable edit rejects text that appears twice or is absent" time="0.00996471" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1159;tools"/>
+		</properties>
+		<system-out>Filters: "Durable edit rejects text that appears twice or is absent"
+Randomness seeded to: 1009181808
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Durable edit tool reproduces the frozen BOM CRLF diff and rejection results" classname="Durable edit tool reproduces the frozen BOM CRLF diff and rejection results" time="0.0936964" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1159;tools"/>
+		</properties>
+		<system-out>Filters: "Durable edit tool reproduces the frozen BOM CRLF diff and rejection results"
+Randomness seeded to: 4206169520
+===============================================================================
+All tests passed (492 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

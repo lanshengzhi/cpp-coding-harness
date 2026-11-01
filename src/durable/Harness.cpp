@@ -335,6 +335,14 @@ namespace {
     return task_live(record) && (record.abort_requested || failed_outcome(record));
 }
 
+/// One live ordinary task a cancellation cascade reaches, and whether the
+/// mark it receives carries the abandoned owner's `restart` reason (frozen pi
+/// `#reconcile`'s `mark(record, reason)`).
+struct CascadeMark {
+    TaskId id{};
+    bool restart{false};
+};
+
 /// The ownership tree of one scheduling pass (frozen pi `TaskScheduler.#below`,
 /// `#edges`, `#roots`): tasks and conversations with their owner edges.
 ///
@@ -435,20 +443,21 @@ public:
 
     /// Live non-background tasks below each live owner with cancellation intent,
     /// not entering another such owner, which has its own walk (frozen
-    /// `#reconcile`'s cascade derivation). Marking them is the bottom-up abort
-    /// cascade: a marked owner keeps its abort handler until its ordinary owned
-    /// work is gone.
-    [[nodiscard]] std::vector<TaskId> cascade_targets() const {
-        std::vector<TaskId> targets;
+    /// `#reconcile`'s cascade derivation). `restart` is set when the nearest
+    /// intent owner was abandoned after a restart and has not failed, so the
+    /// mark it passes on is `restart` rather than a request. Marking them is the
+    /// bottom-up abort cascade: a marked owner keeps its abort handler until its
+    /// ordinary owned work is gone.
+    [[nodiscard]] std::vector<CascadeMark> cascade_targets() const {
+        std::vector<CascadeMark> targets;
         for (const auto& [id, owner] : tasks_) {
             if (!cancellation_intent(owner)) continue;
+            const bool restart = owner.abort_reason == "restart" && !failed_outcome(owner);
             walk_down(
                     TaskNode{id},
                     false,
                     [&](const TaskRecord& record, bool is_background) {
-                        if (!is_background && task_live(record) && !record.abort_requested) {
-                            targets.push_back(record.id);
-                        }
+                        if (!is_background && task_live(record)) targets.push_back(CascadeMark{record.id, restart});
                     },
                     [this](const TaskRecord& record) {
                         const TaskRecord* live = task(record.id);
@@ -918,6 +927,10 @@ struct Harness::Impl {
     std::atomic_bool closed{false};
 
     std::map<std::int64_t, std::stop_source> active_invocations;
+    /// Live flagged tasks a later Harness found at open; its first enabled
+    /// reservation pass abort-marks them with reason `restart` and reserves
+    /// nothing else (frozen pi `TaskScheduler.#abandoned`, `#reserve`).
+    std::set<std::int64_t> abandoned;
     std::map<std::int64_t, FailedMigration> failed_migrations;
     std::map<std::int64_t, std::vector<std::shared_ptr<TaskWaiter>>> waiters;
     /// Idle waiters, keyed by conversation; `std::nullopt` waits for every
@@ -941,6 +954,69 @@ struct Harness::Impl {
         auto conversations = storage->scan_conversations(1024);
         if (!conversations) return std::unexpected(conversations.error());
         return World{std::move(*tasks), std::move(*conversations)};
+    }
+
+    /// Load every live task and change surviving `running` tasks back to
+    /// `pending` (frozen pi `TaskScheduler.open`). A Harness open also collects
+    /// the live flagged task ids into `flagged` for its first later reservation
+    /// pass; an explicit `Harness::open_tasks()` re-reconciliation passes none,
+    /// because frozen has no such call and only an open observes a new process.
+    [[nodiscard]] support::AsyncResult<void> open_tasks(
+            bool observe_abandoned, const std::shared_ptr<std::vector<std::int64_t>>& flagged) {
+        return session->commit([observe_abandoned, flagged](Transaction& tx) -> support::ExpectedVoid {
+            auto tasks = tx.scan_tasks(SIZE_MAX);
+            if (!tasks) return std::unexpected(tasks.error());
+            for (const TaskRecord& task : *tasks) {
+                if (task.state.status == "running") {
+                    TaskRecord pending = task;
+                    pending.state.status = "pending";
+                    auto res = tx.set_task(std::move(pending));
+                    if (!res) return res;
+                }
+            }
+            if (!observe_abandoned || flagged == nullptr) return {};
+            for (const TaskRecord& task : *tasks) {
+                if (task_live(task) && task.abandon_on_restart) flagged->push_back(task.id.value);
+            }
+            return {};
+        });
+    }
+
+    /// The first enabled reservation pass of a Harness that opened over an
+    /// abandoned task: abort-mark every still-live flagged task with reason
+    /// `restart` and start nothing, so the next pass sees the marks (frozen pi
+    /// `TaskScheduler.#reserve`'s `#abandoned` stage). Returns true when the
+    /// pass consumed an abandonment set, whether or not a mark changed.
+    bool mark_abandoned_on_restart() {
+        std::set<std::int64_t> ids;
+        {
+            std::lock_guard lock(mutex);
+            if (abandoned.empty()) return false;
+            ids.swap(abandoned);
+        }
+        const auto written =
+                await_async_void(session->commit([ids = std::move(ids)](Transaction& tx) -> support::ExpectedVoid {
+                    auto tasks = tx.scan_tasks(SIZE_MAX);
+                    if (!tasks) return std::unexpected(tasks.error());
+                    for (const TaskRecord& task : *tasks) {
+                        if (!ids.contains(task.id.value) || task.state.status == "terminal" || task.abort_requested) {
+                            continue;
+                        }
+                        TaskRecord marked = task;
+                        marked.abort_requested = true;
+                        marked.abort_reason = std::string{"restart"};
+                        auto result = tx.set_task(std::move(marked));
+                        if (!result) return result;
+                    }
+                    return support::ExpectedVoid{};
+                }));
+        if (!written) report(written.error());
+        {
+            std::lock_guard lock(mutex);
+            dirty = true;
+        }
+        cv.notify_all();
+        return true;
     }
 
     Impl(Storage* s, std::unique_ptr<Session> sess, HarnessOptions opt)
@@ -1303,6 +1379,10 @@ struct Harness::Impl {
                                    return tx.set_task(task);
                                }
                                task.abort_requested = true;
+                               // An abort request replaces a `restart` mark and
+                               // does not carry the abandonment reason
+                               // (frozen pi `withAbortMark(current)`).
+                               task.abort_reason.reset();
                                return tx.set_task(task);
                            })
                             .start([impl = this, id, completion = std::move(completion), result](
@@ -1376,7 +1456,10 @@ struct Harness::Impl {
     void reconcile() {
         auto scan_res = storage->scan_tasks(1024);
         if (!scan_res) return;
-        std::vector<TaskId> cascade;
+        std::map<std::int64_t, const TaskRecord*> records;
+        for (const TaskRecord& task : *scan_res)
+            records.emplace(task.id.value, &task);
+        std::vector<CascadeMark> cascade;
         std::vector<TaskId> fail_fast;
         {
             auto conversations = storage->scan_conversations(1024);
@@ -1399,33 +1482,60 @@ struct Harness::Impl {
             settle_idle();
             return;
         }
-        std::set<std::int64_t> to_mark;
-        for (const TaskId id : cascade)
-            to_mark.insert(id.value);
+        // The freeze's `mark(record, reason)`: a request staged in this pass
+        // wins over a restart, an existing request is never downgraded, and an
+        // existing restart mark is replaced by a request but not by another
+        // restart (frozen pi `#reconcile`).
+        struct StagedMark {
+            TaskId id{};
+            bool restart{false};
+        };
+        std::map<std::int64_t, StagedMark> marks;
+        const auto stage = [&marks, &records](TaskId id, bool restart) {
+            const auto staged = marks.find(id.value);
+            if (staged != marks.end() && !staged->second.restart) return;
+            const auto found = records.find(id.value);
+            if (found == records.end()) return;
+            const TaskRecord& record = *found->second;
+            if (record.abort_requested && (!record.abort_reason.has_value() || restart)) return;
+            marks[id.value] = StagedMark{record.id, restart};
+        };
+        for (const CascadeMark& target : cascade)
+            stage(target.id, target.restart);
         for (const TaskId waiter_id : fail_fast) {
-            const TaskRecord* waiter = nullptr;
-            for (const TaskRecord& task : *scan_res) {
-                if (task.id == waiter_id) waiter = &task;
-            }
-            if (waiter == nullptr) continue;
-            for (const TaskId member_id : waiter->state.on) {
-                for (const TaskRecord& task : *scan_res) {
-                    if (task.id == member_id && task_live(task) && !failed_outcome(task)) {
-                        to_mark.insert(task.id.value);
-                    }
-                }
+            const auto waiter = records.find(waiter_id.value);
+            if (waiter == records.end()) continue;
+            for (const TaskId member_id : waiter->second->state.on) {
+                const auto member = records.find(member_id.value);
+                if (member == records.end()) continue;
+                const TaskRecord& record = *member->second;
+                // Every other live task: the failed one keeps its own outcome.
+                if (task_live(record) && !failed_outcome(record)) stage(record.id, false);
             }
         }
-        if (!to_mark.empty()) {
+        if (!marks.empty()) {
             (void)await_async_void(
-                    session->commit([to_mark = std::move(to_mark)](Transaction& tx) -> support::ExpectedVoid {
+                    session->commit([marks = std::move(marks)](Transaction& tx) -> support::ExpectedVoid {
                         auto tasks = tx.scan_tasks(1024);
                         if (!tasks) return std::unexpected(tasks.error());
                         for (const TaskRecord& task : *tasks) {
-                            if (!to_mark.contains(task.id.value)) continue;
-                            if (task.state.status == "terminal" || task.abort_requested) continue;
+                            const auto mark = marks.find(task.id.value);
+                            if (mark == marks.end() || task.state.status == "terminal") continue;
+                            // A request that landed after the scan is never
+                            // downgraded to a restart, and an idempotent mark is
+                            // not rewritten (frozen `mark`).
+                            if (task.abort_requested && (!task.abort_reason.has_value() || mark->second.restart)) {
+                                continue;
+                            }
                             TaskRecord marked = task;
                             marked.abort_requested = true;
+                            // A request strips a `restart` reason; only an
+                            // abandonment carries one (frozen `withAbortMark`).
+                            if (mark->second.restart) {
+                                marked.abort_reason = std::string{"restart"};
+                            } else {
+                                marked.abort_reason.reset();
+                            }
                             auto written = tx.set_task(std::move(marked));
                             if (!written) return written;
                         }
@@ -1674,6 +1784,11 @@ struct Harness::Impl {
             }
         }
 
+        // The first pass after open over abandoned work only writes their
+        // `restart` marks; a later pass reserves them for their abort
+        // invocations (frozen pi `#reserve`).
+        if (mark_abandoned_on_restart()) return;
+
         auto scan_res = storage->scan_tasks(256);
         if (!scan_res) return;
 
@@ -1708,8 +1823,11 @@ struct Harness::Impl {
             }
 
             // A waiting task resumes once every member is terminal; a `failFast`
-            // wait whose member failed is handled by `reconcile()`.
-            if (task.state.status == "waiting") {
+            // wait whose member failed is handled by `reconcile()`. A marked
+            // task is an abort candidate from any live status instead: its wait
+            // no longer holds it (frozen pi `#waitingOn` returns owned work for
+            // an abort-marked record).
+            if (task.state.status == "waiting" && !task.abort_requested) {
                 {
                     // A phase that committed `waiting` may still be active;
                     // resuming it to `pending` under a live identity would let
@@ -2003,7 +2121,13 @@ struct Harness::Impl {
                 auto abort_snapshot = registry.snapshot();
                 auto resolution = resolve_task(after, abort_snapshot);
                 if (resolution.fit.blocked_reason.has_value()) {
-                    settle_orphaned(tid, *resolution.fit.blocked_reason);
+                    // A restart-marked task waits for its definition so its abort
+                    // handler can clean up; only a request orphans it (frozen pi
+                    // `#reserve`'s blocked abort branch). Either way this run
+                    // invocation ends: the scheduler reconsiders the task.
+                    if (!after.abort_reason.has_value()) {
+                        settle_orphaned(tid, *resolution.fit.blocked_reason);
+                    }
                     cleanup();
                     return;
                 }
@@ -2123,20 +2247,26 @@ support::AsyncResult<std::unique_ptr<Harness>> Harness::open(Storage& storage, H
         return support::AsyncResult<std::unique_ptr<Harness>>{std::unexpected(res.error())};
     }
     auto harness = std::unique_ptr<Harness>(new Harness(std::move(impl)));
-    return support::AsyncResult<std::unique_ptr<Harness>>{
-            support::AsyncProducer<std::unique_ptr<Harness>, support::Error>{
-                    [harness = std::move(harness)](support::AsyncCompletion<std::unique_ptr<Harness>, support::Error>
-                                    completion) mutable noexcept {
-                        auto recovery = harness->open_tasks();
-                        std::move(recovery).start([harness = std::move(harness), completion = std::move(completion)](
-                                                          support::ExpectedVoid result) mutable noexcept {
-                            if (!result) {
-                                completion(std::unexpected(std::move(result.error())));
-                                return;
-                            }
-                            completion(std::move(harness));
-                        });
-                    }}};
+    return support::AsyncResult<std::unique_ptr<Harness>>{support::AsyncProducer<std::unique_ptr<Harness>,
+            support::Error>{
+            [harness = std::move(harness)](
+                    support::AsyncCompletion<std::unique_ptr<Harness>, support::Error> completion) mutable noexcept {
+                auto flagged = std::make_shared<std::vector<std::int64_t>>();
+                auto recovery = harness->impl_->open_tasks(true, flagged);
+                std::move(recovery).start([harness = std::move(harness), flagged, completion = std::move(completion)](
+                                                  support::ExpectedVoid result) mutable noexcept {
+                    if (!result) {
+                        completion(std::unexpected(std::move(result.error())));
+                        return;
+                    }
+                    {
+                        std::lock_guard lock(harness->impl_->mutex);
+                        for (const std::int64_t id : *flagged)
+                            harness->impl_->abandoned.insert(id);
+                    }
+                    completion(std::move(harness));
+                });
+            }}};
 }
 
 Session& Harness::session() noexcept { return *impl_->session; }
@@ -2299,19 +2429,9 @@ support::ExpectedVoid Harness::resume() {
 }
 
 support::AsyncResult<void> Harness::open_tasks() {
-    return impl_->session->commit([](Transaction& tx) -> support::ExpectedVoid {
-        auto tasks = tx.scan_tasks(SIZE_MAX);
-        if (!tasks) return std::unexpected(tasks.error());
-        for (const auto& task : *tasks) {
-            if (task.state.status == "running") {
-                TaskRecord pending = task;
-                pending.state.status = "pending";
-                auto res = tx.set_task(pending);
-                if (!res) return res;
-            }
-        }
-        return {};
-    });
+    // An explicit re-reconciliation is not a Harness open: it never resembles a
+    // new process, so it does not abandon flagged tasks of this session.
+    return impl_->open_tasks(false, nullptr);
 }
 
 support::AsyncResult<TaskRecord> Harness::wait_for_task(TaskId id, std::stop_token stop) {
@@ -2526,9 +2646,13 @@ void Harness::abort_conversation_pass(
             reached->push_back(id);
             const auto found = std::ranges::find_if(*tasks, [id](const TaskRecord& record) { return record.id == id; });
             if (found == tasks->end()) continue;
-            if (found->state.status == "terminal" || found->abort_requested) continue;
+            if (found->state.status == "terminal") continue;
+            if (found->abort_requested && !found->abort_reason.has_value()) continue;
             TaskRecord task = *found;
             task.abort_requested = true;
+            // A conversation abort is a request: it replaces a `restart` mark
+            // (frozen pi `Conversation.abort` -> `withAbortMark(live)`).
+            task.abort_reason.reset();
             auto written = tx.set_task(std::move(task));
             if (!written) return written;
         }
