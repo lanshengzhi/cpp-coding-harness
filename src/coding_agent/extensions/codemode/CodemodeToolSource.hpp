@@ -10,6 +10,7 @@
 namespace cch::coding_agent::extensions {
 
 class CodemodeCatalogState;
+struct CodemodeSessionState;
 
 /// The codemode Extension Tool Source (spec #882, ticket #885): it yields pi's
 /// single model-facing inline `codemode` tool. There is no on-disk declaration
@@ -24,10 +25,17 @@ class CodemodeCatalogState;
 /// surface and the discovery globals resolve against the same exposure-filtered
 /// callable set the catalog description lists. Without one (the unit-test
 /// seam), every registered tool except `codemode` is callable and ungrouped.
+///
+/// `session` is the application Session's codemode facilities (#1119): the
+/// persistent `store()`/`load()` state, its write-set commitment, and the
+/// output-file/image writer. Without one (the unit-test seam), `load()` starts
+/// empty, writes are dropped, and output spill/image saving report the missing
+/// filesystem in their result, exactly like pi's no-session context.
 class CodemodeToolSource final : public ExtensionToolSource {
 public:
     explicit CodemodeToolSource(std::filesystem::path guest_wasm_path = codemode::default_codemode_guest_wasm_path(),
-            std::shared_ptr<const CodemodeCatalogState> catalog = nullptr);
+            std::shared_ptr<const CodemodeCatalogState> catalog = nullptr,
+            std::shared_ptr<CodemodeSessionState> session = nullptr);
 
     /// Contribute the one `codemode` tool. Loading never touches the guest
     /// module: a missing or invalid guest surfaces as the tool call's explicit
@@ -37,6 +45,7 @@ public:
 private:
     std::filesystem::path guest_wasm_path_;
     std::shared_ptr<const CodemodeCatalogState> catalog_;
+    std::shared_ptr<CodemodeSessionState> session_;
 };
 
 } // namespace cch::coding_agent::extensions

@@ -60,7 +60,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "c765517d529520138ad12be5ff550e93be47fa07f46c6b56ba6ba1f4ee800073"
+            "sha256": "6c80dfa1a69280eb26f528ba04c04eb689f4a8bd0b80f2b74c292dcd26374be8"
           },
           {
             "path": "cmake/targets/Support.cmake",
@@ -76,7 +76,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "b7330ec5a79a7df4cc82a8a0c1f3df226625cc8acdf522c43e833966f5c43253"
+            "sha256": "a994f645d5580acf433577ed9c803006187abb780545f53663fe5f424bc4597e"
           },
           {
             "path": "src/mcp/Client.cpp",
@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "f2b6069ac38fcf3c99e797acd5a0f601bf67e9aa98e80a6866662553a9a89caf"
+            "sha256": "c584781145875d2ff72c7077298cd75de6dc8ac1738cefcc20e13fe08fa5bf67"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -260,14 +260,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml"
           ],
-          "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-          "recordedAt": "2026-10-31T14:20:13Z",
+          "testedRevision": "a502dacd8f81137e2aa76a4026f499d127cc6027",
+          "recordedAt": "2026-11-01T06:30:00Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-            "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml",
+            "sha256": "6ff02ac7faa8982246bb6a2ab1228082e5f7246418efc519fdc1f165fe467673"
           }
         },
         "rows": [
@@ -359,6 +359,38 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1111.xml",
               "sha256": "e93ca4fd72d6c6da2177205938a24a9a3a0d9fa3876c7d1db684a8163f6cff8d"
+            }
+          }
+        },
+        "revalidation1178": {
+          "reason": "#1178 corrected three inert scenarioLinks whose rows are the consolidated cch_chord:delta:prepare-replace row but whose ticket was 1061; the lane filter never applied them, so the row's recorded obligations omitted the deeply-equal and aborted whole-root preparation scenarios. The link ticket is now 1057 and the #1178 receipt compares all three. The delivered #1101 rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        },
+        "revalidation1119": {
+          "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "cmake/targets/CodingAgent.cmake",
+            "cmake/tests/CodingAgentTests.cmake"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
+            ],
+            "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
+            "recordedAt": "2026-10-31T14:20:13Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
+              "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
             }
           }
         }
@@ -695,7 +727,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "c765517d529520138ad12be5ff550e93be47fa07f46c6b56ba6ba1f4ee800073"
+            "sha256": "6c80dfa1a69280eb26f528ba04c04eb689f4a8bd0b80f2b74c292dcd26374be8"
           },
           {
             "path": "cmake/targets/Mcp.cmake",
@@ -711,7 +743,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "b7330ec5a79a7df4cc82a8a0c1f3df226625cc8acdf522c43e833966f5c43253"
+            "sha256": "a994f645d5580acf433577ed9c803006187abb780545f53663fe5f424bc4597e"
           },
           {
             "path": "src/coding_agent/AgentSession.cpp",
@@ -719,7 +751,7 @@
           },
           {
             "path": "src/coding_agent/AgentSessionExecution.cpp",
-            "sha256": "3089a067f338bb721271e21f5636448e814c3b79092a988dca7a2e8eefb1023b"
+            "sha256": "6d35e6c611802602e82a824262ce7cca5f1920123784fd77c7b1ba9bac89dccb"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -739,7 +771,7 @@
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.cpp",
-            "sha256": "ccb56d2283c9bdea465c016f7ed1c4d194c9df9cfeb30a6e2cefef1da244c45f"
+            "sha256": "31ed3eaf8bced5c18463c3f15fe316137386f04c12ab47b24faa76e69c7e4165"
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.hpp",
@@ -905,12 +937,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml"
           ],
-          "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
-          "recordedAt": "2026-11-01T04:36:15Z",
+          "testedRevision": "dc55f9b820aa974429579699b6110ca3e2069d07",
+          "recordedAt": "2026-11-01T06:36:56Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml",
-            "sha256": "3a87c3e769af4c154d0fca40e5bd0b9cda03ef708c137fdeafb9c6547e774dfb"
+            "sha256": "a454200e6ff87c0048e32ed8240a0bb0ead4af67cf728307ef5b9322caad86df"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -976,10 +1008,13 @@
             }
           }
         },
-        "revalidation1107": {
-          "reason": "#1107 renames the completed-turn context to AgentTurnContext (pi `AgentTurnContext`), adds the pi-v1.3.0 prepareRequest/finishTurn loop hooks and appendable prepareNextTurn messages, and retires should_stop_after_turn. AgentSessionExecution.cpp changes only the hook parameter type and its formatting. The delivered rows, scenarios and routing digest are unchanged; the shared selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+        "revalidation1119": {
+          "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
           "changedInputs": [
-            "src/coding_agent/AgentSessionExecution.cpp"
+            "cmake/targets/CodingAgent.cmake",
+            "cmake/tests/CodingAgentTests.cmake",
+            "src/coding_agent/AgentSessionExecution.cpp",
+            "src/coding_agent/runtime/SessionFactory.cpp"
           ],
           "previousValidation": {
             "command": [
@@ -998,6 +1033,31 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
               "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
+            }
+          }
+        },
+        "revalidation1107": {
+          "reason": "#1107 renames the completed-turn context to AgentTurnContext (pi `AgentTurnContext`), adds the pi-v1.3.0 prepareRequest/finishTurn loop hooks and appendable prepareNextTurn messages, and retires should_stop_after_turn. AgentSessionExecution.cpp carries the hook parameter rename on top of the #1119 changes. The delivered rows, scenarios and routing digest are unchanged; the shared selection was rerun on the merged tree into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "src/coding_agent/AgentSessionExecution.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml"
+            ],
+            "testedRevision": "a502dacd8f81137e2aa76a4026f499d127cc6027",
+            "recordedAt": "2026-11-01T06:30:00Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml",
+              "sha256": "6ff02ac7faa8982246bb6a2ab1228082e5f7246418efc519fdc1f165fe467673"
             }
           }
         }
@@ -1027,7 +1087,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "c765517d529520138ad12be5ff550e93be47fa07f46c6b56ba6ba1f4ee800073"
+            "sha256": "6c80dfa1a69280eb26f528ba04c04eb689f4a8bd0b80f2b74c292dcd26374be8"
           },
           {
             "path": "cmake/targets/Codemode.cmake",
@@ -1051,7 +1111,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "b7330ec5a79a7df4cc82a8a0c1f3df226625cc8acdf522c43e833966f5c43253"
+            "sha256": "a994f645d5580acf433577ed9c803006187abb780545f53663fe5f424bc4597e"
           },
           {
             "path": "src/codemode/Declarations.cpp",
@@ -1111,11 +1171,11 @@
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
-            "sha256": "e511f6dd5b5db8e83efe5ff31a5642095cda9236d28aa1c9a430cc8eb2169458"
+            "sha256": "0e2b3744149defdd66f3b2a42a08bb6a0357e6804a3dc9486fa788f590586dd2"
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.hpp",
-            "sha256": "949887284243d3da43b78767b2adfb3daa78fad6daab983cbfc68d4ecd366ac0"
+            "sha256": "ebfa80fc4c78b3dc8b835037b8270cac115fbd88e4ea7afb144384164fada573"
           },
           {
             "path": "src/coding_agent/extensions/tool_search/ToolSearchToolSource.cpp",
@@ -1139,7 +1199,7 @@
           },
           {
             "path": "src/coding_agent/AgentSessionExecution.cpp",
-            "sha256": "3089a067f338bb721271e21f5636448e814c3b79092a988dca7a2e8eefb1023b"
+            "sha256": "6d35e6c611802602e82a824262ce7cca5f1920123784fd77c7b1ba9bac89dccb"
           },
           {
             "path": "src/coding_agent/AgentSessionInteraction.cpp",
@@ -1163,11 +1223,11 @@
           },
           {
             "path": "src/coding_agent/runtime/RuntimeServices.hpp",
-            "sha256": "a2209169c92bdf59b8caeeb2d5079eda43833d1c351e0bc398091f5e643d3a55"
+            "sha256": "5f2a079153f9bd2f59e25babca7e73684203cdc2331edf62929c939f2c18e6ac"
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.cpp",
-            "sha256": "ccb56d2283c9bdea465c016f7ed1c4d194c9df9cfeb30a6e2cefef1da244c45f"
+            "sha256": "31ed3eaf8bced5c18463c3f15fe316137386f04c12ab47b24faa76e69c7e4165"
           },
           {
             "path": "tests/Catch2Main.cpp",
@@ -1179,7 +1239,7 @@
           },
           {
             "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-            "sha256": "3aa1bdd0421410df36216ccee122e1ce341943cff5558730ff4528651b4318cc"
+            "sha256": "33fc155116f7483fb4bd252ad1fae2dfb4b994c204c148ccc575504298fd4b06"
           },
           {
             "path": "tests/coding_agent/CodemodeParityTest.cpp",
@@ -1226,6 +1286,18 @@
             "sha256": "ef00f8b02a43b53dde4d83cd7d7c114b19c27cd614a1a8851b10ee88de2eb84f"
           },
           {
+            "path": "src/coding_agent/extensions/codemode/CodemodeExecution.cpp",
+            "sha256": "c8ab8431dfb22d5a9dfa6580b4ea7dc5908b6be30b5bab6c5fd763709458e179"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeExecution.hpp",
+            "sha256": "77b330d2251ea43f92f6a46524b46c8a9eddd841aba4b544f420a226224f4ea0"
+          },
+          {
+            "path": "tests/support/TextFile.hpp",
+            "sha256": "96dc49ce13266734ac36cfa6a213bccd8dde607ea23269c39464f7b53be6bab5"
+          },
+          {
             "path": "src/support/Json.hpp",
             "sha256": "b28d2fa0c12b4b923e63d54dae09b24dee9d26c164c5f7ea59a0a52fd3d60322"
           },
@@ -1251,7 +1323,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "f2b6069ac38fcf3c99e797acd5a0f601bf67e9aa98e80a6866662553a9a89caf"
+            "sha256": "c584781145875d2ff72c7077298cd75de6dc8ac1738cefcc20e13fe08fa5bf67"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1277,12 +1349,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1107.xml"
           ],
-          "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
-          "recordedAt": "2026-11-01T04:36:15Z",
+          "testedRevision": "dc55f9b820aa974429579699b6110ca3e2069d07",
+          "recordedAt": "2026-11-01T06:36:56Z",
           "selected": 19,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1107.xml",
-            "sha256": "fdfa531ab684460a3904926ef178f18822d4e4c046524ecb48dc0623966b8172"
+            "sha256": "0874a35fbe6f38cee5539a50992178d1be2a67bd33a35d874c579f1df28cba2a"
           }
         },
         "rows": [
@@ -1380,10 +1452,23 @@
           }
         ],
         "routingSha256": "69324f2fda0d49ee9f5ecc9c334f5a5ef3f10bc98895ea395dcd416cc99c9d7b",
-        "revalidation1107": {
-          "reason": "#1107 renames the completed-turn context to AgentTurnContext (pi `AgentTurnContext`), adds the pi-v1.3.0 prepareRequest/finishTurn loop hooks and appendable prepareNextTurn messages, and retires should_stop_after_turn. AgentSessionExecution.cpp changes only the hook parameter type and its formatting. The delivered rows, scenarios and routing digest are unchanged; the shared selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+        "revalidation1178": {
+          "reason": "#1178 corrected three inert scenarioLinks whose rows are the consolidated cch_chord:delta:prepare-replace row but whose ticket was 1061; the lane filter never applied them, so the row's recorded obligations omitted the deeply-equal and aborted whole-root preparation scenarios. The link ticket is now 1057 and the #1178 receipt compares all three. The delivered #1118 row, scenarios and routing digest are unchanged, and this change makes no new verification claim about it.",
           "changedInputs": [
-            "src/coding_agent/AgentSessionExecution.cpp"
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        },
+        "revalidation1119": {
+          "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the 19-case issue1118 selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "cmake/targets/CodingAgent.cmake",
+            "cmake/tests/CodingAgentTests.cmake",
+            "src/coding_agent/AgentSessionExecution.cpp",
+            "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
+            "src/coding_agent/extensions/codemode/CodemodeToolSource.hpp",
+            "src/coding_agent/runtime/RuntimeServices.hpp",
+            "src/coding_agent/runtime/SessionFactory.cpp",
+            "tests/coding_agent/CodemodeCatalogSessionTest.cpp"
           ],
           "previousValidation": {
             "command": [
@@ -1403,8 +1488,768 @@
               "path": "docs/research/pi-v1.3.0/deliveries/1118-catalog.xml",
               "sha256": "ed55e2d9c856d927b10e31c4f93b8ba37e23af5bc34ab383fe38f8f8183d190e"
             }
+          },
+          "addedInputs": [
+            "src/coding_agent/extensions/codemode/CodemodeExecution.cpp",
+            "src/coding_agent/extensions/codemode/CodemodeExecution.hpp",
+            "tests/support/TextFile.hpp"
+          ]
+        },
+        "revalidation1107": {
+          "reason": "#1107 renames the completed-turn context to AgentTurnContext (pi `AgentTurnContext`), adds the pi-v1.3.0 prepareRequest/finishTurn loop hooks and appendable prepareNextTurn messages, and retires should_stop_after_turn. AgentSessionExecution.cpp carries the hook parameter rename on top of the #1119 changes. The delivered rows, scenarios and routing digest are unchanged; the shared selection was rerun on the merged tree into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "changedInputs": [
+            "src/coding_agent/AgentSessionExecution.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1119.xml"
+            ],
+            "testedRevision": "a502dacd8f81137e2aa76a4026f499d127cc6027",
+            "recordedAt": "2026-11-01T06:30:00Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1119.xml",
+              "sha256": "14530c81f91f6aed7ec1d207259cce0f3bcb9c8c4ebb5c043e54e4c30e84fa33"
+            }
           }
         }
+      },
+      {
+        "id": "1178-chord-comparisons",
+        "ticket": "1178",
+        "implementationCommits": [
+          "4f92d811f1ced9aca2141c1b7ce6464733aea80d",
+          "1ed6a12009781efdb8142b00908f49d2600a20e1",
+          "f4cc01fd593b19ba0e3659e6373b3c1d375702ef",
+          "3c8a9fdc55af4353a3cbe02cd1d37c75d2c50035",
+          "b43476412f99f63843c6a64fae4805c0c1efe126",
+          "3a85bd9432fa7a5aff838fc489180149e6811612",
+          "83a8daa985b27c77a59f4e1ec616bd1e185b6975",
+          "5be8fb95c01eb387b47d1b99a26d18ad2a392bf6"
+        ],
+        "report": "docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1178-chord.xml"
+          ],
+          "testedRevision": "a3f9e28af4495a8f5ab96b5c06d04e18f4fe643b",
+          "recordedAt": "2026-11-01T02:20:26Z",
+          "selected": 70,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-chord.xml",
+            "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_chord:context:independent-cancel",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/context-cancellation.json",
+                "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+                "test": "a child cancellation is isolated while parent cancellation reaches an already-created context",
+                "testSource": "tests/chord/ChordContextTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "combined cancellation keeps the first reason and reaches existing children",
+              "testSource": "tests/chord/ChordContextTest.cpp",
+              "reason": "Siblings sharing one stop_source would abort together; the case separates an independent child scope from a shared one by cancelling one child and requiring the other to stay un-aborted."
+            }
+          },
+          {
+            "id": "cch_chord:context:parent-cancellation",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/context-cancellation.json",
+                "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+                "test": "a child cancellation is isolated while parent cancellation reaches an already-created context",
+                "testSource": "tests/chord/ChordContextTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "combined cancellation keeps the first reason and reaches existing children",
+              "testSource": "tests/chord/ChordContextTest.cpp",
+              "reason": "A child created before the parent is cancelled must observe the parent reason; an implementation that only samples the parent at creation time leaves the inheritor un-aborted, and one that overwrites reasons reports the later \"external\" reason instead of \"first\"."
+            }
+          },
+          {
+            "id": "cch_chord:context:value-layering",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/context-cancellation.json",
+                "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+                "test": "a child cancellation is isolated while parent cancellation reaches an already-created context",
+                "testSource": "tests/chord/ChordContextTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "context values layer without modifying their parents",
+              "testSource": "tests/chord/ChordContextTest.cpp",
+              "reason": "A context that mutated its parent or flattened the layered keys would report \"updated\" on the parent after deriving a replacement layer, and a context that re-used one key identity per description would collide distinct keys."
+            }
+          },
+          {
+            "id": "cch_chord:context:with-abort-signal",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/context-cancellation.json",
+                "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+                "test": "a child cancellation is isolated while parent cancellation reaches an already-created context",
+                "testSource": "tests/chord/ChordContextTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "combined cancellation keeps the first reason and reaches existing children",
+              "testSource": "tests/chord/ChordContextTest.cpp",
+              "reason": "Combining an external signal with the parent must keep the first reason; a context that replaces the parent reason with the external one reports \"later\" instead of \"first\", and one that ignores the external token never aborts."
+            }
+          },
+          {
+            "id": "cch_chord:context:without-abort-signal",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/context-cancellation.json",
+                "scenario": "withoutAbortSignal removes cancellation while preserving typed values",
+                "test": "without abort signal masks cancellation while preserving typed values",
+                "testSource": "tests/chord/ChordContextTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "without abort signal masks cancellation while preserving typed values",
+              "testSource": "tests/chord/ChordContextTest.cpp",
+              "reason": "The case separates a detached cleanup overlay from both a pass-through context (which would still report the caller abort) and a value-dropping copy (which would lose \"cleanup\"): the masked context has no signal and keeps the typed value."
+            }
+          },
+          {
+            "id": "cch_chord:delta:batch-application",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "batched immutable application applies ordered batches and returns only the final revision",
+                "test": "ordered immutable batches produce one final revision without changing the base",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "ordered immutable batches produce one final revision without changing the base",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "An implementation that mutates the base, or that returns an intermediate batch revision, fails the base-equality and single-final-revision assertions."
+            }
+          },
+          {
+            "id": "cch_chord:delta:draft-abort",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
+                "test": "aborting a prepared change revokes escaped draft handles",
+                "testSource": "tests/chord/TrackerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "adoption immediately revokes escaped competing draft handles",
+              "testSource": "tests/chord/TrackerTest.cpp",
+              "reason": "An overlay that stays usable after settlement, or one whose prepared result is still adoptable after abort, passes a naive abort test but fails the escaped-handle revocation assertions here."
+            }
+          },
+          {
+            "id": "cch_chord:delta:immutable-application",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "immutable application reproduces each revision without mutating the base and shares untouched subtrees",
+                "test": "immutable application reproduces a revision while sharing untouched containers",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "immutable application reproduces a revision while sharing untouched containers",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "A deep-copy implementation returns the right value but shares no untouched container; a mutating implementation changes the base. The sharing and base-equality assertions separate both."
+            }
+          },
+          {
+            "id": "cch_chord:delta:mutable-application",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1061/validation-order.json",
+                "scenario": "a later empty path keeps the preceding mutable write and reports the empty path",
+                "test": "application follows frozen sequential validation and replacement semantics",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "application follows frozen sequential validation and replacement semantics",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "Whole-batch pre-validation leaves the target at its initial value after a later failing operation; the case requires the leading write to survive while the root replacement stays local."
+            }
+          },
+          {
+            "id": "cch_chord:delta:op-vocabulary",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "the tracker emits the set, append, splice, permutation, delete, truncate, and replace vocabulary",
+                "test": "tracker drafts emit the frozen set append splice permutation delete truncate and replace vocabulary",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "draft writes fold to the final leaf while delete and readd stays explicit",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "A producer that folds delete-and-readd into one set, or that emits duplicate leaf writes, produces a different batch than the two exact operations this case requires."
+            }
+          },
+          {
+            "id": "cch_chord:delta:overlap",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "overlap returns the bounded common run used to merge tool output",
+                "test": "overlap returns the bounded common run",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "overlap returns the bounded common run",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "An unbounded suffix scan ignores the candidate cap and the zero-scan case; the exact results 5/0/0 separate the bounded search from an unbounded one."
+            }
+          },
+          {
+            "id": "cch_chord:delta:prepare-replace",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1061/prepare-replace.json",
+                "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+                "test": "prepare replace keeps the checkpoint base immutable and stales same-base preparations",
+                "testSource": "tests/chord/TrackerTest.cpp"
+              },
+              {
+                "artifact": "audit-1061/prepare-replace.json",
+                "scenario": "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
+                "test": "prepare replace of a deeply equal root emits no operations and stales a competitor",
+                "testSource": "tests/chord/TrackerTest.cpp"
+              },
+              {
+                "artifact": "audit-1061/prepare-replace.json",
+                "scenario": "an aborted whole-root preparation cannot be adopted",
+                "test": "an aborted or foreign whole-root preparation cannot be adopted",
+                "testSource": "tests/chord/TrackerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "an aborted or foreign whole-root preparation cannot be adopted",
+              "testSource": "tests/chord/TrackerTest.cpp",
+              "reason": "A tracker that adopts a prepared change without ownership and settlement checks accepts an aborted or foreign preparation instead of reporting the exact errors this case requires."
+            }
+          },
+          {
+            "id": "cch_chord:delta:stale-preparation",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "prepared revisions are immutable and a same-base preparation becomes stale after adoption",
+                "test": "a same-base preparation becomes stale after another preparation is adopted",
+                "testSource": "tests/chord/TrackerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "prepare replace keeps the checkpoint base immutable and stales same-base preparations",
+              "testSource": "tests/chord/TrackerTest.cpp",
+              "reason": "A tracker that adopts a prepared change without checking its base revision succeeds on the second same-base preparation, which this case rejects with the exact stale error."
+            }
+          },
+          {
+            "id": "cch_chord:delta:tracker-revision",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "prepared revisions are immutable and a same-base preparation becomes stale after adoption",
+                "test": "a same-base preparation becomes stale after another preparation is adopted",
+                "testSource": "tests/chord/TrackerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "prepare replace keeps the checkpoint base immutable and stales same-base preparations",
+              "testSource": "tests/chord/TrackerTest.cpp",
+              "reason": "A tracker that adopts without advancing the revision, or that rebases a same-base preparation instead of staling it, cannot report revision 1 with an unchanged base and the exact stale error."
+            }
+          },
+          {
+            "id": "cch_chord:output:bound-output",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/json-output-support.json",
+                "scenario": "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts",
+                "test": "bound output keeps the configured head or tail and reports exact dropped counts",
+                "testSource": "tests/chord/OutputTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a multi-byte character is cut only on a character boundary",
+              "testSource": "tests/chord/OutputTest.cpp",
+              "reason": "A head/tail bound that slices at the raw byte limit splits a multibyte character and reports the wrong byte count; the case separates a character-boundary cut from a byte cut."
+            }
+          },
+          {
+            "id": "cch_chord:output:character-end",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/json-output-support.json",
+                "scenario": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
+                "test": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
+                "testSource": "tests/chord/OutputTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a multi-byte character is cut only on a character boundary",
+              "testSource": "tests/chord/OutputTest.cpp",
+              "reason": "A byte-index truncation splits the 2-byte and 4-byte sequences; the case separates a UTF-8 boundary helper from plain byte slicing at limits 2, 3 and 4."
+            }
+          },
+          {
+            "id": "cch_chord:output:output-buffer",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/json-output-support.json",
+                "scenario": "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts",
+                "test": "output buffer retains the frozen tail window and exact whole-stream totals",
+                "testSource": "tests/chord/OutputTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "output buffer keeps whole-stream dropped line counts across a tail window",
+              "testSource": "tests/chord/OutputTest.cpp",
+              "reason": "A buffer that reports only its retained window loses the dropped line count of earlier chunks; the case requires whole-stream totals with a tail window."
+            }
+          },
+          {
+            "id": "cch_chord:output:utf8-byte-length",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/json-output-support.json",
+                "scenario": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
+                "test": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
+                "testSource": "tests/chord/OutputTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a multi-byte character is cut only on a character boundary",
+              "testSource": "tests/chord/OutputTest.cpp",
+              "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
+            }
+          },
+          {
+            "id": "cch_chord:state:attached-hydration",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/replicated-state.json",
+                "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+                "test": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/ordered-frames.json",
+                "scenario": "an attached state restores the latest committed revision when subscribing after existing commits",
+                "test": "attached state restores the latest committed revision when subscribing after existing commits",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/ordered-frames.json",
+                "scenario": "attachment captures the snapshot before activation and drains buffered frames in commit order",
+                "test": "attachment captures the snapshot before activation and drains buffered frames in commit order",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/ordered-frames.json",
+                "scenario": "exact source values are published without applying or re-diffing the frame operations",
+                "test": "exact source values are published without applying or re-diffing frame operations",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/review-edges.json",
+                "scenario": "a retained value reference keeps the revision it was read at across a later commit",
+                "test": "a retained value reference keeps the revision it was read at",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/review-edges.json",
+                "scenario": "negative safe integer cursors are accepted for the snapshot and later frames",
+                "test": "negative safe integer cursors are accepted for the snapshot and later frames",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "attachment captures the snapshot before activation and drains buffered frames in commit order",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp",
+              "reason": "A subscriber that replays the intermediate buffered frames, or that hydrates at the acquisition sequence instead of the latest one, fails the single-hydrate-at-latest-sequence assertion."
+            }
+          },
+          {
+            "id": "cch_chord:state:cursor-gap",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/replicated-state.json",
+                "scenario": "a cursor gap is reported once and leaves the last good replicated value",
+                "test": "a cursor gap is reported once and leaves the last good replicated value",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/ordered-frames.json",
+                "scenario": "a repeated cursor is reported once as a gap and keeps the last good value",
+                "test": "a repeated cursor is reported once as a gap and keeps the last good value",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/review-edges.json",
+                "scenario": "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
+                "test": "a source gap without an onError hook writes the exact default diagnostic once and keeps the last good value",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/review-edges.json",
+                "scenario": "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
+                "test": "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/review-edges.json",
+                "scenario": "a gap while draining a buffered activation ignores later buffered frames and disposes once",
+                "test": "a gap while draining buffered activation stops dispatch without touching a disposed listener",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a backward cursor reports one ordering gap and retains the last good value",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp",
+              "reason": "A state that accepts any cursor, or that keeps applying frames after a gap, converges on the later value instead of retaining the last good one and reporting once."
+            }
+          },
+          {
+            "id": "cch_chord:state:dispose",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/replicated-state.json",
+                "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+                "test": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/ordered-frames.json",
+                "scenario": "independent attachments converge separately and dispose idempotently without affecting each other",
+                "test": "independent attachments converge separately and dispose idempotently",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/observer-delivery.json",
+                "scenario": "unsubscribe discards queued deliveries without aborting or joining the running callback",
+                "test": "unsubscribe discards queued deliveries without aborting the running callback",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/review-edges.json",
+                "scenario": "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
+                "test": "a snapshot cursor outside the safe integer range fails attach and disposes the attachment once",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "independent attachments converge separately and dispose idempotently",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp",
+              "reason": "A non-idempotent dispose releases the source twice, and a shared attachment couples the two states; the case separates both."
+            }
+          },
+          {
+            "id": "cch_chord:state:listener-error",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/replicated-state.json",
+                "scenario": "a failing state listener is reported through onError without stopping another subscription",
+                "test": "a failing state listener is reported through onError without stopping another subscription",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/observer-delivery.json",
+                "scenario": "a failing listener is reported through onError in isolation and keeps receiving later deliveries",
+                "test": "a failing listener is reported in isolation and keeps receiving later deliveries",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/observer-delivery.json",
+                "scenario": "a synchronous hydration failure is reported without removing the subscription",
+                "test": "a synchronous hydration failure is reported without removing the subscription",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/observer-delivery.json",
+                "scenario": "a callback rejection that settles after unsubscribe is still reported",
+                "test": "a callback rejection that settles after unsubscribe is still reported",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a callback rejection that settles after unsubscribe is still reported",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp",
+              "reason": "A state that swallows failures after unsubscribe, or that routes them into the source, misses the reported error while the received deliveries stay unchanged."
+            }
+          },
+          {
+            "id": "cch_chord:state:pending-bound",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1062/observer-delivery.json",
+                "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
+                "test": "overflow keeps only the newest pending delivery with its exact value context and delivery",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/observer-delivery.json",
+                "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)",
+                "test": "at most 100 deliveries pend behind one held listener while a commit fits the bound",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/observer-delivery.json",
+                "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)",
+                "test": "overflow at the 100-pending bound keeps the newest pending delivery",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              },
+              {
+                "artifact": "audit-1062/observer-delivery.json",
+                "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)",
+                "test": "repeated overflow at the 100-pending bound keeps the newest pending delivery",
+                "testSource": "tests/chord/ReplicatedStateTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "pending overflow keeps the newest frame while fast observers follow every publication",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp",
+              "reason": "An unbounded queue delays the producer and the other subscriber; the case requires the held subscription to coalesce while the fast one receives all 104 publications."
+            }
+          }
+        ],
+        "routingSha256": "7552c28da0769a2e87b04fa4bc709316fcf053d75960b2728547ed0f1b99c971",
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/targets/Chord.cmake",
+            "sha256": "db34ddc2693d5187df2a94f0e38eacb3262796fe2b0d93ab7ef99167aceccf76"
+          },
+          {
+            "path": "cmake/tests/ChordTests.cmake",
+            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "src/chord/ChordContext.cpp",
+            "sha256": "e26523b78954e4d6da4fd28e91e7cdafdd15a6893a50f5a11d171291162c0aaa"
+          },
+          {
+            "path": "src/chord/Delta.cpp",
+            "sha256": "8f99ccf1bebc645eee26c10b07ed8c9f4ea64dcdb1c72fa43e98ffd21cb01705"
+          },
+          {
+            "path": "src/chord/DeltaInternal.hpp",
+            "sha256": "e10711e4d398c29e109e0fb83a8b7c3ca8b5913d6e164ffb231e989c2f4861db"
+          },
+          {
+            "path": "src/chord/Json.cpp",
+            "sha256": "10a95224acf9ea62a6e024440066dca84ed8a459949a1e96c9f9b780ad85451a"
+          },
+          {
+            "path": "src/chord/Output.cpp",
+            "sha256": "8fbda3b245bfe902c293691ec49fbe3d7d157c04eb2bbd8c0585f7f11a345d59"
+          },
+          {
+            "path": "src/chord/ReplicatedState.cpp",
+            "sha256": "6957b87f6d43adfcd42581a65aafff072e151fa2c22d3bb59efeae1e72773768"
+          },
+          {
+            "path": "src/chord/StrictJson.cpp",
+            "sha256": "d8b03467a1b1ae028a0e80bb8c7c75d674688c57b3dfdf715e73518ae8cc2d7b"
+          },
+          {
+            "path": "src/chord/Tracker.cpp",
+            "sha256": "e6abb2fabb5b0b88ac8a6381ca256834cdb2ed64ef27e0b11069b282f21ebe5f"
+          },
+          {
+            "path": "src/chord/include/cch/chord/ChordContext.hpp",
+            "sha256": "c5a063a7eee26bb73b7eefcff850b8bdea9024aab549252e7ed496d7e398d856"
+          },
+          {
+            "path": "src/chord/include/cch/chord/Delta.hpp",
+            "sha256": "2841496851cde80b117d454d3165bf7de6879e837f467c1c16d37c1127877363"
+          },
+          {
+            "path": "src/chord/include/cch/chord/Json.hpp",
+            "sha256": "a0770553e00418ca5add8b9437bc9f0809e19f8fa723e47d2812e235541b9839"
+          },
+          {
+            "path": "src/chord/include/cch/chord/Output.hpp",
+            "sha256": "02fa83eb4497861eaaffbaa68d6bb88e7460ee1fb4d22a29aa982024c56d0f71"
+          },
+          {
+            "path": "src/chord/include/cch/chord/ReplicatedState.hpp",
+            "sha256": "14bc955d8455f69a939e33ed4d716ace3eb5f8d005dc486adaeba85a9d086318"
+          },
+          {
+            "path": "src/chord/include/cch/chord/StrictJson.hpp",
+            "sha256": "8a791ba15dbab9c9e42433dd9c24cd7f884bfb88c606eca353d7173bfd776cc7"
+          },
+          {
+            "path": "src/support/include/cch/support/AsyncResult.hpp",
+            "sha256": "db1e2881ae278abd38df766bc02aaba31963edea2575421d98759b4c21cef188"
+          },
+          {
+            "path": "src/support/include/cch/support/Error.hpp",
+            "sha256": "195585394d91c60b92f5b5ee85bb81e3961cd9a3e4a293298403f8f1032e558f"
+          },
+          {
+            "path": "src/support/include/cch/support/JsonObject.hpp",
+            "sha256": "bd24f86e03a85fdf402246dd4fbbeb812cec21ccd77ab25f09b6d8bd8bc1680d"
+          },
+          {
+            "path": "src/support/include/cch/support/JsonValue.hpp",
+            "sha256": "93875a958f5e36e0d41feb68de0fbfc66e4d242b525eed7dc74eaf64b048dbee"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/chord/ChordContextTest.cpp",
+            "sha256": "25730e51299f0baa125ffa58080fb35b6145079edb545ac54b3d3dc28ad16ecd"
+          },
+          {
+            "path": "tests/chord/DeltaTest.cpp",
+            "sha256": "d8a2f8169dee839214c15802dbf4811aa1656bdcbacace2090027ec32c15119a"
+          },
+          {
+            "path": "tests/chord/OutputTest.cpp",
+            "sha256": "8c5ef148c2bdfc8017d4fb7224674578fcf49c33df19ff6dd4657d998888ec56"
+          },
+          {
+            "path": "tests/chord/ReplicatedStateTest.cpp",
+            "sha256": "b3b33852cc3089eaccc11b073a32ccc8535d5f0c55a66f246cf4c24e748c5e79"
+          },
+          {
+            "path": "tests/chord/TrackerTest.cpp",
+            "sha256": "caf97023d0a2fc6f06a6195ffeb70012688a3abf4f7b7331de33e95ebfc182ad"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
+            "sha256": "d56e0cb0f2a8afbb2045de990390d74e7898d50f7dfad9458cd34a7e23a63e6d"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+            "sha256": "9b4fa6273547f7b301773571f8bd58066f0574a8c563bdc371be0821c018d817"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+            "sha256": "5b5241721f64f50380b2fe7a5c22c528a4d38d7ebfc9035f2c9de3429c335518"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+            "sha256": "31d83e25d6245809ad78f2f7dfd37ca87c5321d3eca17deda0e4fe38c3238d53"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+            "sha256": "754e7ad07a9279754638f6dca161eebd4de46e2197797e57a989b95eb28fc525"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1061/manifest.json",
+            "sha256": "1532caab7462c64e9008195685a55b001f9dc45a8d4d8e86e7603034ddcaf70b"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
+            "sha256": "363c1e521248f0b89f2ad72ea6f14f8f4967888ccc7ef65d347a99a9a445ad26"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1061/validation-order.json",
+            "sha256": "0c1065e8f9f1f34c8a8f7ce1b949bf236b0ccd4f418896c203123c2f511f7553"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1062/manifest.json",
+            "sha256": "ac11bd98a0b63afaa6cb241e9758812875cec21db75b5e99b36b1dca6bc1b00e"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1062/ordered-frames.json",
+            "sha256": "a8d1edb7fe56d25ef795208c9fafa1e29964e2c3c8fb2226a42ed4ebf25a644e"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1062/observer-delivery.json",
+            "sha256": "a4e0eaefb0f15d35da5abad0825ac62883c8dae2b53fffc1d3b4527e9c2f01de"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1062/review-edges.json",
+            "sha256": "2286ffea931eadb52bd723a1e874c061742ac65810b55a3dd9c245d69d093332"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-chord.xml",
+            "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
+          }
+        ]
       }
     ]
   },
@@ -1647,10 +2492,10 @@
         "not-applicable": 2
       },
       "cch_chord": {
-        "implemented": 8,
-        "missing": 35,
+        "implemented": 24,
+        "missing": 28,
         "not-applicable": 5,
-        "partial": 17
+        "partial": 8
       },
       "cch_codemode": {
         "implemented": 32,
@@ -1687,16 +2532,16 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1033,
-      "missing": 210,
+      "implemented": 1049,
+      "missing": 203,
       "not-applicable": 18,
-      "partial": 203
+      "partial": 194
     },
     "verification": {
       "not-applicable": 28,
       "unverified": 1016,
-      "upstream-captured": 409,
-      "verified": 11
+      "upstream-captured": 386,
+      "verified": 34
     },
     "evidenceRoute": {
       "captured": 420,
@@ -1747,8 +2592,8 @@
     "missingObservationRows": 1016,
     "scenarioCoverage": {
       "scenarios": 562,
-      "scenarioNamed": 360,
-      "artifactCovered": 58,
+      "scenarioNamed": 362,
+      "artifactCovered": 56,
       "orphaned": [
         "audit-1105/session-binding.json:real Session reads resources on demand and binds a late tool",
         "audit-1105/session-binding.json:real Session calls tools after resources/list fails and binds a late tool",
@@ -8122,15 +8967,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/test/session-watches.test.ts:keeps the acquisition revision until start and delivers exact committed frames; packages/durable/test/harness-tasks.test.ts:caller cancellation",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
       "comparisonScenarios": [
         "a child cancellation is isolated while parent cancellation reaches an already-created child context"
@@ -8142,12 +8987,12 @@
         "capturedScenarios": [
           "a child cancellation is isolated while parent cancellation reaches an already-created child context"
         ],
-        "result": "Cancelling child sets only the child's signal; root and sibling remain un-aborted."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Expose a child scope with its own stop_source derived from the parent; do not mutate the parent context.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8160,7 +9005,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a child cancellation is isolated while parent cancellation reaches an already-created child context"
+          ],
+          "result": "Cancelling child sets only the child's signal; root and sibling remain un-aborted."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Expose a child scope with its own stop_source derived from the parent; do not mutate the parent context."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:context:parent-cancellation",
@@ -8171,15 +9035,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/harness.ts:bind; packages/durable/src/harness/scheduler.ts:waitForTask; packages/durable/test/harness-cancellation-barrier.test.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
       "comparisonScenarios": [
         "a child cancellation is isolated while parent cancellation reaches an already-created child context"
@@ -8191,12 +9055,12 @@
         "capturedScenarios": [
           "a child cancellation is isolated while parent cancellation reaches an already-created child context"
         ],
-        "result": "Child reason remains 'child-only'; sibling remains un-aborted; an inheritor context sees parent reason 'parent-reason'."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Compose cancellation with `std::stop_token`/`std::stop_source`; preserve the first cancellation reason at the context boundary.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8209,7 +9073,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a child cancellation is isolated while parent cancellation reaches an already-created child context"
+          ],
+          "result": "Child reason remains 'child-only'; sibling remains un-aborted; an inheritor context sees parent reason 'parent-reason'."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Compose cancellation with `std::stop_token`/`std::stop_source`; preserve the first cancellation reason at the context boundary."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:context:root-background",
@@ -8267,15 +9150,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.#runCommit,SessionImpl.#publish; packages/durable/test/session-watches.test.ts:preserves commit Context values without inheriting producer cancellation",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
       "comparisonScenarios": [
         "a child cancellation is isolated while parent cancellation reaches an already-created child context"
@@ -8287,12 +9170,12 @@
         "capturedScenarios": [
           "a child cancellation is isolated while parent cancellation reaches an already-created child context"
         ],
-        "result": "Root and child both read value 'root'; the inherited child reads its own 'child' value while retaining the parent key."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Make committed context values rely on an immutable keyed layer; a watched delivery must read the commit's values, not the producer's cancellation.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8305,7 +9188,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a child cancellation is isolated while parent cancellation reaches an already-created child context"
+          ],
+          "result": "Root and child both read value 'root'; the inherited child reads its own 'child' value while retaining the parent key."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Make committed context values rely on an immutable keyed layer; a watched delivery must read the commit's values, not the producer's cancellation."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:context:watch-cancellation",
@@ -8365,15 +9267,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/harness.ts:bind; packages/durable/src/harness/scheduler.ts:1291; packages/durable/src/testing/env-conformance.ts:withAbortSignal",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
       "comparisonScenarios": [
         "a child cancellation is isolated while parent cancellation reaches an already-created child context"
@@ -8385,12 +9287,12 @@
         "capturedScenarios": [
           "a child cancellation is isolated while parent cancellation reaches an already-created child context"
         ],
-        "result": "Inheritor aborts with the parent's 'parent-reason' while keeping its own 'child' value."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Accept an external stop token/signal plus the parent stop token; combine reasons without overwriting an earlier reason.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8403,7 +9305,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a child cancellation is isolated while parent cancellation reaches an already-created child context"
+          ],
+          "result": "Inheritor aborts with the parent's 'parent-reason' while keeping its own 'child' value."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Accept an external stop token/signal plus the parent stop token; combine reasons without overwriting an earlier reason."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:context:without-abort-signal",
@@ -8414,15 +9335,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.close,SessionImpl.#runCommit; packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/harness/view.ts:235; packages/durable/src/harness/task-graph.ts:201",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "withoutAbortSignal removes cancellation while preserving typed values",
       "comparisonScenarios": [
         "withoutAbortSignal removes cancellation while preserving typed values"
@@ -8434,12 +9355,12 @@
         "capturedScenarios": [
           "withoutAbortSignal removes cancellation while preserving typed values"
         ],
-        "result": "Masked context exposes no signal but retains value 'cleanup'."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Provide a cleanup overlay that suppresses cancellation propagation only for the operation it wraps; keep values intact.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8452,7 +9373,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "withoutAbortSignal removes cancellation while preserving typed values"
+          ],
+          "result": "Masked context exposes no signal but retains value 'cleanup'."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Provide a cleanup overlay that suppresses cancellation propagation only for the operation it wraps; keep values intact."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:batch-application",
@@ -8462,15 +9402,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/memory.ts:applyImmutableBatches; packages/durable/src/storage/sqlite/storage.ts:apply",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "batched immutable application applies ordered batches and returns only the final revision",
       "comparisonScenarios": [
         "batched immutable application applies ordered batches and returns only the final revision"
@@ -8482,12 +9422,12 @@
         "capturedScenarios": [
           "batched immutable application applies ordered batches and returns only the final revision"
         ],
-        "result": "Two batches yield {items:['b'],value:2}; the input {items:['a'],value:0} is unchanged; root creation works from undefined."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Replay each stored delta batch in revision order; do not require a full snapshot between batches.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8500,7 +9440,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "batched immutable application applies ordered batches and returns only the final revision"
+          ],
+          "result": "Two batches yield {items:['b'],value:2}; the input {items:['a'],value:0} is unchanged; root creation works from undefined."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Replay each stored delta batch in revision order; do not require a full snapshot between batches."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:draft-abort",
@@ -8510,15 +9469,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:Transaction.#abortChanges",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
       "comparisonScenarios": [
         "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
@@ -8530,12 +9489,12 @@
         "capturedScenarios": [
           "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
         ],
-        "result": "Escaped handle write throws TypeError 'Cannot use a settled overlay'; adopting the aborted preparation also fails; value stays {value:1}."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Tie overlay and prepared-handle validity to a settlement generation; revoke deterministically on abort.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8548,7 +9507,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
+          ],
+          "result": "Escaped handle write throws TypeError 'Cannot use a settled overlay'; adopting the aborted preparation also fails; value stays {value:1}."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Tie overlay and prepared-handle validity to a settlement generation; revoke deterministically on abort."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:immutable-application",
@@ -8558,15 +9536,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/task-graph.ts:200; packages/durable/src/harness/view.ts:237; packages/durable/src/storage/memory.ts:applyImmutableBatches",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "immutable application reproduces each revision without mutating the base and shares untouched subtrees",
       "comparisonScenarios": [
         "immutable application reproduces each revision without mutating the base and shares untouched subtrees"
@@ -8578,12 +9556,12 @@
         "capturedScenarios": [
           "immutable application reproduces each revision without mutating the base and shares untouched subtrees"
         ],
-        "result": "Base unchanged; root and touched containers new; `retained` and nested `retained` subtrees shared across revisions."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Implement value-identity-preserving copy-on-write; never mutate a committed value or its shared subtrees.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8596,7 +9574,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "immutable application reproduces each revision without mutating the base and shares untouched subtrees"
+          ],
+          "result": "Base unchanged; root and touched containers new; `retained` and nested `retained` subtrees shared across revisions."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Implement value-identity-preserving copy-on-write; never mutate a committed value or its shared subtrees."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:mutable-application",
@@ -8607,14 +9604,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/sqlite/storage.ts:654 (revision materialization)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": "src/chord/Delta.cpp:apply; src/chord/include/cch/chord/Delta.hpp:apply",
-      "implementation_ticket": "#1061",
+      "implementation_ticket": "#1178",
       "scenario": "a later empty path keeps the preceding mutable write and reports the empty path",
       "comparisonScenarios": [
         "a later empty path keeps the preceding mutable write and reports the empty path"
@@ -8626,12 +9623,12 @@
         "capturedScenarios": [
           "a later empty path keeps the preceding mutable write and reports the empty path"
         ],
-        "result": "Mutable operations execute sequentially and preserve prior writes when a later operation fails; a root replacement remains local until the batch succeeds."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API. Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8644,7 +9641,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1061",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1061/validation-order.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a later empty path keeps the preceding mutable write and reports the empty path"
+          ],
+          "result": "Mutable operations execute sequentially and preserve prior writes when a later operation fails; a root replacement remains local until the batch succeeds."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API. Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:op-validation",
@@ -8702,15 +9718,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:Transaction.adopt; packages/durable/src/storage/sqlite/storage.ts:apply",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "the tracker emits the set, append, splice, permutation, delete, truncate, and replace vocabulary",
       "comparisonScenarios": [
         "the tracker emits the set, append, splice, permutation, delete, truncate, and replace vocabulary"
@@ -8722,12 +9738,12 @@
         "capturedScenarios": [
           "the tracker emits the set, append, splice, permutation, delete, truncate, and replace vocabulary"
         ],
-        "result": "Exact tuples observed for set, append, splice, permutation, delete, truncate and replace."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Durable storage compatibility requires the C++ applier to accept these tuples; exact spelling is not canonical and may differ for an equivalent producer. Recommendation: Implement the seven operations and a validator that rejects unknown verbs, malformed tuples, unsafe paths and splice indices before traversal.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8740,7 +9756,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "the tracker emits the set, append, splice, permutation, delete, truncate, and replace vocabulary"
+          ],
+          "result": "Exact tuples observed for set, append, splice, permutation, delete, truncate and replace."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Durable storage compatibility requires the C++ applier to accept these tuples; exact spelling is not canonical and may differ for an equivalent producer. Recommendation: Implement the seven operations and a validator that rejects unknown verbs, malformed tuples, unsafe paths and splice indices before traversal."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:overlap",
@@ -8750,15 +9785,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/tool.ts:457",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "overlap returns the bounded common run used to merge tool output",
       "comparisonScenarios": [
         "overlap returns the bounded common run used to merge tool output"
@@ -8770,12 +9805,12 @@
         "capturedScenarios": [
           "overlap returns the bounded common run used to merge tool output"
         ],
-        "result": "overlap('abcdefgh','defghxyz',65536)=5; scan 0 and empty input return 0."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Retain a bounded overlap helper for tool progress diffing; do not use it to infer document revision identity.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8788,7 +9823,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "overlap returns the bounded common run used to merge tool output"
+          ],
+          "result": "overlap('abcdefgh','defghxyz',65536)=5; scan 0 and empty input return 0."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Retain a bounded overlap helper for tool progress diffing; do not use it to infer document revision identity."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:path-validation",
@@ -8847,33 +9901,35 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:planDocument",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": "src/chord/include/cch/chord/Delta.hpp:Tracker::prepare_replace,Prepared::base,Prepared::value,Tracker::adopt",
-      "implementation_ticket": "#1061",
+      "implementation_ticket": "#1178",
       "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
       "comparisonScenarios": [
-        "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
+        "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+        "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
+        "an aborted whole-root preparation cannot be adopted"
       ],
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
-          "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
+          "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+          "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
+          "an aborted whole-root preparation cannot be adopted"
         ],
-        "result": "The captured base stays at revision 0 while the owned replacement becomes revision 1; a same-base competitor reports `Prepared change is stale`, and reuse reports `Prepared change has already been used`. The equal-root capture records an empty batch and still advances revision."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ comparison has not been run; upstream capture alone does not establish implementation parity."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8886,7 +9942,28 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1061",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
+          ],
+          "result": "The captured base stays at revision 0 while the owned replacement becomes revision 1; a same-base competitor reports `Prepared change is stale`, and reuse reports `Prepared change has already been used`. The equal-root capture records an empty batch and still advances revision."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "C++ comparison has not been run; upstream capture alone does not establish implementation parity."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:root-replacement",
@@ -8944,15 +10021,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:Transaction.adopt; packages/durable/src/session/session.ts:SessionImpl.#runCommit",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "prepared revisions are immutable and a same-base preparation becomes stale after adoption",
       "comparisonScenarios": [
         "prepared revisions are immutable and a same-base preparation becomes stale after adoption"
@@ -8964,12 +10041,12 @@
         "capturedScenarios": [
           "prepared revisions are immutable and a same-base preparation becomes stale after adoption"
         ],
-        "result": "Second prepared change at base revision 0 rejects 'Prepared change is stale'; value stays {value:2,...} and revision 1."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Validate the prepared base revision and ownership token before applying; never fall back to a full snapshot to hide a stale batch.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8982,7 +10059,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "prepared revisions are immutable and a same-base preparation becomes stale after adoption"
+          ],
+          "result": "Second prepared change at base revision 0 rejects 'Prepared change is stale'; value stays {value:2,...} and revision 1."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Validate the prepared base revision and ownership token before applying; never fall back to a full snapshot to hide a stale batch."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:delta:tracker-revision",
@@ -8992,15 +10088,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:Transaction.#acquire,Transaction.adopt; packages/durable/src/storage/memory.ts:applyImmutableBatches",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "prepared revisions are immutable and a same-base preparation becomes stale after adoption",
       "comparisonScenarios": [
         "prepared revisions are immutable and a same-base preparation becomes stale after adoption"
@@ -9012,12 +10108,12 @@
         "capturedScenarios": [
           "prepared revisions are immutable and a same-base preparation becomes stale after adoption"
         ],
-        "result": "Adopting the first preparation moves revision 0 to 1 and value to {value:2,items:['a']}."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Introduce an immutable revision value plus a prepared-batch handle; avoid mutable in-place document application.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -9030,7 +10126,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "prepared revisions are immutable and a same-base preparation becomes stale after adoption"
+          ],
+          "result": "Adopting the first preparation moves revision 0 to 1 and value to {value:2,items:['a']}."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Introduce an immutable revision value plus a prepared-batch handle; avoid mutable in-place document application."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:document:base-creation",
@@ -10179,15 +11294,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/tool.ts:875",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts",
       "comparisonScenarios": [
         "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts"
@@ -10199,14 +11314,12 @@
         "capturedScenarios": [
           "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts"
         ],
-        "result": "For 'abcdefghij' with maxBytes 4/maxLines 1, head is abcd/bytes 4/dropped 6/0 lines; tail is ghij/bytes 4/dropped 6/0 lines."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ truncation reports structured truncation facts over pi `String.split` lines; it does not expose Chord's exact `{text,bytes,droppedBytes,droppedLines}` result."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Reuse bounded UTF-8 truncation but add exact dropped-byte/line accounting and a byte `retain` direction compatible with Chord tool output.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10219,7 +11332,28 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts"
+          ],
+          "result": "For 'abcdefghij' with maxBytes 4/maxLines 1, head is abcd/bytes 4/dropped 6/0 lines; tail is ghij/bytes 4/dropped 6/0 lines."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "C++ truncation reports structured truncation facts over pi `String.split` lines; it does not expose Chord's exact `{text,bytes,droppedBytes,droppedLines}` result."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Reuse bounded UTF-8 truncation but add exact dropped-byte/line accounting and a byte `retain` direction compatible with Chord tool output."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:output:character-end",
@@ -10229,15 +11363,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/tools/read.ts:280",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
       "comparisonScenarios": [
         "UTF-8 byte length and character-end boundaries match the frozen output helpers"
@@ -10249,12 +11383,12 @@
         "capturedScenarios": [
           "UTF-8 byte length and character-end boundaries match the frozen output helpers"
         ],
-        "result": "For the bytes of 'aé😀', boundaries are [0,1,1,3,3,3,3,7] including the terminal index."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Expose a character-boundary helper for line slicing; preserve the exact clamp/index semantics observed here.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10267,7 +11401,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "UTF-8 byte length and character-end boundaries match the frozen output helpers"
+          ],
+          "result": "For the bytes of 'aé😀', boundaries are [0,1,1,3,3,3,3,7] including the terminal index."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Expose a character-boundary helper for line slicing; preserve the exact clamp/index semantics observed here."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:output:output-buffer",
@@ -10277,15 +11430,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/tool.ts:262,282",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts",
       "comparisonScenarios": [
         "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts"
@@ -10297,12 +11450,12 @@
         "capturedScenarios": [
           "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts"
         ],
-        "result": "Pushes 'abc','def','gh' all accepted; final snapshot {text:'efgh',droppedBytes:4,droppedLines:0}."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add an incremental buffer only on top of the bounded truncation primitive; keep retained text and raw-stream dropped counts separate.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10315,7 +11468,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts"
+          ],
+          "result": "Pushes 'abc','def','gh' all accepted; final snapshot {text:'efgh',droppedBytes:4,droppedLines:0}."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Add an incremental buffer only on top of the bounded truncation primitive; keep retained text and raw-stream dropped counts separate."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:output:progress",
@@ -10419,15 +11591,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/tool.ts:460; packages/durable/src/truncate.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1178",
       "scenario": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
       "comparisonScenarios": [
         "UTF-8 byte length and character-end boundaries match the frozen output helpers"
@@ -10439,12 +11611,12 @@
         "capturedScenarios": [
           "UTF-8 byte length and character-end boundaries match the frozen output helpers"
         ],
-        "result": "utf8ByteLength('abc')=3, 'é'=2, '😀'=4, 'aé😀'=7."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Provide a byte-length helper over UTF-8; current bounded text truncation is not a general byte counter.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10457,7 +11629,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "UTF-8 byte length and character-end boundaries match the frozen output helpers"
+          ],
+          "result": "utf8ByteLength('abc')=3, 'é'=2, '😀'=4, 'aé😀'=7."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Provide a byte-length helper over UTF-8; current bounded text truncation is not a general byte counter."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:state:attached-hydration",
@@ -10469,14 +11660,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/session/observation.ts:CommittedStateSource",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1062",
+      "implementation_ticket": "#1178",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "comparisonScenarios": [
         "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
@@ -10493,12 +11684,12 @@
         "capturedScenarios": [
           "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
         ],
-        "result": "Deliveries are hydrate/0/{value:1}, update/1/{value:2}; no error; dispose called once."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: The C++ source attachment now hydrates from a snapshot cursor and publishes exact ordered frames; durable document history and retention remain in #1063.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10511,7 +11702,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1062",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
+          ],
+          "result": "Deliveries are hydrate/0/{value:1}, update/1/{value:2}; no error; dispose called once."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: The C++ source attachment now hydrates from a snapshot cursor and publishes exact ordered frames; durable document history and retention remain in #1063."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:state:cursor-gap",
@@ -10522,14 +11732,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:CommittedStateSource; packages/durable/src/session/session.ts:SessionImpl.documentState",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1062",
+      "implementation_ticket": "#1178",
       "scenario": "a cursor gap is reported once and leaves the last good replicated value",
       "comparisonScenarios": [
         "a cursor gap is reported once and leaves the last good replicated value",
@@ -10545,12 +11755,12 @@
         "capturedScenarios": [
           "a cursor gap is reported once and leaves the last good replicated value"
         ],
-        "result": "Gap 2 after snapshot 0 reports 'cursor has a gap: expected 1, received 2'; delivered sequences [0]; last value {value:1}; dispose once."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Reject a gap rather than silently applying later frames; surface it through a typed error callback.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10563,7 +11773,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1062",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a cursor gap is reported once and leaves the last good replicated value"
+          ],
+          "result": "Gap 2 after snapshot 0 reports 'cursor has a gap: expected 1, received 2'; delivered sequences [0]; last value {value:1}; dispose once."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Reject a gap rather than silently applying later frames; surface it through a typed error callback."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:state:delivery-order",
@@ -10627,14 +11856,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/view.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1062",
+      "implementation_ticket": "#1178",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "comparisonScenarios": [
         "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
@@ -10649,12 +11878,12 @@
         "capturedScenarios": [
           "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
         ],
-        "result": "disposeCalls is 1 after hydration and an explicit dispose."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Make observer disposal idempotent and release source resources exactly once; do not clear the last good value.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10667,7 +11896,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1062",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
+          ],
+          "result": "disposeCalls is 1 after hydration and an explicit dispose."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Make observer disposal idempotent and release source resources exactly once; do not clear the last good value."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:state:listener-error",
@@ -10678,14 +11926,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/task-graph.ts:replicatedState(observer,{onError})",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1062",
+      "implementation_ticket": "#1178",
       "scenario": "a failing state listener is reported through onError without stopping another subscription",
       "comparisonScenarios": [
         "a failing state listener is reported through onError without stopping another subscription",
@@ -10700,12 +11948,12 @@
         "capturedScenarios": [
           "a failing state listener is reported through onError without stopping another subscription"
         ],
-        "result": "Two errors 'listener failed' (hydrate and update); the other subscriber receives hydrate 0 and update 1."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Catch per-subscriber failures, report them without rethrowing into the source, and keep independent delivery queues.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10718,7 +11966,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1062",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a failing state listener is reported through onError without stopping another subscription"
+          ],
+          "result": "Two errors 'listener failed' (hydrate and update); the other subscriber receives hydrate 0 and update 1."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Catch per-subscriber failures, report them without rethrowing into the source, and keep independent delivery queues."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_chord:state:pending-bound",
@@ -10729,14 +11996,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/session/session.ts:SessionImpl.documentState",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1062",
+      "implementation_ticket": "#1178",
       "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
       "comparisonScenarios": [
         "overflow keeps only the newest pending delivery with its exact value context and delivery",
@@ -10749,14 +12016,17 @@
         "artifact": "fixtures/pi-v1.3.0/audit-1062/observer-delivery.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
-          "overflow keeps only the newest pending delivery with its exact value context and delivery"
+          "overflow keeps only the newest pending delivery with its exact value context and delivery",
+          "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)",
+          "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)",
+          "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)"
         ],
-        "result": "The frozen observer delivery capture records a 100-pending limit and coalesces overflow to the newest pending value, context, and delivery."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Declare one bounded pending-observation capacity and make overflow collapse to the newest state without corrupting the running callback.",
+      "remainingWork": null,
+      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10769,7 +12039,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1062",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1062/observer-delivery.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "overflow keeps only the newest pending delivery with its exact value context and delivery"
+          ],
+          "result": "The frozen observer delivery capture records a 100-pending limit and coalesces overflow to the newest pending value, context, and delivery."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Declare one bounded pending-observation capacity and make overflow collapse to the newest state without corrupting the running callback."
+      },
+      "delivery": "1178-chord-comparisons"
     },
     {
       "id": "cch_codemode:codemode-cloudflare-durable-object",

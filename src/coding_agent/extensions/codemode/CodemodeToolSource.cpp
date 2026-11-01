@@ -3,6 +3,7 @@
 #include "coding_agent/extensions/codemode/CodemodeCatalog.hpp"
 #include "coding_agent/extensions/codemode/CodemodeCatalogState.hpp"
 #include "coding_agent/extensions/codemode/CodemodeDiscovery.hpp"
+#include "coding_agent/extensions/codemode/CodemodeExecution.hpp"
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 
 #include <cch/codemode/Declarations.hpp>
@@ -24,8 +25,11 @@
 #include <chrono>
 #include <expected>
 #include <format>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <set>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -36,6 +40,11 @@
 namespace cch::coding_agent::extensions {
 
 namespace {
+
+/// pi `CODEMODE_MEMORY_LIMIT_BYTES`: the QuickJS heap cap. The worker shares
+/// the process, so without a limit a runaway script can grow to wasm32's 4 GiB
+/// and take the session down.
+constexpr std::uint64_t kCodemodeMemoryLimitBytes = 256ULL * 1024ULL * 1024ULL;
 
 /// Lazy holder for the codemode guest (pi `loadCodemodeExecutor`): the sandbox
 /// is created on the first execute and reused for the source's lifetime, so a
@@ -67,6 +76,65 @@ struct GuestHolder {
     }
 };
 
+/// pi `executeCodemode`'s `calls` array: the nested tool calls one script made,
+/// in issue order. Each handler entry appends its record, and the completion
+/// fills in the id, duration, status and error preview. The sandbox waits for
+/// every handler before the run settles, so a snapshot taken after `run`
+/// returns is complete; the lock only serializes concurrent `Promise.all`
+/// handlers.
+class CallRecorder {
+public:
+    [[nodiscard]] std::size_t start(std::string_view caller_id, std::string name, std::string_view arguments_json) {
+        std::lock_guard lock(mutex_);
+        calls_.push_back(CodemodeCall{
+                .id = std::string{caller_id} + "/?",
+                .name = std::move(name),
+                .args = codemode_preview_args(arguments_json),
+                .status = "running",
+                .duration_ms = std::nullopt,
+                .error = std::nullopt,
+        });
+        return calls_.size() - 1;
+    }
+
+    /// pi's handler after `ctx.executeTool` resolved: the call's own id, its
+    /// duration, and its ok/error status. A rejected (aborted) call never
+    /// reaches here, so it keeps the `<caller>/?` placeholder.
+    void finish_ok(std::size_t index, std::string id, std::chrono::steady_clock::duration elapsed) {
+        std::lock_guard lock(mutex_);
+        auto& call = calls_[index];
+        call.id = std::move(id);
+        call.duration_ms = std::chrono::duration<double, std::milli>(elapsed).count();
+        call.status = "ok";
+    }
+
+    void finish_error(
+            std::size_t index, std::string id, std::chrono::steady_clock::duration elapsed, std::string error) {
+        std::lock_guard lock(mutex_);
+        auto& call = calls_[index];
+        call.id = std::move(id);
+        call.duration_ms = std::chrono::duration<double, std::milli>(elapsed).count();
+        call.status = "error";
+        call.error = std::move(error);
+    }
+
+    /// pi's cancellation path: `executeTool` rejected, so the record keeps its
+    /// placeholder id and gains no duration.
+    void finish_cancelled(std::size_t index) {
+        std::lock_guard lock(mutex_);
+        calls_[index].status = "cancelled";
+    }
+
+    [[nodiscard]] std::vector<CodemodeCall> snapshot() const {
+        std::lock_guard lock(mutex_);
+        return calls_;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::vector<CodemodeCall> calls_;
+};
+
 /// A script's `@options.timeout_ms` is its deadline; without one pi's script
 /// sandbox runs with no timeout (`timeoutMs ?? Number.POSITIVE_INFINITY`), not
 /// the library's 300 s default. `CodemodeLimits.timeout == 0` disables it.
@@ -74,38 +142,8 @@ struct GuestHolder {
     codemode::CodemodeLimits limits;
     limits.timeout = options.timeout_ms.has_value() ? std::chrono::milliseconds{*options.timeout_ms}
                                                     : std::chrono::milliseconds{0};
+    limits.memory_limit_bytes = kCodemodeMemoryLimitBytes;
     return limits;
-}
-
-[[nodiscard]] std::string wall_time_seconds(std::chrono::steady_clock::duration elapsed) {
-    const double seconds = std::chrono::duration<double>(elapsed).count();
-    return std::format("{:.1f}", seconds);
-}
-
-/// Map the sandbox's terminal outcome onto pi's `executeCodemode` content
-/// channel: the `Script completed`/`Script failed` header, the script's
-/// `text()`/`image()` output, the returned value appended like `text()` on
-/// success, and a `Script error:` block on failure.
-[[nodiscard]] ExtensionToolResult to_extension_result(
-        const codemode::CodemodeRunResult& run, std::chrono::steady_clock::duration elapsed) {
-    ExtensionToolResult result;
-    result.is_error = run.error.has_value();
-    std::string header = result.is_error ? "Script failed" : "Script completed";
-    header += "\nWall time " + wall_time_seconds(elapsed) + " seconds\nOutput:\n";
-    result.content.push_back(ai::text_content(std::move(header)));
-    for (const auto& item : run.output) {
-        if (item.kind == codemode::CodemodeOutputItem::Kind::Image) {
-            result.content.push_back(ai::image_content(item.data, item.mime_type));
-        } else {
-            result.content.push_back(ai::text_content(item.data));
-        }
-    }
-    if (run.error.has_value()) {
-        result.content.push_back(ai::text_content("Script error:\n" + run.error->message));
-    } else if (run.value_json.has_value()) {
-        result.content.push_back(ai::text_content(*run.value_json));
-    }
-    return result;
 }
 
 [[nodiscard]] support::AsyncResult<ExtensionToolResult> ready(ExtensionToolResult result) {
@@ -200,11 +238,22 @@ struct GuestHolder {
     return std::unexpected(support::make_error(support::ErrorCode::Validation, std::move(text)));
 }
 
+/// The script's store snapshot (pi `readCodemodeStore(ctx.sessionManager.getBranch())`),
+/// or the failure that prevents reading it.
+[[nodiscard]] support::Expected<std::map<std::string, support::JsonValue>> load_store(
+        const std::shared_ptr<CodemodeSessionState>& session) {
+    if (!session || !session->persistent()) return std::map<std::string, support::JsonValue>{};
+    auto branch = session->branch();
+    if (!branch) return std::unexpected(std::move(branch.error()));
+    return codemode_store_from_branch(*branch);
+}
+
 } // namespace
 
-CodemodeToolSource::CodemodeToolSource(
-        std::filesystem::path guest_wasm_path, std::shared_ptr<const CodemodeCatalogState> catalog)
-    : guest_wasm_path_(std::move(guest_wasm_path)), catalog_(std::move(catalog)) {}
+CodemodeToolSource::CodemodeToolSource(std::filesystem::path guest_wasm_path,
+        std::shared_ptr<const CodemodeCatalogState> catalog,
+        std::shared_ptr<CodemodeSessionState> session)
+    : guest_wasm_path_(std::move(guest_wasm_path)), catalog_(std::move(catalog)), session_(std::move(session)) {}
 
 support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
     auto holder = std::make_shared<GuestHolder>();
@@ -221,7 +270,7 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
     tool.prompt_snippet = std::string{kCodemodePromptSnippet};
     tool.prompt_guidelines = codemode_prompt_guidelines();
     tool.concurrency = agent::ToolConcurrency::Exclusive;
-    tool.context_execute = [holder, catalog = catalog_](support::JsonValue arguments,
+    tool.context_execute = [holder, catalog = catalog_, session = session_](support::JsonValue arguments,
                                    ExtensionToolContext context,
                                    std::stop_token stop_token) -> support::AsyncResult<ExtensionToolResult> {
         const auto* fields = arguments.get_if<support::JsonValue::object_t>();
@@ -236,6 +285,10 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
         auto parsed = codemode::parse_codemode_source(*source_text);
         if (!parsed) {
             return failed("Script error:\n" + parsed.error().message);
+        }
+        auto store = load_store(session);
+        if (!store) {
+            return failed("Script failed\n" + store.error().message);
         }
 
         std::vector<LoadoutTool> callable;
@@ -252,16 +305,20 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
         }
         auto discovery = std::make_shared<CodemodeDiscovery>(callable);
         auto descriptors = std::make_shared<std::vector<codemode::CodemodeToolDescriptor>>(to_descriptors(callable));
+        auto recorder = std::make_shared<CallRecorder>();
         const std::string caller_id = context.call_id;
 
         return support::detail::make_async_result(
                 [holder,
                         parsed = std::move(*parsed),
+                        store = std::move(*store),
                         discovery,
                         descriptors,
+                        recorder,
                         schema_names,
                         caller_id,
                         nested_calls = context.nested_calls,
+                        session,
                         stop_token]() mutable -> boost::asio::awaitable<support::Expected<ExtensionToolResult>> {
                     auto guest = holder->ensure();
                     if (!guest) {
@@ -270,7 +327,7 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
                     }
                     const auto started = std::chrono::steady_clock::now();
 
-                    auto handler = [discovery, nested_calls, schema_names, caller_id](std::string_view name,
+                    auto handler = [discovery, nested_calls, schema_names, recorder, caller_id](std::string_view name,
                                            std::string_view arguments_json,
                                            std::stop_token signal) -> support::AsyncResult<std::string> {
                         if (is_discovery_global(name)) {
@@ -291,17 +348,35 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
                         }
                         auto parsed_args = support::read_json(arguments_json);
                         support::JsonValue args = parsed_args ? std::move(*parsed_args) : support::JsonValue{};
+                        const std::size_t record = recorder->start(caller_id, std::string{name}, arguments_json);
                         return support::detail::make_async_result(
                                 [nested_calls,
+                                        recorder,
                                         schema_names,
                                         caller_id,
+                                        record,
                                         name = std::string{name},
                                         args = std::move(args),
                                         signal]() mutable -> boost::asio::awaitable<support::Expected<std::string>> {
+                                    const auto call_started = std::chrono::steady_clock::now();
                                     auto outcome = co_await support::detail::await_async_result(
                                             nested_calls->execute(caller_id, name, std::move(args), signal));
+                                    const auto elapsed = std::chrono::steady_clock::now() - call_started;
                                     if (!outcome) {
+                                        recorder->finish_cancelled(record);
                                         co_return support::Expected<std::string>{std::unexpected(outcome.error())};
+                                    }
+                                    if (signal.stop_requested()) {
+                                        // The sandbox aborted this call to settle the
+                                        // run; pi's handler sees a rejection.
+                                        recorder->finish_cancelled(record);
+                                    } else if (outcome->is_error) {
+                                        recorder->finish_error(record,
+                                                outcome->call_id,
+                                                elapsed,
+                                                codemode_error_preview(ai::text_from_content(outcome->content), name));
+                                    } else {
+                                        recorder->finish_ok(record, outcome->call_id, elapsed);
                                     }
                                     co_return script_value_from(*outcome, schema_names->contains(name), name);
                                 });
@@ -311,13 +386,15 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
                             std::move(*descriptors),
                             limits_for(parsed.options),
                             stop_token,
-                            std::move(handler)));
+                            std::move(handler),
+                            std::move(store)));
                     if (!run) {
                         co_return std::unexpected(
                                 support::make_error(support::ErrorCode::Validation, run.error().message));
                     }
                     const auto elapsed = std::chrono::steady_clock::now() - started;
-                    co_return to_extension_result(*run, elapsed);
+                    co_return co_await support::detail::await_async_result(present_codemode_run(
+                            *run, recorder->snapshot(), parsed.options, elapsed, session, stop_token));
                 });
     };
     std::vector<ExtensionTool> contributed;

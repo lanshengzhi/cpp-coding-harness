@@ -117,6 +117,11 @@ public:
             std::optional<bool> from_hook,
             std::optional<ai::Usage> usage = std::nullopt);
     [[nodiscard]] support::ExpectedVoid append_session_info(std::optional<std::string> parent_id, std::string name);
+    /// Append one Custom entry (pi `appendCustomEntry`): an application-defined
+    /// `customType` plus optional JSON data. The codemode store persists its
+    /// writes this way, so a resumed branch replays them in order.
+    [[nodiscard]] support::ExpectedVoid append_custom_entry(
+            std::optional<std::string> parent_id, std::string custom_type, std::optional<support::JsonValue> data);
 
     // --- Live tree queries (snapshots taken under the append lock) ---
 

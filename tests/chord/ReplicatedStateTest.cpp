@@ -30,6 +30,8 @@ struct DeliveryEvent {
     ReplicatedStateDeliveryKind kind;
     std::int64_t sequence;
     double value;
+    bool signal_present{false};
+    bool signal_aborted{false};
 };
 
 [[nodiscard]] Json revision(double value) { return Json{Json::Object{{"value", Json{value}}}}; }
@@ -414,6 +416,45 @@ TEST_CASE("independent attachments converge separately and dispose idempotently"
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json
+// "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order".
+// The frozen record pins both deliveries (kind, sequence, value, absent abort signal), no errors and
+// one disposal, so a view that hydrates only, reorders the two deliveries, or never disposes fails.
+TEST_CASE("attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+        "[chord][replicated_state][issue1062][spec]") {
+    TestSource source{revision(1), 0};
+    std::vector<std::string> errors;
+    auto attached = AttachedReplicatedState::attach(source,
+            ReplicatedStateSourceOptions{
+                    .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
+    REQUIRE(attached.has_value());
+
+    std::vector<DeliveryEvent> observed;
+    auto unsubscribe = attached->subscribe([&observed](Json value, Context context, ReplicatedStateDelivery delivery) {
+        observed.push_back(DeliveryEvent{.kind = delivery.kind,
+                .sequence = delivery.sequence,
+                .value = number_of(value),
+                .signal_present = context.stop_token().stop_possible()});
+        return ready();
+    });
+    source.commit(revision(2));
+
+    REQUIRE(observed.size() == 2);
+    CHECK(observed[0].kind == ReplicatedStateDeliveryKind::Hydrate);
+    CHECK(observed[0].sequence == 0);
+    CHECK(observed[0].value == 1.0);
+    CHECK_FALSE(observed[0].signal_present);
+    CHECK(observed[1].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(observed[1].sequence == 1);
+    CHECK(observed[1].value == 2.0);
+    CHECK_FALSE(observed[1].signal_present);
+    CHECK(errors.empty());
+
+    unsubscribe();
+    attached->dispose();
+    CHECK(source.dispose_calls() == 1);
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json
 // "a cursor gap is reported once and leaves the last good replicated value".
 // Negative control: an implementation that reordered or skipped the cursor
 // check would deliver the gap frame and converge on 9 instead of retaining 1.
@@ -591,38 +632,48 @@ TEST_CASE("repeated overflow at the 100-pending bound keeps the newest pending d
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
 // "overflow keeps only the newest pending delivery with its exact value context and delivery".
+// The frozen newest pending delivery carries the exact context published with frame 102 — a
+// `withCancel` layer over the background root, so its abort signal is present and un-aborted —
+// and the adopted revision at the overflow point is frame 102, before the trailing commit.
 TEST_CASE("overflow keeps only the newest pending delivery with its exact value context and delivery",
         "[chord][replicated_state][issue1062][spec]") {
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
 
-    const ContextKey<int> marker_key = create_context_key<int>("1062.delivery-marker");
-    const Context marked = with_context_value(marker_key, 102, background_context());
+    const auto marker_scope = with_cancel(background_context());
+    const Context marked = marker_scope.context();
     std::optional<Completion> held;
-    std::vector<double> received;
-    std::vector<ReplicatedStateDelivery> deliveries;
-    std::vector<std::optional<int>> markers;
+    std::vector<DeliveryEvent> observed;
     auto unsubscribe = attached->subscribe([&](Json value, Context context, ReplicatedStateDelivery delivery) {
-        received.push_back(number_of(value));
-        deliveries.push_back(delivery);
-        markers.push_back(context.value(marker_key));
+        observed.push_back(DeliveryEvent{.kind = delivery.kind,
+                .sequence = delivery.sequence,
+                .value = number_of(value),
+                .signal_present = context.stop_token().stop_possible(),
+                .signal_aborted = context.aborted()});
         if (number_of(value) == 1) return hold(held);
         return ready();
     });
     for (int value = 1; value < 102; value += 1)
         source.commit(revision(value));
     source.commit(revision(102), marked);
+    // Frozen adoptedValueAtOverflow: the newest published revision is frame 102 here.
     CHECK(number_of(attached->value()) == 102.0);
     source.commit(revision(103));
 
-    CHECK((received == std::vector<double>{0.0, 1.0}));
+    REQUIRE(observed.size() == 2);
+    CHECK(observed[0].value == 0.0);
+    CHECK(observed[1].value == 1.0);
     settle(held);
-    CHECK((received == std::vector<double>{0.0, 1.0, 102.0, 103.0}));
-    REQUIRE(deliveries.size() == 4);
-    CHECK(deliveries[2].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(deliveries[2].sequence == 102);
-    CHECK(markers[2] == std::optional<int>{102});
+    REQUIRE(observed.size() == 4);
+    CHECK(observed[2].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(observed[2].sequence == 102);
+    CHECK(observed[2].value == 102.0);
+    CHECK(observed[2].signal_present);
+    CHECK_FALSE(observed[2].signal_aborted);
+    CHECK(observed[3].value == 103.0);
+    CHECK_FALSE(observed[0].signal_present);
+    CHECK_FALSE(observed[3].signal_present);
     unsubscribe();
 }
 
@@ -682,6 +733,46 @@ TEST_CASE("pending overflow keeps the newest frame while fast observers follow e
 
     held_unsubscribe();
     fast_unsubscribe();
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json
+// "a failing state listener is reported through onError without stopping another subscription".
+// The frozen record observes two `listener failed` reports from the one failing subscription and the
+// other subscription's hydrate/update pair, so a state that drops a failing subscription or that
+// rethrows into the source fails this case.
+TEST_CASE("a failing state listener is reported through onError without stopping another subscription",
+        "[chord][replicated_state][issue1062][spec]") {
+    TestSource source{revision(7), 0};
+    std::vector<std::string> errors;
+    auto attached = AttachedReplicatedState::attach(source,
+            ReplicatedStateSourceOptions{
+                    .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
+    REQUIRE(attached.has_value());
+
+    std::vector<double> failing_received;
+    auto failing_unsubscribe = attached->subscribe([&failing_received](Json value, Context, ReplicatedStateDelivery) {
+        failing_received.push_back(number_of(value));
+        return ready_failure("listener failed");
+    });
+    std::vector<DeliveryEvent> other_deliveries;
+    auto other_unsubscribe =
+            attached->subscribe([&other_deliveries](Json value, Context, ReplicatedStateDelivery delivery) {
+                record_delivery(other_deliveries, delivery.kind, delivery.sequence, number_of(value));
+                return ready();
+            });
+    source.commit(revision(8));
+
+    CHECK((errors == std::vector<std::string>{"listener failed", "listener failed"}));
+    CHECK((failing_received == std::vector<double>{7.0, 8.0}));
+    REQUIRE(other_deliveries.size() == 2);
+    CHECK(other_deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
+    CHECK(other_deliveries[0].sequence == 0);
+    CHECK(other_deliveries[0].value == 7.0);
+    CHECK(other_deliveries[1].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(other_deliveries[1].sequence == 1);
+    CHECK(other_deliveries[1].value == 8.0);
+    failing_unsubscribe();
+    other_unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
@@ -1120,7 +1211,8 @@ TEST_CASE("a retained value reference keeps the revision it was read at",
     // revision IS the object committed as revision 1) and
     // `currentIsTheRetainedObject: false` (the current revision is not that
     // object), with retainedValue 1 and currentValue 2.
-    source.commit(revision(1));
+    const Json committed_one = revision(1);
+    source.commit(committed_one);
     // The by-value result is a snapshot of one revision. Holding it as a
     // const reference extends the returned revision's lifetime, so this
     // observation must still read revision 1 after a later commit. A
@@ -1132,6 +1224,7 @@ TEST_CASE("a retained value reference keeps the revision it was read at",
 
     CHECK(number_of(retained) == 1.0);
     CHECK(number_of(current) == 2.0);
+    CHECK(retained.shares_container_with(committed_one));
     CHECK_FALSE(retained.shares_container_with(current));
     CHECK((std::is_same_v<decltype(attached->value()), Json>));
 }

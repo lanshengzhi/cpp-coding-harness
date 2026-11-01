@@ -6,212 +6,212 @@
 	skipped="0"
 	hostname=""
 	time="5"
-	timestamp="2026-11-01T13:36:10"
+	timestamp="2026-11-01T15:36:50"
 	>
-	<testcase name="a callable tool the catalog cannot execute is not silently declared" classname="a callable tool the catalog cannot execute is not silently declared" time="0.0351628" status="run">
+	<testcase name="a callable tool the catalog cannot execute is not silently declared" classname="a callable tool the catalog cannot execute is not silently declared" time="0.0429591" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "a callable tool the catalog cannot execute is not silently declared"
-Randomness seeded to: 3460494617
+Randomness seeded to: 4103149938
 ===============================================================================
 All tests passed (9 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="a connected MCP server&apos;s contributed tools carry their exposure and namespace" classname="a connected MCP server&apos;s contributed tools carry their exposure and namespace" time="0.164356" status="run">
+	<testcase name="a connected MCP server&apos;s contributed tools carry their exposure and namespace" classname="a connected MCP server&apos;s contributed tools carry their exposure and namespace" time="0.129153" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;mcp;spec"/>
 		</properties>
 		<system-out>Filters: "a connected MCP server's contributed tools carry their exposure and namespace"
-Randomness seeded to: 1571183048
+Randomness seeded to: 1901491516
 ===============================================================================
 All tests passed (36 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="a direct tool&apos;s declaration carries the script-call sentence and stays out of the catalog" classname="a direct tool&apos;s declaration carries the script-call sentence and stays out of the catalog" time="0.137677" status="run">
+	<testcase name="a direct tool&apos;s declaration carries the script-call sentence and stays out of the catalog" classname="a direct tool&apos;s declaration carries the script-call sentence and stays out of the catalog" time="0.144573" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "a direct tool's declaration carries the script-call sentence and stays out of the catalog"
-Randomness seeded to: 1801076348
+Randomness seeded to: 3234824198
 ===============================================================================
 All tests passed (14 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="a listed tool section carries its declaration, output type and guidelines" classname="a listed tool section carries its declaration, output type and guidelines" time="0.0255924" status="run">
+	<testcase name="a listed tool section carries its declaration, output type and guidelines" classname="a listed tool section carries its declaration, output type and guidelines" time="0.0476345" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "a listed tool section carries its declaration\, output type and guidelines"
-Randomness seeded to: 186574096
+Randomness seeded to: 844103863
 ===============================================================================
 All tests passed (7 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="a real session&apos;s next request lists MCP tools registered late and executes them" classname="a real session&apos;s next request lists MCP tools registered late and executes them" time="5.38311" status="run">
+	<testcase name="a real session&apos;s next request lists MCP tools registered late and executes them" classname="a real session&apos;s next request lists MCP tools registered late and executes them" time="5.46184" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "a real session's next request lists MCP tools registered late and executes them"
-Randomness seeded to: 2863461916
+Randomness seeded to: 1785364351
 ===============================================================================
 All tests passed (37 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an inline budget omits a namespace&apos;s tools with pi&apos;s marker" classname="an inline budget omits a namespace&apos;s tools with pi&apos;s marker" time="0.113065" status="run">
+	<testcase name="an inline budget omits a namespace&apos;s tools with pi&apos;s marker" classname="an inline budget omits a namespace&apos;s tools with pi&apos;s marker" time="0.162451" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "an inline budget omits a namespace's tools with pi's marker"
-Randomness seeded to: 764583139
+Randomness seeded to: 1794601526
 ===============================================================================
 All tests passed (14 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an unknown discovery name is an explicit rejected call, never a silent success" classname="an unknown discovery name is an explicit rejected call, never a silent success" time="5.21142" status="run">
+	<testcase name="an unknown discovery name is an explicit rejected call, never a silent success" classname="an unknown discovery name is an explicit rejected call, never a silent success" time="5.07804" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "an unknown discovery name is an explicit rejected call\, never a silent success"
-Randomness seeded to: 31756931
+Randomness seeded to: 9067124
 ===============================================================================
 All tests passed (26 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="deferred tools are never listed and do not change the description" classname="deferred tools are never listed and do not change the description" time="0.0224002" status="run">
+	<testcase name="deferred tools are never listed and do not change the description" classname="deferred tools are never listed and do not change the description" time="0.0522661" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "deferred tools are never listed and do not change the description"
-Randomness seeded to: 4054497274
+Randomness seeded to: 3300007029
 ===============================================================================
 All tests passed (6 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="disabling a server and changing its exposure reshape the next request&apos;s catalog" classname="disabling a server and changing its exposure reshape the next request&apos;s catalog" time="0.356023" status="run">
+	<testcase name="disabling a server and changing its exposure reshape the next request&apos;s catalog" classname="disabling a server and changing its exposure reshape the next request&apos;s catalog" time="0.274955" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "disabling a server and changing its exposure reshape the next request's catalog"
-Randomness seeded to: 1573379611
+Randomness seeded to: 3496194136
 ===============================================================================
 All tests passed (42 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="namespaces group sections and the inline budget omits tools with an explicit marker" classname="namespaces group sections and the inline budget omits tools with an explicit marker" time="0.0271012" status="run">
+	<testcase name="namespaces group sections and the inline budget omits tools with an explicit marker" classname="namespaces group sections and the inline budget omits tools with an explicit marker" time="0.033024" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "namespaces group sections and the inline budget omits tools with an explicit marker"
-Randomness seeded to: 3121708597
+Randomness seeded to: 570658084
 ===============================================================================
 All tests passed (7 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the advertised discovery globals are bound and answer over the callable loadout" classname="the advertised discovery globals are bound and answer over the callable loadout" time="3.29125" status="run">
+	<testcase name="the advertised discovery globals are bound and answer over the callable loadout" classname="the advertised discovery globals are bound and answer over the callable loadout" time="3.23051" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "the advertised discovery globals are bound and answer over the callable loadout"
-Randomness seeded to: 371922803
+Randomness seeded to: 2851683328
 ===============================================================================
 All tests passed (25 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the callable tool set excludes codemode itself" classname="the callable tool set excludes codemode itself" time="0.0284448" status="run">
+	<testcase name="the callable tool set excludes codemode itself" classname="the callable tool set excludes codemode itself" time="0.0206183" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "the callable tool set excludes codemode itself"
-Randomness seeded to: 1702937750
+Randomness seeded to: 1384490831
 ===============================================================================
 All tests passed (5 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the codemode description is the frozen pi-v1.3.0 empty catalog" classname="the codemode description is the frozen pi-v1.3.0 empty catalog" time="0.0244822" status="run">
+	<testcase name="the codemode description is the frozen pi-v1.3.0 empty catalog" classname="the codemode description is the frozen pi-v1.3.0 empty catalog" time="0.0487578" status="run">
 		<properties>
 			<property name="cmake_labels" value="codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "the codemode description is the frozen pi-v1.3.0 empty catalog"
-Randomness seeded to: 4137396229
+Randomness seeded to: 2945750195
 ===============================================================================
 All tests passed (3 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the empty codemode catalog matches the frozen pi-v1.3.0 description" classname="the empty codemode catalog matches the frozen pi-v1.3.0 description" time="0.0317879" status="run">
+	<testcase name="the empty codemode catalog matches the frozen pi-v1.3.0 description" classname="the empty codemode catalog matches the frozen pi-v1.3.0 description" time="0.0393264" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "the empty codemode catalog matches the frozen pi-v1.3.0 description"
-Randomness seeded to: 1637467088
+Randomness seeded to: 1332795923
 ===============================================================================
 All tests passed (5 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the inline budget defaults to pi&apos;s 3000 estimated tokens in a loadout" classname="the inline budget defaults to pi&apos;s 3000 estimated tokens in a loadout" time="0.0631454" status="run">
+	<testcase name="the inline budget defaults to pi&apos;s 3000 estimated tokens in a loadout" classname="the inline budget defaults to pi&apos;s 3000 estimated tokens in a loadout" time="0.0667357" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "the inline budget defaults to pi's 3000 estimated tokens in a loadout"
-Randomness seeded to: 692701688
+Randomness seeded to: 943270076
 ===============================================================================
 All tests passed (43 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the models declaration line follows the bound capability" classname="the models declaration line follows the bound capability" time="0.022732" status="run">
+	<testcase name="the models declaration line follows the bound capability" classname="the models declaration line follows the bound capability" time="0.0331101" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "the models declaration line follows the bound capability"
-Randomness seeded to: 1583725918
+Randomness seeded to: 935301257
 ===============================================================================
 All tests passed (5 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the on loadout lists only non-direct callable tools and adds script-call descriptions" classname="the on loadout lists only non-direct callable tools and adds script-call descriptions" time="0.0255801" status="run">
+	<testcase name="the on loadout lists only non-direct callable tools and adds script-call descriptions" classname="the on loadout lists only non-direct callable tools and adds script-call descriptions" time="0.052543" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "the on loadout lists only non-direct callable tools and adds script-call descriptions"
-Randomness seeded to: 1944031766
+Randomness seeded to: 4079627561
 ===============================================================================
 All tests passed (9 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the only loadout hides direct declarations from the request and lists them in the catalog" classname="the only loadout hides direct declarations from the request and lists them in the catalog" time="0.113977" status="run">
+	<testcase name="the only loadout hides direct declarations from the request and lists them in the catalog" classname="the only loadout hides direct declarations from the request and lists them in the catalog" time="0.152902" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "the only loadout hides direct declarations from the request and lists them in the catalog"
-Randomness seeded to: 1059325963
+Randomness seeded to: 2813645225
 ===============================================================================
 All tests passed (19 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="the only loadout lists every callable tool and hides direct declarations" classname="the only loadout lists every callable tool and hides direct declarations" time="0.0246824" status="run">
+	<testcase name="the only loadout lists every callable tool and hides direct declarations" classname="the only loadout lists every callable tool and hides direct declarations" time="0.0399881" status="run">
 		<properties>
 			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;spec"/>
 		</properties>
 		<system-out>Filters: "the only loadout lists every callable tool and hides direct declarations"
-Randomness seeded to: 2866520706
+Randomness seeded to: 3354563229
 ===============================================================================
 All tests passed (8 assertions in 1 test case)
 

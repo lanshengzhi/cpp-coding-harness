@@ -300,7 +300,7 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_thinking_
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_entry(
-        std::optional<std::string> parent_id, std::string custom_type, support::JsonValue data) {
+        std::optional<std::string> parent_id, std::string custom_type, std::optional<support::JsonValue> data) {
     EntrySerializer serializer;
     return append_mirrored_line(*impl_,
             serializer.serialize_custom_entry(

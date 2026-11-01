@@ -5,11 +5,13 @@
 #include <cch/support/AsyncResult.hpp>
 
 #include "support/AsyncResultBridge.hpp"
+#include "support/Json.hpp"
 #include "coding_agent/environment/RuntimeRoot.hpp"
 
 #include <cstddef>
 #include <deque>
 #include <exception>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -25,7 +27,9 @@ inline constexpr std::size_t kAdmittedOperationOverheadBytes{4096};
 
 struct SessionPersistence::PendingOp {
     harness::RuntimeTarget::Admission admission;
-    ai::MessageVariant message;
+    /// The typed append this admission runs on the worker. It receives the
+    /// shared store, so the channel never needs a second store reference.
+    std::move_only_function<support::ExpectedVoid(harness::session::SessionStore&)> append;
 };
 
 struct SessionPersistence::State {
@@ -125,7 +129,7 @@ void SessionPersistence::start_operation_locked(
     auto shared = std::make_shared<PendingOp>(std::move(op));
     const bool queued = shared->admission.post_worker([state, shared]() mutable noexcept {
         support::ExpectedVoid outcome;
-        outcome = state->store->append(shared->message);
+        outcome = shared->append(*state->store);
         std::move(shared->admission).complete([state, outcome = std::move(outcome)]() mutable noexcept {
             deliver_result(state, std::move(outcome));
         });
@@ -175,10 +179,8 @@ SessionPersistence::SessionPersistence(
 
 SessionPersistence::~SessionPersistence() = default;
 
-support::ExpectedVoid SessionPersistence::submit_message_append(
-    ai::MessageVariant message) {
-    const auto byte_charge =
-        estimate_message_bytes(message) + kAdmittedOperationOverheadBytes;
+support::ExpectedVoid SessionPersistence::submit_append(std::size_t byte_charge,
+        std::move_only_function<support::ExpectedVoid(harness::session::SessionStore&)> append) {
     std::lock_guard lock(state_->mutex);
     if (state_->first_failure) {
         return std::unexpected(*state_->first_failure);
@@ -190,8 +192,8 @@ support::ExpectedVoid SessionPersistence::submit_message_append(
         return std::unexpected(std::move(error));
     }
     PendingOp op{
-        .admission = std::move(*admission),
-        .message = std::move(message),
+            .admission = std::move(*admission),
+            .append = std::move(append),
     };
     if (state_->in_flight) {
         state_->queue.push_back(std::move(op));
@@ -199,6 +201,23 @@ support::ExpectedVoid SessionPersistence::submit_message_append(
     }
     start_operation_locked(state_, std::move(op));
     return {};
+}
+
+support::ExpectedVoid SessionPersistence::submit_message_append(ai::MessageVariant message) {
+    return submit_append(estimate_message_bytes(message) + kAdmittedOperationOverheadBytes,
+            [message = std::move(message)](harness::session::SessionStore& store) { return store.append(message); });
+}
+
+support::ExpectedVoid SessionPersistence::submit_custom_entry_append(std::string custom_type, support::JsonValue data) {
+    std::size_t byte_charge = custom_type.size() + kAdmittedOperationOverheadBytes;
+    if (auto written = support::write_json(data)) {
+        byte_charge += written->size();
+    }
+    return submit_append(byte_charge,
+            [custom_type = std::move(custom_type), data = std::move(data)](
+                    harness::session::SessionStore& store) mutable {
+                return store.append_custom_entry(std::nullopt, std::move(custom_type), std::move(data));
+            });
 }
 
 boost::asio::awaitable<void> SessionPersistence::drain() {

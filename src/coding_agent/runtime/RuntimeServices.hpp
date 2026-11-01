@@ -6,6 +6,7 @@
 #include <cch/coding_agent/environment/FileSystem.hpp>
 #include <cch/coding_agent/tools/ToolFactories.hpp>
 #include "coding_agent/extensions/codemode/CodemodeCatalogState.hpp"
+#include "coding_agent/extensions/codemode/CodemodeExecution.hpp"
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/McpSessionManager.hpp"
 
@@ -68,6 +69,13 @@ struct RuntimeServices {
     /// register, withdraw or re-expose tools. Never null in production
     /// assembly.
     std::shared_ptr<extensions::CodemodeCatalogState> codemode_catalog;
+    /// The Session facilities codemode execution needs (#1119): the active
+    /// branch that backs `store()`/`load()`, the commitment line its writes
+    /// persist through, and the filesystem that receives spilled output and
+    /// saved images. Assembly creates it with the codemode source; the Session
+    /// binds the store and persistence channel once they exist. Never null in
+    /// production assembly.
+    std::shared_ptr<extensions::CodemodeSessionState> codemode_session;
     /// pi `defaultActive: false` registrations (today only the codemode
     /// tool): registered on the Agent's surface but excluded from the
     /// initial declared set. An explicit `--tools` selection that names one
