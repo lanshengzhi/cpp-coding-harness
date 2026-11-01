@@ -54,9 +54,6 @@ using ConvertToLlmHook = std::move_only_function<
 /// pi-compatible policy for draining one pending input queue.
 enum class InputQueueMode { OneAtATime, All };
 
-inline constexpr std::size_t kDefaultMaxQueuedMessages = 256;
-inline constexpr std::size_t kDefaultMaxQueuedBytes = 16 * 1024 * 1024;
-
 /// Passive configuration and pending contents for one Agent-owned input queue.
 struct AgentInputQueue {
     InputQueueMode mode{InputQueueMode::OneAtATime};
@@ -71,11 +68,8 @@ struct AgentInputQueueCounts {
     std::size_t follow_up{0};
 };
 
-/// Passive observation of both Agent-owned input queues and their shared
-/// per-queue admission limits.
+/// Passive observation of both Agent-owned input queues.
 struct AgentInputQueues {
-    std::size_t max_messages{kDefaultMaxQueuedMessages};
-    std::size_t max_bytes{kDefaultMaxQueuedBytes};
     AgentInputQueue steering;
     AgentInputQueue follow_up;
 };
@@ -169,10 +163,8 @@ struct AsyncAgentOptions {
     /// once the budget is exhausted; exhaustion is never reported as a
     /// provider error.
     std::optional<int> max_turns{std::nullopt};
-    /// Per-queue admission limits (ADR 0022). Defaults: 256 messages and
-    /// 16 MiB of approximate message content.
-    std::size_t max_queued_messages{kDefaultMaxQueuedMessages};
-    std::size_t max_queued_bytes{kDefaultMaxQueuedBytes};
+    /// pi-compatible drain policies for the unbounded steering and follow-up
+    /// queues. Both default to one-at-a-time (frozen `PendingMessageQueue`).
     InputQueueMode steering_mode{InputQueueMode::OneAtATime};
     InputQueueMode follow_up_mode{InputQueueMode::OneAtATime};
     /// Concrete Model for every turn, forwarded to `streamSimple` exactly as

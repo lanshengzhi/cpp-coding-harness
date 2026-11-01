@@ -3245,8 +3245,6 @@ TEST_CASE(
     auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
     auto options = session_options(workspace, std::move(client));
-    options.max_queued_messages = 3;
-    options.max_queued_bytes = 64;
     auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
@@ -3327,17 +3325,14 @@ TEST_CASE(
     CHECK(*run_result);
 }
 
-TEST_CASE("Native TUI preserves bounded rejected input and dequeues pending text",
-        "[coding_agent][tui][queues][limits][issue62][spec]") {
+TEST_CASE("Native TUI queues unbounded steering input and dequeues pending text",
+        "[coding_agent][tui][queues][issue62][issue1113][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
-    auto options = session_options(workspace, std::move(client));
-    options.max_queued_messages = 2;
-    options.max_queued_bytes = 4;
-    auto created = runtime.run(create_session_async(runtime, std::move(options)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -3366,26 +3361,27 @@ TEST_CASE("Native TUI preserves bounded rejected input and dequeues pending text
     REQUIRE(terminal.inject_input("\x03"));
     drain_ready(io);
 
+    // The retired count/byte caps no longer reject anything: all three
+    // submissions remain queued in FIFO order.
     REQUIRE(terminal.inject_input("é\ré\rx\r"));
     drain_ready(io);
     auto snapshot = created->session->snapshot();
-    CHECK(snapshot.agent_state.input_queues.max_messages == 2);
-    CHECK(snapshot.agent_state.input_queues.max_bytes == 4);
-    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 3);
     CHECK(ai::text_from_user_message(
                   std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages[0])) == "é");
     CHECK(ai::text_from_user_message(
                   std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages[1])) == "é");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages[2])) == "x");
     screen = visible_screen(terminal);
-    CHECK(screen.find("Unable to queue steering input: too many queued messages") != std::string::npos);
-    CHECK(screen.find("Steering: é") != std::string::npos);
-    CHECK(screen.find("x") != std::string::npos);
+    CHECK(count_text(screen, "Steering: é") == 2);
+    CHECK(screen.find("Steering: x") != std::string::npos);
+    CHECK(screen.find("Unable to queue steering input") == std::string::npos);
 
+    // An empty submission adds nothing; the accepted `x` left the editor.
     REQUIRE(terminal.inject_input("\r"));
     drain_ready(io);
-    snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
-    CHECK(visible_screen(terminal).find("Unable to queue steering input") != std::string::npos);
+    CHECK(created->session->snapshot().agent_state.input_queues.steering.messages.size() == 3);
 
     REQUIRE(terminal.inject_input("\x1b[1;3A"));
     drain_ready(io);
@@ -3400,18 +3396,21 @@ TEST_CASE("Native TUI preserves bounded rejected input and dequeues pending text
     REQUIRE(draft != std::string::npos);
     CHECK(first < second);
     CHECK(second < draft);
-    CHECK(screen.find("Restored 2 queued messages to editor") != std::string::npos);
+    CHECK(screen.find("Restored 3 queued messages to editor") != std::string::npos);
     CHECK(screen.find("Steering: é") == std::string::npos);
 
+    // The same admission path accepts a second batch, including a message that
+    // the retired byte cap would have rejected.
     REQUIRE(terminal.inject_input("\x03éé\rx\r"));
     drain_ready(io);
     snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 1);
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
     CHECK(ai::text_from_user_message(
                   std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages[0])) == "éé");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages[1])) == "x");
     screen = visible_screen(terminal);
-    CHECK(screen.find("Unable to queue steering input: queued messages too large") != std::string::npos);
-    CHECK(screen.find("x") != std::string::npos);
+    CHECK(screen.find("Unable to queue steering input") == std::string::npos);
 
     REQUIRE(terminal.inject_input("\x1b[1;3A"));
     drain_ready(io);
@@ -3637,16 +3636,14 @@ TEST_CASE("Native TUI records accepted follow-up in editor history and queues sl
     CHECK(*run_result);
 }
 
-TEST_CASE("Native TUI rejects follow-up admission at capacity and restores the text unchanged",
-        "[coding_agent][tui][queues][limits][issue401][spec]") {
+TEST_CASE("Native TUI queues multiple follow-ups without capacity rejection",
+        "[coding_agent][tui][queues][issue401][issue1113][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto client = std::make_shared<TurnGatedChatProvider>();
     auto* client_pointer = client.get();
-    auto options = session_options(workspace, std::move(client));
-    options.max_queued_messages = 1;
-    auto created = runtime.run(create_session_async(runtime, std::move(options)));
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -3668,35 +3665,38 @@ TEST_CASE("Native TUI rejects follow-up admission at capacity and restores the t
 
     REQUIRE(terminal.inject_input("fu one\x1b[13;3u"));
     drain_ready(io);
-    auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
-
-    // Second follow-up admission is rejected at capacity: the submitted text
-    // is restored unchanged to the editor, the diagnostic is bounded and
-    // redacted, and the queue plus the active run stay untouched.
     REQUIRE(terminal.inject_input("fu two\x1b[13;3u"));
     drain_ready(io);
-    snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
+    auto snapshot = created->session->snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 2);
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.follow_up.messages[0])) == "fu one");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.follow_up.messages[1])) == "fu two");
     auto screen = visible_screen(terminal);
-    CHECK(screen.find("Unable to queue follow-up input: too many queued messages") != std::string::npos);
     CHECK(screen.find("Follow-up: fu one") != std::string::npos);
-    CHECK(screen.find("Follow-up: fu two") == std::string::npos);
-    // The rejected text is back in the editor, unchanged.
-    CHECK(screen.find("fu two") != std::string::npos);
+    CHECK(screen.find("Follow-up: fu two") != std::string::npos);
+    CHECK(screen.find("Unable to queue follow-up input") == std::string::npos);
     CHECK(client_pointer->request_count == 1);
 
     client_pointer->release();
     drain_ready(io);
     CHECK(client_pointer->request_count == 2);
+    REQUIRE(client_pointer->observed_users.size() == 2);
+    CHECK((client_pointer->observed_users[1] == std::vector<std::string>{"initial", "fu one"}));
+    CHECK(created->session->snapshot().agent_state.input_queues.follow_up.messages.size() == 1);
+
+    client_pointer->release();
+    drain_ready(io);
+    CHECK(client_pointer->request_count == 3);
+    REQUIRE(client_pointer->observed_users.size() == 3);
+    CHECK((client_pointer->observed_users[2] == std::vector<std::string>{"initial", "fu one", "fu two"}));
     CHECK(created->session->snapshot().agent_state.input_queues.follow_up.messages.empty());
+
     client_pointer->release();
     drain_ready(io);
     CHECK_FALSE(created->session->is_busy());
 
-    // The rejected text still occupies the editor; clear before exit.
-    REQUIRE(terminal.inject_input("\x03"));
-    drain_ready(io);
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
     REQUIRE(run_result);

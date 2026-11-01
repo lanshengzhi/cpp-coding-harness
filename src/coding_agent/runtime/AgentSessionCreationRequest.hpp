@@ -11,7 +11,6 @@
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 
-#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -107,8 +106,6 @@ struct AgentSessionCreationRequest {
     /// engine-owned field from session_facts; the Session Assembly facts merge
     /// fills it only when unset (issue #507, #516).
     std::optional<bool> project_trust_override;
-    std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
-    std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// The internal workspace containment seam: always the current working
     /// directory (pi `workspace := cwd`).
     std::filesystem::path workspace;

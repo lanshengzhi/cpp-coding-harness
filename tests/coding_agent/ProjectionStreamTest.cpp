@@ -438,6 +438,50 @@ TEST_CASE("AgentSession input queue mutations publish one projection update and 
     CHECK(subscription.drain() == 0);
 }
 
+TEST_CASE("AgentSession queue admission retains 300 steering and 300 follow-up messages",
+        "[coding_agent][projection][input_queue][issue1113][spec]") {
+    tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    auto created = create_projection_session(runtime, workspace, tests::make_scripted_fake_provider());
+    REQUIRE(created.has_value());
+    auto& session = *created->session;
+
+    for (std::size_t index = 0; index < 300; ++index) {
+        REQUIRE(session.steer("s" + std::to_string(index)));
+        REQUIRE(session.follow_up("f" + std::to_string(index)));
+    }
+
+    auto snapshot = session.snapshot();
+    CHECK(snapshot.agent_state.input_queues.steering.mode == agent::InputQueueMode::OneAtATime);
+    CHECK(snapshot.agent_state.input_queues.follow_up.mode == agent::InputQueueMode::OneAtATime);
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 300);
+    REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 300);
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages.front())) == "s0");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages.back())) == "s299");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.follow_up.messages.front())) == "f0");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.follow_up.messages.back())) == "f299");
+
+    // The retired byte bound is gone at the same public seam.
+    const std::string large(16 * 1024 * 1024 + 1, 'x');
+    REQUIRE(session.steer(large));
+    snapshot = session.snapshot();
+    REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 301);
+    const auto large_text = ai::text_from_user_message(
+            std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages.back()));
+    CHECK(large_text.size() == large.size());
+    CHECK(large_text.front() == 'x');
+    CHECK(large_text.back() == 'x');
+
+    REQUIRE(session.clear_input_queues());
+    snapshot = session.snapshot();
+    CHECK(snapshot.agent_state.input_queues.steering.messages.empty());
+    CHECK(snapshot.agent_state.input_queues.follow_up.messages.empty());
+}
+
 TEST_CASE("AgentSession input queue mutations reject before initialization",
         "[coding_agent][projection][input_queue][spec]") {
     coding_agent::AgentSession session;

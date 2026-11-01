@@ -5,7 +5,6 @@
 #include "agent/ExecutionShared.hpp"
 #include "support/AsyncResultBridge.hpp"
 
-#include <cch/ai/Content.hpp>
 #include <cch/ai/Model.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -17,9 +16,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
-#include <variant>
 #include <vector>
 
 namespace cch::agent {
@@ -92,77 +89,11 @@ struct AgentSubscriptionAnchor {
     return ai::parse_model_thinking_level(level).has_value();
 }
 
-[[nodiscard]] inline std::size_t approximate_content_size(const ai::Content& block) {
-    return std::visit(
-            [](const auto& content) -> std::size_t {
-                if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::TextContent>) {
-                    return content.text.size();
-                } else if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::ImageContent>) {
-                    return content.data.size() + content.mime_type.size();
-                } else if constexpr (std::is_same_v<std::decay_t<decltype(content)>, ai::ThinkingContent>) {
-                    return content.thinking.size();
-                }
-                return 0;
-            },
-            block);
-}
-
-[[nodiscard]] inline std::size_t approximate_message_size(const ai::MessageVariant& message) {
-    return std::visit(
-            [](const auto& current) -> std::size_t {
-                if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::UserMessage>) {
-                    std::size_t size = 0;
-                    if (const auto* text = std::get_if<std::string>(&current.content)) {
-                        size = text->size();
-                    } else {
-                        for (const auto& block : std::get<std::vector<ai::Content>>(current.content)) {
-                            size += approximate_content_size(block);
-                        }
-                    }
-                    return size;
-                } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::AssistantMessage>) {
-                    std::size_t size = 0;
-                    for (const auto& block : current.content) {
-                        if (const auto* text = std::get_if<ai::TextContent>(&block)) {
-                            size += text->text.size();
-                        } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
-                            size += thinking->thinking.size();
-                        } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
-                            size += call->raw_arguments.size();
-                        }
-                    }
-                    return size;
-                } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::ToolResultMessage>) {
-                    return ai::text_from_content(current.content).size();
-                } else if constexpr (std::is_same_v<std::decay_t<decltype(current)>, ai::SystemMessage>) {
-                    return current.content.size();
-                }
-                return 0;
-            },
-            message);
-}
-
-[[nodiscard]] inline support::ExpectedVoid admit_queued_message(
-        AgentInputQueues& queues, AgentInputQueue& queue, ai::MessageVariant message, std::string_view queue_name) {
-    const std::size_t message_bytes = approximate_message_size(message);
-    if (queue.messages.size() + 1 > queues.max_messages) {
-        return std::unexpected(support::make_error(support::ErrorCode::Validation,
-                "too many queued messages",
-                std::string{queue_name} + " message count exceeds " + std::to_string(queues.max_messages)));
+[[nodiscard]] inline std::size_t queued_selection_count(const AgentInputQueue& queue) {
+    if (queue.messages.empty()) {
+        return 0;
     }
-
-    std::size_t queued_bytes = message_bytes;
-    for (const auto& queued : queue.messages) {
-        queued_bytes += approximate_message_size(queued);
-    }
-    if (queued_bytes > queues.max_bytes) {
-        return std::unexpected(support::make_error(support::ErrorCode::Validation,
-                "queued messages too large",
-                std::string{queue_name} + " message byte size exceeds " + std::to_string(queues.max_bytes)));
-    }
-
-    queue.messages.push_back(std::move(message));
-    return {};
+    return queue.mode == InputQueueMode::All ? queue.messages.size() : 1;
 }
 
 /// Input queue selector for the turn machine's drains.

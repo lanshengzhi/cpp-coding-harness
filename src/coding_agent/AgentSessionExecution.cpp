@@ -225,8 +225,6 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // Seed the session's scoped-model set (pi `scopedModels: config.scopedModels`).
     scoped_models_ = config_.scoped_models;
     agent::AsyncAgentOptions options;
-    options.max_queued_messages = config_.max_queued_messages;
-    options.max_queued_bytes = config_.max_queued_bytes;
     options.max_turns = config_.max_turns;
     options.model = std::move(config_.model);
     // The session id is forwarded as the per-turn `sessionId` streamSimple

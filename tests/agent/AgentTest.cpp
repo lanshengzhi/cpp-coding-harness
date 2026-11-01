@@ -23,6 +23,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -90,6 +91,64 @@ support::ExpectedVoid run_prompt(
             "agent prompt coroutine did not complete"));
     }
     return std::move(*result);
+}
+
+support::ExpectedVoid run_continue(agent::Agent& subject) {
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> result;
+    boost::asio::co_spawn(
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(subject.continue_run());
+                co_return;
+            },
+            boost::asio::detached);
+    io.run();
+    if (!result) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Unknown, "agent continue coroutine did not complete"));
+    }
+    return std::move(*result);
+}
+
+[[nodiscard]] std::vector<std::string> message_roles(const ai::AiContext& context) {
+    std::vector<std::string> roles;
+    roles.reserve(context.messages.size());
+    for (const auto& message : context.messages) {
+        std::visit(
+                [&roles](const auto& current) {
+                    using Message = std::decay_t<decltype(current)>;
+                    if constexpr (std::is_same_v<Message, ai::SystemMessage>) {
+                        roles.emplace_back("system");
+                    } else if constexpr (std::is_same_v<Message, ai::UserMessage>) {
+                        roles.emplace_back("user");
+                    } else if constexpr (std::is_same_v<Message, ai::AssistantMessage>) {
+                        roles.emplace_back("assistant");
+                    } else if constexpr (std::is_same_v<Message, ai::ToolResultMessage>) {
+                        roles.emplace_back("toolResult");
+                    }
+                },
+                message);
+    }
+    return roles;
+}
+
+[[nodiscard]] std::optional<std::string> last_user_text(const ai::AiContext& context) {
+    for (auto it = context.messages.rbegin(); it != context.messages.rend(); ++it) {
+        if (const auto* user = std::get_if<ai::UserMessage>(&*it)) {
+            return ai::text_from_user_message(*user);
+        }
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::size_t agent_end_message_count(const std::vector<agent::AgentLifecycleEvent>& events) {
+    for (auto it = events.rbegin(); it != events.rend(); ++it) {
+        if (const auto* end = std::get_if<agent::AgentEndEvent>(&*it)) {
+            return end->messages.size();
+        }
+    }
+    return 0;
 }
 
 [[nodiscard]] agent::Tool make_read_tool() {
@@ -560,8 +619,8 @@ TEST_CASE("reset restores the System Message baseline and clears queues while re
     CHECK(subject.state().thinking_level == "high");
 
     REQUIRE(run_prompt(subject, "go"));
-    REQUIRE(subject.steer(ai::user_text_message("steer")));
-    REQUIRE(subject.follow_up(ai::user_text_message("follow")));
+    subject.steer(ai::user_text_message("steer"));
+    subject.follow_up(ai::user_text_message("follow"));
     CHECK(subject.input_queue_counts().steering == 1);
     CHECK(subject.input_queue_counts().follow_up == 1);
 
@@ -1389,8 +1448,8 @@ TEST_CASE("stateful Agent retains its configured thinking state across a run", "
     CHECK(subject.state().thinking_level == "high");
 }
 
-TEST_CASE("stateful Agent admits bounded queues and drains steering before follow-up in pi order",
-        "[agent][stateful][issue44][spec]") {
+TEST_CASE(
+        "stateful Agent drains steering before follow-up in pi order", "[agent][stateful][issue44][issue1113][spec]") {
     auto client = std::make_shared<RecordingModelRuntime>();
     client->responses.push_back(ai::assistant_text_message("first"));
     client->responses.push_back(ai::assistant_text_message("second"));
@@ -1398,16 +1457,13 @@ TEST_CASE("stateful Agent admits bounded queues and drains steering before follo
 
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
-    options.max_queued_messages = 2;
     agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
-    REQUIRE(subject.steer(ai::user_text_message("steer-one")));
-    REQUIRE(subject.steer(ai::user_text_message("steer-two")));
-    REQUIRE(subject.follow_up(ai::user_text_message("follow-up")));
+    subject.steer(ai::user_text_message("steer-one"));
+    subject.steer(ai::user_text_message("steer-two"));
+    subject.follow_up(ai::user_text_message("follow-up"));
 
     const auto queued = subject.state();
-    CHECK(queued.input_queues.max_messages == 2);
-    CHECK(queued.input_queues.max_bytes == 16 * 1024 * 1024);
     CHECK(queued.input_queues.steering.mode == agent::InputQueueMode::OneAtATime);
     REQUIRE(queued.input_queues.steering.messages.size() == 2);
     REQUIRE(queued.input_queues.follow_up.messages.size() == 1);
@@ -1424,48 +1480,114 @@ TEST_CASE("stateful Agent admits bounded queues and drains steering before follo
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[5])) == "follow-up");
 }
 
-TEST_CASE("stateful Agent queue admission is atomic at UTF-8 byte and item boundaries",
-        "[agent][stateful][issue44][spec]") {
+TEST_CASE("stateful Agent queue admission retains 300 steering and 300 follow-up messages",
+        "[agent][stateful][issue1113][spec]") {
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
-    options.max_queued_messages = 1;
-    options.max_queued_bytes = 6;
     agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
-    const std::string multibyte = "\xC3\xA9\xC3\xA9\xC3\xA9";
-    REQUIRE(multibyte.size() == 6);
-    REQUIRE(subject.steer(ai::user_text_message(multibyte)));
-    auto rejected_count = subject.steer(ai::user_text_message("x"));
-    REQUIRE_FALSE(rejected_count);
-    CHECK(rejected_count.error().message == "too many queued messages");
-    auto rejected_again = subject.steer(ai::user_text_message("y"));
-    REQUIRE_FALSE(rejected_again);
-    CHECK(rejected_again.error().message == "too many queued messages");
-    REQUIRE(subject.state().input_queues.steering.messages.size() == 1);
-    CHECK(ai::text_from_user_message(
-              std::get<ai::UserMessage>(
-                  subject.state().input_queues.steering.messages.front())) ==
-          multibyte);
+    CHECK(subject.state().input_queues.steering.mode == agent::InputQueueMode::OneAtATime);
+    CHECK(subject.state().input_queues.follow_up.mode == agent::InputQueueMode::OneAtATime);
+    CHECK_FALSE(subject.has_queued_messages());
+
+    for (std::size_t index = 0; index < 300; ++index) {
+        subject.steer(ai::user_text_message("s" + std::to_string(index)));
+    }
+    for (std::size_t index = 0; index < 300; ++index) {
+        subject.follow_up(ai::user_text_message("f" + std::to_string(index)));
+    }
+
+    CHECK(subject.has_queued_messages());
+    CHECK(subject.input_queue_counts().steering == 300);
+    CHECK(subject.input_queue_counts().follow_up == 300);
+
+    // Frozen default peek: one-at-a-time selects only the oldest steering
+    // message and does not consume it.
+    const auto one_at_a_time = subject.peek_queued_messages();
+    REQUIRE(one_at_a_time.size() == 1);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(one_at_a_time.front())) == "s0");
+    CHECK(subject.input_queue_counts().steering == 300);
+
+    REQUIRE(subject.set_steering_mode(agent::InputQueueMode::All));
+    const auto steering = subject.peek_queued_messages();
+    REQUIRE(steering.size() == 300);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(steering.front())) == "s0");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(steering.back())) == "s299");
 
     REQUIRE(subject.clear_steering_queue());
-    auto rejected_bytes = subject.follow_up(ai::user_text_message(multibyte + "x"));
-    REQUIRE_FALSE(rejected_bytes);
-    CHECK(rejected_bytes.error().message == "queued messages too large");
-    CHECK(subject.state().input_queues.follow_up.messages.empty());
-    REQUIRE(subject.follow_up(ai::user_text_message(multibyte)));
+    REQUIRE(subject.set_follow_up_mode(agent::InputQueueMode::All));
+    const auto follow_up = subject.peek_queued_messages();
+    REQUIRE(follow_up.size() == 300);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(follow_up.front())) == "f0");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(follow_up.back())) == "f299");
+
     REQUIRE(subject.clear_input_queues());
-    CHECK(subject.state().input_queues.steering.messages.empty());
-    CHECK(subject.state().input_queues.follow_up.messages.empty());
+    CHECK_FALSE(subject.has_queued_messages());
+    CHECK(subject.peek_queued_messages().empty());
+}
+
+TEST_CASE("stateful Agent queue admission keeps a message larger than the retired byte bound",
+        "[agent][stateful][issue1113][spec]") {
+    auto client = std::make_shared<ScriptedFakeRuntime>();
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("fake-model");
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
+
+    const std::string steering(16 * 1024 * 1024 + 1, 's');
+    const std::string follow_up(16 * 1024 * 1024 + 2, 'f');
+    subject.steer(ai::user_text_message(steering));
+    subject.follow_up(ai::user_text_message(follow_up));
+
+    REQUIRE(subject.set_steering_mode(agent::InputQueueMode::All));
+    auto peeked = subject.peek_queued_messages();
+    REQUIRE(peeked.size() == 1);
+    const auto steering_text = ai::text_from_user_message(std::get<ai::UserMessage>(peeked.front()));
+    CHECK(steering_text.size() == steering.size());
+    CHECK(steering_text.front() == 's');
+    CHECK(steering_text.back() == 's');
+
+    REQUIRE(subject.clear_steering_queue());
+    REQUIRE(subject.set_follow_up_mode(agent::InputQueueMode::All));
+    peeked = subject.peek_queued_messages();
+    REQUIRE(peeked.size() == 1);
+    const auto follow_up_text = ai::text_from_user_message(std::get<ai::UserMessage>(peeked.front()));
+    CHECK(follow_up_text.size() == follow_up.size());
+    CHECK(follow_up_text.front() == 'f');
+    CHECK(follow_up_text.back() == 'f');
+}
+
+TEST_CASE("stateful Agent queue peek prefers steering and clear removes both queues",
+        "[agent][stateful][issue1113][spec]") {
+    auto client = std::make_shared<ScriptedFakeRuntime>();
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("fake-model");
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
+
+    subject.steer(ai::user_text_message("steer1"));
+    subject.steer(ai::user_text_message("steer2"));
+    subject.follow_up(ai::user_text_message("follow"));
+
+    auto peeked = subject.peek_queued_messages();
+    REQUIRE(peeked.size() == 1);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(peeked.front())) == "steer1");
+
+    REQUIRE(subject.clear_steering_queue());
+    peeked = subject.peek_queued_messages();
+    REQUIRE(peeked.size() == 1);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(peeked.front())) == "follow");
+
+    REQUIRE(subject.clear_input_queues());
+    CHECK_FALSE(subject.has_queued_messages());
+    CHECK(subject.peek_queued_messages().empty());
 }
 
 TEST_CASE("stateful Agent accepts steering and follow-up while streaming without disrupting the active run",
-        "[agent][stateful][issue44][spec]") {
+        "[agent][stateful][issue44][issue1113][spec]") {
     boost::asio::io_context io;
     auto client = std::make_shared<GatedModelRuntime>();
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
-    options.max_queued_messages = 1;
     agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     std::optional<support::ExpectedVoid> prompted;
@@ -1480,11 +1602,8 @@ TEST_CASE("stateful Agent accepts steering and follow-up while streaming without
         REQUIRE(io.poll_one() == 1);
     }
 
-    REQUIRE(subject.steer(ai::user_text_message("steer")));
-    REQUIRE(subject.follow_up(ai::user_text_message("follow")));
-    auto rejected = subject.steer(ai::user_text_message("rejected"));
-    REQUIRE_FALSE(rejected);
-    CHECK(rejected.error().message == "too many queued messages");
+    subject.steer(ai::user_text_message("steer"));
+    subject.follow_up(ai::user_text_message("follow"));
     REQUIRE(subject.state().is_running);
     REQUIRE(subject.state().input_queues.steering.messages.size() == 1);
     REQUIRE(subject.state().input_queues.follow_up.messages.size() == 1);
@@ -1503,7 +1622,7 @@ TEST_CASE("stateful Agent accepts steering and follow-up while streaming without
     REQUIRE(subject.state().messages.size() == 6);
 }
 
-TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][stateful][issue44][spec]") {
+TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][stateful][issue44][issue1113][spec]") {
     auto client = std::make_shared<RecordingModelRuntime>();
     client->responses.push_back(ai::assistant_text_message("done"));
     agent::AsyncAgentOptions options;
@@ -1514,8 +1633,8 @@ TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][statefu
     REQUIRE(subject.set_follow_up_mode(agent::InputQueueMode::All));
     CHECK(subject.state().input_queues.steering.mode == agent::InputQueueMode::All);
     CHECK(subject.state().input_queues.follow_up.mode == agent::InputQueueMode::All);
-    REQUIRE(subject.steer(ai::user_text_message("first")));
-    REQUIRE(subject.steer(ai::user_text_message("second")));
+    subject.steer(ai::user_text_message("first"));
+    subject.steer(ai::user_text_message("second"));
     REQUIRE(run_prompt(subject, "prompt"));
     const auto state = subject.state();
     REQUIRE(state.messages.size() == 4);
@@ -1523,7 +1642,8 @@ TEST_CASE("stateful Agent all queue modes preserve FIFO order", "[agent][statefu
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[2])) == "second");
 }
 
-TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order", "[agent][stateful][issue44][spec]") {
+TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order",
+        "[agent][stateful][issue44][issue1113][spec]") {
     auto client = std::make_shared<RecordingModelRuntime>();
     client->responses.push_back(ai::assistant_text_message("first"));
     client->responses.push_back(ai::assistant_text_message("second"));
@@ -1532,14 +1652,164 @@ TEST_CASE("stateful Agent drains all follow-up messages together in FIFO order",
     agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
     REQUIRE(subject.set_follow_up_mode(agent::InputQueueMode::All));
-    REQUIRE(subject.follow_up(ai::user_text_message("first follow-up")));
-    REQUIRE(subject.follow_up(ai::user_text_message("second follow-up")));
+    subject.follow_up(ai::user_text_message("first follow-up"));
+    subject.follow_up(ai::user_text_message("second follow-up"));
     REQUIRE(run_prompt(subject, "prompt"));
 
     const auto state = subject.state();
     REQUIRE(state.messages.size() == 5);
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[2])) == "first follow-up");
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(state.messages[3])) == "second follow-up");
+}
+
+TEST_CASE("stateful Agent one-at-a-time steering injects the oldest message after the tool turn",
+        "[agent][stateful][issue1113][spec]") {
+    auto client = std::make_shared<RecordingModelRuntime>();
+    client->responses.push_back(read_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    agent::ToolRegistry registry;
+    auto subject_holder = std::make_shared<agent::Agent*>(nullptr);
+    REQUIRE(registry.add(
+            tests::make_fake_tool(ai::Tool{"read", "Read", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::Exclusive,
+                    [subject_holder](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        (**subject_holder).steer(ai::user_text_message("steer1"));
+                        (**subject_holder).steer(ai::user_text_message("steer2"));
+                        agent::AsyncToolExecutionResult result;
+                        result.content.push_back(ai::text_content("file contents"));
+                        co_return result;
+                    })));
+
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("fake-model");
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    *subject_holder = &subject;
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = subject.subscribe([&](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscription);
+
+    REQUIRE(run_prompt(subject, "go"));
+    REQUIRE(client->calls.size() == 3);
+    CHECK(message_roles(client->calls[0].context) == std::vector<std::string>{"system", "user"});
+    CHECK(message_roles(client->calls[1].context) ==
+            std::vector<std::string>{"system", "user", "assistant", "toolResult", "user"});
+    CHECK(message_roles(client->calls[2].context) ==
+            std::vector<std::string>{"system", "user", "assistant", "toolResult", "user", "assistant", "user"});
+    CHECK(last_user_text(client->calls[0].context) == "go");
+    CHECK(last_user_text(client->calls[1].context) == "steer1");
+    CHECK(last_user_text(client->calls[2].context) == "steer2");
+    CHECK_FALSE(subject.has_queued_messages());
+    CHECK(agent_end_message_count(events) == 7);
+}
+
+TEST_CASE("stateful Agent all-mode steering injects every queued message in one turn",
+        "[agent][stateful][issue1113][spec]") {
+    auto client = std::make_shared<RecordingModelRuntime>();
+    client->responses.push_back(read_tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("done"));
+
+    agent::ToolRegistry registry;
+    auto subject_holder = std::make_shared<agent::Agent*>(nullptr);
+    REQUIRE(registry.add(
+            tests::make_fake_tool(ai::Tool{"read", "Read", test::permissive_object_tool_argument_contract()},
+                    agent::ToolConcurrency::Exclusive,
+                    [subject_holder](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        (**subject_holder).steer(ai::user_text_message("steer1"));
+                        (**subject_holder).steer(ai::user_text_message("steer2"));
+                        agent::AsyncToolExecutionResult result;
+                        result.content.push_back(ai::text_content("file contents"));
+                        co_return result;
+                    })));
+
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("fake-model");
+    options.steering_mode = agent::InputQueueMode::All;
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    *subject_holder = &subject;
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = subject.subscribe([&](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscription);
+
+    REQUIRE(run_prompt(subject, "go"));
+    REQUIRE(client->calls.size() == 2);
+    CHECK(message_roles(client->calls[0].context) == std::vector<std::string>{"system", "user"});
+    CHECK(message_roles(client->calls[1].context) ==
+            std::vector<std::string>{"system", "user", "assistant", "toolResult", "user", "user"});
+    CHECK(last_user_text(client->calls[1].context) == "steer2");
+    CHECK_FALSE(subject.has_queued_messages());
+    CHECK(agent_end_message_count(events) == 6);
+}
+
+TEST_CASE("stateful Agent follow-up runs only after an otherwise stopping assistant turn",
+        "[agent][stateful][issue1113][spec]") {
+    auto client = std::make_shared<RecordingModelRuntime>();
+    client->responses.push_back(ai::assistant_text_message("first"));
+    client->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("fake-model");
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
+    subject.follow_up(ai::user_text_message("follow"));
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = subject.subscribe([&](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscription);
+
+    REQUIRE(run_prompt(subject, "go"));
+    REQUIRE(client->calls.size() == 2);
+    CHECK(message_roles(client->calls[0].context) == std::vector<std::string>{"user"});
+    CHECK(message_roles(client->calls[1].context) == std::vector<std::string>{"user", "assistant", "user"});
+    CHECK(last_user_text(client->calls[0].context) == "go");
+    CHECK(last_user_text(client->calls[1].context) == "follow");
+    CHECK_FALSE(subject.has_queued_messages());
+    CHECK(agent_end_message_count(events) == 4);
+}
+
+TEST_CASE("stateful Agent continue from an assistant tail drains steering before follow-up",
+        "[agent][stateful][issue1113][spec]") {
+    auto client = std::make_shared<RecordingModelRuntime>();
+    client->responses.push_back(ai::assistant_text_message("r0"));
+    client->responses.push_back(ai::assistant_text_message("r1"));
+
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("fake-model");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.push_back(ai::assistant_text_message("tail"));
+    agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options), std::move(initial_state));
+    subject.steer(ai::user_text_message("steer"));
+    subject.follow_up(ai::user_text_message("follow"));
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscription = subject.subscribe([&](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscription);
+
+    REQUIRE(run_continue(subject));
+    REQUIRE(client->calls.size() == 2);
+    CHECK(message_roles(client->calls[0].context) == std::vector<std::string>{"assistant", "user"});
+    CHECK(message_roles(client->calls[1].context) ==
+            std::vector<std::string>{"assistant", "user", "assistant", "user"});
+    CHECK(last_user_text(client->calls[0].context) == "steer");
+    CHECK(last_user_text(client->calls[1].context) == "follow");
+    CHECK_FALSE(subject.has_queued_messages());
+    CHECK(agent_end_message_count(events) == 4);
 }
 
 TEST_CASE("Agent::set_system_prompt reaches live state and the next stream request",

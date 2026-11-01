@@ -302,14 +302,16 @@ public:
 
     // ── Input queues ─────────────────────────────────────────────────────
 
-    /// Queue input after the current assistant turn. Admission is synchronous
-    /// and rejects before mutation when the Agent-owned queue is full.
+    /// Queue input after the current assistant turn. The Agent-owned queue is
+    /// unbounded and admission returns no capacity result; this operation only
+    /// rejects before mutation when the Session is closed.
     [[nodiscard]] support::ExpectedVoid steer(
         std::string text,
         PromptOptions options = {});
 
-    /// Queue input only when the Agent would otherwise stop. Admission is
-    /// synchronous and rejects before mutation when the Agent-owned queue is full.
+    /// Queue input only when the Agent would otherwise stop. The Agent-owned
+    /// queue is unbounded and admission returns no capacity result; this
+    /// operation only rejects before mutation when the Session is closed.
     [[nodiscard]] support::ExpectedVoid follow_up(
         std::string text,
         PromptOptions options = {});

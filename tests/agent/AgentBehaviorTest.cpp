@@ -582,8 +582,8 @@ TEST_CASE("Agent continuation from an assistant tail prioritizes steering before
     initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
     initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
     agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
-    REQUIRE(subject.steer(ai::user_text_message("steering input")));
-    REQUIRE(subject.follow_up(ai::user_text_message("follow-up input")));
+    subject.steer(ai::user_text_message("steering input"));
+    subject.follow_up(ai::user_text_message("follow-up input"));
 
     auto run = run_agent(subject, subject.continue_run());
 
@@ -608,7 +608,7 @@ TEST_CASE("Agent continuation from an assistant tail falls back to queued follow
     initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
     initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
     agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
-    REQUIRE(subject.follow_up(ai::user_text_message("follow-up continuation input")));
+    subject.follow_up(ai::user_text_message("follow-up continuation input"));
 
     auto run = run_agent(subject, subject.continue_run());
 
@@ -631,8 +631,8 @@ TEST_CASE("Agent continuation from an assistant tail drains all configured steer
     initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
     initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
     agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
-    REQUIRE(subject.steer(ai::user_text_message("first steering input")));
-    REQUIRE(subject.steer(ai::user_text_message("second steering input")));
+    subject.steer(ai::user_text_message("first steering input"));
+    subject.steer(ai::user_text_message("second steering input"));
 
     auto run = run_agent(subject, subject.continue_run());
 
@@ -663,7 +663,7 @@ TEST_CASE("Agent continuation rejects empty, system-only, and assistant-tail his
     system_state.messages.emplace_back(ai::SystemMessage{.content = "system prompt"});
     agent::Agent system_subject(
             system_client->factory(), std::move(system_registry), std::move(system_options), std::move(system_state));
-    REQUIRE(system_subject.follow_up(ai::user_text_message("must remain queued")));
+    system_subject.follow_up(ai::user_text_message("must remain queued"));
     auto system_run = run_agent(system_subject, system_subject.continue_run());
     CHECK_FALSE(system_run.result);
     CHECK(system_client->requests.empty());
@@ -698,9 +698,9 @@ TEST_CASE("Agent continuation honors OneAtATime steering drain without premature
     initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
     initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
     agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
-    REQUIRE(subject.steer(ai::user_text_message("first steer")));
-    REQUIRE(subject.steer(ai::user_text_message("second steer")));
-    REQUIRE(subject.steer(ai::user_text_message("third steer")));
+    subject.steer(ai::user_text_message("first steer"));
+    subject.steer(ai::user_text_message("second steer"));
+    subject.steer(ai::user_text_message("third steer"));
     REQUIRE(subject.input_queue_counts().steering == 3);
 
     auto run = run_agent(subject, subject.continue_run());
@@ -757,9 +757,9 @@ TEST_CASE("Agent continuation during an active run is rejected before consuming 
     initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
     initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
     agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
-    REQUIRE(subject.steer(ai::user_text_message("queued steer one")));
-    REQUIRE(subject.steer(ai::user_text_message("queued steer two")));
-    REQUIRE(subject.follow_up(ai::user_text_message("queued follow-up")));
+    subject.steer(ai::user_text_message("queued steer one"));
+    subject.steer(ai::user_text_message("queued steer two"));
+    subject.follow_up(ai::user_text_message("queued follow-up"));
     const agent::AgentInputQueueCounts counts_before = subject.input_queue_counts();
     REQUIRE(counts_before.steering == 2);
     REQUIRE(counts_before.follow_up == 1);
@@ -897,7 +897,7 @@ TEST_CASE("aborting an active continuation completes through the ordinary aborte
     initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
     initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
     agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
-    REQUIRE(subject.steer(ai::user_text_message("steering to be interrupted")));
+    subject.steer(ai::user_text_message("steering to be interrupted"));
 
     std::vector<agent::AgentLifecycleEvent> events;
     auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
@@ -1301,10 +1301,10 @@ TEST_CASE("async agent loop enforces an explicit host-set turn cap", "[agent][as
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
 }
 
-TEST_CASE("agent queue bounds are documented configuration fields", "[agent][async][issue68][spec]") {
+TEST_CASE("agent queue defaults are unbounded pi-compatible drain modes", "[agent][async][issue68][issue1113][spec]") {
     const agent::AsyncAgentOptions options;
-    CHECK(options.max_queued_messages == 256);
-    CHECK(options.max_queued_bytes == 16 * 1024 * 1024);
+    CHECK(options.steering_mode == agent::InputQueueMode::OneAtATime);
+    CHECK(options.follow_up_mode == agent::InputQueueMode::OneAtATime);
 }
 
 TEST_CASE("beforeToolCall hook can block a tool call", "[agent][async][u7][spec]") {
@@ -2526,7 +2526,7 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8][spe
     agent::Agent subject(client->factory(), std::move(registry), std::move(options));
     // The hook runs only when the loop continues (#745): the rejection row
     // continues the run with a queued follow-up.
-    REQUIRE(subject.follow_up(ai::user_text_message("continue")));
+    subject.follow_up(ai::user_text_message("continue"));
     auto run = run_agent(subject, "hi");
 
     REQUIRE_FALSE(run.result);
@@ -2850,7 +2850,7 @@ TEST_CASE("steering queued while prepare-next-turn runs is injected before the n
         // Simulate steering queued during a long preparation: nothing was
         // queued when the earlier end-of-turn poll ran, so the re-poll after
         // this hook settles must pick it up.
-        REQUIRE((**subject_holder).steer(ai::user_text_message("late steer")));
+        (**subject_holder).steer(ai::user_text_message("late steer"));
         return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
     };
@@ -2918,7 +2918,7 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
 
     agent::Agent subject(client->factory(), std::move(registry), std::move(options));
     // Continues the run so the update row reaches the hook (#745).
-    REQUIRE(subject.follow_up(ai::user_text_message("continue")));
+    subject.follow_up(ai::user_text_message("continue"));
     auto run = run_agent(subject, "hi");
 
     CHECK(run.result);
@@ -2979,7 +2979,7 @@ TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "
         agent::Agent subject(client->factory(), std::move(registry), std::move(options));
         // The hook runs only when the loop continues (#745); the failure row
         // continues the run with a queued follow-up.
-        REQUIRE(subject.follow_up(ai::user_text_message("continue")));
+        subject.follow_up(ai::user_text_message("continue"));
         auto run = run_agent(subject, "hi");
 
         REQUIRE_FALSE(run.result);
@@ -3007,7 +3007,7 @@ TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "
         };
 
         agent::Agent subject(client->factory(), std::move(registry), std::move(options));
-        REQUIRE(subject.follow_up(ai::user_text_message("continue")));
+        subject.follow_up(ai::user_text_message("continue"));
         auto run = run_agent(subject, "hi");
 
         REQUIRE_FALSE(run.result);
@@ -3059,7 +3059,7 @@ TEST_CASE("prepareRequest observes the emitted pending prompt and replaces the r
         return support::ExpectedVoid{};
     });
     REQUIRE(observed);
-    REQUIRE(subject.steer(ai::user_text_message("steering")));
+    subject.steer(ai::user_text_message("steering"));
     auto run = run_agent(subject, "go");
 
     CHECK(run.result);
@@ -3129,17 +3129,16 @@ TEST_CASE("prepareRequest does not poll the steering queue", "[agent][async][u8]
 
     agent::ToolRegistry registry;
     auto subject_holder = std::make_shared<agent::Agent*>(nullptr);
-    support::ExpectedVoid steer_result;
     std::size_t prepare_calls = 0;
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
     options.model = tests::make_model("gpt-test");
     options.prepare_request =
-            [subject_holder, &steer_result, &prepare_calls](
+            [subject_holder, &prepare_calls](
                     agent::PrepareRequestContext) -> support::AsyncResult<std::optional<agent::AgentRequestUpdate>> {
         ++prepare_calls;
         if (prepare_calls == 1) {
-            steer_result = (**subject_holder).steer(ai::user_text_message("late steering"));
+            (**subject_holder).steer(ai::user_text_message("late steering"));
         }
         return support::AsyncResult<std::optional<agent::AgentRequestUpdate>>{
                 support::Expected<std::optional<agent::AgentRequestUpdate>>{std::nullopt}};
@@ -3150,7 +3149,6 @@ TEST_CASE("prepareRequest does not poll the steering queue", "[agent][async][u8]
     auto run = run_agent(subject, "go");
 
     CHECK(run.result);
-    CHECK(steer_result.has_value());
     CHECK(prepare_calls == 2);
     REQUIRE(client->requests.size() == 2);
     CHECK(user_texts(client->requests[0].context.messages) == std::vector<std::string>{"go"});
@@ -3284,7 +3282,7 @@ TEST_CASE("finishTurn end stops before queue polling and next-turn preparation",
     };
 
     agent::Agent subject(client->factory(), std::move(registry), std::move(options));
-    REQUIRE(subject.follow_up(ai::user_text_message("queued follow-up")));
+    subject.follow_up(ai::user_text_message("queued follow-up"));
     auto run = run_agent(subject, "go");
 
     CHECK(run.result);
@@ -3385,7 +3383,7 @@ TEST_CASE("finishTurn observes an aborted assistant before turn_end without cont
         return support::ExpectedVoid{};
     });
     REQUIRE(observed);
-    REQUIRE(subject.follow_up(ai::user_text_message("queued follow-up")));
+    subject.follow_up(ai::user_text_message("queued follow-up"));
     auto run = run_agent(subject, "go");
 
     CHECK(run.result);

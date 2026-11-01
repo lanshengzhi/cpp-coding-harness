@@ -592,7 +592,7 @@ TEST_CASE("model switch re-clamps the thinking level so an unsupported level nev
     // The switch must land before the next stream call; the corrected turn
     // lifecycle runs prepare-next-turn only on a continuing turn (#745), so
     // the switch row continues turn 1 with a queued follow-up message.
-    REQUIRE(subject.follow_up(ai::user_text_message("continue")));
+    subject.follow_up(ai::user_text_message("continue"));
     REQUIRE(run_prompt(subject, "first"));
 
     REQUIRE(runtime->calls.size() == 2);

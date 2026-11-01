@@ -263,8 +263,6 @@ struct AssemblyPlan {
     std::optional<std::string> system_prompt;
     std::vector<std::string> append_system_prompt;
     std::optional<bool> project_trust_override;
-    std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
-    std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// Interactive frontend assembly policy: provide the Session-owned User
     /// Shell (ADR 0026). Set only by CLI normalization for the interactive
     /// frontend.
@@ -878,8 +876,6 @@ struct SessionTargetNormalizationOptions {
     plan.no_context_files = request.session_facts.no_context_files;
     plan.system_prompt = std::move(request.session_facts.system_prompt);
     plan.append_system_prompt = std::move(request.session_facts.append_system_prompt);
-    plan.max_queued_messages = request.max_queued_messages;
-    plan.max_queued_bytes = request.max_queued_bytes;
     plan.provide_user_shell = request.provide_user_shell;
     plan.execution_runtime_target = std::move(request.execution_runtime_target);
     plan.session_name = std::move(request.session_name);
@@ -2042,8 +2038,6 @@ struct PreparedAssemblyTarget final {
     // runtime below so it can persist later defaults with the same
     // project-trust state (pi `AgentSession.settingsManager`).
     AgentSessionConfig session_config;
-    session_config.max_queued_messages = plan.max_queued_messages;
-    session_config.max_queued_bytes = plan.max_queued_bytes;
     session_config.model = std::move(request_model);
     session_config.scoped_models = std::move(scoped_models);
     // pi main.ts `buildSessionOptions`: explicit CLI thinking wins, then a

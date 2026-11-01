@@ -1,0 +1,90 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-01T13:50:39.067Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/agent/src/agent.ts:PendingMessageQueue,Agent.steer,Agent.followUp,Agent.peekQueuedMessages,Agent.hasQueuedMessages,Agent.clearSteeringQueue",
+    "packages/agent/test/agent.test.ts:should support steering message queue",
+    "packages/agent/test/agent.test.ts:previews the next selected queued messages without consuming them"
+  ],
+  "scenarios": [
+    {
+      "name": "queue admission retains 300 steering and 300 follow-up messages in FIFO order",
+      "inputs": {
+        "steeringMessages": 300,
+        "followUpMessages": 300
+      },
+      "expected": {
+        "steeringMode": "one-at-a-time",
+        "followUpMode": "one-at-a-time",
+        "enqueueReturnsVoid": true,
+        "steeringRetained": 300,
+        "followUpRetained": 300,
+        "hasQueuedMessages": true,
+        "oneAtATimePeekCount": 1,
+        "oneAtATimePeekText": "s0",
+        "steeringFifoFirst": "s0",
+        "steeringFifoLast": "s299",
+        "followUpFifoFirst": "f0",
+        "followUpFifoLast": "f299"
+      },
+      "normalizations": [],
+      "observed": {
+        "steeringMode": "one-at-a-time",
+        "followUpMode": "one-at-a-time",
+        "enqueueReturnsVoid": true,
+        "steeringRetained": 300,
+        "followUpRetained": 300,
+        "hasQueuedMessages": true,
+        "oneAtATimePeekCount": 1,
+        "oneAtATimePeekText": "s0",
+        "steeringFifoFirst": "s0",
+        "steeringFifoLast": "s299",
+        "followUpFifoFirst": "f0",
+        "followUpFifoLast": "f299"
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should support steering message queue"
+      }
+    },
+    {
+      "name": "queue admission keeps a message larger than the retired 16 MiB byte bound",
+      "inputs": {
+        "steeringBytes": 16777217,
+        "followUpBytes": 16777218,
+        "retiredByteBound": 16777216
+      },
+      "expected": {
+        "enqueueReturnsVoid": true,
+        "steeringLength": 16777217,
+        "steeringSha256": "2fb473190494f729d54ce2ef4f730bc2b642f178a37ab99bf58ac655db81da86",
+        "followUpLength": 16777218,
+        "followUpSha256": "d6415dba96b694bfca6f4e9ab77698f08b3d77e46e5940cc4c03982fa649206c",
+        "hasQueuedMessages": true
+      },
+      "normalizations": [],
+      "observed": {
+        "enqueueReturnsVoid": true,
+        "steeringLength": 16777217,
+        "steeringSha256": "2fb473190494f729d54ce2ef4f730bc2b642f178a37ab99bf58ac655db81da86",
+        "followUpLength": 16777218,
+        "followUpSha256": "d6415dba96b694bfca6f4e9ab77698f08b3d77e46e5940cc4c03982fa649206c",
+        "hasQueuedMessages": true
+      },
+      "upstreamTest": {
+        "path": "packages/agent/src/agent.ts",
+        "case": "PendingMessageQueue.enqueue"
+      }
+    }
+  ]
+}

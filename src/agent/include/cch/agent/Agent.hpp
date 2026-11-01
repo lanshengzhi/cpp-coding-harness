@@ -109,12 +109,23 @@ public:
     void abort();
 
     /// Admit an Agent Message for injection after the current assistant turn.
-    /// The configured queue capacity is checked before the queue is mutated.
-    [[nodiscard]] support::ExpectedVoid steer(ai::MessageVariant message);
+    /// The queue is unbounded (frozen `PendingMessageQueue.enqueue`): admission
+    /// never rejects for capacity and returns no result, like pi.
+    void steer(ai::MessageVariant message);
 
     /// Admit an Agent Message to run when the Agent would otherwise stop.
-    /// The configured queue capacity is checked before the queue is mutated.
-    [[nodiscard]] support::ExpectedVoid follow_up(ai::MessageVariant message);
+    /// The queue is unbounded (frozen `PendingMessageQueue.enqueue`): admission
+    /// never rejects for capacity and returns no result, like pi.
+    void follow_up(ai::MessageVariant message);
+
+    /// Preview the messages the next turn would drain without consuming them
+    /// (pi `peekQueuedMessages`): the mode-selected steering batch when the
+    /// steering queue has items, otherwise the mode-selected follow-up batch.
+    [[nodiscard]] std::vector<ai::MessageVariant> peek_queued_messages() const;
+
+    /// Whether either input queue still holds pending messages (pi
+    /// `hasQueuedMessages`).
+    [[nodiscard]] bool has_queued_messages() const;
 
     /// Change the drain policy for queued steering messages.
     [[nodiscard]] support::ExpectedVoid set_steering_mode(InputQueueMode mode);

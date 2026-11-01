@@ -505,11 +505,9 @@ support::ExpectedVoid AgentSession::Impl::steer(
     }
     auto message = detail::make_admitted_user_message(
             std::move(text), skills_, templates_, std::move(images), expand_prompt_templates);
-    auto result = agent_->steer(ai::MessageVariant{std::move(message)});
-    if (result) {
-        update_projection();
-    }
-    return result;
+    agent_->steer(ai::MessageVariant{std::move(message)});
+    update_projection();
+    return {};
 }
 
 support::ExpectedVoid AgentSession::Impl::follow_up(
@@ -519,11 +517,9 @@ support::ExpectedVoid AgentSession::Impl::follow_up(
     }
     auto message = detail::make_admitted_user_message(
             std::move(text), skills_, templates_, std::move(images), expand_prompt_templates);
-    auto result = agent_->follow_up(ai::MessageVariant{std::move(message)});
-    if (result) {
-        update_projection();
-    }
-    return result;
+    agent_->follow_up(ai::MessageVariant{std::move(message)});
+    update_projection();
+    return {};
 }
 
 support::ExpectedVoid AgentSession::Impl::apply_input_queue_mutation(

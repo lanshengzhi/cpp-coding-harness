@@ -49,8 +49,6 @@ Agent::Impl::Impl(ai::ModelStreamFactory stream_factory,
     state.thinking_level = options.thinking_level.empty() ? "off" : std::move(options.thinking_level);
     state.thinking_level = ai::clamp_thinking_level_string(state.model, state.thinking_level);
     state.system_prompt = std::move(options.system_prompt);
-    state.input_queues.max_messages = options.max_queued_messages;
-    state.input_queues.max_bytes = options.max_queued_bytes;
     state.input_queues.steering.mode = options.steering_mode;
     state.input_queues.follow_up.mode = options.follow_up_mode;
     state.active_tool_names = tool_names(definitions);
@@ -158,21 +156,21 @@ boost::asio::awaitable<support::Expected<std::optional<AgentTurnAction>>> Agent:
 }
 
 [[nodiscard]] std::vector<ai::MessageVariant> Agent::Impl::drain(InputQueueKind queue_kind) {
-    auto& queue = queue_kind == InputQueueKind::Steering ? state.input_queues.steering.messages
-                                                         : state.input_queues.follow_up.messages;
-    const auto mode = queue_kind == InputQueueKind::Steering ? state.input_queues.steering.mode
-                                                             : state.input_queues.follow_up.mode;
-    if (queue.empty()) {
+    auto& configured_queue =
+            queue_kind == InputQueueKind::Steering ? state.input_queues.steering : state.input_queues.follow_up;
+    const std::size_t count = queued_selection_count(configured_queue);
+    if (count == 0) {
         return {};
     }
-    if (mode == InputQueueMode::All) {
-        auto drained = std::move(queue);
-        queue.clear();
-        return drained;
-    }
+    auto& queue = configured_queue.messages;
     std::vector<ai::MessageVariant> drained;
-    drained.push_back(std::move(queue.front()));
-    queue.erase(queue.begin());
+    drained.reserve(count);
+    auto erase_end = queue.begin();
+    for (std::size_t index = 0; index < count; ++index) {
+        drained.push_back(std::move(*erase_end));
+        ++erase_end;
+    }
+    queue.erase(queue.begin(), erase_end);
     return drained;
 }
 
@@ -396,20 +394,48 @@ support::ExpectedVoid Agent::reset() {
     return clear_input_queues();
 }
 
-support::ExpectedVoid Agent::steer(ai::MessageVariant message) {
+void Agent::steer(ai::MessageVariant message) {
     if (!impl_) {
-        return std::unexpected(agent_not_initialized());
+        return;
     }
-    auto& queues = impl_->state.input_queues;
-    return admit_queued_message(queues, queues.steering, std::move(message), "steering");
+    impl_->state.input_queues.steering.messages.push_back(std::move(message));
 }
 
-support::ExpectedVoid Agent::follow_up(ai::MessageVariant message) {
+void Agent::follow_up(ai::MessageVariant message) {
     if (!impl_) {
-        return std::unexpected(agent_not_initialized());
+        return;
     }
-    auto& queues = impl_->state.input_queues;
-    return admit_queued_message(queues, queues.follow_up, std::move(message), "follow-up");
+    impl_->state.input_queues.follow_up.messages.push_back(std::move(message));
+}
+
+std::vector<ai::MessageVariant> Agent::peek_queued_messages() const {
+    if (!impl_) {
+        return {};
+    }
+    const auto peek = [](const AgentInputQueue& queue) {
+        const std::size_t count = queued_selection_count(queue);
+        std::vector<ai::MessageVariant> selected;
+        selected.reserve(count);
+        auto next = queue.messages.begin();
+        for (std::size_t index = 0; index < count; ++index) {
+            selected.push_back(*next);
+            ++next;
+        }
+        return selected;
+    };
+    auto selected = peek(impl_->state.input_queues.steering);
+    if (selected.empty()) {
+        selected = peek(impl_->state.input_queues.follow_up);
+    }
+    return selected;
+}
+
+bool Agent::has_queued_messages() const {
+    if (!impl_) {
+        return false;
+    }
+    return !impl_->state.input_queues.steering.messages.empty() ||
+           !impl_->state.input_queues.follow_up.messages.empty();
 }
 
 support::ExpectedVoid Agent::set_steering_mode(InputQueueMode mode) {

@@ -742,7 +742,7 @@
         },
         {
           "path": "src/coding_agent/AgentSessionExecution.cpp",
-          "sha256": "03b012d727e040f0cb4c30581dc9baf79e01d890c928a131f20a5870ebac733b"
+          "sha256": "ad0af4c1e5e3e6a0b41c54715c6c0bcc87e8f77ab46625ccb2248f038a0faa8e"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -762,7 +762,7 @@
         },
         {
           "path": "src/coding_agent/runtime/SessionFactory.cpp",
-          "sha256": "31ed3eaf8bced5c18463c3f15fe316137386f04c12ab47b24faa76e69c7e4165"
+          "sha256": "bf9413d7f8c9e6a62aad92e0f041706bde3347f0b9cf71c831c0e276c7969f54"
         },
         {
           "path": "src/coding_agent/runtime/SessionFactory.hpp",
@@ -926,14 +926,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1108.xml"
+          "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1113.xml"
         ],
-        "testedRevision": "70ab98d3daf47e1a70c78ddbb212d0bd75b477a8",
-        "recordedAt": "2026-11-01T11:30:35Z",
+        "testedRevision": "4790e9e3c2d61f31ad31b8a742352389018ad4b6",
+        "recordedAt": "2026-11-01T14:57:39Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1108.xml",
-          "sha256": "5c8a16c2b78a1be87f73db1579263324be0789753d4fe619cc8b77f11131b124"
+          "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1113.xml",
+          "sha256": "99f4618b47143527a5979d21a318219b83179e73c3a2c1bbb8300dbd5733d8d4"
         }
       },
       "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -1082,6 +1082,32 @@
             "sha256": "a454200e6ff87c0048e32ed8240a0bb0ead4af67cf728307ef5b9322caad86df"
           }
         }
+      },
+      "revalidation1113": {
+        "reason": "#1113 removes the extra Agent input-queue capacity behavior: both queues are unbounded, steer/followUp return no result like frozen pi, and the AgentSession creation plumbing no longer forwards max_queued_messages/max_queued_bytes. AgentSessionExecution.cpp and SessionFactory.cpp carry that removal. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "src/coding_agent/AgentSessionExecution.cpp",
+          "src/coding_agent/runtime/SessionFactory.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1108.xml"
+          ],
+          "testedRevision": "70ab98d3daf47e1a70c78ddbb212d0bd75b477a8",
+          "recordedAt": "2026-11-01T11:30:35Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1108.xml",
+            "sha256": "5c8a16c2b78a1be87f73db1579263324be0789753d4fe619cc8b77f11131b124"
+          }
+        }
       }
     },
     {
@@ -1221,11 +1247,11 @@
         },
         {
           "path": "src/coding_agent/AgentSessionExecution.cpp",
-          "sha256": "03b012d727e040f0cb4c30581dc9baf79e01d890c928a131f20a5870ebac733b"
+          "sha256": "ad0af4c1e5e3e6a0b41c54715c6c0bcc87e8f77ab46625ccb2248f038a0faa8e"
         },
         {
           "path": "src/coding_agent/AgentSessionInteraction.cpp",
-          "sha256": "cd99e93706159350c591f7344c2d5f456f8eb490d1187f61f5dcf47e417c1d1f"
+          "sha256": "f8f72c24d6c3c02f1cce8543ee58367434413312995a0bf39b8316bc47a76cd4"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -1249,7 +1275,7 @@
         },
         {
           "path": "src/coding_agent/runtime/SessionFactory.cpp",
-          "sha256": "31ed3eaf8bced5c18463c3f15fe316137386f04c12ab47b24faa76e69c7e4165"
+          "sha256": "bf9413d7f8c9e6a62aad92e0f041706bde3347f0b9cf71c831c0e276c7969f54"
         },
         {
           "path": "tests/Catch2Main.cpp",
@@ -1369,14 +1395,14 @@
           "issue1118",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1108.xml"
+          "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1113.xml"
         ],
-        "testedRevision": "70ab98d3daf47e1a70c78ddbb212d0bd75b477a8",
-        "recordedAt": "2026-11-01T11:30:35Z",
+        "testedRevision": "4790e9e3c2d61f31ad31b8a742352389018ad4b6",
+        "recordedAt": "2026-11-01T14:57:39Z",
         "selected": 19,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1108.xml",
-          "sha256": "688d6f5eed76493bfe5fd74b0a10c9c99d3a6527bef51a00cb4cf1bce5b0a5eb"
+          "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1113.xml",
+          "sha256": "827bb18ad54a04b5ebcb180f3cf85e3114f3b8c3fe97d8a9e511d00b378845ca"
         }
       },
       "rows": [
@@ -1570,6 +1596,33 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1107.xml",
             "sha256": "0874a35fbe6f38cee5539a50992178d1be2a67bd33a35d874c579f1df28cba2a"
+          }
+        }
+      },
+      "revalidation1113": {
+        "reason": "#1113 removes the extra Agent input-queue capacity behavior: both queues are unbounded, steer/followUp return no result like frozen pi, and AgentSessionExecution.cpp, AgentSessionInteraction.cpp and SessionFactory.cpp carry the queue-option and adapter removal. The delivered #1118 row, scenarios and routing digest are unchanged; the 19-case issue1118 selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about it.",
+        "changedInputs": [
+          "src/coding_agent/AgentSessionExecution.cpp",
+          "src/coding_agent/AgentSessionInteraction.cpp",
+          "src/coding_agent/runtime/SessionFactory.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1118",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1108.xml"
+          ],
+          "testedRevision": "70ab98d3daf47e1a70c78ddbb212d0bd75b477a8",
+          "recordedAt": "2026-11-01T11:30:35Z",
+          "selected": 19,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1108.xml",
+            "sha256": "688d6f5eed76493bfe5fd74b0a10c9c99d3a6527bef51a00cb4cf1bce5b0a5eb"
           }
         }
       }
@@ -1923,7 +1976,7 @@
           "discriminatingCase": {
             "test": "a multi-byte character is cut only on a character boundary",
             "testSource": "tests/chord/OutputTest.cpp",
-            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"a\u00e9\ud83d\ude00\"; the boundary case separates the byte length from a code-point count."
+            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
           }
         },
         {

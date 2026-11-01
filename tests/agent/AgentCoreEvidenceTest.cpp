@@ -531,7 +531,7 @@ TEST_CASE("loop lifecycle ordering golden covers the pi turn lifecycle end to en
     // A follow-up queued up front drains only after the last tool-call turn
     // completes; a steering message steered from the turn_end(1) observer
     // drains at the end of turn 1 and injects before the turn-2 request.
-    REQUIRE(subject.follow_up(ai::user_text_message("follow me")));
+    subject.follow_up(ai::user_text_message("follow me"));
 
     std::vector<agent::AgentLifecycleEvent> events;
     bool steered = false;
@@ -543,7 +543,7 @@ TEST_CASE("loop lifecycle ordering golden covers the pi turn lifecycle end to en
                 if (!steered &&
                     std::holds_alternative<agent::TurnEndEvent>(event)) {
                     steered = true;
-                    return subject.steer(ai::user_text_message("steer me"));
+                    subject.steer(ai::user_text_message("steer me"));
                 }
                 return support::ExpectedVoid{};
             });
@@ -667,7 +667,7 @@ TEST_CASE("thinking-level clamp golden covers creation and model-switch clamping
     // The switch must land before the next stream call; the corrected turn
     // lifecycle runs prepare-next-turn only on a continuing turn (#745), so
     // the switch row continues turn 1 with a queued follow-up message.
-    REQUIRE(subject.follow_up(ai::user_text_message("continue")));
+    subject.follow_up(ai::user_text_message("continue"));
     REQUIRE(run_prompt(subject, "think hard"));
 
     REQUIRE(runtime->calls.size() == 2);

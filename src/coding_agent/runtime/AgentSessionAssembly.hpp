@@ -10,7 +10,6 @@
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
-#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -19,11 +18,9 @@
 namespace cch::coding_agent::runtime {
 
 /// Agent Session configuration resolved by Session Assembly (pi
-/// `AgentSessionConfig` subset): queue bounds, the resolved Model, and the
-/// resource-loader inputs the System Prompt is built from.
+/// `AgentSessionConfig` subset): the resolved Model and the resource-loader
+/// inputs the System Prompt is built from.
 struct AgentSessionConfig {
-    std::size_t max_queued_messages{agent::kDefaultMaxQueuedMessages};
-    std::size_t max_queued_bytes{agent::kDefaultMaxQueuedBytes};
     /// Explicit turn cap forwarded to the Agent; std::nullopt imposes no cap
     /// (ADR 0015).
     std::optional<int> max_turns{std::nullopt};
