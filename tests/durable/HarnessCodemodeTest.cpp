@@ -170,6 +170,10 @@ public:
     support::Expected<std::string> read(std::string_view path, std::stop_token stop) override {
         return inner_->read(path, stop);
     }
+    support::Expected<std::string> read(
+            std::string_view path, std::uintmax_t offset, std::size_t length, std::stop_token stop) override {
+        return inner_->read(path, offset, length, stop);
+    }
     support::ExpectedVoid write(std::string_view path, std::string_view content, std::stop_token stop) override {
         writes.emplace_back(path);
         if (fail_writes_)
@@ -182,8 +186,13 @@ public:
     support::Expected<FileInfo> stat(std::string_view path, std::stop_token stop) override {
         return inner_->stat(path, stop);
     }
-    support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
-        return inner_->list(path, stop);
+    support::Expected<std::unique_ptr<DirectoryReader>> open_directory(
+            std::string_view path, std::stop_token stop) override {
+        return inner_->open_directory(path, stop);
+    }
+    support::Expected<FileListing> list_files(
+            std::string_view path, ListOptions options, std::stop_token stop) override {
+        return inner_->list_files(path, std::move(options), stop);
     }
     support::Expected<std::string> create_temp_dir(std::string_view prefix, std::stop_token stop) override {
         auto created = inner_->create_temp_dir(prefix, stop);

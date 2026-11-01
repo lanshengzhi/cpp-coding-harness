@@ -1,0 +1,509 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1158",
+  "family": "audit-1158",
+  "capturedAt": "2026-11-01T20:17:52.388Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1158/capture-1158.mts",
+    "sha256": "7326835625ce2415643627c37bd7d80674b3f353439f51714af81a134065bd34",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1158/capture-1158.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1158/capture-1158.mts",
+        "sha256": "7326835625ce2415643627c37bd7d80674b3f353439f51714af81a134065bd34"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "listing.json",
+      "family": "audit-1158",
+      "bytes": 7363,
+      "sha256": "75752b17a33a3436f4ba154420ef78f01d68b68f7cff62a523ab722f1e3f5fda",
+      "sourceEndpoints": [
+        "packages/durable/src/env/index.ts:DirReader.next",
+        "packages/durable/src/env/index.ts:ListFilesOptions,FileListEntry,FileListing",
+        "packages/durable/src/env/node.ts:NodeDirReader.next",
+        "packages/env/daemon/src/list.rs:list,Options"
+      ],
+      "scenarios": [
+        {
+          "name": "directory pages continue where the previous page stopped",
+          "inputs": {
+            "files": [
+              "a",
+              "b",
+              "c"
+            ],
+            "pageSize": 2
+          },
+          "expected": {
+            "names": [
+              "a",
+              "b",
+              "c"
+            ],
+            "pageSizes": [
+              2,
+              1
+            ],
+            "done": [
+              false,
+              true
+            ]
+          },
+          "normalizations": [
+            "entries inside one page are in the order the file system returns them and are compared as a set"
+          ]
+        },
+        {
+          "name": "listFiles lists files and directories depth first in name order",
+          "inputs": {
+            "files": [
+              "b.txt",
+              "a/z.txt",
+              "a/b/c.txt",
+              ".hidden/x",
+              "A.txt"
+            ],
+            "directories": [
+              "empty"
+            ],
+            "options": {
+              "gitignore": false
+            }
+          },
+          "expected": {
+            "listing": {
+              "entries": [
+                {
+                  "path": ".hidden",
+                  "kind": "directory"
+                },
+                {
+                  "path": ".hidden/x",
+                  "kind": "file"
+                },
+                {
+                  "path": "A.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "a",
+                  "kind": "directory"
+                },
+                {
+                  "path": "a/b",
+                  "kind": "directory"
+                },
+                {
+                  "path": "a/b/c.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "a/z.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "b.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "empty",
+                  "kind": "directory"
+                }
+              ],
+              "truncated": false
+            },
+            "hiddenOff": {
+              "entries": [
+                {
+                  "path": "A.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "a",
+                  "kind": "directory"
+                },
+                {
+                  "path": "a/b",
+                  "kind": "directory"
+                },
+                {
+                  "path": "a/b/c.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "a/z.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "b.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "empty",
+                  "kind": "directory"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          "normalizations": [
+            "temporary directory path omitted"
+          ]
+        },
+        {
+          "name": "listFiles stops at its entry and byte bounds and reports truncated",
+          "inputs": {
+            "files": [
+              "a",
+              "b",
+              "c"
+            ],
+            "gitignore": false
+          },
+          "expected": {
+            "cases": [
+              {
+                "options": {
+                  "maxEntries": 2
+                },
+                "listing": {
+                  "entries": [
+                    {
+                      "path": "a",
+                      "kind": "file"
+                    },
+                    {
+                      "path": "b",
+                      "kind": "file"
+                    }
+                  ],
+                  "truncated": true
+                }
+              },
+              {
+                "options": {
+                  "maxEntries": 3
+                },
+                "listing": {
+                  "entries": [
+                    {
+                      "path": "a",
+                      "kind": "file"
+                    },
+                    {
+                      "path": "b",
+                      "kind": "file"
+                    },
+                    {
+                      "path": "c",
+                      "kind": "file"
+                    }
+                  ],
+                  "truncated": false
+                }
+              },
+              {
+                "options": {
+                  "maxEntries": 0
+                },
+                "listing": {
+                  "entries": [],
+                  "truncated": true
+                }
+              },
+              {
+                "options": {
+                  "maxBytes": 6
+                },
+                "listing": {
+                  "entries": [
+                    {
+                      "path": "a",
+                      "kind": "file"
+                    },
+                    {
+                      "path": "b",
+                      "kind": "file"
+                    }
+                  ],
+                  "truncated": true
+                }
+              },
+              {
+                "options": {
+                  "maxBytes": 5
+                },
+                "listing": {
+                  "entries": [
+                    {
+                      "path": "a",
+                      "kind": "file"
+                    }
+                  ],
+                  "truncated": true
+                }
+              }
+            ]
+          },
+          "normalizations": [
+            "each entry counts its UTF-8 path plus two bytes"
+          ]
+        },
+        {
+          "name": "listFiles applies hidden and excluded names and never lists .git",
+          "inputs": {
+            "files": [
+              "keep.txt",
+              "out/x.js",
+              "sub/keep.txt",
+              "node_modules/m/i.js",
+              ".hidden/x.txt",
+              ".git/HEAD"
+            ],
+            "exclude": [
+              "node_modules"
+            ],
+            "gitignore": false
+          },
+          "expected": {
+            "excluded": {
+              "entries": [
+                {
+                  "path": ".hidden",
+                  "kind": "directory"
+                },
+                {
+                  "path": ".hidden/x.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "keep.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "out",
+                  "kind": "directory"
+                },
+                {
+                  "path": "out/x.js",
+                  "kind": "file"
+                },
+                {
+                  "path": "sub",
+                  "kind": "directory"
+                },
+                {
+                  "path": "sub/keep.txt",
+                  "kind": "file"
+                }
+              ],
+              "truncated": false
+            },
+            "hiddenOff": {
+              "entries": [
+                {
+                  "path": "keep.txt",
+                  "kind": "file"
+                },
+                {
+                  "path": "out",
+                  "kind": "directory"
+                },
+                {
+                  "path": "out/x.js",
+                  "kind": "file"
+                },
+                {
+                  "path": "sub",
+                  "kind": "directory"
+                },
+                {
+                  "path": "sub/keep.txt",
+                  "kind": "file"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          "normalizations": [
+            "temporary directory path omitted"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "positioned-read.json",
+      "family": "audit-1158",
+      "bytes": 3953,
+      "sha256": "35f57cf0eb7ffea5a072542bb785eeac052b5967d8994a40177d60d1f7c1da81",
+      "sourceEndpoints": [
+        "packages/durable/src/env/index.ts:BinaryReader.read",
+        "packages/durable/src/env/node.ts:NodeBinaryReader.read"
+      ],
+      "scenarios": [
+        {
+          "name": "positioned reads return up to the requested length and stop early only at end of file",
+          "inputs": {
+            "file": "digits.txt",
+            "content": "0123456789abcdef",
+            "reads": [
+              {
+                "offset": 0,
+                "length": 4
+              },
+              {
+                "offset": 4,
+                "length": 4
+              },
+              {
+                "offset": 10,
+                "length": 8
+              },
+              {
+                "offset": 4,
+                "length": 8192
+              },
+              {
+                "offset": 10,
+                "length": 0
+              }
+            ]
+          },
+          "expected": {
+            "results": [
+              {
+                "offset": 0,
+                "length": 4,
+                "text": "0123"
+              },
+              {
+                "offset": 4,
+                "length": 4,
+                "text": "4567"
+              },
+              {
+                "offset": 10,
+                "length": 8,
+                "text": "abcdef"
+              },
+              {
+                "offset": 4,
+                "length": 8192,
+                "text": "456789abcdef"
+              },
+              {
+                "offset": 10,
+                "length": 0,
+                "text": ""
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a read at or past end of file returns the frozen empty result instead of an error",
+          "inputs": {
+            "files": [
+              "digits.txt",
+              "empty.txt"
+            ],
+            "digits": "0123456789abcdef"
+          },
+          "expected": {
+            "results": [
+              {
+                "file": "digits.txt",
+                "offset": 16,
+                "length": 4,
+                "bytes": 0,
+                "text": ""
+              },
+              {
+                "file": "digits.txt",
+                "offset": 17,
+                "length": 4,
+                "bytes": 0,
+                "text": ""
+              },
+              {
+                "file": "digits.txt",
+                "offset": 4096,
+                "length": 1024,
+                "bytes": 0,
+                "text": ""
+              },
+              {
+                "file": "empty.txt",
+                "offset": 0,
+                "length": 8,
+                "bytes": 0,
+                "text": ""
+              },
+              {
+                "file": "empty.txt",
+                "offset": 1,
+                "length": 8,
+                "bytes": 0,
+                "text": ""
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a positioned read longer than one internal chunk crosses reads unchanged",
+          "inputs": {
+            "file": "large.txt",
+            "bytes": 3145728,
+            "reads": [
+              {
+                "offset": 1048569,
+                "length": 64
+              },
+              {
+                "offset": 2097152,
+                "length": 1048576
+              }
+            ]
+          },
+          "expected": {
+            "results": [
+              {
+                "offset": 1048569,
+                "length": 64,
+                "bytes": 64,
+                "sha256": "4967c01dd66effeb261de330a1d18641864744145dad5b98dfe65b5b4995b296",
+                "head": "9abcdef0",
+                "tail": "12345678"
+              },
+              {
+                "offset": 2097152,
+                "length": 1048576,
+                "bytes": 1048576,
+                "sha256": "aca1cd027e979588d14b877b7b0cb8585ad9fec599eb45801992ee5382b3760f",
+                "head": "01234567",
+                "tail": "89abcdef"
+              }
+            ]
+          },
+          "normalizations": [
+            "the 3 MiB pattern file is described by length and digest, not stored in the artifact"
+          ]
+        }
+      ]
+    }
+  ]
+}

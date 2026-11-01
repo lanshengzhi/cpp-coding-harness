@@ -2,6 +2,8 @@
 
 #include <cch/chord/Output.hpp>
 
+#include "Utf8Text.hpp"
+
 #include "support/UniqueFd.hpp"
 
 #include <algorithm>
@@ -11,6 +13,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <format>
 #include <fcntl.h>
@@ -223,6 +226,133 @@ support::Expected<support::UniqueFd> open_write_parent(const fs::path& target, b
     return fd;
 }
 
+/// One path's metadata without following a symbolic link (frozen `lstat`).
+FileInfo file_info_of(const fs::path& name, const struct stat& st) {
+    return FileInfo{.name = name.filename().string(),
+            .path = name.string(),
+            .kind = S_ISDIR(st.st_mode)   ? "directory"
+                    : S_ISLNK(st.st_mode) ? "symlink"
+                                          : "file",
+            .size = static_cast<std::uintmax_t>(st.st_size)};
+}
+
+support::Error missing_path(const fs::path& path, std::string_view operation) {
+    return support::make_error(support::ErrorCode::Workspace,
+            std::format("ENOENT: no such file or directory, {} '{}'", operation, path.string()),
+            "not_found");
+}
+
+/// Pages one open directory in file-system order. Metadata is read per entry, so
+/// a page never restarts the scan and an entry that vanished meanwhile is
+/// skipped instead of failing the page.
+class LocalDirectoryReader final : public DirectoryReader {
+public:
+    explicit LocalDirectoryReader(fs::directory_iterator iterator) : iterator_(std::move(iterator)) {}
+
+    support::Expected<ListingPage> next(std::size_t max_entries, std::stop_token stop) override {
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        if (max_entries == 0)
+            return std::unexpected(failure("maxEntries must be a positive integer", support::ErrorCode::Validation));
+        ListingPage page;
+        while (!done_ && page.entries.size() < max_entries) {
+            if (iterator_ == fs::directory_iterator{}) {
+                done_ = true;
+                break;
+            }
+            if (stop.stop_requested()) return std::unexpected(cancelled());
+            const auto entry_path = iterator_->path();
+            std::error_code increment_error;
+            iterator_.increment(increment_error);
+            if (increment_error) return std::unexpected(failure(increment_error.message()));
+            struct stat st{};
+            if (::lstat(entry_path.c_str(), &st) != 0) {
+                // Gone between enumeration and its metadata read: it is not part
+                // of the listing any more (frozen DirReader.next).
+                if (errno == ENOENT) continue;
+                return std::unexpected(system_failure("stat"));
+            }
+            page.entries.push_back(file_info_of(entry_path, st));
+        }
+        page.done = done_;
+        return page;
+    }
+
+private:
+    fs::directory_iterator iterator_;
+    bool done_{};
+};
+
+/// The frozen largest listing payload (`packages/env/daemon/src/frame.rs`
+/// `MAX_PAYLOAD`): 16 MiB less the frame's JSON allowance.
+constexpr std::size_t kMaxListBytes = 16 * 1024 * 1024 - 64 * 1024;
+
+/// What a whole-tree listing may still add; `truncated` records the bound that
+/// ended the walk.
+struct WalkBudget {
+    std::size_t entries{};
+    std::size_t bytes{};
+    std::chrono::steady_clock::time_point deadline{};
+    bool truncated{};
+};
+
+/// The smallest `limit` listable names below one directory, in byte order.
+/// Keeping the prefix while the whole directory streams past is what bounds the
+/// walk's memory by the listing's own entry bound instead of the directory size.
+std::vector<std::string> smallest_names(
+        const fs::path& directory, std::size_t limit, const ListOptions& options, std::stop_token stop) {
+    std::vector<std::string> kept;
+    if (limit == 0) return kept;
+    kept.reserve(std::min<std::size_t>(limit, 1024));
+    std::error_code ec;
+    fs::directory_iterator it(directory, fs::directory_options::skip_permission_denied, ec), end;
+    for (; !ec && it != end && !stop.stop_requested(); it.increment(ec)) {
+        auto name = it->path().filename().string();
+        if (name == ".git" || (!options.hidden && !name.empty() && name.front() == '.') ||
+                std::ranges::find(options.excluded_names, name) != options.excluded_names.end())
+            continue;
+        if (kept.size() < limit) {
+            kept.push_back(std::move(name));
+            std::ranges::push_heap(kept);
+        } else if (name < kept.front()) {
+            std::ranges::pop_heap(kept);
+            kept.back() = std::move(name);
+            std::ranges::push_heap(kept);
+        }
+    }
+    std::ranges::sort(kept);
+    return kept;
+}
+
+/// Walk `directory` depth first into `listing`, spending `budget`. False means a
+/// bound or the stop token ended the walk; the caller tells them apart.
+bool walk_listing(const fs::path& directory,
+        const std::string& prefix,
+        const ListOptions& options,
+        FileListing& listing,
+        WalkBudget& budget,
+        std::stop_token stop) {
+    for (const auto& name : smallest_names(directory, budget.entries + 1, options, stop)) {
+        if (stop.stop_requested()) return false;
+        const std::string path = prefix + name;
+        const std::size_t cost = path.size() + 2;
+        if (budget.entries == 0 || cost > budget.bytes || std::chrono::steady_clock::now() >= budget.deadline) {
+            budget.truncated = true;
+            return false;
+        }
+        const auto entry_path = directory / name;
+        struct stat st{};
+        // An entry that cannot be read is skipped, as frozen listFiles skips it.
+        if (::lstat(entry_path.c_str(), &st) != 0) continue;
+        const auto info = file_info_of(entry_path, st);
+        listing.entries.push_back(FileListEntry{.path = path, .kind = info.kind});
+        budget.entries -= 1;
+        budget.bytes -= cost;
+        if (info.kind == "directory" && !walk_listing(entry_path, path + "/", options, listing, budget, stop))
+            return false;
+    }
+    return true;
+}
+
 class LocalEnvironment final : public Environment {
 public:
     explicit LocalEnvironment(std::string cwd, std::move_only_function<void()> before_rename = {})
@@ -251,6 +381,35 @@ public:
         }
         auto error = n < 0 ? std::optional{system_failure("read")} : std::nullopt;
         if (error) return std::unexpected(*error);
+        return result;
+    }
+    support::Expected<std::string> read(
+            std::string_view path, std::uintmax_t offset, std::size_t length, std::stop_token stop) override {
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        auto name = resolve(path).string();
+        support::UniqueFd fd{::open(name.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW)};
+        if (!fd) {
+            if (errno == ENOENT) return std::unexpected(missing_path(resolve(path), "open"));
+            return std::unexpected(system_failure("open"));
+        }
+        std::string result;
+        result.reserve(std::min<std::size_t>(length, 64 * 1024));
+        std::array<char, 64 * 1024> buffer{};
+        // Positional reads never move the descriptor, so a range entirely before
+        // `offset` is never transferred; fewer bytes only means the file ended.
+        while (result.size() < length) {
+            if (stop.stop_requested()) return std::unexpected(cancelled());
+            const auto position = offset + result.size();
+            if (position > static_cast<std::uintmax_t>(std::numeric_limits<off_t>::max()))
+                return std::unexpected(failure(
+                        "offset is beyond the file system's addressable range", support::ErrorCode::Validation));
+            const auto want = std::min(buffer.size(), length - result.size());
+            const ssize_t n = ::pread(fd.get(), buffer.data(), want, static_cast<off_t>(position));
+            if (n < 0 && errno == EINTR) continue;
+            if (n < 0) return std::unexpected(system_failure("pread"));
+            if (n == 0) break;
+            result.append(buffer.data(), static_cast<std::size_t>(n));
+        }
         return result;
     }
     support::ExpectedVoid write(std::string_view path, std::string_view content, std::stop_token stop) override {
@@ -292,26 +451,40 @@ public:
         auto name = resolve(path);
         struct stat st{};
         if (::lstat(name.c_str(), &st) != 0) return std::unexpected(system_failure("stat"));
-        return FileInfo{name.filename().string(),
-                name.string(),
-                S_ISDIR(st.st_mode)   ? "directory"
-                : S_ISLNK(st.st_mode) ? "symlink"
-                                      : "file",
-                static_cast<std::uintmax_t>(st.st_size)};
+        return file_info_of(name, st);
     }
-    support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
+    support::Expected<std::unique_ptr<DirectoryReader>> open_directory(
+            std::string_view path, std::stop_token stop) override {
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        auto directory = resolve(path);
         std::error_code ec;
-        fs::directory_iterator it(resolve(path), ec), end;
-        if (ec) return std::unexpected(failure(ec.message()));
-        std::vector<FileInfo> result;
-        while (it != end) {
-            auto info = stat(it->path().string(), stop);
-            if (!info) return std::unexpected(info.error());
-            result.push_back(std::move(*info));
-            it.increment(ec);
-            if (ec) return std::unexpected(failure(ec.message()));
+        fs::directory_iterator iterator(directory, ec);
+        if (ec) {
+            if (ec == std::errc::no_such_file_or_directory) return std::unexpected(missing_path(directory, "scandir"));
+            return std::unexpected(failure(ec.message()));
         }
-        return result;
+        return std::unique_ptr<DirectoryReader>{std::make_unique<LocalDirectoryReader>(std::move(iterator))};
+    }
+    support::Expected<FileListing> list_files(
+            std::string_view path, ListOptions options, std::stop_token stop) override {
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        auto root = resolve(path);
+        std::error_code ec;
+        const auto status = fs::status(root, ec);
+        if (ec) return std::unexpected(failure(ec.message()));
+        if (status.type() == fs::file_type::not_found) return std::unexpected(missing_path(root, "scandir"));
+        if (!fs::is_directory(status))
+            return std::unexpected(failure(std::format("ENOTDIR: not a directory, scandir '{}'", root.string()),
+                    support::ErrorCode::Validation));
+        options.max_bytes = std::min(options.max_bytes, kMaxListBytes);
+        FileListing listing;
+        WalkBudget budget{.entries = options.max_entries,
+                .bytes = options.max_bytes,
+                .deadline = std::chrono::steady_clock::now() + options.timeout};
+        (void)walk_listing(root, {}, options, listing, budget, stop);
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        listing.truncated = budget.truncated;
+        return listing;
     }
     support::Expected<std::string> create_temp_dir(std::string_view prefix, std::stop_token stop) override {
         if (stop.stop_requested()) return std::unexpected(cancelled());
@@ -381,54 +554,6 @@ bool secret_name(std::string name) {
         if (name.find(part) != std::string::npos) return true;
     return false;
 }
-
-class Utf8Decoder {
-public:
-    std::string decode(std::string_view chunk, bool finish = false) {
-        pending_.append(chunk);
-        std::string result;
-        std::size_t i = 0;
-        while (i < pending_.size()) {
-            auto lead = static_cast<unsigned char>(pending_[i]);
-            if (lead < 0x80) {
-                result.push_back(pending_[i++]);
-                continue;
-            }
-            std::size_t length = lead >= 0xc2 && lead <= 0xdf   ? 2
-                                 : lead >= 0xe0 && lead <= 0xef ? 3
-                                 : lead >= 0xf0 && lead <= 0xf4 ? 4
-                                                                : 0;
-            if (length == 0) {
-                result += "\xef\xbf\xbd";
-                ++i;
-                continue;
-            }
-            std::size_t valid = 1;
-            while (valid < length && i + valid < pending_.size()) {
-                auto byte = static_cast<unsigned char>(pending_[i + valid]);
-                if (byte < 0x80 || byte > 0xbf ||
-                        (valid == 1 && ((lead == 0xe0 && byte < 0xa0) || (lead == 0xed && byte > 0x9f) ||
-                                               (lead == 0xf0 && byte < 0x90) || (lead == 0xf4 && byte > 0x8f))))
-                    break;
-                ++valid;
-            }
-            if (valid == length) {
-                result.append(pending_, i, length);
-                i += length;
-            } else if (i + valid == pending_.size() && !finish) {
-                break;
-            } else {
-                result += "\xef\xbf\xbd";
-                i += valid;
-            }
-        }
-        pending_.erase(0, i);
-        return result;
-    }
-
-private:
-    std::string pending_;
-};
 
 void retain_tail(
         std::string& text, std::optional<ShellOutputSkip>& skipped, std::string_view chunk, ShellOutputWindow window) {

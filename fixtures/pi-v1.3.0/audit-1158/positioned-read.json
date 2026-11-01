@@ -1,0 +1,169 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-01T20:17:52.388Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/env/index.ts:BinaryReader.read",
+    "packages/durable/src/env/node.ts:NodeBinaryReader.read"
+  ],
+  "scenarios": [
+    {
+      "name": "positioned reads return up to the requested length and stop early only at end of file",
+      "inputs": {
+        "file": "digits.txt",
+        "content": "0123456789abcdef",
+        "reads": [
+          {
+            "offset": 0,
+            "length": 4
+          },
+          {
+            "offset": 4,
+            "length": 4
+          },
+          {
+            "offset": 10,
+            "length": 8
+          },
+          {
+            "offset": 4,
+            "length": 8192
+          },
+          {
+            "offset": 10,
+            "length": 0
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "offset": 0,
+            "length": 4,
+            "text": "0123"
+          },
+          {
+            "offset": 4,
+            "length": 4,
+            "text": "4567"
+          },
+          {
+            "offset": 10,
+            "length": 8,
+            "text": "abcdef"
+          },
+          {
+            "offset": 4,
+            "length": 8192,
+            "text": "456789abcdef"
+          },
+          {
+            "offset": 10,
+            "length": 0,
+            "text": ""
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a read at or past end of file returns the frozen empty result instead of an error",
+      "inputs": {
+        "files": [
+          "digits.txt",
+          "empty.txt"
+        ],
+        "digits": "0123456789abcdef"
+      },
+      "expected": {
+        "results": [
+          {
+            "file": "digits.txt",
+            "offset": 16,
+            "length": 4,
+            "bytes": 0,
+            "text": ""
+          },
+          {
+            "file": "digits.txt",
+            "offset": 17,
+            "length": 4,
+            "bytes": 0,
+            "text": ""
+          },
+          {
+            "file": "digits.txt",
+            "offset": 4096,
+            "length": 1024,
+            "bytes": 0,
+            "text": ""
+          },
+          {
+            "file": "empty.txt",
+            "offset": 0,
+            "length": 8,
+            "bytes": 0,
+            "text": ""
+          },
+          {
+            "file": "empty.txt",
+            "offset": 1,
+            "length": 8,
+            "bytes": 0,
+            "text": ""
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a positioned read longer than one internal chunk crosses reads unchanged",
+      "inputs": {
+        "file": "large.txt",
+        "bytes": 3145728,
+        "reads": [
+          {
+            "offset": 1048569,
+            "length": 64
+          },
+          {
+            "offset": 2097152,
+            "length": 1048576
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "offset": 1048569,
+            "length": 64,
+            "bytes": 64,
+            "sha256": "4967c01dd66effeb261de330a1d18641864744145dad5b98dfe65b5b4995b296",
+            "head": "9abcdef0",
+            "tail": "12345678"
+          },
+          {
+            "offset": 2097152,
+            "length": 1048576,
+            "bytes": 1048576,
+            "sha256": "aca1cd027e979588d14b877b7b0cb8585ad9fec599eb45801992ee5382b3760f",
+            "head": "01234567",
+            "tail": "89abcdef"
+          }
+        ]
+      },
+      "normalizations": [
+        "the 3 MiB pattern file is described by length and digest, not stored in the artifact"
+      ]
+    }
+  ]
+}
