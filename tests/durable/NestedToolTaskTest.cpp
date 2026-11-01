@@ -1,3 +1,4 @@
+#include <cch/chord/Json.hpp>
 #include <cch/durable/Codemode.hpp>
 #include <cch/durable/SqliteStorage.hpp>
 #include <cch/durable/Harness.hpp>
@@ -373,29 +374,36 @@ struct Rig {
     }
 
     /// The terminal task records of the nested calls, normalized to the frozen projection.
-    /// The terminal nested-call task records; absent when the scan fails.
+    /// The terminal nested-call task records, projected for the frozen
+    /// comparison. The scan runs on the Session line, so it cannot race the
+    /// Harness's own storage access; absent when the read fails.
     [[nodiscard]] std::optional<std::vector<support::JsonValue>> nested_records() {
-        auto tasks = storage.scan_tasks(1024);
-        if (!tasks.has_value()) return std::nullopt;
-        std::vector<support::JsonValue> rows;
-        for (const auto& task : *tasks) {
-            if (task.kind != "pi.tool") continue;
-            const auto input = task.input.to_support();
-            if (!nested_input(input)) continue;
-            const auto parent = static_cast<std::int64_t>(field(input, "parent")->get_number());
-            rows.push_back(Json{Object{{"kind", task.kind},
-                    {"inputKind", input.at("kind")},
-                    {"key", input.at("key")},
-                    {"callId", input.at("call").at("id")},
-                    {"callName", input.at("call").at("name")},
-                    {"ownerIsParent", task.owner.has_value() && task.owner->value == parent},
-                    {"outcome", task.state.outcome.has_value() ? Json{task.state.outcome->status} : Json{}},
-                    {"resultKind",
-                            task.state.outcome.has_value() && task.state.outcome->result.has_value()
-                                    ? task.state.outcome->result->to_support().at("kind")
-                                    : Json{}}}});
-        }
-        std::ranges::sort(rows, [](const auto& left, const auto& right) {
+        auto read = consume(harness->session().read_committed([](Storage& storage) -> support::Expected<chord::Json> {
+            auto tasks = storage.scan_tasks(1024);
+            if (!tasks) return std::unexpected(tasks.error());
+            Array rows;
+            for (const auto& task : *tasks) {
+                if (task.kind != "pi.tool") continue;
+                const auto input = task.input.to_support();
+                if (!nested_input(input)) continue;
+                const auto parent = static_cast<std::int64_t>(field(input, "parent")->get_number());
+                rows.push_back(Json{Object{{"kind", task.kind},
+                        {"inputKind", *field(input, "kind")},
+                        {"key", *field(input, "key")},
+                        {"callId", *field(*field(input, "call"), "id")},
+                        {"callName", *field(*field(input, "call"), "name")},
+                        {"ownerIsParent", task.owner.has_value() && task.owner->value == parent},
+                        {"outcome", task.state.outcome.has_value() ? Json{task.state.outcome->status} : Json{}},
+                        {"resultKind",
+                                task.state.outcome.has_value() && task.state.outcome->result.has_value()
+                                        ? task.state.outcome->result->to_support().at("kind")
+                                        : Json{}}}});
+            }
+            return chord::Json::from_support(Json{std::move(rows)});
+        }));
+        if (!read.has_value()) return std::nullopt;
+        auto rows = read.value().to_support().get_array();
+        std::ranges::sort(rows, [](const support::JsonValue& left, const support::JsonValue& right) {
             return left.at("callId").get_string() < right.at("callId").get_string();
         });
         return rows;
