@@ -75,7 +75,7 @@ struct MyersPath {
 /// The walk is bounded so a pathological rewrite cannot spend unbounded time or
 /// memory: beyond either bound the caller keeps a coarse whole-region
 /// replacement instead of a minimal line diff.
-// debt: a bounded greedy Myers window can show one coarser hunk where frozen pi shows a minimal diff;
+// debt: a bounded greedy Myers window can show one coarser hunk where frozen pi shows a minimal diff,
 // upgrade to a linear-space middle-snake walk if a real edit exceeds the window.
 inline constexpr std::ptrdiff_t kMaxEditLength = 2048;
 inline constexpr std::size_t kMaxComponents = 1U << 21;

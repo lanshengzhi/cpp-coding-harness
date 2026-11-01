@@ -19,7 +19,7 @@ namespace {
 
 /// One slot per file for the whole process, so every environment that resolves
 /// to the same file shares it and no call waits on another file.
-// debt: one process-wide mutex serializes slot lookup and release for every file; upgrade to a sharded
+// debt: one process-wide mutex serializes slot lookup and release for every file, upgrade to a sharded
 // registry if unrelated files measurably contend on it.
 std::mutex registry_mutex;
 std::map<std::string, std::shared_ptr<FileMutationSlot>> registry;
