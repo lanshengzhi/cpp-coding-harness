@@ -26,6 +26,7 @@
 #include "support/McpTestKit.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/TextFile.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
@@ -210,11 +211,6 @@ private:
 /// The details of the session's latest result for `name` (pi
 /// `ToolResultMessage.details`), which carries the nested-call records and the
 /// spill path.
-[[nodiscard]] std::string read_file(const std::filesystem::path& path) {
-    std::ifstream input(path, std::ios::binary);
-    return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
-}
-
 [[nodiscard]] std::optional<support::JsonValue> tool_result_details(
         const coding_agent::AgentSession& session, std::string_view name) {
     std::optional<support::JsonValue> last;
@@ -613,7 +609,7 @@ TEST_CASE("a real session presents codemode output and applies the script budget
     REQUIRE(spilled != nullptr);
     // The model-visible result names the spill file; the file holds the full
     // text the budget removed.
-    CHECK(read_file(*spilled) == "abcdefghijklmnopqrstuvwxyz");
+    CHECK(tests::read_text_file(*spilled) == "abcdefghijklmnopqrstuvwxyz");
     std::filesystem::remove(*spilled);
 }
 

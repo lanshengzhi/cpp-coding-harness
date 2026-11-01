@@ -6,6 +6,8 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <cstddef>
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -69,6 +71,12 @@ public:
 private:
     struct State;
     struct PendingOp;
+
+    /// Admit one typed append: charge the reservation, reject on the latched
+    /// failure or saturation, then run the append on the shared worker line in
+    /// FIFO admission order.
+    [[nodiscard]] support::ExpectedVoid submit_append(std::size_t byte_charge,
+            std::move_only_function<support::ExpectedVoid(harness::session::SessionStore&)> append);
 
     /// Post one pending operation to a Runtime worker (requires the state
     /// lock). The admission always completes exactly once.

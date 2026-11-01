@@ -2,7 +2,7 @@
   "schema": "pike/pi-v1.3.0-audit-evidence/1",
   "baseline": "pi-v1.3.0",
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
-  "capturedAt": "2026-11-01T00:27:01.324Z",
+  "capturedAt": "2026-11-01T04:08:04.582Z",
   "environment": {
     "node": "v26.3.0",
     "bun": "1.4.4",
@@ -15,12 +15,12 @@
   "family": "audit-1119",
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1119/capture.mts",
-    "sha256": "aeec98ad6ff9b0652f32c7fe637a61c67564bb147c06a20cd13c746bddf6f434",
+    "sha256": "227c7a83010e081f4c9d28602bf1b163e20761f12704fee570505aa2b8f4b7fc",
     "command": "PI_CHECKOUT=<pi-v1.3.0 checkout> bun --conditions=source fixtures/pi-v1.3.0/audit-1119/capture.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1119/capture.mts",
-        "sha256": "aeec98ad6ff9b0652f32c7fe637a61c67564bb147c06a20cd13c746bddf6f434"
+        "sha256": "227c7a83010e081f4c9d28602bf1b163e20761f12704fee570505aa2b8f4b7fc"
       }
     ]
   },
@@ -28,8 +28,8 @@
     {
       "path": "execution.json",
       "family": "audit-1119",
-      "bytes": 15993,
-      "sha256": "05f4bc5ce5707aaa3f9df35557f1414f3340d00d514a6a10058dacd199122367",
+      "bytes": 17520,
+      "sha256": "3152c0a7cab336dea7e62475ddeca8d22194d69dfc0375c9bc88dbab2fea1620",
       "sourceEndpoints": [
         "packages/coding-agent/src/extensions/codemode/execute.ts:executeCodemode,readCodemodeStore",
         "packages/coding-agent/src/core/session-manager.ts:SessionManager"
@@ -348,6 +348,54 @@
                     "status": "error",
                     "durationMs": "<elapsed>",
                     "error": "ENOENT: no such file or directory, access '<workspace>/missing.txt'"
+                  }
+                ]
+              },
+              "isError": true
+            },
+            "store": {
+              "answer": "42"
+            }
+          },
+          "normalizations": [
+            "Wall time and present durationMs values become <elapsed>; presence is retained.",
+            "Temporary output paths become <output-file>; full spilled bytes are captured separately.",
+            "The unique temporary workspace becomes <workspace>."
+          ]
+        },
+        {
+          "name": "nested-failure-fixed",
+          "inputs": {
+            "code": "await tools.write({path:'before.txt',content:'kept'}); await tools.fail({});"
+          },
+          "expected": {
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Script failed\nWall time <elapsed> seconds\nOutput:\n"
+                },
+                {
+                  "type": "text",
+                  "text": "Script error:\nError: boom\n\nTool calls made before the failure (they are not undone): write (ok), fail (error)"
+                }
+              ],
+              "details": {
+                "calls": [
+                  {
+                    "id": "call_1/1",
+                    "name": "write",
+                    "args": "{\"path\":\"before.txt\",\"content\":\"kept\"}",
+                    "status": "ok",
+                    "durationMs": "<elapsed>"
+                  },
+                  {
+                    "id": "call_1/2",
+                    "name": "fail",
+                    "args": "{}",
+                    "status": "error",
+                    "durationMs": "<elapsed>",
+                    "error": "boom"
                   }
                 ]
               },

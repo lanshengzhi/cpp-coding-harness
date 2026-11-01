@@ -22,7 +22,9 @@ const {createBashTool} = await load('packages/coding-agent/src/core/tools/bash.t
 const workspace = mkdtempSync(join(tmpdir(),'pike-1119-'));
 let manager = SessionManager.create(workspace,workspace);
 manager.appendMessage({role:'user',content:[{type:'text',text:'save'}],timestamp:1});
-const tools = [createWriteTool(workspace),createReadTool(workspace),createBashTool(workspace)];
+const failTool = {name:'fail', label:'fail', description:'Fail with a fixed error.', parameters:{type:'object',properties:{}},
+    execute: async () => { throw new Error('boom'); }};
+const tools = [createWriteTool(workspace),createReadTool(workspace),createBashTool(workspace),failTool];
 let counter = 0;
 const ctx = {tools, get sessionManager(){return manager;}, executeTool:async(name:string,args:unknown,options:any)=>{
     const tool = tools.find(t=>t.name===name)!;
@@ -63,6 +65,7 @@ try {
  await run('unicode-budget',"// @options: {\"max_output_tokens\": 1}\ntext('猫'.repeat(12));");
  await run('zero-error-budget',"// @options: {\"max_output_tokens\": 0}\nthrow 'boom';");
  await run('nested-failure',"await tools.write({path:'before.txt',content:'kept'}); await tools.read({path:'missing.txt'});");
+ await run('nested-failure-fixed',"await tools.write({path:'before.txt',content:'kept'}); await tools.fail({});");
  await run('timeout',"// @options: {\"timeout_ms\": 100}\nawait tools.write({path:'before.txt',content:'kept'}); text('before'); await tools.bash({command:'sleep 30'});");
  await run('missing-discovery',"return [typeof await describeTool('missing'), typeof await describeNamespace('missing')];");
  await run('image',"image('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');");

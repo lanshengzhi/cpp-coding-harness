@@ -53,10 +53,10 @@ struct CodemodeSessionState {
     std::shared_ptr<harness::AsyncFileSystem> filesystem;
     /// pi `ctx.sessionManager.getBranch()`: the active branch entries,
     /// leaf-to-root, from which `load()` replays the store.
-    std::function<support::Expected<std::vector<harness::session::SessionEntry>>()> branch;
+    std::move_only_function<support::Expected<std::vector<harness::session::SessionEntry>>()> branch;
     /// pi `options.appendEntry`: persist one `codemode-store` write set on the
     /// session's ordered commitment line.
-    std::function<support::ExpectedVoid(std::string, support::JsonValue)> append_store;
+    std::move_only_function<support::ExpectedVoid(std::string, support::JsonValue)> append_store;
 
     [[nodiscard]] bool persistent() const { return static_cast<bool>(branch) && static_cast<bool>(append_store); }
 };
@@ -80,12 +80,13 @@ struct CodemodeSessionState {
 /// `Script error:` block with its call summary, apply the output budget with
 /// its spill file, save each image next to a path label, and build the
 /// model-facing content and `details`. A successful run also persists its
-/// store writes through `session`.
+/// store writes through `session`. The state is owned by value so the returned
+/// operation — which writes spill files and saved images — keeps it alive.
 [[nodiscard]] support::AsyncResult<ExtensionToolResult> present_codemode_run(const codemode::CodemodeRunResult& run,
         std::vector<CodemodeCall> calls,
         const codemode::CodemodeSourceOptions& options,
         std::chrono::steady_clock::duration elapsed,
-        const CodemodeSessionState* session,
+        std::shared_ptr<CodemodeSessionState> session,
         std::stop_token stop_token);
 
 } // namespace cch::coding_agent::extensions

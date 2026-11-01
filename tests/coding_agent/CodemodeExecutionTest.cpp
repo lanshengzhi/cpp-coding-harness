@@ -21,6 +21,7 @@
 #include "support/StreamAdapterFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/TextFile.hpp"
 
 #include <cch/agent/AgentTool.hpp>
 #include <cch/agent/NestedToolCalls.hpp>
@@ -65,13 +66,8 @@ namespace extensions = cch::coding_agent::extensions;
     return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1119" / "execution.json";
 }
 
-[[nodiscard]] std::string read_text(const std::filesystem::path& path) {
-    std::ifstream input(path, std::ios::binary);
-    return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
-}
-
 [[nodiscard]] support::JsonValue read_artifact() {
-    auto parsed = support::read_json(read_text(artifact_path()));
+    auto parsed = support::read_json(tests::read_text_file(artifact_path()));
     REQUIRE(parsed.has_value());
     return std::move(*parsed);
 }
@@ -104,6 +100,21 @@ struct FakeTool {
                     [text = std::move(text)](support::JsonValue, std::stop_token) {
                         agent::AsyncToolExecutionResult result;
                         result.content.push_back(ai::text_content(text));
+                        return ready_result(std::move(result));
+                    },
+    };
+}
+
+/// A tool whose call fails with a fixed message (pi's `fail` fixture tool in
+/// the frozen capture).
+[[nodiscard]] FakeTool failing_tool(std::string name, std::string message) {
+    return FakeTool{
+            .name = std::move(name),
+            .run =
+                    [message = std::move(message)](support::JsonValue, std::stop_token) {
+                        agent::AsyncToolExecutionResult result;
+                        result.is_error = true;
+                        result.content.push_back(ai::text_content(message));
                         return ready_result(std::move(result));
                     },
     };
@@ -304,7 +315,7 @@ TEST_CASE("the frozen pi-v1.3.0 codemode output budget truncates and spills the 
     const auto* spilled = budget.details->get_object().at("fullOutputPath").get_if<std::string>();
     REQUIRE(spilled != nullptr);
     // The content says the full text was saved; the file must actually hold it.
-    CHECK(read_text(*spilled) == "abcdefghijklmnopqrstuvwxyz");
+    CHECK(tests::read_text_file(*spilled) == "abcdefghijklmnopqrstuvwxyz");
     std::filesystem::remove(*spilled);
 
     const auto unicode =
@@ -312,7 +323,7 @@ TEST_CASE("the frozen pi-v1.3.0 codemode output budget truncates and spills the 
     check_scenario(artifact, "unicode-budget", unicode, workspace.path().string());
     REQUIRE(unicode.details.has_value());
     if (const auto* path = unicode.details->get_object().at("fullOutputPath").get_if<std::string>(); path != nullptr) {
-        CHECK(read_text(*path) == "猫猫猫猫猫猫猫猫猫猫猫猫");
+        CHECK(tests::read_text_file(*path) == "猫猫猫猫猫猫猫猫猫猫猫猫");
         std::filesystem::remove(*path);
     }
 
@@ -322,7 +333,7 @@ TEST_CASE("the frozen pi-v1.3.0 codemode output budget truncates and spills the 
     REQUIRE(error_budget.details.has_value());
     if (const auto* path = error_budget.details->get_object().at("fullOutputPath").get_if<std::string>();
             path != nullptr) {
-        CHECK(read_text(*path).starts_with("Script error:\nError: boom"));
+        CHECK(tests::read_text_file(*path).starts_with("Script error:\nError: boom"));
         std::filesystem::remove(*path);
     }
 }
@@ -336,6 +347,15 @@ TEST_CASE("the frozen pi-v1.3.0 codemode failure keeps prior calls and console o
             run_script("await tools.write({path:'before.txt',content:'kept'}); console.log('log'); text('before'); "
                        "throw 'boom';",
                     &runner));
+}
+
+TEST_CASE("the frozen pi-v1.3.0 codemode nested failure records the failed call and its error preview",
+        "[coding_agent][codemode][issue1119][spec]") {
+    const auto artifact = read_artifact();
+    auto runner = make_runner({text_tool("write", "kept"), failing_tool("fail", "boom")});
+    check_scenario(artifact,
+            "nested-failure-fixed",
+            run_script("await tools.write({path:'before.txt',content:'kept'}); await tools.fail({});", &runner));
 }
 
 TEST_CASE("the frozen pi-v1.3.0 codemode timeout reports the interrupted call as cancelled",
@@ -371,7 +391,7 @@ TEST_CASE("a codemode image is saved to disk next to its path label", "[coding_a
     static const std::regex saved{R"(\[Image saved to (/[^\]]*pi-codemode-[0-9a-f]+\.png) \(image/png, 68B\)\])"};
     std::smatch match;
     REQUIRE(std::regex_search(label->text, match, saved));
-    const auto bytes = read_text(match[1].str());
+    const auto bytes = tests::read_text_file(match[1].str());
     static const std::regex base64_data{R"(base64,([^')]+))"};
     std::smatch encoded;
     REQUIRE(std::regex_search(image_script, encoded, base64_data));
@@ -411,7 +431,8 @@ TEST_CASE("a codemode store entry replays from the root and a later delete wins"
     const auto loaded = run_script("return load('answer');", nullptr, session);
     REQUIRE(loaded.content.size() == 2);
     CHECK(std::get<ai::TextContent>(loaded.content.at(1)).text == "7");
+    const auto artifact = read_artifact();
     const auto deleted = run_script("store('answer', undefined); return load('answer');", nullptr, session);
-    CHECK_FALSE(deleted.is_error);
+    check_scenario(artifact, "delete", deleted);
     CHECK(extensions::codemode_store_from_branch(store->get_branch()).empty());
 }

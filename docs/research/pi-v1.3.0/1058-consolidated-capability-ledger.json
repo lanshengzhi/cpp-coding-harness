@@ -262,12 +262,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml"
           ],
-          "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
-          "recordedAt": "2026-11-01T03:01:32Z",
+          "testedRevision": "a502dacd8f81137e2aa76a4026f499d127cc6027",
+          "recordedAt": "2026-11-01T04:18:00Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml",
-            "sha256": "4061b7996924cad056159944d427b4263c927d04d3f7578b444b68d47d5cea8b"
+            "sha256": "389aff0040714a1b2966194706a250662f21f09f1752a87a79d7fa2c1fffef6b"
           }
         },
         "rows": [
@@ -364,10 +364,7 @@
         },
         "revalidation1119": {
           "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "cmake/targets/CodingAgent.cmake",
-            "cmake/tests/CodingAgentTests.cmake"
-          ],
+          "changedInputs": [],
           "previousValidation": {
             "command": [
               "ctest",
@@ -931,12 +928,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml"
           ],
-          "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
-          "recordedAt": "2026-11-01T03:01:32Z",
+          "testedRevision": "a502dacd8f81137e2aa76a4026f499d127cc6027",
+          "recordedAt": "2026-11-01T04:18:00Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml",
-            "sha256": "4061b7996924cad056159944d427b4263c927d04d3f7578b444b68d47d5cea8b"
+            "sha256": "389aff0040714a1b2966194706a250662f21f09f1752a87a79d7fa2c1fffef6b"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -1004,12 +1001,7 @@
         },
         "revalidation1119": {
           "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "cmake/targets/CodingAgent.cmake",
-            "cmake/tests/CodingAgentTests.cmake",
-            "src/coding_agent/AgentSessionExecution.cpp",
-            "src/coding_agent/runtime/SessionFactory.cpp"
-          ],
+          "changedInputs": [],
           "previousValidation": {
             "command": [
               "ctest",
@@ -1140,7 +1132,7 @@
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
-            "sha256": "5c194e6970a9b15c7d960ba55f6c9a3d39c7b6e940408b9ca74fca5a9b1b0077"
+            "sha256": "0e2b3744149defdd66f3b2a42a08bb6a0357e6804a3dc9486fa788f590586dd2"
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.hpp",
@@ -1148,11 +1140,11 @@
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeExecution.cpp",
-            "sha256": "7dd6583560a5ce1c875b82ab88fe943850afdc2273977dfa1f8be17b154b8401"
+            "sha256": "c8ab8431dfb22d5a9dfa6580b4ea7dc5908b6be30b5bab6c5fd763709458e179"
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeExecution.hpp",
-            "sha256": "fa184b174314242b2f51757f80ecf939c8e3febcce93baa71f01d48bf7ee3b15"
+            "sha256": "77b330d2251ea43f92f6a46524b46c8a9eddd841aba4b544f420a226224f4ea0"
           },
           {
             "path": "src/coding_agent/extensions/tool_search/ToolSearchToolSource.cpp",
@@ -1216,7 +1208,7 @@
           },
           {
             "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-            "sha256": "8868cbf414353edc4083bbf67181b9de5c44e3c35de63a108fb2367613f4afd1"
+            "sha256": "33fc155116f7483fb4bd252ad1fae2dfb4b994c204c148ccc575504298fd4b06"
           },
           {
             "path": "tests/coding_agent/CodemodeParityTest.cpp",
@@ -1261,6 +1253,10 @@
           {
             "path": "tests/support/ModelRuntimeTestSupport.cpp",
             "sha256": "ef00f8b02a43b53dde4d83cd7d7c114b19c27cd614a1a8851b10ee88de2eb84f"
+          },
+          {
+            "path": "tests/support/TextFile.hpp",
+            "sha256": "96dc49ce13266734ac36cfa6a213bccd8dde607ea23269c39464f7b53be6bab5"
           },
           {
             "path": "src/support/Json.hpp",
@@ -1314,12 +1310,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1119.xml"
           ],
-          "testedRevision": "0b118e912d320b7e181e622267e7cf07f7369922",
-          "recordedAt": "2026-11-01T03:01:32Z",
+          "testedRevision": "a502dacd8f81137e2aa76a4026f499d127cc6027",
+          "recordedAt": "2026-11-01T04:18:00Z",
           "selected": 19,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1119.xml",
-            "sha256": "74050417df6e4ce07e3a7ad71fd6b16d76553b256afb8ad7a685d2c9f7474ee0"
+            "sha256": "e75a674da97568c97685a9e1b254f55e4ea112ca220959e1675085f5edcf2167"
           }
         },
         "rows": [
@@ -1420,13 +1416,9 @@
         "revalidation1119": {
           "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the 19-case issue1118 selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
           "changedInputs": [
-            "cmake/targets/CodingAgent.cmake",
-            "cmake/tests/CodingAgentTests.cmake",
-            "src/coding_agent/AgentSessionExecution.cpp",
+            "src/coding_agent/extensions/codemode/CodemodeExecution.cpp",
+            "src/coding_agent/extensions/codemode/CodemodeExecution.hpp",
             "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
-            "src/coding_agent/extensions/codemode/CodemodeToolSource.hpp",
-            "src/coding_agent/runtime/RuntimeServices.hpp",
-            "src/coding_agent/runtime/SessionFactory.cpp",
             "tests/coding_agent/CodemodeCatalogSessionTest.cpp"
           ],
           "addedInputs": [

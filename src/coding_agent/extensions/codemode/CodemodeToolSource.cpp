@@ -394,7 +394,7 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
                     }
                     const auto elapsed = std::chrono::steady_clock::now() - started;
                     co_return co_await support::detail::await_async_result(present_codemode_run(
-                            *run, recorder->snapshot(), parsed.options, elapsed, session.get(), stop_token));
+                            *run, recorder->snapshot(), parsed.options, elapsed, session, stop_token));
                 });
     };
     std::vector<ExtensionTool> contributed;

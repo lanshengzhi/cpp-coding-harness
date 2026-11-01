@@ -4,15 +4,14 @@
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
+#include "support/RandomHex.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/OutputLimiter.hpp>
-#include "support/RandomHex.hpp"
-
-#include <utf8proc.h>
 
 #include <boost/asio/awaitable.hpp>
+#include <utf8proc.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -239,7 +238,7 @@ constexpr double kCharsPerToken = 4.0;
 /// the write failed so the caller can keep the script's result. `session` must
 /// outlive the returned operation; the tool call owns it for the whole run.
 [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> write_output_file(
-        const CodemodeSessionState* session,
+        std::shared_ptr<CodemodeSessionState> session,
         std::string extension,
         harness::WriteContent content,
         std::stop_token stop_token) {
@@ -258,7 +257,7 @@ constexpr double kCharsPerToken = 4.0;
 /// pi `saveImages`: write each image's bytes once and put a path label before
 /// it. A failed write keeps the script's result and becomes part of the label.
 [[nodiscard]] boost::asio::awaitable<std::vector<ai::Content>> save_images(
-        std::vector<ai::Content> items, const CodemodeSessionState* session, std::stop_token stop_token) {
+        std::vector<ai::Content> items, std::shared_ptr<CodemodeSessionState> session, std::stop_token stop_token) {
     std::map<std::string, std::string> labels;
     std::vector<ai::Content> saved;
     saved.reserve(items.size());
@@ -305,7 +304,7 @@ struct TruncatedOutput {
 
 [[nodiscard]] boost::asio::awaitable<TruncatedOutput> truncate_output(std::vector<ai::Content> items,
         std::int64_t max_tokens,
-        const CodemodeSessionState* session,
+        std::shared_ptr<CodemodeSessionState> session,
         std::stop_token stop_token) {
     std::vector<std::string> texts;
     for (const auto& item : items) {
@@ -336,7 +335,7 @@ struct TruncatedOutput {
                     removed_tokens,
                     tail_chars > 0 ? to_utf8(units.substr(units.size() - tail_chars)) : std::string{});
     TruncatedOutput truncated;
-    auto spilled = co_await write_output_file(session, ".txt", std::move(combined), stop_token);
+    auto spilled = co_await write_output_file(std::move(session), ".txt", std::move(combined), stop_token);
     if (spilled) {
         text += std::format("\n\n[Full output: {} (read with offset/limit)]", *spilled);
         truncated.full_output_path = *spilled;
@@ -370,7 +369,7 @@ struct TruncatedOutput {
 /// pi `appendEntry(CODEMODE_STORE_ENTRY_TYPE, { set, delete })`: persist a
 /// successful run's write set before the tool result reports the run.
 [[nodiscard]] support::ExpectedVoid persist_store_writes(
-        const CodemodeSessionState& session, const codemode::CodemodeStoreWrites& writes) {
+        CodemodeSessionState& session, const codemode::CodemodeStoreWrites& writes) {
     if (writes.set.empty() && writes.deleted.empty()) return {};
     JsonValue::object_t set;
     for (const auto& [key, value] : writes.set)
@@ -425,7 +424,7 @@ support::AsyncResult<ExtensionToolResult> present_codemode_run(const codemode::C
         std::vector<CodemodeCall> calls,
         const codemode::CodemodeSourceOptions& options,
         std::chrono::steady_clock::duration elapsed,
-        const CodemodeSessionState* session,
+        std::shared_ptr<CodemodeSessionState> session,
         std::stop_token stop_token) {
     // Calls still marked running were cut off by the script ending, a timeout,
     // or an abort (pi's post-run pass).

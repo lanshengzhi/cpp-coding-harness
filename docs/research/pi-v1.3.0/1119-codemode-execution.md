@@ -23,7 +23,8 @@ executes frozen pi's `executeCodemode` with its real read/write/bash tools and
   `Tool calls made before the failure (they are not undone)` summary;
 - the `max_output_tokens` budget, including UTF-16 counting, zero budget over
   the error text, and the spilled full text;
-- a nested-tool failure and a script timeout whose in-flight call is cancelled;
+- a nested-tool failure (a fixed `Error: boom` from a fixture tool) and a
+  script timeout whose in-flight call is cancelled;
 - missing discovery results (`undefined`) and `image()` output saved to a file.
 
 The capture checks the exact revision and clean tracked source, and writes the
@@ -43,7 +44,7 @@ serial merger (a lane does not edit the shared registry):
 {
   "audit-1119": {
     "manifest": "audit-1119/manifest.json",
-    "manifestSha256": "8276f58876234e9ba8f8b3e98615926affda86c9e3d7e9728ff797be71d68a02"
+    "manifestSha256": "705c46d6d386d50c65b4220fef58446a6a6a72b30aacbd24a2fa757fa6e8d7e5"
   }
 }
 ```
@@ -86,7 +87,8 @@ without guessing.
 | --- | --- |
 | successful writes persist and reload | `a session resumes codemode store writes and discards failed script writes` (real session, real `write`/`read`, close, reopen) |
 | a failed script's writes are discarded | same case: the resumed script loads `42`, writes `wrong`, throws, and a later run still loads `42` |
-| `store(key, undefined)` deletes | `a codemode store entry replays from the root and a later delete wins`; frozen `delete` scenario compared in `CodemodeExecutionTest` |
+| `store(key, undefined)` deletes | `a codemode store entry replays from the root and a later delete wins` — compares the frozen `delete` envelope *and* checks the replayed branch is empty |
+| a nested failure keeps the error preview | `the frozen pi-v1.3.0 codemode nested failure records the failed call and its error preview` (exact normalized envelope, including `fail (error)` and the 500-unit preview) |
 | numbered text, console block, returned value | `the frozen pi-v1.3.0 codemode output layout numbers text and groups console output` (exact normalized envelope) and `a real session presents codemode output and applies the script budget` |
 | prior calls + console survive a failure | `the frozen pi-v1.3.0 codemode failure keeps prior calls and console output` (exact normalized envelope) |
 | output budget, UTF-16 counting, spilled bytes | `the frozen pi-v1.3.0 codemode output budget truncates and spills the full text` (three scenarios; each spilled file is read back) and the live-session budget case |
@@ -103,22 +105,22 @@ and absent duration, so a generic `error` status fails.
 
 ## Validation
 
-- Focused Validation: `ctest --preset vcpkg -L issue1119` — 9 selected, 9
-  passed. `-L codemode` — 58 selected, 58 passed. `-R 'session|Session'` — 234
-  selected, 234 passed, covering the persistence-channel and resume paths.
+- Focused Validation: `ctest --preset vcpkg -L issue1119` — 10 selected, 10
+  passed. `-L codemode` — 142 selected, 142 passed. `-R 'session|Session'` —
+  432 selected, 432 passed, covering the persistence-channel and resume paths.
 - Architecture: `ctest --preset vcpkg -L architecture` — 43 selected, 43
   passed, including the build-phase include scan after reconfigure, the
   strict-no-exception gates, `cch_owner_interface_standalone` and
   `cch_warning_gate`.
 - Full Validation: `cmake --build --preset vcpkg` then the unfiltered serial
-  `ctest --preset vcpkg -j1` with `TERM_PROGRAM=herdr` — 4,111 selected, 4,111
-  passed, 0 failed, 8 skipped, exit 0 (786.05 s). The skips are the six
+  `ctest --preset vcpkg -j1` with `TERM_PROGRAM=herdr` — 4,112 selected, 4,112
+  passed, 0 failed, 8 skipped, exit 0 (590.85 s). The skips are the six
   frozen-pi durable continuation cases, the realtime-clock wrapper and the
-  Native TUI differential capture; this slice touches none of them. Earlier
-  `-j4` runs under unrelated host load reproduced known runner-sensitive
-  failures (bounded parallel cancellation, a durable atomic-commit count, the
-  inline interrupt budget, and a PTY drain-EIO race); each passed in isolation
-  and the serial run above is the delivery evidence.
+  Native TUI differential capture; this slice touches none of them. Runs made
+  while other worktrees were building reproduced known runner-sensitive cases
+  (the PTY drain-EIO race, bounded-parallel cancellation, and the quarantined
+  #632 projection cost bound); each passed in isolation, and the quiet final
+  run above is the delivery evidence.
 - Formatting: `scripts/format-check.sh origin/main` clean.
 - Evidence: `check --manifest` for `audit-1119` passes; the 36-case
   `^(issue1090|issue1101|issue1104)$` selection ran into
