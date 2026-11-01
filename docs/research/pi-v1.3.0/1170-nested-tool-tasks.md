@@ -206,7 +206,7 @@ no live task thread (`CODING_STANDARDS.md` §11.10).
   isolated rerun: the `[issue1163]` attempt-publication backstop, the alternate
   screen post-drain probe, bounded parallel cancellation, the codemode
   interrupt budget, the quarantined projection cost bound, the quarantined
-  streaming-block benchmark and the `[issue1163]` case again. The 8 skipped cases
+  streaming-block benchmark and an `/mcp` reconnect probe. The 8 skipped cases
   are the existing optional live-pi/SQLite interchange, realtime-clock and
   Native TUI differential skips.
 - Two earlier full runs on the same code are recorded for honesty. At `-j 2`
