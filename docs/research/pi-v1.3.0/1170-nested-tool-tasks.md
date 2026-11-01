@@ -189,14 +189,14 @@ race the Harness's own storage access.
 ## Validation
 
 - Focused: default strict Debug build of `cch_tests_durable`; CTest label
-  `issue1170` selected **7** cases and passed **7/7**; the JUnit receipt is
-  `deliveries/1170-focused.xml`. The owning module label
-  `ctest --preset vcpkg -L durable` selected **310** cases: **309** passed, 6
-  skipped optional frozen-checkout interchange cases, and one pre-existing
-  `[issue1163]` workflow case whose 10-second in-test backstop timed out under
-  host contention; it passes on isolated rerun (0.01 s) and is unrelated to this
-  slice. The #1094 label re-ran on the new code: **14** selected, **14/14**
-  passed.
+  `issue1170` selected **7** cases and passed **7/7** on the final tree; the
+  JUnit receipt is `deliveries/1170-focused.xml`. The owning module label
+  `ctest --preset vcpkg -L durable -j 1` selected **310** cases: **304** passed
+  and 6 skipped optional frozen-checkout interchange cases. Under `-j 2` the same
+  label intermittently fails wall-clock-sensitive cases (the `[issue1163]`
+  attempt-publication backstop, the `[issue1094]` SIGKILL replay subprocess);
+  each passes on isolated rerun and in the serial label run. The #1094 label
+  re-ran on the new code: **14** selected, **14/14** passed.
 - Architecture selection, required because `TaskRuntime` and the built
   `cch_durable` sources changed: `ctest --preset vcpkg -L architecture`
   selected **43** cases and passed **43/43**; the configure and build phases of
