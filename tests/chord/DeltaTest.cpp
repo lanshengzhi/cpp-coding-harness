@@ -85,6 +85,20 @@ TEST_CASE("immutable application reproduces a revision while sharing untouched c
     REQUIRE(member(*next_again, "value").as_number() != nullptr);
     CHECK(*member(*next_again, "value").as_number() == 3.0);
     CHECK(member(*next_again, "retained").shares_container_with(member(base, "retained")));
+    // Frozen `nextAgain`: the earlier containers survive the later revision unchanged.
+    CHECK(*next_again == object({
+                                 {"value", Json{3}},
+                                 {"nested",
+                                         object({
+                                                 {"count", Json{1}},
+                                                 {"retained", object({{"deep", Json{true}}})},
+                                         })},
+                                 {"retained",
+                                         object({
+                                                 {"list", array({Json{1}, Json{2}})},
+                                         })},
+                                 {"items", array({Json{"a"}, Json{"b"}})},
+                         }));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
@@ -224,6 +238,18 @@ TEST_CASE("application follows frozen sequential validation and replacement sema
     REQUIRE_FALSE(replaced_then_empty);
     CHECK(replaced_then_empty.error().message == "path is empty");
     CHECK(target == before_root_replace);
+
+    // Frozen evidence: fixtures/pi-v1.3.0/audit-1061/validation-order.json
+    // "a later empty path keeps the preceding mutable write and reports the empty path".
+    Json empty_path_target = object({{"value", Json{1}}, {"items", array({Json{"a"}})}});
+    const auto write_then_empty_path = apply(empty_path_target,
+            OpBatch{
+                    SetOp{.path = keys({"value"}), .value = Json{2}},
+                    SetOp{.path = Path{}, .value = Json{3}},
+            });
+    REQUIRE_FALSE(write_then_empty_path);
+    CHECK(write_then_empty_path.error().message == "path is empty");
+    CHECK(empty_path_target == object({{"value", Json{2}}, {"items", array({Json{"a"}})}}));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json

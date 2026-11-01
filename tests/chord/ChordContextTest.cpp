@@ -46,6 +46,8 @@ TEST_CASE("context values layer without modifying their parents", "[chord][conte
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/context-cancellation.json
 // "a child cancellation is isolated while parent cancellation reaches an already-created context".
+// The frozen record observes `value` and the abort-signal presence/aborted/reason of the root, both
+// children, the inheritor and three ordered observations; every one of those is asserted here.
 TEST_CASE("a child cancellation is isolated while parent cancellation reaches an already-created context",
         "[chord][context][cancellation][issue1060][spec]") {
     const auto key = create_context_key<std::string>("audit-1057-context");
@@ -54,15 +56,30 @@ TEST_CASE("a child cancellation is isolated while parent cancellation reaches an
     auto child = with_cancel(root);
     auto sibling = with_cancel(root);
 
+    // Frozen root: value "root", no abort signal, not aborted, no reason.
+    REQUIRE(root.value(key).has_value());
+    CHECK(*root.value(key) == "root");
+    CHECK_FALSE(root.stop_token().stop_possible());
+    CHECK_FALSE(root.aborted());
+    CHECK_FALSE(root.abort_reason().has_value());
+
     child.cancel("child-only");
+    // Frozen observation "child": aborted with "child-only" while the root stays un-aborted.
+    CHECK(child.context().stop_token().stop_possible());
     CHECK(child.context().aborted());
     CHECK(child.context().abort_reason() == std::optional<std::string>{"child-only"});
     CHECK_FALSE(root.aborted());
+    // Frozen observation "sibling" before its own cancellation: present value, un-aborted.
+    REQUIRE(sibling.context().value(key).has_value());
+    CHECK(*sibling.context().value(key) == "root");
+    CHECK(sibling.context().stop_token().stop_possible());
     CHECK_FALSE(sibling.context().aborted());
     REQUIRE(child.context().value(key).has_value());
     CHECK(*child.context().value(key) == "root");
 
     sibling.cancel("sibling-only");
+    // Frozen observation "sibling-after-cancel".
+    CHECK(sibling.context().aborted());
     CHECK(sibling.context().abort_reason() == std::optional<std::string>{"sibling-only"});
     CHECK_FALSE(root.aborted());
 
@@ -70,9 +87,11 @@ TEST_CASE("a child cancellation is isolated while parent cancellation reaches an
     auto inheritor = with_abort_signal(parent.context().stop_token(),
             "parent-reason",
             with_context_value(key, std::string{"child"}, background_context()));
+    CHECK(inheritor.stop_token().stop_possible());
     CHECK_FALSE(inheritor.aborted());
 
     parent.cancel("parent-reason");
+    // Frozen inheritor: parent reason reaches it while its own value survives.
     CHECK(inheritor.aborted());
     CHECK(inheritor.abort_reason() == std::optional<std::string>{"parent-reason"});
     REQUIRE(inheritor.value(key).has_value());
@@ -90,6 +109,7 @@ TEST_CASE("without abort signal masks cancellation while preserving typed values
     parent.cancel("cleanup-cancel");
     CHECK(context.aborted());
 
+    // Frozen masked: value "cleanup", no abort signal, not aborted, no reason.
     const auto masked = without_abort_signal(context);
     CHECK_FALSE(masked.aborted());
     CHECK_FALSE(masked.abort_reason().has_value());
@@ -97,6 +117,12 @@ TEST_CASE("without abort signal masks cancellation while preserving typed values
     REQUIRE(masked.value(key).has_value());
     CHECK(*masked.value(key) == "cleanup");
 
+    // Frozen plainBackground: no abort signal, not aborted, no reason.
+    CHECK_FALSE(background_context().stop_token().stop_possible());
+    CHECK_FALSE(background_context().aborted());
+    CHECK_FALSE(background_context().abort_reason().has_value());
+
+    // Frozen withUndefinedSignal: an un-aborted signal is present.
     const auto visible = with_abort_signal(std::stop_token{}, std::string{"unused"}, background_context());
     CHECK_FALSE(visible.aborted());
     CHECK_FALSE(visible.abort_reason().has_value());

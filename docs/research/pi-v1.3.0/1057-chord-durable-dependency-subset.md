@@ -420,3 +420,23 @@ manifest hash:
 #1057 itself made no shared registry or production alignment changes; later issues #1061 and #1062
 own the Chord implementation and evidence updates described above. Integration merge and issue
 close-out remain separate delivery steps.
+
+## Verification reconciliation (2026-11-01, #1178)
+
+This audit record stays historical: its statuses, counts and gaps are the observations of the
+2026-10 audit, not current code observations. The
+[#1178 Chord comparison reconciliation](1178-chord-reconciliation.md) reconciled all 60 supported
+`cch_chord` rows against the delivered #1060/#1061/#1062 public seams and registered the
+`1178-chord-comparisons` delivery record in
+[1058-deliveries.json](1058-deliveries.json).
+
+- 23 rows now hold a complete pinned comparison receipt (context value/cancellation, delta
+  revision/application, UTF-8 and bounded output, replicated-state hydration/gap/dispose/failure/pending
+  bound). They move to `implemented` / `verified` only through that record.
+- The remaining rows keep their recorded status and name a bounded follow-up with exact row and
+  scenario IDs: #1184 (context wait and observer cancellation), #1185 (delta ingestion and applier
+  identity), #1186 (typed JSON ingestion), #1187 (progress pacing), #1188 (observer serialization
+  across the durable watch seam), and the durable packet #1180 for the document-transaction and
+  harness-view rows.
+- Membership, the excluded surfaces and every recorded frozen observation are unchanged. The six
+  unverified rows listed above stay unverified; none is Deferred.
