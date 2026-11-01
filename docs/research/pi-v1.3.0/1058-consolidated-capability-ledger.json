@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "77452e31cf3d0f194d1d119828c2fc38eb38be94127589e5302329df005a8a2b"
+            "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -260,14 +260,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1181.xml"
+            "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
           ],
-          "testedRevision": "31fba00f6fc1e4660876b866ddf7c940e26f3807",
-          "recordedAt": "2026-11-01T12:25:05Z",
+          "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+          "recordedAt": "2026-11-01T22:03:38Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1181.xml",
-            "sha256": "60b30eba4e13aac70dbcb2ddeb14f6397ed3c06850f70273c3166f932499107d"
+            "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
+            "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
           }
         },
         "rows": [
@@ -412,6 +412,19 @@
             "fixtures/pi-v1.3.0/baselines.json",
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
+        },
+        "revalidation1175plan": {
+          "reason": "Serial-merger step registered audit-1175 in baselines.json and listed its five comparison scenarios as explicit orphanScenarios (row receipts remain #1180). The plan is a pinned input of this record; digest refreshed and the 36-case selection rerun into deliveries/1090-revalidation-1175r.xml with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
+        },
+        "revalidation1159": {
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -432,28 +445,28 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1175-1090-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
           ],
-          "testedRevision": "e8d813a0c28f6ea5a3eef999b8432907befd9729",
-          "recordedAt": "2026-11-01T18:43:53Z",
+          "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+          "recordedAt": "2026-11-01T22:03:38Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1175-1090-revalidation.xml",
-            "sha256": "8cdfbe54c5ce7ff444a4e97e12591cdcf8318f19f1463b8f6af64c815ad5641a"
+            "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
+            "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
           }
         },
         "inputs": [
           {
             "path": "cmake/targets/Durable.cmake",
-            "sha256": "b79a02a65c62e8acd874daed2f83ae76bbb9c5d6803a802a28dd6f47e301e2a5"
+            "sha256": "35ad925b149e51b49a2e1162252e84f451b325292a451db0651a405e95e3496d"
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "3d2c63b8d4011c3155e61b3e5c8ab67c61f70fc7e5beee0fd464de48ac9906f5"
+            "sha256": "f4fe03f5d75d5be2e84d2af7191950166180ee83f8ba8bc37811b26565539bac"
           },
           {
             "path": "docs/agents/architecture.md",
-            "sha256": "8fec5cb90a27825ddc16a9df7e4c4a1c803d43ca6b125a9ce7c1a875c303fdf1"
+            "sha256": "7be8cd40477e6c705d02d78fd0182fff8852a7c13df165f6958b958fc5132a34"
           },
           {
             "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
@@ -485,11 +498,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
+            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
           },
           {
             "path": "src/durable/CodingTools.cpp",
-            "sha256": "6395c680148bcbb274dc85f9453f7eecf2dcfde500bd996c959ba170200ccf32"
+            "sha256": "90ae4ec7d27b25b2e8fb80a8851fa8c604bf90a7d7d4b1b50b45bdc478dd643e"
           },
           {
             "path": "src/durable/Images.cpp",
@@ -762,6 +775,29 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1175r": {
+          "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "testedRevision": "7e2ccc288",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+            "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+          }
+        },
+        "revalidation1159": {
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+          "changedInputs": [
+            "cmake/targets/Durable.cmake",
+            "cmake/tests/DurableTests.cmake",
+            "docs/agents/architecture.md",
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "src/durable/CodingTools.cpp"
+          ]
         }
       },
       {
@@ -906,7 +942,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
+            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -994,14 +1030,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1113.xml"
+            "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
           ],
-          "testedRevision": "4790e9e3c2d61f31ad31b8a742352389018ad4b6",
-          "recordedAt": "2026-11-01T14:57:39Z",
+          "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+          "recordedAt": "2026-11-01T22:03:38Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1113.xml",
-            "sha256": "99f4618b47143527a5979d21a318219b83179e73c3a2c1bbb8300dbd5733d8d4"
+            "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
+            "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -1179,6 +1215,24 @@
         },
         "revalidation1172": {
           "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
+        },
+        "revalidation1175r": {
+          "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "testedRevision": "7e2ccc288",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+            "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+          }
+        },
+        "revalidation1159": {
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json"
           ]
@@ -1441,11 +1495,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
+            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "77452e31cf3d0f194d1d119828c2fc38eb38be94127589e5302329df005a8a2b"
+            "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1469,14 +1523,14 @@
             "issue1118",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1113.xml"
+            "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1118.xml"
           ],
-          "testedRevision": "4790e9e3c2d61f31ad31b8a742352389018ad4b6",
-          "recordedAt": "2026-11-01T14:57:39Z",
+          "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+          "recordedAt": "2026-11-01T22:03:38Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation-1113.xml",
-            "sha256": "827bb18ad54a04b5ebcb180f3cf85e3114f3b8c3fe97d8a9e511d00b378845ca"
+            "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1118.xml",
+            "sha256": "8bf5e618ccbfaa5bb87777f8f43525577ff1fab146cd04bc9bbd1a0d21655343"
           }
         },
         "rows": [
@@ -1702,6 +1756,32 @@
         },
         "revalidation1172": {
           "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry, and the consolidation plan now lists its unrouted observations as explicit orphans. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        },
+        "revalidation1175r": {
+          "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "testedRevision": "7e2ccc288",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+            "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+          }
+        },
+        "revalidation1175plan": {
+          "reason": "Serial-merger step registered audit-1175 in baselines.json and listed its five comparison scenarios as explicit orphanScenarios (row receipts remain #1180). The plan is a pinned input of this record; digest refreshed and the 36-case selection rerun into deliveries/1090-revalidation-1175r.xml with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
+        },
+        "revalidation1159": {
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json",
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
@@ -2791,7 +2871,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "77452e31cf3d0f194d1d119828c2fc38eb38be94127589e5302329df005a8a2b"
+            "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -2799,7 +2879,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d4d10115bbf8db4a80bf870a58b84780e581dc4aab7f4065d44fb022496b519d"
+            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
           }
         ],
         "validation": {
@@ -2811,14 +2891,14 @@
             "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1181-mcp.xml"
+            "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1181.xml"
           ],
-          "testedRevision": "31fba00f6fc1e4660876b866ddf7c940e26f3807",
-          "recordedAt": "2026-11-01T12:24:56Z",
+          "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+          "recordedAt": "2026-11-01T22:03:38Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp.xml",
-            "sha256": "6c519cb61d3a16fbfdce55eca8746458d7155ee7f1cf851fbb98007e21d5ddc0"
+            "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1181.xml",
+            "sha256": "235e56241e1b0e10ccf6b6657a27452a22a81ff75af4ef54afda337e5ce47ae3"
           }
         },
         "rows": [
@@ -3017,6 +3097,32 @@
         "routingSha256": "016612d68f1eb7ff67b288e072b7fc7ea06486e3fdaa45d4048abbb9c2b9304a",
         "revalidation1172": {
           "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry, and the consolidation plan now lists its unrouted observations as explicit orphans. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        },
+        "revalidation1175r": {
+          "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "testedRevision": "7e2ccc288",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
+            "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
+          }
+        },
+        "revalidation1175plan": {
+          "reason": "Serial-merger step registered audit-1175 in baselines.json and listed its five comparison scenarios as explicit orphanScenarios (row receipts remain #1180). The plan is a pinned input of this record; digest refreshed and the 36-case selection rerun into deliveries/1090-revalidation-1175r.xml with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
+        },
+        "revalidation1159": {
+          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json",
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
@@ -3363,7 +3469,7 @@
     ],
     "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 579,
+      "scenarios": 594,
       "scenarioNamed": 362,
       "artifactCovered": 56,
       "orphaned": [
@@ -3527,7 +3633,22 @@
         "audit-1172/codemode-output.json:one character over the token budget truncates",
         "audit-1172/codemode-output.json:the line budget exactly at its limit is not truncated",
         "audit-1172/codemode-output.json:one line over the line budget truncates and spills",
-        "audit-1172/codemode-output.json:a token budget larger than the text still clamps the tail to the whole line window"
+        "audit-1172/codemode-output.json:a token budget larger than the text still clamps the tail to the whole line window",
+        "audit-1175/abandon-on-restart.json:a flagged task stays unmarked while the next Harness is paused and is marked restart by its first reservation pass",
+        "audit-1175/abandon-on-restart.json:a restart mark cascades to ordinary owned work with the same reason and stops at background and unflagged work",
+        "audit-1175/abandon-on-restart.json:a restart-marked task with a missing definition waits; an explicit abort orphans it; a restored definition runs its abort with reason restart",
+        "audit-1175/abandon-on-restart.json:an explicit abort above a restart-marked subtree replaces the reason and orphans a blocked leaf",
+        "audit-1175/abandon-on-restart.json:a flagged task created after the Harness opened runs instead of being abandoned",
+        "audit-1159/edit-tool.json:a BOM and CRLF file edits when the old text is LF and leaves the normalized content",
+        "audit-1159/edit-tool.json:a single replacement returns the frozen diff patch and first changed line",
+        "audit-1159/edit-tool.json:a replacement on a two-digit line keeps the frozen diff gutter and context window",
+        "audit-1159/edit-tool.json:two concurrent edits of one file both land without a lost update",
+        "audit-1159/edit-tool.json:an old text that appears twice fails with the frozen uniqueness message",
+        "audit-1159/edit-tool.json:an old text that is absent from a multi-edit call fails with the frozen indexed message",
+        "audit-1159/edit-tool.json:an edit that reproduces the original text fails with the frozen no-change message",
+        "audit-1159/edit-tool.json:an empty old text fails with the frozen empty-target message",
+        "audit-1159/edit-tool.json:two edits that target overlapping text fail with the frozen overlap message",
+        "audit-1159/edit-tool.json:an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message"
       ],
       "uncovered": []
     }
@@ -7328,6 +7449,158 @@
         "cch_durable:codemode-output"
       ],
       "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a flagged task stays unmarked while the next Harness is paused and is marked restart by its first reservation pass",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a restart mark cascades to ordinary owned work with the same reason and stops at background and unflagged work",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a restart-marked task with a missing definition waits; an explicit abort orphans it; a restored definition runs its abort with reason restart",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "an explicit abort above a restart-marked subtree replaces the reason and orphans a blocked leaf",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a flagged task created after the Harness opened runs instead of being abandoned",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "a BOM and CRLF file edits when the old text is LF and leaves the normalized content",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "a single replacement returns the frozen diff patch and first changed line",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "a replacement on a two-digit line keeps the frozen diff gutter and context window",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "two concurrent edits of one file both land without a lost update",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an old text that appears twice fails with the frozen uniqueness message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an old text that is absent from a multi-edit call fails with the frozen indexed message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an edit that reproduces the original text fails with the frozen no-change message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an empty old text fails with the frozen empty-target message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "two edits that target overlapping text fail with the frozen overlap message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
     }
   ],
   "correctionsIndex": [

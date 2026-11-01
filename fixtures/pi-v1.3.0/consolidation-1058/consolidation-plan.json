@@ -2430,6 +2430,158 @@
         "cch_durable:codemode-output"
       ],
       "disposition": "#1172 compares this slice in tests/durable/HarnessCodemodeTest.cpp; #1180 owns the whole-row receipt. This observation does not promote a capability row."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a flagged task stays unmarked while the next Harness is paused and is marked restart by its first reservation pass",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a restart mark cascades to ordinary owned work with the same reason and stops at background and unflagged work",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a restart-marked task with a missing definition waits; an explicit abort orphans it; a restored definition runs its abort with reason restart",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "an explicit abort above a restart-marked subtree replaces the reason and orphans a blocked leaf",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1175",
+      "artifact": "abandon-on-restart.json",
+      "scenario": "a flagged task created after the Harness opened runs instead of being abandoned",
+      "reason": "Captured by #1175 from the clean pi-v1.3.0 checkout through the public Harness; the consolidate row routes no audit lanes into this supplemental artifact before #1180.",
+      "rows": [
+        "cch_durable:abandon-on-restart"
+      ],
+      "disposition": "#1175 compares these scenarios on its own branch; #1180 owns the whole-row receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "a BOM and CRLF file edits when the old text is LF and leaves the normalized content",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "a single replacement returns the frozen diff patch and first changed line",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "a replacement on a two-digit line keeps the frozen diff gutter and context window",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "two concurrent edits of one file both land without a lost update",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an old text that appears twice fails with the frozen uniqueness message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an old text that is absent from a multi-edit call fails with the frozen indexed message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an edit that reproduces the original text fails with the frozen no-change message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an empty old text fails with the frozen empty-target message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "two edits that target overlapping text fail with the frozen overlap message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1159",
+      "artifact": "edit-tool.json",
+      "scenario": "an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message",
+      "reason": "Captured by #1159 after the consolidated ledger; no #1056 source row routes to this supplemental artifact.",
+      "rows": [
+        "cch_durable:builtin-tools"
+      ],
+      "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
     }
   ],
   "groups": [

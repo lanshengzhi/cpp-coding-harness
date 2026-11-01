@@ -21,5 +21,7 @@ Membership, implementation and verification remain distinct. The focused tests c
 - #1156: recursive watch, exclusions, overflow/error notifications and mode — delivered by #1156 (`1156-recursive-watch.md`).
 - #1157: shell output window, skip and spill are not aligned. Output is retained without a bound and a long-running or noisy command can exhaust memory.
 - #1158: bounded, paged and filtered listings and read offset/limit are not aligned.
-- #1159: edit BOM/CRLF normalization, file mutation queue and diff details are not aligned.
+- #1159: delivered by #1159 (`1159-edit-tool-details.md`): BOM/CRLF repair, the
+  per-file mutation queue and the frozen diff details. Fuzzy matching and the
+  frozen access-error text remain open there.
 - #1160: the final symlink check and atomic rename are not protected against a concurrent path replacement.

@@ -1,8 +1,12 @@
 #include "Utf8Text.hpp"
+#include "durable/EditDiff.hpp"
+#include "durable/FileMutationQueue.hpp"
+#include "durable/ToolContent.hpp"
 
 #include <cch/durable/Environment.hpp>
 #include <cch/durable/Images.hpp>
 #include <cch/ai/Content.hpp>
+#include <cch/ai/Message.hpp>
 #include <cch/support/OutputLimiter.hpp>
 
 #include <algorithm>
@@ -13,6 +17,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace cch::durable {
 namespace {
@@ -171,65 +176,91 @@ Result run(std::string_view name,
     if (name == "write") {
         const auto* content = string_field(args, "content");
         if (!content) return failure("Invalid content");
+        // Frozen pi routes `write` through the same per-file mutation queue as
+        // `edit`, so a write and an edit of one file cannot interleave.
+        const auto guard = acquire_file_mutation(mutation_key(env, *path, stop));
         auto result = env.write(*path, *content, stop);
         if (!result) return std::unexpected(result.error());
         return text_result("Successfully wrote to " + *path);
     }
-    if (name == "read") {
-        std::optional<std::uintmax_t> offset;
-        std::optional<std::size_t> length;
-        const auto positional = [&args](std::string_view key) -> std::optional<double> {
-            const auto* value = field(args, key);
-            if (!value || !value->holds<double>()) return std::nullopt;
-            const double number = value->get_number();
-            // 2^53 is the last integer a double holds exactly; anything past it
-            // is not a byte count a caller can mean.
-            constexpr double kMaxExact = 9'007'199'254'740'992.0;
-            if (!(number >= 0 && number <= kMaxExact)) return std::nullopt;
-            if (number != static_cast<double>(static_cast<std::uintmax_t>(number))) return std::nullopt;
-            return number;
-        };
-        if (field(args, "offset")) {
-            const auto value = positional("offset");
-            if (!value) return failure("Invalid offset");
-            offset = static_cast<std::uintmax_t>(*value);
-        }
-        if (field(args, "length")) {
-            const auto value = positional("length");
-            if (!value) return failure("Invalid length");
-            length = static_cast<std::size_t>(*value);
-        }
-        return read_path(*path, env, options, stop, offset, length);
-    }
-    auto content = env.read(*path, stop);
-    if (!content) return std::unexpected(content.error());
-    auto* edits = field(args, "edits");
-    if (!edits || !edits->holds<support::JsonValue::array_t>() || edits->get_array().empty())
-        return failure("Edit tool input is invalid. edits must contain at least one replacement.");
-    struct Replacement {
-        std::size_t offset;
-        std::size_t length;
-        std::string text;
+    std::optional<std::uintmax_t> offset;
+    std::optional<std::size_t> length;
+    const auto positional = [&args](std::string_view key) -> std::optional<double> {
+        const auto* value = field(args, key);
+        if (!value || !value->holds<double>()) return std::nullopt;
+        const double number = value->get_number();
+        // 2^53 is the last integer a double holds exactly; anything past it
+        // is not a byte count a caller can mean.
+        constexpr double kMaxExact = 9'007'199'254'740'992.0;
+        if (!(number >= 0 && number <= kMaxExact)) return std::nullopt;
+        if (number != static_cast<double>(static_cast<std::uintmax_t>(number))) return std::nullopt;
+        return number;
     };
-    std::vector<Replacement> replacements;
-    for (const auto& edit : edits->get_array()) {
-        const auto* old = string_field(edit, "oldText");
-        const auto* replacement = string_field(edit, "newText");
-        if (!old || !replacement || old->empty()) return failure("Invalid edit");
-        auto position = content->find(*old);
-        if (position == std::string::npos || content->find(*old, position + 1) != std::string::npos)
-            return failure("Edit text must match exactly once");
-        replacements.push_back({position, old->size(), *replacement});
+    if (field(args, "offset")) {
+        const auto value = positional("offset");
+        if (!value) return failure("Invalid offset");
+        offset = static_cast<std::uintmax_t>(*value);
     }
-    std::ranges::sort(replacements, {}, &Replacement::offset);
-    for (std::size_t i = 1; i < replacements.size(); ++i)
-        if (replacements[i - 1].offset + replacements[i - 1].length > replacements[i].offset)
-            return failure("Edits overlap");
-    for (auto it = replacements.rbegin(); it != replacements.rend(); ++it)
-        content->replace(it->offset, it->length, it->text);
-    auto written = env.write(*path, *content, stop);
-    if (!written) return std::unexpected(written.error());
-    return text_result(std::format("Successfully replaced {} block(s) in {}.", replacements.size(), *path));
+    if (field(args, "length")) {
+        const auto value = positional("length");
+        if (!value) return failure("Invalid length");
+        length = static_cast<std::size_t>(*value);
+    }
+    return read_path(*path, env, options, stop, offset, length);
+}
+
+/// A rejected edit keeps the frozen `<harness>` diagnostic and carries no
+/// details: the model sees the reason and the run continues.
+ai::ToolResultMessage edit_failure(std::string message) {
+    return ai::ToolResultMessage{.content = harness_error_content(message), .is_error = true};
+}
+
+/// One `edit` call: the frozen BOM/CRLF repair, the per-file mutation slot, and
+/// the diff payload the model-visible result carries.
+ai::ToolResultMessage run_edit(const support::JsonValue& args, Environment& env, std::stop_token stop) {
+    const auto* path = string_field(args, "path");
+    if (!path) return edit_failure("Invalid path");
+    const auto* edits = field(args, "edits");
+    if (!edits || !edits->holds<support::JsonValue::array_t>() || edits->get_array().empty())
+        return edit_failure("Edit tool input is invalid. edits must contain at least one replacement.");
+    std::vector<EditReplacement> replacements;
+    replacements.reserve(edits->get_array().size());
+    for (const auto& edit : edits->get_array()) {
+        const auto* old_text = string_field(edit, "oldText");
+        const auto* new_text = string_field(edit, "newText");
+        if (!old_text || !new_text) return edit_failure("Invalid edit");
+        replacements.push_back(EditReplacement{.old_text = *old_text, .new_text = *new_text});
+    }
+
+    std::optional<AppliedEdits> applied;
+    {
+        // The slot covers the whole read-modify-write, so a concurrent call of
+        // one file reads what this call wrote instead of the stale text.
+        const auto guard = acquire_file_mutation(mutation_key(env, *path, stop));
+        auto content = env.read(*path, stop);
+        if (!content) return edit_failure(content.error().message);
+        const auto stripped = strip_bom(*content);
+        const auto original_ending = detect_line_ending(stripped.text);
+        auto current = apply_edits_to_normalized_content(normalize_to_lf(stripped.text), replacements, *path);
+        if (!current) return edit_failure(current.error().message);
+        auto written =
+                env.write(*path, stripped.bom + restore_line_endings(current->new_content, original_ending), stop);
+        if (!written) return edit_failure(written.error().message);
+        applied = std::move(*current);
+    }
+
+    const auto display = generate_diff_string(applied->base_content, applied->new_content);
+    support::JsonValue::object_t details;
+    details.emplace("diff", support::JsonValue(display.diff));
+    details.emplace(
+            "patch", support::JsonValue(generate_unified_patch(*path, applied->base_content, applied->new_content)));
+    if (display.first_changed_line)
+        details.emplace("firstChangedLine", support::JsonValue(*display.first_changed_line));
+    return ai::ToolResultMessage{
+            .content = {ai::text_content(
+                    std::format("Successfully replaced {} block(s) in {}.", replacements.size(), *path))},
+            .details = support::JsonValue(std::move(details)),
+    };
 }
 support::JsonValue parameters(std::string_view name) {
     using Json = support::JsonValue;
@@ -274,15 +305,27 @@ Extension coding_tools(std::shared_ptr<Environment> environment, CodingToolOptio
     // immutable options object for as long as their registrations live.
     auto shared_options = std::make_shared<const CodingToolOptions>(std::move(options));
     for (std::string name : {"read", "write", "edit", "bash"}) {
-        result.tools.push_back(ToolRegistration{.declaration = ai::Tool{.name = name,
-                                                        .description = "Durable " + name + " tool",
-                                                        .parameters = parameters(name)},
-                .execute = [environment, name, shared_options](support::JsonValue args, std::stop_token stop) {
-                    if (!environment)
-                        return support::AsyncResult<std::vector<ai::Content>>{failure("No execution environment")};
-                    return support::AsyncResult<std::vector<ai::Content>>{
-                            run(name, args, *environment, *shared_options, stop)};
-                }});
+        ToolRegistration registration{
+                .declaration = ai::Tool{
+                        .name = name, .description = "Durable " + name + " tool", .parameters = parameters(name)}};
+        if (name == "edit") {
+            // The edit result carries structured `details`, which only the
+            // context-aware hook can return.
+            registration.execute_durable = [environment](support::JsonValue args, ToolExecutionContext context) {
+                if (!environment)
+                    return support::Expected<ai::ToolResultMessage>{edit_failure("No execution environment")};
+                const auto stop = context.runtime != nullptr ? context.runtime->stop_token() : std::stop_token{};
+                return support::Expected<ai::ToolResultMessage>{run_edit(args, *environment, stop)};
+            };
+        } else {
+            registration.execute = [environment, name, shared_options](support::JsonValue args, std::stop_token stop) {
+                if (!environment)
+                    return support::AsyncResult<std::vector<ai::Content>>{failure("No execution environment")};
+                return support::AsyncResult<std::vector<ai::Content>>{
+                        run(name, args, *environment, *shared_options, stop)};
+            };
+        }
+        result.tools.push_back(std::move(registration));
     }
     return result;
 }

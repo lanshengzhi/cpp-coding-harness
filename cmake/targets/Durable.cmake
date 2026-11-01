@@ -21,7 +21,9 @@ cch_parity_declare_target(
         src/durable/Codemode.cpp
         src/durable/CodingTools.cpp
         src/durable/CommittedContext.cpp
+        src/durable/EditDiff.cpp
         src/durable/Environment.cpp
+        src/durable/FileMutationQueue.cpp
         src/durable/Images.cpp
         src/durable/Compaction.cpp
         src/durable/Harness.cpp
