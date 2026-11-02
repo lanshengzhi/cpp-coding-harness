@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/chord/ChordContext.hpp>
 #include <cch/durable/Records.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
@@ -512,10 +513,16 @@ struct DocumentFrame {
 
 /// Receives one committed document frame (frozen pi `WatchHandle.start`).
 ///
+/// The second parameter is the exact commit context the frame was committed
+/// with, masked by `chord::without_abort_signal()`: the observer keeps the
+/// commit's typed values but never inherits the producer's cancellation
+/// (frozen `packages/durable/test/session-watches.test.ts:preserves commit
+/// Context values without inheriting producer cancellation`).
+///
 /// Serialized domain: every frame delivery of one watch must run in the one
 /// serialized execution domain the caller chooses (the Session's mutation
 /// line when the Session publishes from it).
-using DocumentFrameListener = std::move_only_function<void(DocumentFrame)>;
+using DocumentFrameListener = std::move_only_function<void(DocumentFrame frame, chord::Context context)>;
 
 /// The terminal result of one document watch (frozen pi `WatchEnd`).
 enum class WatchEndReason {
@@ -556,7 +563,10 @@ public:
     [[nodiscard]] support::ExpectedVoid start(DocumentFrameListener listener);
 
     /// Idempotently stop future deliveries and return this watch's terminal
-    /// result (frozen pi `WatchHandle.stop`).
+    /// result (frozen pi `WatchHandle.stop`). A watch acquired with a context
+    /// that has been cancelled since reports `Cancelled`; every other stop
+    /// reports `Stopped`. Delivery itself samples the same context, so a
+    /// cancelled watch delivers nothing even before this is called.
     [[nodiscard]] WatchEndReason stop();
 
 private:
@@ -630,13 +640,25 @@ public:
     /// order, and the next callback starts after prior Storage settlement.
     /// The Session must outlive the operation until its completion callback
     /// returns, because the mutation line continues there.
+    ///
+    /// The caller's context is the commit context (frozen `Session.commit`
+    /// context parameter): observers receive it with the committed frames,
+    /// masked by `chord::without_abort_signal()`. This slice carries the
+    /// context only; rejecting a commit whose caller is already cancelled is
+    /// the `#runCommit` abort check and stays unverified.
     [[nodiscard]] support::AsyncResult<void> commit(
-            std::move_only_function<support::Expected<void>(Transaction&)> change);
+            std::move_only_function<support::Expected<void>(Transaction&)> change,
+            const chord::Context& context = chord::background_context());
 
     /// Seal admission and stop observers immediately, settle admitted commits,
     /// then close Storage (frozen pi `Session.close`). Idempotent. The Session
     /// must outlive the operation until its completion callback returns.
-    [[nodiscard]] support::AsyncResult<void> close();
+    ///
+    /// The mandatory cleanup is not a waiter: it runs under the detached
+    /// cleanup context (frozen pi `withoutAbortSignal(context)`), so cancelling
+    /// the caller rejects this wait with the frozen `AbortError` while Storage
+    /// still closes and the Session still ends `Closed`.
+    [[nodiscard]] support::AsyncResult<void> close(const chord::Context& context = chord::background_context());
 
     /// Observe every committed batch (frozen pi `Session.subscribeCommits`).
     /// The listener runs in the Session's mutation line.
@@ -684,8 +706,15 @@ public:
     /// Acquire a watch bound to one committed document incarnation (frozen pi
     /// `Session.watchDoc`). The acquisition revision is the committed value at
     /// the moment of acquisition; every later commit delivers its exact frame.
-    [[nodiscard]] support::AsyncResult<std::optional<DocumentWatch>> watch_doc(
-            const DocumentDefinition& definition, DocumentAddress address);
+    ///
+    /// The acquisition is a context-scoped wait: a `context` cancelled before
+    /// or during the acquisition's committed read rejects it with the frozen
+    /// `AbortError` and leaves no observer and no write behind, and a context
+    /// cancelled after the acquisition ends the watch's delivery (`Cancelled`)
+    /// without touching committed state.
+    [[nodiscard]] support::AsyncResult<std::optional<DocumentWatch>> watch_doc(const DocumentDefinition& definition,
+            DocumentAddress address,
+            const chord::Context& context = chord::background_context());
 
     /// Whether the Session has failed (frozen pi `SessionImpl.failure`).
     [[nodiscard]] bool failed() const noexcept;
@@ -712,6 +741,12 @@ private:
     /// admission under the mutation line and enqueues the FIFO job.
     [[nodiscard]] static support::AsyncResult<chord::Json> admit_line_read(
             Impl& impl, std::move_only_function<support::Expected<chord::Json>(Storage&)> read);
+
+    /// The mandatory close work (frozen pi `SessionImpl.close`): seal
+    /// admission, stop observers, settle admitted commits and close Storage.
+    /// It runs before `close(context)` installs the caller's wait, so it is
+    /// never skipped by a cancelled caller.
+    [[nodiscard]] support::AsyncResult<void> close_cleanup();
 
     friend class Transaction;
 

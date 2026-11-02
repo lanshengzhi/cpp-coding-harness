@@ -189,7 +189,8 @@ TEST_CASE("retiring a document publishes the canonical root-null batch and close
     REQUIRE(watch.has_value());
     REQUIRE(watch.value().has_value());
     std::vector<DocumentFrame> frames;
-    REQUIRE(watch.value().value().start([&frames](DocumentFrame frame) { frames.push_back(std::move(frame)); }));
+    REQUIRE(watch.value().value().start(
+            [&frames](DocumentFrame frame, chord::Context) { frames.push_back(std::move(frame)); }));
 
     REQUIRE(run_commit(*session, [&definition](Transaction& transaction) -> support::Expected<void> {
         auto retired = transaction.retire_doc(definition, DocumentAddress{});
@@ -540,7 +541,7 @@ TEST_CASE("a retired watch ends at retirement and never follows the replacement 
     REQUIRE(old_watch.value().has_value());
     std::vector<DocumentFrame> old_frames;
     REQUIRE(old_watch.value().value().start(
-            [&old_frames](DocumentFrame frame) { old_frames.push_back(std::move(frame)); }));
+            [&old_frames](DocumentFrame frame, chord::Context) { old_frames.push_back(std::move(frame)); }));
 
     // Retire and rebuild in one commit, then change the replacement.
     REQUIRE(run_commit(*session, [&definition](Transaction& transaction) -> support::Expected<void> {
@@ -615,7 +616,8 @@ TEST_CASE("a failing storage commit publishes nothing and retires nothing",
     REQUIRE(watch.has_value());
     REQUIRE(watch.value().has_value());
     std::vector<DocumentFrame> frames;
-    REQUIRE(watch.value().value().start([&frames](DocumentFrame frame) { frames.push_back(std::move(frame)); }));
+    REQUIRE(watch.value().value().start(
+            [&frames](DocumentFrame frame, chord::Context) { frames.push_back(std::move(frame)); }));
 
     // The storage fails the commit that stages a change and a retirement.
     const auto* frozen_failure = scenario.object_member("commitError");
@@ -678,7 +680,8 @@ TEST_CASE("a document callback rollback publishes nothing and keeps the committe
     REQUIRE(watch.has_value());
     REQUIRE(watch.value().has_value());
     std::vector<DocumentFrame> frames;
-    REQUIRE(watch.value().value().start([&frames](DocumentFrame frame) { frames.push_back(std::move(frame)); }));
+    REQUIRE(watch.value().value().start(
+            [&frames](DocumentFrame frame, chord::Context) { frames.push_back(std::move(frame)); }));
     const auto* frozen_before = scenario.member("beforeRollback");
     REQUIRE(frozen_before != nullptr);
     CHECK(json_equals(watch.value().value().value(), *frozen_before));
@@ -809,7 +812,8 @@ TEST_CASE("a watcher acquired at an older definition receives a root replacement
     REQUIRE(watch.has_value());
     REQUIRE(watch.value().has_value());
     std::vector<DocumentFrame> frames;
-    REQUIRE(watch.value().value().start([&frames](DocumentFrame frame) { frames.push_back(std::move(frame)); }));
+    REQUIRE(watch.value().value().start(
+            [&frames](DocumentFrame frame, chord::Context) { frames.push_back(std::move(frame)); }));
 
     // The migration-only commit: acquire with the newer definition, touch
     // nothing, and let the version gap store a base (frozen pi

@@ -194,6 +194,14 @@ including every case this record claims) and the record carries a `revalidation1
 refreshed digests. No claimed row, scenario or routing digest changed, and the original
 `deliveries/1178-chord.xml` stays committed.
 
+[#1184](1184-chord-context-cancellation.md) later changed `src/chord/ChordContext.cpp`, its header
+and `tests/chord/ChordContextTest.cpp` while adding the waiter-only context wait. Three inputs this
+receipt pins therefore changed, and the selection now has the three new Chord cases. The shared
+selection was rerun on the #1184 merged tree into `deliveries/1178-revalidation-1184.xml` (79
+selected, 79 passed, including every case this record claims) and the record carries a
+`revalidation1184` entry with the refreshed digests. No claimed row, scenario or routing digest
+changed, and the original `deliveries/1178-chord.xml` stays committed.
+
 The receipt pins the exact JUnit bytes, so the selected count, the case names and the scenario
 mapping cannot drift silently.
 

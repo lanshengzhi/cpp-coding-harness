@@ -150,8 +150,8 @@ Two-axis review (Standards and Spec, independent sub-agents) ran on the implemen
 
 ## Validation
 
-Measured on this ticket's implementation commit `4f548771c5f866c86624fb48e7e1977be84f2942`,
-checkout `4f548771c`, with the pinned vcpkg toolchain:
+Measured on this ticket's implementation commit `4f548771c5f866c86624fb48e7e1977be84f2942`
+and rerun on the tree merged with `origin/main` (#1184), with the pinned vcpkg toolchain:
 
 | Command | Result |
 | --- | --- |
@@ -159,16 +159,22 @@ checkout `4f548771c`, with the pinned vcpkg toolchain:
 | `cmake --build --preset vcpkg --target cch_tests_chord` | built; build-phase Parity Architecture Gate PASS |
 | `ctest --preset vcpkg -N -L issue1186` | 7 selected |
 | `ctest --preset vcpkg -L issue1186` | 7/7 passed |
-| `ctest --preset vcpkg -N -L chord` | 81 selected |
-| `ctest --preset vcpkg -L chord --output-junit docs/research/pi-v1.3.0/deliveries/1186-chord.xml` | 81/81 passed, 0 failed, 0 skipped |
-| `ctest --preset vcpkg -L architecture` | 43/43 passed (280.14 s) |
-| `cmake --build --preset vcpkg` then `TERM_PROGRAM=herdr ctest --preset vcpkg -j1` | 4,228 selected, 4,218 passed, 0 failed, 10 skipped (643.32 s) |
-| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` | ledger rebuilt; 54 delivery-backed rows |
+| `ctest --preset vcpkg -N -L chord` | 84 selected on the merged tree |
+| `ctest --preset vcpkg -L chord --output-junit docs/research/pi-v1.3.0/deliveries/1186-chord.xml` | 84/84 passed, 0 failed, 0 skipped |
+| `ctest --preset vcpkg -L architecture` | 43/43 passed (119.90 s) |
+| `cmake --build --preset vcpkg` then `TERM_PROGRAM=herdr ctest --preset vcpkg -j1` | 4,238 selected, 4,227 passed, 1 failed, 10 skipped (695.87 s); the failure is the #990 TUI case below and passes 1/1 in isolation |
+| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` | ledger rebuilt; 58 delivery-backed rows |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check` | PASS — 649 scenarios, 366 named by a row, 56 covered by a referenced artifact, 227 explicit orphans, 0 uncovered |
 | `python3 tests/evidence/ConsolidationAuditTest.py` | 42 tests, all passed |
 | `python3 scripts/evidence/audit_evidence.py check --manifest fixtures/pi-v1.3.0/audit-1057-typed-json/manifest.json` | PASS |
 | `python3 scripts/evidence/audit_evidence.py verify --baseline pi-v1.3.0` | 55 bundles, 115 artifacts and 652 scenarios verified |
-| `scripts/format-check.sh 5ff7a14c9` | clean |
+| `scripts/format-check.sh origin/main` | clean |
+
+The serial full run's one failure is `a timed-out query resolves partial results and later replies advance state`
+(`tests/tui/QueryTimeoutTest.cpp`, labels `issue990`, `spec`, `theme`, `tui`). It is outside
+`cch_chord` and passed 1/1 when rerun alone on the same tree; the #1185 report recorded the same case
+as a load-limited full-run failure. No assertion, timeout or label exclusion was changed to obtain the
+result, and the ten skips are environment-gated cases that supply no acceptance evidence.
 
 The receipt pins the exact JUnit bytes for the `-L chord` selection, so the selected count, case names
 and scenario mapping cannot drift silently. The receipt also refreshes the registry/plan digests

@@ -138,6 +138,13 @@ void attach_parent_cancellation(
 
 } // namespace detail
 
+support::Error context_abort_error(std::string reason) {
+    // Frozen pi `AbortError`: the DOMException name/code map to
+    // `ErrorCode::Cancelled`, the message is the frozen generic text, and the
+    // caller's `AbortController.abort(reason)` reason is carried as the detail.
+    return support::make_error(support::ErrorCode::Cancelled, "The operation was aborted", std::move(reason));
+}
+
 std::optional<detail::ContextValueView> Context::find_value(const detail::ContextKeyIdentity& key) const {
     for (const detail::ContextNode* node = node_.get(); node != nullptr; node = node->parent.get()) {
         if (node->key && node->key.get() == &key) {

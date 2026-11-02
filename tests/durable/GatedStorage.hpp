@@ -4,7 +4,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -16,11 +15,13 @@
 namespace cch::tests {
 
 /// A `cch::durable::Storage` that delegates every real operation to an inner
-/// `cch::durable::MemoryStorage` and adds two fault-injection controls the
+/// `cch::durable::MemoryStorage` and adds the fault-injection controls the
 /// frozen memory backend has no equivalent of: holding one commit at a latch
 /// (the pre-settlement observation of `audit-1063` scenario "a prepared draft
-/// is not observable before Storage settles its commit") and failing the next
-/// commit (the frozen "disk vanished" backend failure).
+/// is not observable before Storage settles its commit"), failing the next
+/// commit (the frozen "disk vanished" backend failure), and observing a
+/// committed document read before it is answered (the `audit-1057`
+/// acquisition-cancellation shape).
 ///
 /// The double is never the subject under test: the committed records, the ID
 /// namespace and the sequences come from the real `MemoryStorage` behind it.
@@ -73,7 +74,18 @@ public:
     }
 
     /// Observe the inner backend just before Session closes it after a failure.
-    void on_close(std::function<void(::cch::durable::Storage&)> observer) { close_observer_ = std::move(observer); }
+    void on_close(std::move_only_function<void(::cch::durable::Storage&)> observer) {
+        close_observer_ = std::move(observer);
+    }
+
+    /// Observe one committed document read before it is answered. The observer
+    /// runs while the reading caller holds the Session's mutation line, so a
+    /// test can cancel an acquiring context while the acquisition's read is in
+    /// flight (the `audit-1057` acquisition-cancellation shape).
+    void on_find_document(std::move_only_function<void()> observer) { find_observer_ = std::move(observer); }
+
+    /// The number of `find_document()` calls this double received.
+    [[nodiscard]] std::size_t find_calls() const noexcept { return find_calls_; }
 
     /// The last batch rejected by the fault injector.
     [[nodiscard]] const std::vector<::cch::durable::StorageWrite>& failed_writes() const noexcept {
@@ -144,6 +156,8 @@ public:
     [[nodiscard]] support::Expected<std::optional<::cch::durable::DocumentRecord>> find_document(std::string_view kind,
             const ::cch::durable::DocumentAddress& address,
             ::cch::durable::DocumentPoint at) override {
+        find_calls_ += 1;
+        if (find_observer_) find_observer_();
         return inner_->find_document(kind, address, at);
     }
 
@@ -209,11 +223,13 @@ private:
     std::optional<Held> held_;
     std::optional<std::string> failure_;
     std::vector<::cch::durable::StorageWrite> failed_writes_;
-    std::function<void(::cch::durable::Storage&)> close_observer_;
+    std::move_only_function<void(::cch::durable::Storage&)> close_observer_;
+    std::move_only_function<void()> find_observer_;
     bool hold_armed_{false};
     std::size_t permits_{0};
     std::size_t commit_calls_{0};
     std::size_t close_calls_{0};
+    std::size_t find_calls_{0};
 };
 
 } // namespace cch::tests
