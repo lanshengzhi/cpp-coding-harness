@@ -8,6 +8,7 @@
 #include <cch/support/Error.hpp>
 
 #include <memory>
+#include <optional>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -263,6 +264,17 @@ private:
     /// declares on it (pi `_prepareRun`: `messages.unshift(updateMessage)`).
     [[nodiscard]] support::AsyncResult<void> prompt_with_prefix(ai::UserMessage user_message,
             std::vector<ai::MessageVariant> prefix,
+            AgentEventCommitter commitment,
+            std::stop_source stop_source);
+
+    /// The prepared-input prompt: an optional user message plus the prefix and
+    /// the starting messages in pi `_prepareRun` order
+    /// (`[...prefix, user, ...messages]`). A run triggered by an extension
+    /// sends no user message; its custom message is the first starting
+    /// message.
+    [[nodiscard]] support::AsyncResult<void> prompt_prepared(std::optional<ai::UserMessage> user_message,
+            std::vector<ai::MessageVariant> prefix,
+            std::vector<ai::MessageVariant> messages,
             AgentEventCommitter commitment,
             std::stop_source stop_source);
 

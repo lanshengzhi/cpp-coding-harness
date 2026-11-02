@@ -228,6 +228,10 @@ struct AssemblyPlan {
     /// contribute Agent Tools, loaded and registered alongside the built-ins
     /// before the registry moves into the Agent.
     std::vector<std::unique_ptr<extensions::ExtensionToolSource>> extension_tool_sources;
+    /// Native extension registrations (pi extension factory, native subset):
+    /// their tools load with the Extension Tool Sources and their lifecycle
+    /// hooks bind to the assembled Session.
+    std::vector<std::shared_ptr<extensions::NativeExtension>> native_extensions;
     /// Configured MCP stdio servers (spec #865, ticket #869). Assembly connects
     /// each one and appends the resulting Extension Tool Source before the
     /// sources are loaded.
@@ -853,6 +857,7 @@ struct SessionTargetNormalizationOptions {
     plan.requested_model = std::move(request.request_model);
     plan.custom_tools = std::move(request.custom_tools);
     plan.extension_tool_sources = std::move(request.extension_tool_sources);
+    plan.native_extensions = std::move(request.native_extensions);
     plan.mcp_servers = std::move(request.mcp_servers);
     auto tool_selection =
             make_tool_selection(std::move(request.session_facts.tools), std::move(request.session_facts.exclude_tools));
@@ -1800,12 +1805,17 @@ struct PreparedAssemblyTarget final {
     // Extension Tool Source (spec #865): load every configured source and
     // register its tools before the registry moves into the Agent, so an
     // extension tool joins the ordinary Agent surface (visible to the model
-    // and callable through the same executor path as the built-ins).
-    if (!plan.extension_tool_sources.empty()) {
+    // and callable through the same executor path as the built-ins). Native
+    // extensions (#1112) are Extension Tool Sources themselves: appending them
+    // here reuses the one loader and collision path rather than a second loop.
+    if (!plan.extension_tool_sources.empty() || !plan.native_extensions.empty()) {
         std::vector<extensions::ExtensionToolSource*> sources;
-        sources.reserve(plan.extension_tool_sources.size());
+        sources.reserve(plan.extension_tool_sources.size() + plan.native_extensions.size());
         for (auto& source : plan.extension_tool_sources) {
             sources.push_back(source.get());
+        }
+        for (auto& extension : plan.native_extensions) {
+            sources.push_back(extension.get());
         }
         extensions::ExtensionToolRegistry extension_tools;
         if (auto loaded = extensions::load_extension_tools(extension_tools, sources); !loaded) {
@@ -2086,6 +2096,7 @@ struct PreparedAssemblyTarget final {
     services.default_tool_modifiers = std::move(plan.tool_selection.modifiers);
     services.restore_tools_from_transcript = !plan.tool_selection.allowed.has_value();
     services.mcp_manager = std::move(mcp_manager);
+    services.native_extensions = std::move(plan.native_extensions);
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;

@@ -8,6 +8,7 @@
 #include <cch/coding_agent/tools/ToolFactories.hpp>
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"
+#include "coding_agent/extensions/NativeExtension.hpp"
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 
@@ -166,6 +167,13 @@ struct AgentSessionCreationRequest {
     /// codemode slices supply configured sources; the foundation tests inject
     /// a stub source here.
     std::vector<std::unique_ptr<extensions::ExtensionToolSource>> extension_tool_sources;
+    /// Native extension registrations (pi extension factory, native subset):
+    /// compiled-in extensions whose tools join the same Extension Tool Source
+    /// registry and whose `before_agent_start` hook runs at every real Agent
+    /// Session. Production assembly leaves it empty; focused tests and a host
+    /// embedding native extensions register here. No JS/TS plugin loader is
+    /// involved.
+    std::vector<std::shared_ptr<extensions::NativeExtension>> native_extensions;
     /// The MCP servers this session connects (spec #865, ticket #869). During
     /// assembly each configured server is launched over stdio, handshaken, and
     /// converted into one Extension Tool Source, so its tools join the same

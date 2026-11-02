@@ -26,16 +26,22 @@ public:
             std::move(stop_source));
     }
 
-    /// Prompt with caller-prepared transcript prefixes: pi `_prepareRun`
-    /// unshifts the prompt-time system message (the section diff) ahead of the
-    /// prompt's own messages, so the loop's loadout declaration anchors on it.
+    /// Prompt with caller-prepared transcript inputs in pi `_prepareRun`
+    /// order: the prompt-time system prefix, the optional user message, then
+    /// the starting messages (a custom trigger and/or handler contributions).
+    /// The Agent loop anchors its loadout declaration on the same prefix
+    /// message.
     [[nodiscard]] static support::AsyncResult<void> prompt(Agent& agent,
-            ai::UserMessage user_message,
+            std::optional<ai::UserMessage> user_message,
             std::vector<ai::MessageVariant> prefix_messages,
+            std::vector<ai::MessageVariant> messages,
             AgentEventCommitter commitment,
             std::stop_source stop_source) {
-        return agent.prompt_with_prefix(
-                std::move(user_message), std::move(prefix_messages), std::move(commitment), std::move(stop_source));
+        return agent.prompt_prepared(std::move(user_message),
+                std::move(prefix_messages),
+                std::move(messages),
+                std::move(commitment),
+                std::move(stop_source));
     }
 
     /// Continue the loop without a new user message (pi `agent.continue()` /

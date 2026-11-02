@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/extensions/NativeExtensionHost.hpp"
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
 #include <cch/agent/Agent.hpp>
@@ -33,6 +34,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace cch::coding_agent {
@@ -80,6 +82,41 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// interpretation, the stateful Agent, persistence, and event fanout.
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_prompt(
             std::string prompt, std::vector<ai::ImageContent> images, bool expand_prompt_templates);
+
+    // ── Native extensions (pi extension lifecycle, native subset) ─────────
+
+    /// One submitted user prompt's hook-visible starting facts (pi
+    /// `BeforeAgentStartUserEvent`). The user message itself is minted after
+    /// the hook so the handler observes the expanded prompt.
+    struct UserRunTrigger {
+        std::string prompt{};
+        std::vector<ai::ImageContent> images{};
+    };
+
+    /// One run's starting input: a submitted user prompt or a custom message
+    /// sent by an extension (`sendMessage` with `triggerTurn: true`).
+    using RunTrigger = std::variant<UserRunTrigger, ai::CustomMessage>;
+
+    /// The messages a run starts with: the user message the Agent receives
+    /// separately (pi `agent.prompt(userMessage)`) and the custom starting
+    /// messages that follow it (pi `_prepareRun`'s starting messages).
+    struct RunStartingMessages {
+        std::optional<ai::UserMessage> user_message{};
+        std::vector<ai::MessageVariant> messages{};
+    };
+
+    /// Bind the registered extensions' session actions once the Agent exists.
+    [[nodiscard]] support::ExpectedVoid bind_native_extensions();
+
+    /// pi `ExtensionAPI.sendMessage` with `triggerTurn: true`: idle starts a
+    /// run (completing when it settles); a running session queues the message
+    /// into the current run.
+    [[nodiscard]] support::AsyncResult<void> send_extension_message(
+            ai::CustomMessage message, extensions::ExtensionSendMessageOptions options);
+
+    /// pi `ctx.isIdle()` at extension scope: an Agent run or compaction keeps
+    /// the session non-idle (User Bash does not).
+    [[nodiscard]] bool is_extension_idle() const { return !prompt_active_ && !compaction_active_; }
 
     /// Private Native TUI path for one direct-user Shell execution. User Bash
     /// may overlap an active Agent run; a result completed mid-run stays
@@ -445,7 +482,15 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     void flush_pending_user_bash();
 
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_agent_loop(
-            ai::UserMessage prompt, std::stop_source stop_source);
+            RunStartingMessages starting_messages, std::stop_source stop_source);
+    /// Admit one run and settle it exactly once: the shared body behind the
+    /// public prompt and an extension-triggered run.
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> execute_run(RunTrigger trigger);
+    /// The admitted run's work: pre-run compaction, startup waits, the
+    /// `before_agent_start` dispatch, and the Agent loop with its retry and
+    /// compaction continuations.
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_trigger_work(
+            RunTrigger trigger, std::stop_source stop_source);
     /// The compaction body with `compaction_active_` already set; the public
     /// `compact` wrapper resets the flag on every exit path.
     [[nodiscard]] boost::asio::awaitable<support::Expected<CompactionResult>> compact_impl(
@@ -507,6 +552,17 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
 
     runtime::RuntimeServices services_;
     runtime::OpenSession session_;
+    /// The session action handle extensions receive at bind time. Declared
+    /// before the extension host so it outlives every registered extension's
+    /// stored pointer (members destroy in reverse declaration order).
+    std::unique_ptr<extensions::ExtensionSession> extension_session_;
+    /// The session's native extension registrations and the one
+    /// `before_agent_start` dispatch order.
+    extensions::NativeExtensionHost native_extensions_;
+    /// The active run's system-prompt replacement (pi `_runSystemPromptOptions`
+    /// `forceSystemPrompt`): projected onto each request by `prepareRequest`,
+    /// never persisted into the transcript.
+    std::optional<std::string> run_forced_system_prompt_{std::nullopt};
     /// The session's off-loop Session Event Commitment channel (ADR 0040):
     /// admitted message appends persist on Runtime workers and their outcomes
     /// return through the session's serialized mailbox in FIFO order. Null
@@ -676,6 +732,11 @@ void record_session_observer_diagnostic(std::vector<support::Error>& diagnostics
         const std::vector<PromptTemplate>& templates,
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates);
+
+/// One admitted user message from already-expanded text and images (pi
+/// `before_agent_start` observes the expanded prompt before the message is
+/// minted).
+[[nodiscard]] ai::UserMessage make_user_message(std::string text, std::vector<ai::ImageContent> images);
 
 } // namespace detail
 
