@@ -133,7 +133,11 @@ private:
     std::map<std::string, std::shared_ptr<Waiter>> waiters_;
     std::map<std::string, std::size_t> calls_;
     bool first_only_{false};
-    std::binary_semaphore entered_signal_{0};
+    /// A recovered run may enter the same gate more than once (the resumed
+    /// task and the replayed caller), so the signal does not assume one entry.
+    /// A recovered run may enter the same gate again: the resumed nested task
+    /// and a replayed caller both run, so the signal does not assume one entry.
+    std::counting_semaphore<8> entered_signal_{0};
 };
 
 ToolRegistration gate_tool(std::shared_ptr<Gates> gates) {
@@ -751,9 +755,10 @@ TEST_CASE("A recovered nested call applies its recorded replay policy", "[durabl
     storage->reset();
     storage = SqliteStorage::open(path);
     REQUIRE(storage.has_value());
-    opened = consume(Harness::open(**storage,
-            HarnessOptions{.registry = &registry,
-                    .stream = scripts({"const a = await tools.gate({name:'A'}); store('kept', a); return a;"})}));
+    // The recovered round resumes from the committed tool round; the reopened
+    // model answers instead of issuing another call, so the recovered nested
+    // call is what the run settles on.
+    opened = consume(Harness::open(**storage, HarnessOptions{.registry = &registry, .stream = scripts({})}));
     REQUIRE(opened.has_value());
     harness = std::move(opened.value());
     REQUIRE(harness->resume().has_value());

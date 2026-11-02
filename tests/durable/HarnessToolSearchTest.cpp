@@ -525,7 +525,9 @@ TEST_CASE("Forked durable sessions persist independent deferred loadouts across 
         REQUIRE(fail_results.size() == 2);
         CHECK(result_text(fail_results.at(0)) ==
                 "Loaded 1 tool. They are available from your next call:\n- fail: Always report error fail");
-        CHECK(result_text(fail_results.at(1)) == "fail: requested failure");
+        // A failing tool's message is the frozen harness error text
+        // (`fixtures/pi-v1.3.0/audit-1173/event-stream.json`, tool failure).
+        CHECK(result_text(fail_results.at(1)) == "<harness>\n[error] fail: requested failure\n</harness>");
         CHECK(fail_results.at(1).at("isError").get_boolean());
         REQUIRE(consume(fail_harness->close()).has_value());
         fail_harness.reset();
@@ -572,7 +574,7 @@ TEST_CASE("Forked durable sessions persist independent deferred loadouts across 
         CHECK(std::ranges::contains(reopened_fail_script->offered.at(0), "fail"));
         const auto fail_results = tool_results(*fail_harness, fail_branch_id);
         REQUIRE(fail_results.size() == 3);
-        CHECK(result_text(fail_results.back()) == "fail: requested failure");
+        CHECK(result_text(fail_results.back()) == "<harness>\n[error] fail: requested failure\n</harness>");
         CHECK(fail_results.back().at("isError").get_boolean());
         REQUIRE(consume(fail_harness->close()).has_value());
         fail_harness.reset();

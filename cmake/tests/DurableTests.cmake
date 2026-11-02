@@ -33,6 +33,7 @@ include_guard(GLOBAL)
         # failure path (issue #1167); never selected by a discovery spec.
         tests/durable/HarnessFailureCleanupProbeTest.cpp
         tests/durable/HarnessObservationTest.cpp
+        tests/durable/HarnessEventStreamTest.cpp
         tests/durable/HarnessImagesTest.cpp
         tests/durable/HarnessCodemodeTest.cpp
         tests/durable/CodemodeContinuationTest.cpp

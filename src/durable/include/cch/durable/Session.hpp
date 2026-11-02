@@ -527,6 +527,10 @@ enum class WatchEndReason {
     /// replacement incarnation of the same address (frozen `{ reason:
     /// "retired" }`).
     Retired,
+    /// A listener reported an error; the watch ended with it and reported it
+    /// (frozen `{ reason: "listener_error", error }`). Only an agent event
+    /// stream has a failure-carrying listener.
+    ListenerError,
 };
 
 /// One committed document watch (frozen pi `DocumentWatch`).

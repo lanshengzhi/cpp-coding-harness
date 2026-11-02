@@ -415,14 +415,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
+          "docs/research/pi-v1.3.0/deliveries/1173-revalidation-1090-1104.xml"
         ],
-        "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
-        "recordedAt": "2026-11-01T22:03:38Z",
+        "testedRevision": "23f9dd8f7ae7f9d54eecfbc4377e9c6e17bda029",
+        "recordedAt": "2026-11-02T01:40:49Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
-          "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
+          "path": "docs/research/pi-v1.3.0/deliveries/1173-revalidation-1090-1104.xml",
+          "sha256": "b4596d7bf0c1a98b11e50ad0cee2d342319442d4cba62caf0eebfcff2394b8d8"
         }
       },
       "inputs": [
@@ -432,7 +432,7 @@
         },
         {
           "path": "cmake/tests/DurableTests.cmake",
-          "sha256": "f4fe03f5d75d5be2e84d2af7191950166180ee83f8ba8bc37811b26565539bac"
+          "sha256": "f6840104c20daa76cc8b46d43f7b8c7290d0855941aab09a0a6096da903d5b23"
         },
         {
           "path": "docs/agents/architecture.md",
@@ -767,6 +767,12 @@
           "fixtures/pi-v1.3.0/baselines.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "src/durable/CodingTools.cpp"
+        ]
+      },
+      "revalidation1173": {
+        "reason": "#1173 delivers the durable public agent event stream: it adds the `Harness::watch_events` seam, the live tool-slot presentation and the generation tool-round hand-over in the durable sources, the architecture-neutral durable test-shard entry and the audit-1173 frozen-evidence family. That changes a pinned shared input (`cmake/tests/DurableTests.cmake`); the delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them. The exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+        "changedInputs": [
+          "cmake/tests/DurableTests.cmake"
         ]
       }
     },
