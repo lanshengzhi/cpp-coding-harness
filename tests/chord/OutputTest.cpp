@@ -339,7 +339,7 @@ TEST_CASE("progress pacing separates a byte-rate pause from a constant interval 
 
     ProgressPacer pacer{100ms};
     pacer.mark();
-    REQUIRE(pacer.due(ProgressTime{}));
+    CHECK(pacer.due(ProgressTime{}));
     pacer.begin();
     pacer.committed(ProgressTime{}, 51'200);
     CHECK_FALSE(pacer.pending());

@@ -218,10 +218,10 @@ BoundedOutput OutputBuffer::snapshot() {
 }
 
 ProgressTime progress_pause(std::size_t bytes, std::chrono::milliseconds min_interval) {
-    // pi: `bytes * 1000 / PROGRESS_BYTES_PER_SECOND` milliseconds. The ratio
-    // 1000/102400 reduces to 5/512, so the quotient is exact for every byte
-    // count that fits in a size_t.
-    const ProgressTime by_rate{static_cast<double>(bytes) * 5.0 / 512.0};
+    // pi: `bytes * 1000 / PROGRESS_BYTES_PER_SECOND` milliseconds. For the
+    // frozen constant the ratio reduces to 5/512, so the quotient is exact for
+    // every byte count that fits in a size_t.
+    const ProgressTime by_rate{static_cast<double>(bytes) * 1000.0 / static_cast<double>(kProgressBytesPerSecond)};
     return std::max(ProgressTime{min_interval}, by_rate);
 }
 
