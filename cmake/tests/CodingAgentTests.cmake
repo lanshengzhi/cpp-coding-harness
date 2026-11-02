@@ -118,6 +118,7 @@ include_guard(GLOBAL)
         tests/coding_agent/ProjectionStreamTest.cpp
         tests/coding_agent/SetModelTest.cpp
         tests/coding_agent/SettingsManagerTest.cpp
+        tests/coding_agent/SettingsSchemaTest.cpp
         tests/coding_agent/SkillFormattingTest.cpp
         tests/coding_agent/SkillFrontmatterParserTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp

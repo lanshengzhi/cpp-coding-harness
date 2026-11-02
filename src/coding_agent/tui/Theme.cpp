@@ -249,6 +249,10 @@ std::string_view theme_token_name(ThemeToken token) {
     return kThemeTokenNames[static_cast<std::size_t>(token)];
 }
 
+std::string_view theme_token_fallback(ThemeToken token) {
+    return kThemeTokenFallbacks[static_cast<std::size_t>(token)];
+}
+
 const ResolvedThemeColor& color_for(const ResolvedTheme& theme, ThemeToken token) {
     return theme.colors[static_cast<std::size_t>(token)];
 }

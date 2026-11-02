@@ -384,6 +384,50 @@ TEST_CASE("Assembly preserves the identity of a discovered shared gateway runtim
     CHECK(wire->requests.back().headers.at("Authorization") == "Bearer bound-key");
 }
 
+TEST_CASE("a malformed project settings file is reported only while the project is trusted",
+        "[coding_agent][runtime][assembly-contract][issue1115][spec]") {
+    // fixtures/pi-v1.3.0/audit-1115/settings-diagnostics.json, scenario
+    // "a malformed project settings file reports its own path only while the
+    // project is trusted": the trusted scope reports one diagnostic naming
+    // `<workspace>/.pi/settings.json`; an untrusted scope is never read, so it
+    // reports none.
+    const auto project_settings = [](AssemblyFixture& fix) {
+        return (std::filesystem::canonical(fix.workspace.path()) / ".pi" / "settings.json").string();
+    };
+    {
+        AssemblyFixture fix;
+        fix.write_models(kTwoProviderModels);
+        fix.alpha_guard.set("alpha-key");
+        fix.beta_guard.set("beta-key");
+        fix.workspace.write(".pi/settings.json", "{ this is not json");
+        auto created = fix.create(fix.make_request(/*trust_override=*/true));
+        REQUIRE(created);
+        (void)fix.runtime.adopt_session(std::move(created->session));
+        std::vector<std::string> project_diagnostics;
+        for (const auto& diagnostic : created->diagnostics) {
+            if (diagnostic.code == "settings:project") {
+                project_diagnostics.push_back(diagnostic.message);
+            }
+        }
+        REQUIRE(project_diagnostics.size() == 1);
+        INFO(project_diagnostics.front());
+        CHECK(project_diagnostics.front().starts_with("Invalid settings file " + project_settings(fix) + ": "));
+    }
+    {
+        AssemblyFixture fix;
+        fix.write_models(kTwoProviderModels);
+        fix.alpha_guard.set("alpha-key");
+        fix.beta_guard.set("beta-key");
+        fix.workspace.write(".pi/settings.json", "{ this is not json");
+        auto created = fix.create(fix.make_request(/*trust_override=*/false));
+        REQUIRE(created);
+        (void)fix.runtime.adopt_session(std::move(created->session));
+        CHECK(std::none_of(created->diagnostics.begin(), created->diagnostics.end(), [](const auto& diagnostic) {
+            return diagnostic.code == "settings:project";
+        }));
+    }
+}
+
 TEST_CASE("settings load errors surface as diagnostics ahead of resource diagnostics",
         "[coding_agent][runtime][assembly-contract][issue509][spec]") {
     AssemblyFixture fix;
@@ -425,4 +469,12 @@ TEST_CASE("settings load errors surface as diagnostics ahead of resource diagnos
     REQUIRE(resource_index != diagnostics.end());
     // pi report order: settings errors precede resource diagnostics.
     CHECK(settings_index < resource_index);
+    // pi `collectSettingsDiagnostics` text: `Invalid settings file <path>:
+    // <message>` (fixtures/pi-v1.3.0/audit-1115/settings-diagnostics.json,
+    // scenario "a malformed global settings file yields one warning naming the
+    // file path"). The path is the reported file, not the scope name.
+    const auto settings_path = (fix.agent_dir / "settings.json").string();
+    CHECK(settings_index->message.starts_with("Invalid settings file " + settings_path + ": "));
+    CHECK(settings_index->path == settings_path);
+    CHECK(settings_index->severity == coding_agent::SessionDiagnostic::Severity::Warning);
 }

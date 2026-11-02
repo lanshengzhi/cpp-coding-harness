@@ -312,16 +312,15 @@ struct SettingsSnapshot {
 }
 
 /// Failed creation keeps the primary error and carries any settings load
-/// warnings through the error context field.
+/// warnings through the error context field, in pi's `collectSettingsDiagnostics`
+/// text.
 [[nodiscard]] support::Error with_settings_fallback_context(
     support::Error error,
     const SettingsSnapshot& snapshot) {
     for (const auto& settings_error : snapshot.errors) {
-        std::string warning = std::string{"could not load "} +
-            (settings_error.scope == SettingsScope::Global
-                 ? "global settings"
-                 : "project settings") +
-            ": " + settings_error.message;
+        const auto& path = settings_error.scope == SettingsScope::Global ? snapshot.manager.global_path()
+                                                                         : snapshot.manager.project_path();
+        std::string warning = coding_agent::settings_diagnostic_text(path, settings_error.message);
         if (error.context && !error.context->empty()) {
             error.context = *error.context + "; " + warning;
         } else {
@@ -1257,26 +1256,19 @@ struct PreparedAssemblyTarget final {
         snapshot.errors = snapshot.manager.errors();
     }
 
-    // 2. Settings load errors stay observable as warning diagnostics. Global
-    // errors are known at bootstrap; project-scope errors surface after the
-    // project trust decision below reloads the project scope.
+    // 2. Settings load errors stay observable as warning diagnostics in pi's
+    // `collectSettingsDiagnostics` text (`Invalid settings file <path>:
+    // <message>`). Global errors are known at bootstrap; project-scope errors
+    // surface after the project trust decision below reloads the project scope.
     const auto add_settings_diagnostics = [&]() {
         for (const auto& settings_error : snapshot.errors) {
-            diagnostics.push_back(make_diag(
-                SessionDiagnostic::Severity::Warning,
-                "settings:" +
-                    (settings_error.scope == SettingsScope::Global
-                         ? std::string{"global"}
-                         : std::string{"project"}),
-                "could not load " +
-                    (settings_error.scope == SettingsScope::Global
-                         ? std::string{"global settings"}
-                         : std::string{"project settings"}) +
-                    ": " + settings_error.message,
-                (settings_error.scope == SettingsScope::Global
-                     ? snapshot.manager.global_path()
-                     : snapshot.manager.project_path())
-                    .string()));
+            const auto& path = settings_error.scope == SettingsScope::Global ? snapshot.manager.global_path()
+                                                                             : snapshot.manager.project_path();
+            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Warning,
+                    "settings:" + (settings_error.scope == SettingsScope::Global ? std::string{"global"}
+                                                                                 : std::string{"project"}),
+                    coding_agent::settings_diagnostic_text(path, settings_error.message),
+                    path.string()));
         }
     };
     add_settings_diagnostics();

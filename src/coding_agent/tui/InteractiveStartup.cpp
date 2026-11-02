@@ -100,10 +100,13 @@ support::Expected<coding_agent::SettingsManager> create_interactive_settings_man
         /* project_trusted */ false);
     for (const auto& settings_error : manager.errors()) {
         if (settings_error.scope == coding_agent::SettingsScope::Global) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::JsonParse,
-                "could not load global settings",
-                settings_error.message));
+            // pi `collectSettingsDiagnostics` text. Divergence from pi: a
+            // malformed global settings file stops the interactive boot here
+            // instead of printing a warning and continuing (pi `main.ts`
+            // reports `startupSettingsDiagnostics` and proceeds). That boot
+            // behavior is outside this ticket's text-alignment slice.
+            return std::unexpected(support::make_error(support::ErrorCode::JsonParse,
+                    coding_agent::settings_diagnostic_text(manager.global_path(), settings_error.message)));
         }
     }
     return manager;

@@ -644,3 +644,46 @@ TEST_CASE(
     CHECK(calls[1].get_object().at("id").get_string() == "call_1/?");
     CHECK_FALSE(calls[1].get_object().contains("durationMs"));
 }
+
+TEST_CASE("a settings document the schema accepts reshapes the request and reload re-reads it",
+        "[coding_agent][codemode][catalog][issue1115][spec]") {
+    // Ticket #1115 acceptance: a `settings.json` document the published schema
+    // accepts is consumed by the real runtime, and `/reload` re-reads it. The
+    // discriminating case is the stale value: if the reload did not re-apply
+    // `codemode.mode`, the second request would still declare the direct tools.
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    write_global_settings(workspace, R"({"codemode":{"mode":"on","inlineBudget":3000}})");
+    tests::RuntimeFixture runtime;
+    auto provider = std::make_shared<CapturingProvider>();
+    auto attempt = make_session(runtime, workspace, provider, std::vector<std::string>{"codemode", "read"});
+
+    REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("first request")).has_value());
+    REQUIRE_FALSE(provider->offered_tools.empty());
+    {
+        const auto& offered = provider->offered_tools.front();
+        const auto codemode = offered_codemode(offered);
+        REQUIRE(codemode.has_value());
+        // `on`: the direct `read` declaration stays in the request.
+        const auto names = offered_names(offered);
+        CHECK(std::ranges::find(names, std::string{"read"}) != names.end());
+    }
+
+    // Rewrite the same scope and reload through the public Session operation.
+    write_global_settings(workspace, R"({"codemode":{"mode":"only","inlineBudget":3000}})");
+    auto reloaded = tests::run_awaitable(runtime, attempt.session->reload());
+    REQUIRE(reloaded.has_value());
+
+    REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("after reload")).has_value());
+    const auto& offered = provider->offered_tools.back();
+    const auto codemode = offered_codemode(offered);
+    REQUIRE(codemode.has_value());
+    INFO(codemode->description);
+    // `only`: the direct declaration leaves the request and the catalog lists
+    // the tool instead, so the reloaded value reached the live catalog.
+    const auto names = offered_names(offered);
+    CHECK(std::ranges::find(names, std::string{"read"}) == names.end());
+    CHECK(contains(codemode->description, "### `read`"));
+
+    attempt.session->close();
+}

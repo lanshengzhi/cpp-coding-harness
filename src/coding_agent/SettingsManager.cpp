@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iomanip>
 #include <optional>
@@ -181,6 +182,17 @@ void migrate_settings(JsonObject& settings) {
     return found == object.end() ? nullptr : found->second.get_if<std::string>();
 }
 
+/// pi's `Number.isSafeInteger(value) && value >= 0` bound used by the
+/// `nonNegativeSafeInteger` settings shape and by
+/// `SettingsManager.getCompactionTokenSetting`.
+constexpr double kMaxSafeInteger = 9007199254740991.0;
+
+[[nodiscard]] bool is_non_negative_safe_integer(const support::JsonValue& value) {
+    const auto* number = value.get_if<double>();
+    return number != nullptr && std::isfinite(*number) && std::floor(*number) == *number && *number >= 0.0 &&
+           *number <= kMaxSafeInteger;
+}
+
 [[nodiscard]] bool is_thinking_level(std::string_view value) {
     return value == "off" || value == "minimal" || value == "low" ||
            value == "medium" || value == "high" || value == "xhigh" ||
@@ -270,10 +282,44 @@ struct FullscreenWireCanonical {
            *number <= 100.0;
 }
 
+/// pi `SettingsManager.getCompactionTokenSetting` validation, moved to the load
+/// boundary because this build has no exception to throw from a getter: a
+/// present token setting must be a non-negative safe integer. The failure text
+/// is pi-verbatim (`Invalid compaction.<field> setting: <value>. Expected a
+/// non-negative safe integer.`, frozen at
+/// `fixtures/pi-v1.3.0/audit-1115/settings-diagnostics.json`, scenario "the
+/// compaction consumer rejects negative and fractional token settings naming
+/// the field").
+[[nodiscard]] support::Expected<std::uint64_t> compaction_token_setting(
+        std::string_view field, const support::JsonValue& value) {
+    const auto invalid = [&] {
+        std::string described;
+        if (const auto* number = value.get_if<double>()) {
+            described = std::format("{}", *number);
+        } else if (const auto* text = value.get_if<std::string>()) {
+            described = *text;
+        } else if (auto serialized = support::write_json(value); serialized) {
+            described = std::move(*serialized);
+        }
+        return settings_file_error(
+                std::format(
+                        "Invalid compaction.{} setting: {}. Expected a non-negative safe integer.", field, described),
+                {},
+                std::format(
+                        "Invalid compaction.{} setting: {}. Expected a non-negative safe integer.", field, described));
+    };
+    if (!is_non_negative_safe_integer(value)) {
+        return std::unexpected(invalid());
+    }
+    return static_cast<std::uint64_t>(*value.get_if<double>());
+}
+
 /// Parse pi's nested `compaction` object (`{enabled, reserveTokens,
-/// keepRecentTokens}`). Each field is optional; unknown or mistyped fields
-/// are ignored (a mistyped field falls back to the pi default at resolution,
-/// mirroring pi's `settings.compaction?.enabled ?? true` reads).
+/// keepRecentTokens}`). Each field is optional. `enabled` keeps pi's nullish
+/// read, so a mistyped value falls back to the pi default; the two token
+/// settings are validated exactly as pi's `getCompactionTokenSetting` does, so
+/// a negative, fractional or mistyped token setting fails the scope load with
+/// pi's own failure text instead of silently resolving to a default.
 [[nodiscard]] support::Expected<UserCompactionSettings> parse_compaction_settings(
     const support::JsonValue& value) {
     const auto* object = value.get_if<JsonObject>();
@@ -292,20 +338,18 @@ struct FullscreenWireCanonical {
     }
     const auto reserve = object->find("reserveTokens");
     if (reserve != object->end()) {
-        if (const auto* parsed = reserve->second.get_if<double>()) {
-            if (*parsed >= 0) {
-                settings.reserve_tokens =
-                    static_cast<std::uint64_t>(*parsed);
-            }
+        if (auto parsed = compaction_token_setting("reserveTokens", reserve->second); parsed) {
+            settings.reserve_tokens = *parsed;
+        } else {
+            return std::unexpected(parsed.error());
         }
     }
     const auto keep = object->find("keepRecentTokens");
     if (keep != object->end()) {
-        if (const auto* parsed = keep->second.get_if<double>()) {
-            if (*parsed >= 0) {
-                settings.keep_recent_tokens =
-                    static_cast<std::uint64_t>(*parsed);
-            }
+        if (auto parsed = compaction_token_setting("keepRecentTokens", keep->second); parsed) {
+            settings.keep_recent_tokens = *parsed;
+        } else {
+            return std::unexpected(parsed.error());
         }
     }
     return settings;
@@ -1609,6 +1653,199 @@ support::ExpectedVoid SettingsManager::set_enabled_models(
     target.enabled_models = std::move(patterns);
     impl_->recompute_merged();
     return support::ExpectedVoid{};
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Supported-field schema (pi `SettingsSchema` subset).
+//
+// pi publishes one TypeBox schema for editors and generated JSON Schema while
+// its runtime reads the same document independently, so the published shape and
+// the consumed shape can drift (audit-1049 records the drift it accepts). This
+// build publishes only fields a consumer here actually reads, and validates a
+// document against that same table, so the schema cannot promise behavior the
+// runtime drops.
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::span<const SettingsSchemaField> settings_schema_fields() {
+    static constexpr std::array<SettingsSchemaField, 32> kFields{{
+            {"defaultProvider", SettingsValueKind::String},
+            {"defaultModel", SettingsValueKind::String},
+            {"defaultThinkingLevel", SettingsValueKind::ThinkingLevel},
+            {"enabledModels", SettingsValueKind::StringArray},
+            {"sessionDir", SettingsValueKind::String},
+            {"defaultProjectTrust", SettingsValueKind::ProjectTrust},
+            {"shellPath", SettingsValueKind::String},
+            {"shellCommandPrefix", SettingsValueKind::String},
+            {"theme", SettingsValueKind::String},
+            {"tuiMode", SettingsValueKind::TuiMode},
+            {"fullscreenExitOutput", SettingsValueKind::FullscreenExitOutput},
+            {"fullscreenScrollbar", SettingsValueKind::FullscreenScrollbar},
+            {"fullscreenCopyOnSelect", SettingsValueKind::Boolean},
+            {"fullscreenWheelScrollLines", SettingsValueKind::WheelScrollLines},
+            {"compaction", SettingsValueKind::Object},
+            {"compaction.enabled", SettingsValueKind::Boolean},
+            {"compaction.reserveTokens", SettingsValueKind::NonNegativeInteger},
+            {"compaction.keepRecentTokens", SettingsValueKind::NonNegativeInteger},
+            {"retry", SettingsValueKind::Object},
+            {"retry.enabled", SettingsValueKind::Boolean},
+            {"retry.maxRetries", SettingsValueKind::NonNegativeInteger},
+            {"retry.baseDelayMs", SettingsValueKind::NonNegativeInteger},
+            {"codemode", SettingsValueKind::Object},
+            {"codemode.mode", SettingsValueKind::CodemodeMode},
+            {"codemode.inlineBudget", SettingsValueKind::NonNegativeInteger},
+            {"hideThinkingBlock", SettingsValueKind::Boolean},
+            {"outputPad", SettingsValueKind::OutputPad},
+            {"enableSkillCommands", SettingsValueKind::Boolean},
+            {"showHardwareCursor", SettingsValueKind::Boolean},
+            {"terminal", SettingsValueKind::Object},
+            {"terminal.showTerminalProgress", SettingsValueKind::Boolean},
+            {"deviceId", SettingsValueKind::String},
+    }};
+    return kFields;
+}
+
+namespace {
+
+constexpr std::string_view kAnyOfMessage = "must match a schema in anyOf";
+constexpr std::string_view kEnumMessage = "must be equal to one of the allowed values";
+
+[[nodiscard]] bool matches_one_of(std::string_view value, std::span<const std::string_view> allowed) {
+    return std::ranges::find(allowed, value) != allowed.end();
+}
+
+/// pi's TypeBox message for one rejected value of `kind`.
+[[nodiscard]] std::optional<std::string_view> violation_message(
+        SettingsValueKind kind, const support::JsonValue& value) {
+    switch (kind) {
+    case SettingsValueKind::String:
+        return value.get_if<std::string>() == nullptr ? std::optional<std::string_view>{"must be string"}
+                                                      : std::nullopt;
+    case SettingsValueKind::Boolean:
+        return value.get_if<bool>() == nullptr ? std::optional<std::string_view>{"must be boolean"} : std::nullopt;
+    case SettingsValueKind::NonNegativeInteger:
+        if (is_non_negative_safe_integer(value)) return std::nullopt;
+        if (const auto* number = value.get_if<double>();
+                number != nullptr && std::isfinite(*number) && std::floor(*number) == *number) {
+            return "must be >= 0";
+        }
+        return "must be integer";
+    case SettingsValueKind::StringArray: {
+        if (value.get_if<support::JsonValue::array_t>() == nullptr) return "must be array";
+        return std::nullopt;
+    }
+    case SettingsValueKind::Object:
+        return value.get_if<JsonObject>() == nullptr ? std::optional<std::string_view>{"must be object"} : std::nullopt;
+    case SettingsValueKind::ThinkingLevel: {
+        const auto* text = value.get_if<std::string>();
+        return text != nullptr && is_thinking_level(*text) ? std::nullopt
+                                                           : std::optional<std::string_view>{kEnumMessage};
+    }
+    case SettingsValueKind::ProjectTrust: {
+        const auto* text = value.get_if<std::string>();
+        return text != nullptr && parse_default_project_trust(*text) ? std::nullopt
+                                                                     : std::optional<std::string_view>{kAnyOfMessage};
+    }
+    case SettingsValueKind::CodemodeMode: {
+        static constexpr std::array<std::string_view, 2> kAllowed{"on", "only"};
+        const auto* text = value.get_if<std::string>();
+        return text != nullptr && matches_one_of(*text, kAllowed) ? std::nullopt
+                                                                  : std::optional<std::string_view>{kAnyOfMessage};
+    }
+    case SettingsValueKind::TuiMode: {
+        static constexpr std::array<std::string_view, 2> kAllowed{"regular", "fullscreen"};
+        const auto* text = value.get_if<std::string>();
+        return text != nullptr && matches_one_of(*text, kAllowed) ? std::nullopt
+                                                                  : std::optional<std::string_view>{kAnyOfMessage};
+    }
+    case SettingsValueKind::FullscreenExitOutput: {
+        static constexpr std::array<std::string_view, 2> kAllowed{"transcript", "resume-hint"};
+        const auto* text = value.get_if<std::string>();
+        return text != nullptr && matches_one_of(*text, kAllowed) ? std::nullopt
+                                                                  : std::optional<std::string_view>{kAnyOfMessage};
+    }
+    case SettingsValueKind::FullscreenScrollbar: {
+        static constexpr std::array<std::string_view, 3> kAllowed{"auto", "always", "hidden"};
+        const auto* text = value.get_if<std::string>();
+        return text != nullptr && matches_one_of(*text, kAllowed) ? std::nullopt
+                                                                  : std::optional<std::string_view>{kAnyOfMessage};
+    }
+    case SettingsValueKind::WheelScrollLines: {
+        if (value.get_if<double>() != nullptr) return std::nullopt;
+        if (const auto* text = value.get_if<std::string>(); text != nullptr && *text == "auto") return std::nullopt;
+        return kAnyOfMessage;
+    }
+    case SettingsValueKind::OutputPad: {
+        const auto* number = value.get_if<double>();
+        return number != nullptr && (*number == 0.0 || *number == 1.0) ? std::nullopt
+                                                                       : std::optional<std::string_view>{kAnyOfMessage};
+    }
+    }
+    return std::nullopt;
+}
+
+/// pi's JSON-pointer spelling of one dotted schema key (`/compaction/reserveTokens`).
+[[nodiscard]] std::string instance_path(std::string_view dotted) {
+    std::string path{"/"};
+    path.reserve(dotted.size() + 1);
+    for (const auto character : dotted) {
+        path.push_back(character == '.' ? '/' : character);
+    }
+    return path;
+}
+
+/// Resolve one dotted schema key inside a document, following nested objects.
+[[nodiscard]] const support::JsonValue* find_dotted(const JsonObject& root, std::string_view dotted) {
+    const support::JsonValue* current = nullptr;
+    const JsonObject* object = &root;
+    std::size_t offset = 0;
+    while (offset <= dotted.size()) {
+        const auto dot = dotted.find('.', offset);
+        const auto segment =
+                dotted.substr(offset, dot == std::string_view::npos ? dotted.size() - offset : dot - offset);
+        const auto found = object->find(std::string{segment});
+        if (found == object->end()) return nullptr;
+        current = &found->second;
+        if (dot == std::string_view::npos) return current;
+        // A non-object intermediate segment means the leaf is absent: the
+        // container's own type violation is reported against the container, so
+        // reporting the leaf as well would double-count one malformed value.
+        object = current->get_if<JsonObject>();
+        if (object == nullptr) return nullptr;
+        offset = dot + 1;
+    }
+    return current;
+}
+
+} // namespace
+
+std::vector<SettingsSchemaViolation> validate_settings_schema(const support::JsonValue& document) {
+    std::vector<SettingsSchemaViolation> violations;
+    const auto* root = document.get_if<JsonObject>();
+    if (root == nullptr) {
+        violations.push_back({"/", "must be object"});
+        return violations;
+    }
+    for (const auto& field : settings_schema_fields()) {
+        const auto* value = find_dotted(*root, field.key);
+        if (value == nullptr) continue;
+        if (const auto message = violation_message(field.kind, *value)) {
+            violations.push_back({instance_path(field.key), std::string{*message}});
+            continue;
+        }
+        if (field.kind != SettingsValueKind::StringArray) continue;
+        const auto* items = value->get_if<support::JsonValue::array_t>();
+        if (items == nullptr) continue;
+        for (std::size_t index = 0; index < items->size(); ++index) {
+            if ((*items)[index].get_if<std::string>() == nullptr) {
+                violations.push_back({instance_path(field.key) + "/" + std::to_string(index), "must be string"});
+            }
+        }
+    }
+    return violations;
+}
+
+std::string settings_diagnostic_text(const std::filesystem::path& path, std::string_view message) {
+    return std::format("Invalid settings file {}: {}", path.string(), message);
 }
 
 } // namespace cch::coding_agent

@@ -29,6 +29,53 @@ namespace {
     return content.str();
 }
 
+/// pi's full 43-action `AppKeybindings` table (see the catalog case below).
+constexpr std::array<std::string_view, 43> kAppActionCatalog{
+        "app.interrupt",
+        "app.clear",
+        "app.exit",
+        "app.suspend",
+        "app.thinking.cycle",
+        "app.thinking.save",
+        "app.model.cycleForward",
+        "app.model.cycleBackward",
+        "app.model.select",
+        "app.tools.expand",
+        "app.thinking.toggle",
+        "app.session.toggleNamedFilter",
+        "app.editor.external",
+        "app.message.copy",
+        "app.message.followUp",
+        "app.message.dequeue",
+        "app.clipboard.pasteImage",
+        "app.session.new",
+        "app.session.tree",
+        "app.session.fork",
+        "app.session.resume",
+        "app.tree.foldOrUp",
+        "app.tree.unfoldOrDown",
+        "app.tree.editLabel",
+        "app.tree.toggleLabelTimestamp",
+        "app.session.togglePath",
+        "app.session.toggleSort",
+        "app.session.rename",
+        "app.session.delete",
+        "app.session.deleteNoninvasive",
+        "app.models.save",
+        "app.models.enableAll",
+        "app.models.clearAll",
+        "app.models.toggleProvider",
+        "app.models.reorderUp",
+        "app.models.reorderDown",
+        "app.tree.filter.default",
+        "app.tree.filter.noTools",
+        "app.tree.filter.userOnly",
+        "app.tree.filter.labeledOnly",
+        "app.tree.filter.all",
+        "app.tree.filter.cycleForward",
+        "app.tree.filter.cycleBackward",
+};
+
 [[nodiscard]] bool has_diagnostic(
     const coding_agent::tui::KeybindingsManagerResult& manager,
     std::string_view code) {
@@ -284,53 +331,7 @@ TEST_CASE("The app layer adopts the full 43-action AppKeybindings table with pi-
     // 83114817 plus v0.87.1's `app.thinking.save` for the thinking selector's
     // save-as-default action): every action resolves with its pi-verbatim
     // description.
-    constexpr std::array<std::string_view, 43> kAllActions{
-            "app.interrupt",
-            "app.clear",
-            "app.exit",
-            "app.suspend",
-            "app.thinking.cycle",
-            "app.thinking.save",
-            "app.model.cycleForward",
-            "app.model.cycleBackward",
-            "app.model.select",
-            "app.tools.expand",
-            "app.thinking.toggle",
-            "app.session.toggleNamedFilter",
-            "app.editor.external",
-            "app.message.copy",
-            "app.message.followUp",
-            "app.message.dequeue",
-            "app.clipboard.pasteImage",
-            "app.session.new",
-            "app.session.tree",
-            "app.session.fork",
-            "app.session.resume",
-            "app.tree.foldOrUp",
-            "app.tree.unfoldOrDown",
-            "app.tree.editLabel",
-            "app.tree.toggleLabelTimestamp",
-            "app.session.togglePath",
-            "app.session.toggleSort",
-            "app.session.rename",
-            "app.session.delete",
-            "app.session.deleteNoninvasive",
-            "app.models.save",
-            "app.models.enableAll",
-            "app.models.clearAll",
-            "app.models.toggleProvider",
-            "app.models.reorderUp",
-            "app.models.reorderDown",
-            "app.tree.filter.default",
-            "app.tree.filter.noTools",
-            "app.tree.filter.userOnly",
-            "app.tree.filter.labeledOnly",
-            "app.tree.filter.all",
-            "app.tree.filter.cycleForward",
-            "app.tree.filter.cycleBackward",
-    };
-    const auto definitions = coding_agent::tui::app_keybinding_definitions(
-        kAllActions);
+    const auto definitions = coding_agent::tui::app_keybinding_definitions(kAppActionCatalog);
     REQUIRE(definitions);
     REQUIRE(definitions->size() == 43);
 
@@ -513,4 +514,134 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     CHECK(remapped_text.find("ctrl+x  Copy selection or last assistant message") != std::string::npos);
     CHECK(remapped_text.find("alt+enter  Queue follow-up message") != std::string::npos);
     CHECK(remapped_text.find("alt+up  Restore queued messages") != std::string::npos);
+}
+
+TEST_CASE("Keybindings manager migrates legacy names, keeps unknown actions and reloads",
+        "[coding_agent][keybindings][issue1115][spec]") {
+    // fixtures/pi-v1.3.0/audit-1049/configuration-schema.json, scenario
+    // "keybindings manager migrates legacy names, keeps unknown actions, drops
+    // invalid values and reloads".
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({
+        "app.interrupt": "ctrl+q",
+        "app.clear": "ctrl+q",
+        "app.unknown": "ctrl+u",
+        "cursorUp": "ctrl+u",
+        "app.model.select": "not-a-key"
+    })");
+
+    constexpr std::array<std::string_view, 2> kAssembled{"app.interrupt", "app.clear"};
+    auto definitions = coding_agent::tui::app_keybinding_definitions(kAssembled);
+    REQUIRE(definitions);
+    coding_agent::tui::KeybindingsManagerRequest request;
+    request.agent_config_directory = config.path();
+    request.application_definitions = std::move(*definitions);
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+    REQUIRE(manager);
+
+    // The legacy `cursorUp` entry migrates to `tui.editor.cursorUp` and is
+    // installed, so dispatch sees the user's key.
+    CHECK(manager->registry->keys("tui.editor.cursorUp") == std::vector<std::string>{"ctrl+u"});
+    CHECK(manager->registry->keys("app.interrupt") == std::vector<std::string>{"ctrl+q"});
+    CHECK(manager->registry->keys("app.clear") == std::vector<std::string>{"ctrl+q"});
+    // An unknown id stays in the user map and is never installed.
+    CHECK(manager->registry->find("app.unknown") == nullptr);
+    // An invalid key value is dropped from both. `app.model.select` is not
+    // assembled by this request, so its default is not in the registry either.
+    CHECK(manager->registry->find("app.model.select") == nullptr);
+    CHECK(has_diagnostic(*manager, "invalid_key"));
+
+    // A duplicate key is pi's `conflicts` entry: `ctrl+q` is claimed by
+    // `app.interrupt` and `app.clear`, in that order.
+    const auto conflict = std::find_if(manager->diagnostics.begin(),
+            manager->diagnostics.end(),
+            [](const auto& diagnostic) { return diagnostic.code == "conflicting_user_key"; });
+    REQUIRE(conflict != manager->diagnostics.end());
+    INFO(conflict->message);
+    CHECK(conflict->message.find("ctrl+q") != std::string::npos);
+    CHECK(conflict->message.find("app.interrupt, app.clear") != std::string::npos);
+
+    // pi `getUserBindings`: migrated names, retained unknown ids, dropped
+    // invalid values, catalog order first then the remaining ids sorted.
+    const std::vector<std::string> expected_ids{"tui.editor.cursorUp", "app.interrupt", "app.clear", "app.unknown"};
+    REQUIRE(manager->user_bindings.size() == expected_ids.size());
+    for (std::size_t index = 0; index < expected_ids.size(); ++index) {
+        INFO(index);
+        CHECK(manager->user_bindings[index].id == expected_ids[index]);
+    }
+    CHECK(manager->user_bindings.front().keys == std::vector<std::string>{"ctrl+u"});
+
+    // pi `reload`: the user map is replaced wholesale, so a removed entry stops
+    // overriding its action.
+    config.write("keybindings.json", R"({"app.interrupt": "escape"})");
+    coding_agent::tui::KeybindingsManagerRequest reload_request;
+    reload_request.agent_config_directory = config.path();
+    reload_request.application_definitions = coding_agent::tui::app_keybinding_definitions(kAssembled).value();
+    const auto reloaded = coding_agent::tui::load_keybindings_manager(std::move(reload_request));
+    REQUIRE(reloaded);
+    CHECK(reloaded->registry->keys("app.interrupt") == std::vector<std::string>{"escape"});
+    CHECK(reloaded->registry->keys("tui.editor.cursorUp") == std::vector<std::string>{"up"});
+    REQUIRE(reloaded->user_bindings.size() == 1);
+    CHECK(reloaded->user_bindings.front().id == "app.interrupt");
+}
+
+TEST_CASE("Keybindings manager lets the canonical id win over its legacy spelling",
+        "[coding_agent][keybindings][issue1115][spec]") {
+    // pi `migrateKeybindingsConfig`: when the stored document carries both the
+    // legacy name and its canonical id, the canonical entry is the one kept.
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"cursorUp": "ctrl+u", "tui.editor.cursorUp": "ctrl+k"})");
+
+    coding_agent::tui::KeybindingsManagerRequest request;
+    request.agent_config_directory = config.path();
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+    REQUIRE(manager);
+    CHECK(manager->registry->keys("tui.editor.cursorUp") == std::vector<std::string>{"ctrl+k"});
+    REQUIRE(manager->user_bindings.size() == 1);
+    CHECK(manager->user_bindings.front().keys == std::vector<std::string>{"ctrl+k"});
+}
+
+TEST_CASE("Keybindings manager skips the $schema member and keeps a BOM-prefixed document",
+        "[coding_agent][keybindings][issue1115][spec]") {
+    // The frozen scenario writes a UTF-8 BOM and pi's `stripBom` tolerates it;
+    // `$schema` is a schema-reference member, not an action.
+    tests::TempWorkspace config;
+    config.write(
+            "keybindings.json", std::string{"\xEF\xBB\xBF"} + R"({"$schema": "https://example.invalid/keybindings.json",
+        "tui.editor.cursorUp": "ctrl+u"})");
+
+    coding_agent::tui::KeybindingsManagerRequest request;
+    request.agent_config_directory = config.path();
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+    REQUIRE(manager);
+    CHECK_FALSE(has_diagnostic(*manager, "unknown_action"));
+    CHECK(manager->registry->keys("tui.editor.cursorUp") == std::vector<std::string>{"ctrl+u"});
+    REQUIRE(manager->user_bindings.size() == 1);
+    CHECK(manager->user_bindings.front().id == "tui.editor.cursorUp");
+}
+
+TEST_CASE("the assembled catalog plus the known-unassembled actions is pi's 90-action catalog",
+        "[coding_agent][keybindings][issue1115][spec]") {
+    // fixtures/pi-v1.3.0/audit-1049/configuration-schema.json, scenario
+    // "keybindings manager migrates legacy names, keeps unknown actions, drops
+    // invalid values and reloads": pi's effective catalog is 90 actions. This
+    // build assembles 85 and knows the remaining five as unavailable, so an
+    // assembled action silently disappearing or a new action being invented
+    // separates.
+    constexpr std::array<std::string_view, 5> kKnownUnassembled{
+            "tui.input.copy",
+            "tui.altScreen.halfPageUp",
+            "tui.altScreen.halfPageDown",
+            "tui.altScreen.lineUp",
+            "tui.altScreen.lineDown",
+    };
+    coding_agent::tui::KeybindingsManagerRequest request;
+    request.application_definitions = coding_agent::tui::app_keybinding_definitions(kAppActionCatalog).value();
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+    REQUIRE(manager);
+    CHECK(manager->registry->entries().size() == 85);
+    for (const auto id : kKnownUnassembled) {
+        CHECK(manager->registry->find(id) == nullptr);
+    }
+    CHECK(manager->registry->entries().size() + kKnownUnassembled.size() == 90);
 }

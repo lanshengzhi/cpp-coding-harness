@@ -2,10 +2,12 @@
 
 #include "SlashCommandEffects.hpp"
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
+#include "coding_agent/TextBom.hpp"
 #include "support/Json.hpp"
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -13,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -305,60 +308,215 @@ void bound_diagnostics(std::vector<KeybindingDiagnostic>& diagnostics) {
 }
 
 struct ParsedOverrides {
+    /// Overrides for assembled actions only: what the registry may install.
     std::vector<cch::tui::KeybindingOverride> overrides{};
+    /// pi `getUserBindings`: every valid entry after migration, catalog-ordered.
+    std::vector<cch::tui::KeybindingOverride> user_bindings{};
     std::vector<KeybindingDiagnostic> diagnostics{};
 };
 
-[[nodiscard]] ParsedOverrides parse_overrides(
-    const support::JsonValue::object_t& object,
-    const std::set<std::string, std::less<>>& assembled_ids,
-    const std::filesystem::path& path) {
-    ParsedOverrides result;
-    for (const auto& [id, value] : object) {
-        if (!assembled_ids.contains(id)) {
-            add_diagnostic(
-                result.diagnostics,
-                known_unassembled_id(id) ? "unavailable_action" : "unknown_action",
-                known_unassembled_id(id)
-                    ? std::format("keybinding action '{}' is not assembled", id)
-                    : std::format("unknown keybinding action '{}'", id),
-                path);
-            continue;
-        }
+/// pi `KEYBINDING_NAME_MIGRATIONS` (packages/coding-agent/src/core/keybindings.ts
+/// at the named baseline): the pre-`tui.*`/`app.*` spellings that a stored
+/// `keybindings.json` may still carry. The map is applied on every read, so a
+/// migrated file is only rewritten when the user saves it.
+struct KeybindingNameMigration {
+    std::string_view legacy{};
+    std::string_view canonical{};
+};
 
-        std::vector<std::string> keys;
-        bool valid_value = true;
-        if (const auto* key = value.get_if<std::string>()) {
-            keys.push_back(*key);
-        } else if (value.holds<support::JsonValue::array_t>()) {
-            for (const auto& item : value.get_array()) {
-                if (const auto* key = item.get_if<std::string>()) {
-                    keys.push_back(*key);
-                } else {
-                    valid_value = false;
-                    break;
-                }
-            }
-        } else {
-            valid_value = false;
+[[nodiscard]] std::span<const KeybindingNameMigration> keybinding_name_migrations() {
+    static constexpr auto kMigrations = std::to_array<KeybindingNameMigration>({
+            {"cursorUp", "tui.editor.cursorUp"},
+            {"cursorDown", "tui.editor.cursorDown"},
+            {"cursorLeft", "tui.editor.cursorLeft"},
+            {"cursorRight", "tui.editor.cursorRight"},
+            {"cursorWordLeft", "tui.editor.cursorWordLeft"},
+            {"cursorWordRight", "tui.editor.cursorWordRight"},
+            {"cursorLineStart", "tui.editor.cursorLineStart"},
+            {"cursorLineEnd", "tui.editor.cursorLineEnd"},
+            {"jumpForward", "tui.editor.jumpForward"},
+            {"jumpBackward", "tui.editor.jumpBackward"},
+            {"pageUp", "tui.editor.pageUp"},
+            {"pageDown", "tui.editor.pageDown"},
+            {"deleteCharBackward", "tui.editor.deleteCharBackward"},
+            {"deleteCharForward", "tui.editor.deleteCharForward"},
+            {"deleteWordBackward", "tui.editor.deleteWordBackward"},
+            {"deleteWordForward", "tui.editor.deleteWordForward"},
+            {"deleteToLineStart", "tui.editor.deleteToLineStart"},
+            {"deleteToLineEnd", "tui.editor.deleteToLineEnd"},
+            {"yank", "tui.editor.yank"},
+            {"yankPop", "tui.editor.yankPop"},
+            {"undo", "tui.editor.undo"},
+            {"newLine", "tui.input.newLine"},
+            {"submit", "tui.input.submit"},
+            {"tab", "tui.input.tab"},
+            {"copy", "tui.input.copy"},
+            {"selectUp", "tui.select.up"},
+            {"selectDown", "tui.select.down"},
+            {"selectPageUp", "tui.select.pageUp"},
+            {"selectPageDown", "tui.select.pageDown"},
+            {"selectConfirm", "tui.select.confirm"},
+            {"selectCancel", "tui.select.cancel"},
+            {"interrupt", "app.interrupt"},
+            {"clear", "app.clear"},
+            {"exit", "app.exit"},
+            {"suspend", "app.suspend"},
+            {"cycleThinkingLevel", "app.thinking.cycle"},
+            {"cycleModelForward", "app.model.cycleForward"},
+            {"cycleModelBackward", "app.model.cycleBackward"},
+            {"selectModel", "app.model.select"},
+            {"expandTools", "app.tools.expand"},
+            {"toggleThinking", "app.thinking.toggle"},
+            {"toggleSessionNamedFilter", "app.session.toggleNamedFilter"},
+            {"externalEditor", "app.editor.external"},
+            {"followUp", "app.message.followUp"},
+            {"dequeue", "app.message.dequeue"},
+            {"pasteImage", "app.clipboard.pasteImage"},
+            {"newSession", "app.session.new"},
+            {"tree", "app.session.tree"},
+            {"fork", "app.session.fork"},
+            {"resume", "app.session.resume"},
+            {"treeFoldOrUp", "app.tree.foldOrUp"},
+            {"treeUnfoldOrDown", "app.tree.unfoldOrDown"},
+            {"treeEditLabel", "app.tree.editLabel"},
+            {"treeToggleLabelTimestamp", "app.tree.toggleLabelTimestamp"},
+            {"toggleSessionPath", "app.session.togglePath"},
+            {"toggleSessionSort", "app.session.toggleSort"},
+            {"renameSession", "app.session.rename"},
+            {"deleteSession", "app.session.delete"},
+            {"deleteSessionNoninvasive", "app.session.deleteNoninvasive"},
+    });
+    return kMigrations;
+}
+
+[[nodiscard]] std::string_view migrate_keybinding_name(std::string_view id) {
+    const auto& migrations = keybinding_name_migrations();
+    const auto found = std::ranges::find_if(migrations, [id](const auto& migration) { return migration.legacy == id; });
+    return found == migrations.end() ? id : found->canonical;
+}
+
+/// One stored binding value after pi's `KeybindingValueSchema` read. A value
+/// that is neither a `KeyId` nor a `KeyId[]` leaves `shape_valid` false with no
+/// `invalid_key`; a `KeyId[]` carrying an unparsable element names that element.
+/// Every accepted key normalizes to its canonical spelling, which is the
+/// spelling the registry resolves.
+struct BindingValue {
+    std::vector<std::string> keys{};
+    std::optional<std::string> invalid_key{};
+    bool shape_valid{false};
+};
+
+[[nodiscard]] BindingValue read_binding_value(const support::JsonValue& value) {
+    BindingValue result;
+    std::vector<std::string> raw;
+    if (const auto* key = value.get_if<std::string>()) {
+        raw.push_back(*key);
+    } else if (const auto* array = value.get_if<support::JsonValue::array_t>()) {
+        for (const auto& item : *array) {
+            const auto* key = item.get_if<std::string>();
+            if (key == nullptr) return result;
+            raw.push_back(*key);
         }
-        if (!valid_value) {
-            add_diagnostic(
-                result.diagnostics,
-                "invalid_binding_value",
-                std::format("keybinding action '{}' must use a string or string array", id),
-                path);
+    } else {
+        return result;
+    }
+    std::set<std::string, std::less<>> seen;
+    for (const auto& key : raw) {
+        auto parsed = cch::tui::parse_key_id(key);
+        if (!parsed) {
+            result.invalid_key = key;
+            return result;
+        }
+        auto canonical = cch::tui::key_id(*parsed);
+        if (seen.insert(canonical).second) result.keys.push_back(std::move(canonical));
+    }
+    result.shape_valid = true;
+    return result;
+}
+
+[[nodiscard]] ParsedOverrides parse_overrides(const support::JsonValue::object_t& object,
+        const std::set<std::string, std::less<>>& assembled_ids,
+        const std::vector<std::string>& catalog_order,
+        const std::filesystem::path& path) {
+    ParsedOverrides result;
+    // pi `migrateKeybindingsConfig` + `toKeybindingsConfig`: iterate the stored
+    // document once, drop `$schema`, rename a legacy id unless the document also
+    // carries the canonical id (the canonical entry wins), and drop a value the
+    // schema rejects. Unknown ids survive in the user map.
+    std::vector<std::pair<std::string, std::vector<std::string>>> retained;
+    for (const auto& [id, value] : object) {
+        if (id == "$schema") continue;
+        const std::string canonical{migrate_keybinding_name(id)};
+        if (canonical != id && object.contains(canonical)) continue;
+
+        auto binding = read_binding_value(value);
+        if (!binding.shape_valid) {
+            add_diagnostic(result.diagnostics,
+                    binding.invalid_key.has_value() ? "invalid_key" : "invalid_binding_value",
+                    binding.invalid_key.has_value()
+                            ? std::format("keybinding '{}' has invalid key '{}'", id, *binding.invalid_key)
+                            : std::format("keybinding action '{}' must use a string or string array", id),
+                    path);
             continue;
         }
-        result.overrides.push_back({.id = id, .keys = std::move(keys)});
+        const auto existing =
+                std::ranges::find_if(retained, [&canonical](const auto& entry) { return entry.first == canonical; });
+        if (existing != retained.end()) {
+            existing->second = std::move(binding.keys);
+        } else {
+            retained.emplace_back(canonical, std::move(binding.keys));
+        }
+    }
+
+    // pi `orderKeybindingsConfig`: catalog entries in catalog order, then the
+    // remaining ids sorted.
+    // debt: O(catalog x retained) scans over the fixed catalog and one user
+    // map; index both sides if the user map ever grows past a screenful.
+    for (const auto& id : catalog_order) {
+        const auto found = std::ranges::find_if(retained, [&id](const auto& entry) { return entry.first == id; });
+        if (found != retained.end()) {
+            result.user_bindings.push_back({.id = found->first, .keys = found->second});
+        }
+    }
+    std::vector<std::pair<std::string, std::vector<std::string>>> extras;
+    for (auto& entry : retained) {
+        const bool in_catalog = std::ranges::find(catalog_order, entry.first) != catalog_order.end();
+        if (!in_catalog) extras.push_back(std::move(entry));
+    }
+    std::ranges::sort(extras, [](const auto& left, const auto& right) { return left.first < right.first; });
+    for (auto& entry : extras) {
+        result.user_bindings.push_back({.id = std::move(entry.first), .keys = std::move(entry.second)});
+    }
+
+    // Only assembled actions reach the registry. A known-but-unassembled action
+    // and an unknown id are both retained above and diagnosed here.
+    for (const auto& binding : result.user_bindings) {
+        if (!assembled_ids.contains(binding.id)) {
+            add_diagnostic(result.diagnostics,
+                    known_unassembled_id(binding.id) ? "unavailable_action" : "unknown_action",
+                    known_unassembled_id(binding.id)
+                            ? std::format("keybinding action '{}' is not assembled", binding.id)
+                            : std::format("unknown keybinding action '{}'", binding.id),
+                    path);
+            continue;
+        }
+        result.overrides.push_back(binding);
     }
     return result;
 }
 
-[[nodiscard]] std::vector<cch::tui::KeybindingOverride> load_overrides(
-    const std::filesystem::path& path,
-    const std::set<std::string, std::less<>>& assembled_ids,
-    std::vector<KeybindingDiagnostic>& diagnostics) {
+/// Load the user map for one keybindings file. Both the registry overrides and
+/// the retained user map come from the same parse, so a reload cannot leave one
+/// of them stale.
+struct LoadedKeybindings {
+    std::vector<cch::tui::KeybindingOverride> overrides{};
+    std::vector<cch::tui::KeybindingOverride> user_bindings{};
+};
+
+[[nodiscard]] LoadedKeybindings load_overrides(const std::filesystem::path& path,
+        const std::set<std::string, std::less<>>& assembled_ids,
+        const std::vector<std::string>& catalog_order,
+        std::vector<KeybindingDiagnostic>& diagnostics) {
     if (path.empty()) return {};
     std::error_code status_error;
     const auto status = std::filesystem::status(path, status_error);
@@ -389,8 +547,10 @@ struct ParsedOverrides {
     }
     std::ostringstream content;
     content << input.rdbuf();
-    if (auto parsed = support::read_json(content.str());
-        !parsed || !parsed->holds<support::JsonValue::object_t>()) {
+    // pi `loadRawConfig` parses `stripBom(readFileSync(...))`: a keybindings
+    // file authored elsewhere may carry the UTF-8 BOM.
+    if (auto parsed = support::read_json(coding_agent::strip_bom(content.str()));
+            !parsed || !parsed->holds<support::JsonValue::object_t>()) {
         add_diagnostic(
             diagnostics,
             "invalid_keybindings_document",
@@ -398,12 +558,15 @@ struct ParsedOverrides {
             path);
         return {};
     } else {
-        auto transformed = parse_overrides(parsed->get_object(), assembled_ids, path);
+        auto transformed = parse_overrides(parsed->get_object(), assembled_ids, catalog_order, path);
         diagnostics.insert(
             diagnostics.end(),
             std::make_move_iterator(transformed.diagnostics.begin()),
             std::make_move_iterator(transformed.diagnostics.end()));
-        return std::move(transformed.overrides);
+        return LoadedKeybindings{
+                .overrides = std::move(transformed.overrides),
+                .user_bindings = std::move(transformed.user_bindings),
+        };
     }
 }
 
@@ -451,17 +614,22 @@ support::Expected<KeybindingsManagerResult> load_keybindings_manager(
         std::make_move_iterator(request.application_definitions.end()));
 
     std::set<std::string, std::less<>> assembled_ids;
-    for (const auto& definition : definitions) assembled_ids.insert(definition.id);
+    std::vector<std::string> catalog_order;
+    catalog_order.reserve(definitions.size());
+    for (const auto& definition : definitions) {
+        assembled_ids.insert(definition.id);
+        catalog_order.push_back(definition.id);
+    }
 
     std::vector<KeybindingDiagnostic> diagnostics;
     const auto path = request.agent_config_directory.empty()
         ? std::filesystem::path{}
         : request.agent_config_directory / "keybindings.json";
-    auto overrides = load_overrides(path, assembled_ids, diagnostics);
+    auto loaded = load_overrides(path, assembled_ids, catalog_order, diagnostics);
 
     cch::tui::KeybindingResolutionRequest resolution_request;
     resolution_request.definitions = std::move(definitions);
-    resolution_request.overrides = std::move(overrides);
+    resolution_request.overrides = std::move(loaded.overrides);
     if (auto resolution = cch::tui::resolve_keybindings(std::move(resolution_request)); !resolution) {
         return std::unexpected(resolution.error());
     } else {
@@ -474,6 +642,7 @@ support::Expected<KeybindingsManagerResult> load_keybindings_manager(
                 .registry = std::move(resolution->registry),
                 .help = std::move(help),
                 .diagnostics = std::move(diagnostics),
+                .user_bindings = std::move(loaded.user_bindings),
         };
     }
 }

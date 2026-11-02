@@ -529,11 +529,11 @@ TEST_CASE("SettingsManager loads and deep-merges the compaction settings object"
     CHECK(manager.project_settings().compaction->keep_recent_tokens == 4096);
 }
 
-TEST_CASE("SettingsManager compaction fields are optional and mistyped values fall back to defaults",
+TEST_CASE("SettingsManager compaction fields are optional and mistyped booleans fall back to defaults",
         "[settings][two-scope][issue359][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({
-        "compaction": { "enabled": "yes", "reserveTokens": -1, "keepRecentTokens": 10000 }
+        "compaction": { "enabled": "yes", "keepRecentTokens": 10000 }
     })");
 
     auto manager = coding_agent::SettingsManager::create(
@@ -541,10 +541,12 @@ TEST_CASE("SettingsManager compaction fields are optional and mistyped values fa
 
     REQUIRE(manager.errors().empty());
     REQUIRE(manager.settings().compaction.has_value());
-    // Mistyped fields are ignored, leaving them absent (the pi default at
-    // resolution); the valid field is kept.
+    // A mistyped `enabled` is ignored, leaving it absent (the pi default at
+    // resolution); the valid field is kept. The two token settings are not
+    // optional in the same way: pi's `getCompactionTokenSetting` rejects a
+    // mistyped, fractional or negative value, so they fail the load instead
+    // (SettingsSchemaTest.cpp, #1115).
     CHECK_FALSE(manager.settings().compaction->enabled.has_value());
-    CHECK_FALSE(manager.settings().compaction->reserve_tokens.has_value());
     CHECK(manager.settings().compaction->keep_recent_tokens == 10000);
 }
 
