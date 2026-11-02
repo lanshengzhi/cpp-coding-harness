@@ -1,5 +1,15 @@
 # #1158 — durable EnvIO bounds: listing pages, listing bounds and positioned reads
 
+## Current delivery scope
+
+The 2026-11-02 reassessment below supersedes the earlier implementation and
+validation descriptions in this record. The branch now retains only directory
+paging and positioned byte reads. The original unbounded `list` and read tool
+are preserved for compatibility; `list_files` and the tool's proposed byte
+parameters were removed from the current tree. Earlier descriptions and test
+counts document the preserved historical implementation, not the current tree.
+The ticket remains open for tree-listing and read-tool work.
+
 ## Scope
 
 Aligns the durable environment's file IO with the frozen Linux EnvIO surfaces
@@ -158,6 +168,43 @@ Measured on the default strict Debug preset, base `origin/main` `7e2ccc288`.
   compares page sizes, `done` marks and the union of the page names, and the
   listing cases compare every entry path and kind plus `truncated`.
 - `scripts/format-check.sh origin/main` and `git diff --check`: clean.
+
+## 2026-11-02 reassessment after merging main
+
+This ticket remains open. The owner resolved the issue wording against frozen
+`71023aec`: `BinaryReader.read(offset, length)` uses zero-based bytes and returns
+empty at or past EOF; the durable `read` tool instead uses one-based line
+`offset` and `limit`, reports an offset beyond the line count as an error, and
+applies the frozen default output limits. The issue's “same treatment” cannot
+mean identical parameter units on both surfaces. The prior proposed tool byte `offset`/`length` interface and its focused test
+were removed. The restored tool's no-parameter path still reads the whole file. Frozen reference:
+`packages/durable/src/env/index.ts` `BinaryReader` and
+`packages/durable/src/tools/read.ts` `readSchema`, `readText`, `readHead`.
+
+The environment interface and focused tests cover paged directory continuation,
+entry/byte limits, hidden and explicit excluded names, positional bytes, EOF,
+and large inputs. They do not cover the frozen default gitignore behavior:
+work-tree detection, parent and nested `.gitignore`, `.git/info/exclude`, global
+excludes, rule precedence, and `gitignore:false`. The capture explicitly disables
+that behavior. Frozen `packages/env/daemon/src/list.rs` uses the Rust `ignore`
+crate; the application-private `GitIgnoreMatcher` implements a different npm
+ignore subset and is not an established durable Owner seam.
+
+The removed tree-listing implementation has further gaps before acceptance:
+`smallest_names` scans a whole directory before checking the deadline; metadata
+failures are skipped only after retaining the bounded prefix, and unsupported
+file types were classified as files. Frozen listing skips unsupported
+kinds and checks its timeout as it walks. Frozen tool comparison still needs
+line selection, past-end error, default byte/line limits, BOM/UTF-8, diagnostics,
+and bounded memory, including the no-parameter path. The removed tool test asserted byte parameters and is not evidence for
+line semantics.
+
+A possible split is environment pagination and positional reads first, followed
+by listing ignore semantics and bounded line-oriented tool behavior. The first
+slice excludes the incompatible tool API and tree-listing implementation; the
+latter's edge cases must be resolved in its follow-up. Shared delivery receipt
+revalidation and serial-merger registration of `audit-1158` remain prerequisites
+for any delivery that changes their pinned inputs or registry.
 
 ## Capability status
 

@@ -271,6 +271,7 @@ public:
                 if (errno == ENOENT) continue;
                 return std::unexpected(system_failure("stat"));
             }
+            if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode)) continue;
             page.entries.push_back(file_info_of(entry_path, st));
         }
         page.done = done_;
@@ -281,77 +282,6 @@ private:
     fs::directory_iterator iterator_;
     bool done_{};
 };
-
-/// The frozen largest listing payload (`packages/env/daemon/src/frame.rs`
-/// `MAX_PAYLOAD`): 16 MiB less the frame's JSON allowance.
-constexpr std::size_t kMaxListBytes = 16 * 1024 * 1024 - 64 * 1024;
-
-/// What a whole-tree listing may still add; `truncated` records the bound that
-/// ended the walk.
-struct WalkBudget {
-    std::size_t entries{};
-    std::size_t bytes{};
-    std::chrono::steady_clock::time_point deadline{};
-    bool truncated{};
-};
-
-/// The smallest `limit` listable names below one directory, in byte order.
-/// Keeping the prefix while the whole directory streams past is what bounds the
-/// walk's memory by the listing's own entry bound instead of the directory size.
-std::vector<std::string> smallest_names(
-        const fs::path& directory, std::size_t limit, const ListOptions& options, std::stop_token stop) {
-    std::vector<std::string> kept;
-    if (limit == 0) return kept;
-    kept.reserve(std::min<std::size_t>(limit, 1024));
-    std::error_code ec;
-    fs::directory_iterator it(directory, fs::directory_options::skip_permission_denied, ec), end;
-    for (; !ec && it != end && !stop.stop_requested(); it.increment(ec)) {
-        auto name = it->path().filename().string();
-        if (name == ".git" || (!options.hidden && !name.empty() && name.front() == '.') ||
-                std::ranges::find(options.excluded_names, name) != options.excluded_names.end())
-            continue;
-        if (kept.size() < limit) {
-            kept.push_back(std::move(name));
-            std::ranges::push_heap(kept);
-        } else if (name < kept.front()) {
-            std::ranges::pop_heap(kept);
-            kept.back() = std::move(name);
-            std::ranges::push_heap(kept);
-        }
-    }
-    std::ranges::sort(kept);
-    return kept;
-}
-
-/// Walk `directory` depth first into `listing`, spending `budget`. False means a
-/// bound or the stop token ended the walk; the caller tells them apart.
-bool walk_listing(const fs::path& directory,
-        const std::string& prefix,
-        const ListOptions& options,
-        FileListing& listing,
-        WalkBudget& budget,
-        std::stop_token stop) {
-    for (const auto& name : smallest_names(directory, budget.entries + 1, options, stop)) {
-        if (stop.stop_requested()) return false;
-        const std::string path = prefix + name;
-        const std::size_t cost = path.size() + 2;
-        if (budget.entries == 0 || cost > budget.bytes || std::chrono::steady_clock::now() >= budget.deadline) {
-            budget.truncated = true;
-            return false;
-        }
-        const auto entry_path = directory / name;
-        struct stat st{};
-        // An entry that cannot be read is skipped, as frozen listFiles skips it.
-        if (::lstat(entry_path.c_str(), &st) != 0) continue;
-        const auto info = file_info_of(entry_path, st);
-        listing.entries.push_back(FileListEntry{.path = path, .kind = info.kind});
-        budget.entries -= 1;
-        budget.bytes -= cost;
-        if (info.kind == "directory" && !walk_listing(entry_path, path + "/", options, listing, budget, stop))
-            return false;
-    }
-    return true;
-}
 
 class LocalEnvironment final : public Environment {
 public:
@@ -399,12 +329,12 @@ public:
         // `offset` is never transferred; fewer bytes only means the file ended.
         while (result.size() < length) {
             if (stop.stop_requested()) return std::unexpected(cancelled());
-            const auto position = offset + result.size();
-            if (position > static_cast<std::uintmax_t>(std::numeric_limits<off_t>::max()))
+            const auto max_offset = static_cast<std::uintmax_t>(std::numeric_limits<off_t>::max());
+            if (offset > max_offset || result.size() > max_offset - offset)
                 return std::unexpected(failure(
                         "offset is beyond the file system's addressable range", support::ErrorCode::Validation));
             const auto want = std::min(buffer.size(), length - result.size());
-            const ssize_t n = ::pread(fd.get(), buffer.data(), want, static_cast<off_t>(position));
+            const ssize_t n = ::pread(fd.get(), buffer.data(), want, static_cast<off_t>(offset + result.size()));
             if (n < 0 && errno == EINTR) continue;
             if (n < 0) return std::unexpected(system_failure("pread"));
             if (n == 0) break;
@@ -465,26 +395,19 @@ public:
         }
         return std::unique_ptr<DirectoryReader>{std::make_unique<LocalDirectoryReader>(std::move(iterator))};
     }
-    support::Expected<FileListing> list_files(
-            std::string_view path, ListOptions options, std::stop_token stop) override {
-        if (stop.stop_requested()) return std::unexpected(cancelled());
-        auto root = resolve(path);
+    support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
         std::error_code ec;
-        const auto status = fs::status(root, ec);
+        fs::directory_iterator it(resolve(path), ec), end;
         if (ec) return std::unexpected(failure(ec.message()));
-        if (status.type() == fs::file_type::not_found) return std::unexpected(missing_path(root, "scandir"));
-        if (!fs::is_directory(status))
-            return std::unexpected(failure(std::format("ENOTDIR: not a directory, scandir '{}'", root.string()),
-                    support::ErrorCode::Validation));
-        options.max_bytes = std::min(options.max_bytes, kMaxListBytes);
-        FileListing listing;
-        WalkBudget budget{.entries = options.max_entries,
-                .bytes = options.max_bytes,
-                .deadline = std::chrono::steady_clock::now() + options.timeout};
-        (void)walk_listing(root, {}, options, listing, budget, stop);
-        if (stop.stop_requested()) return std::unexpected(cancelled());
-        listing.truncated = budget.truncated;
-        return listing;
+        std::vector<FileInfo> result;
+        while (it != end) {
+            auto info = stat(it->path().string(), stop);
+            if (!info) return std::unexpected(info.error());
+            result.push_back(std::move(*info));
+            it.increment(ec);
+            if (ec) return std::unexpected(failure(ec.message()));
+        }
+        return result;
     }
     support::Expected<std::string> create_temp_dir(std::string_view prefix, std::stop_token stop) override {
         if (stop.stop_requested()) return std::unexpected(cancelled());

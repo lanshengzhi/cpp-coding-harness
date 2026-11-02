@@ -40,39 +40,6 @@ public:
     virtual support::Expected<ListingPage> next(std::size_t max_entries, std::stop_token stop) = 0;
 };
 
-/// Bounds and filters for one whole-tree listing.
-struct ListOptions {
-    /// Most entries to list; the frozen default is 50,000. Zero lists no entry.
-    std::size_t max_entries{50'000};
-    /// Most bytes of the listing: each entry counts its UTF-8 path plus two.
-    /// The frozen default is 4 MiB and the frozen ceiling is the largest listing
-    /// payload (15.9 MiB); a larger request is clamped to the ceiling.
-    std::size_t max_bytes{4 * 1024 * 1024};
-    /// Include names starting with '.'; `.git` is never listed.
-    bool hidden{true};
-    /// Names to skip with everything below them, such as `node_modules`.
-    std::vector<std::string> excluded_names{};
-    /// Time after which the listing stops and reports `truncated`.
-    std::chrono::milliseconds timeout{10'000};
-};
-
-/// One entry of a whole-tree listing.
-struct FileListEntry {
-    /// Relative to the listed directory, with `/` separators.
-    std::string path;
-    /// "file", "directory" or "symlink"; a symbolic link is listed as such and
-    /// not followed.
-    std::string kind;
-};
-
-/// The files, directories and symbolic links below a directory.
-struct FileListing {
-    /// Depth first, parents before their entries, siblings in byte order of their names.
-    std::vector<FileListEntry> entries;
-    /// A bound in ListOptions ended the listing early.
-    bool truncated{};
-};
-
 struct ShellOutputWindow {
     std::size_t max_bytes{50000};
     std::size_t max_lines{2000};
@@ -138,11 +105,7 @@ public:
     /// Open a directory for paged listing; no entry is read until `next` is called.
     virtual support::Expected<std::unique_ptr<DirectoryReader>> open_directory(
             std::string_view path, std::stop_token stop) = 0;
-    /// The files, directories and symbolic links below a directory, at any
-    /// depth, bounded by ListOptions. Symbolic links are not followed, `.git` is
-    /// never listed, and entries that cannot be read are skipped.
-    virtual support::Expected<FileListing> list_files(
-            std::string_view path, ListOptions options, std::stop_token stop) = 0;
+    virtual support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) = 0;
     /// Create a fresh temporary directory for one run's output files. An
     /// environment without a temporary area reports that explicitly instead of
     /// silently writing beside the workspace.

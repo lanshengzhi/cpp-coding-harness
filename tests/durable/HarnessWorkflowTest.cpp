@@ -24,6 +24,7 @@
 #include <semaphore>
 #include <stop_token>
 #include <string>
+#include <sys/stat.h>
 #include <thread>
 #include <vector>
 
@@ -130,9 +131,8 @@ public:
             std::string_view path, std::stop_token stop) override {
         return inner_->open_directory(path, stop);
     }
-    support::Expected<FileListing> list_files(
-            std::string_view path, ListOptions options, std::stop_token stop) override {
-        return inner_->list_files(path, std::move(options), stop);
+    support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
+        return inner_->list(path, stop);
     }
     support::Expected<std::string> create_temp_dir(std::string_view prefix, std::stop_token stop) override {
         return inner_->create_temp_dir(prefix, stop);
@@ -349,12 +349,9 @@ TEST_CASE("Durable local environment reports file process and watch outcomes", "
     auto info = env->stat("file.txt", {});
     REQUIRE(info);
     CHECK(info->size == 5);
-    auto listing = env->open_directory(".", {});
+    auto listing = env->list(".", {});
     REQUIRE(listing);
-    auto page = (*listing)->next(10, {});
-    REQUIRE(page);
-    CHECK(page->entries.size() == 1);
-    CHECK(page->done);
+    CHECK(listing->size() == 1);
     std::string streamed;
     auto normal = env->exec(std::vector<std::string>{"/bin/sh", "-c", "printf out; printf err >&2; exit 7"},
             0ms,
@@ -729,28 +726,22 @@ TEST_CASE("Durable directory pages continue where the previous page stopped", "[
     CHECK(rejected.error().code == support::ErrorCode::Validation);
 }
 
+TEST_CASE("Durable directory pages skip unsupported file kinds", "[durable][environment][issue1158]") {
+    tests::TempWorkspace workspace;
+    const auto fifo = workspace.path() / "pipe";
+    REQUIRE(::mkfifo(fifo.c_str(), 0600) == 0);
+    auto env = local_environment(workspace.path().string());
+    REQUIRE(env->write("file", "x", {}));
+    auto reader = env->open_directory(".", {});
+    REQUIRE(reader);
+    auto page = (*reader)->next(10, {});
+    REQUIRE(page);
+    REQUIRE(page->entries.size() == 1);
+    CHECK(page->entries.front().name == "file");
+    CHECK(page->done);
+}
+
 namespace {
-
-/// The frozen listing's `{entries: [{path, kind}], truncated}` compared field by
-/// field, so a dropped filter or a bound that does not stop shows up by path.
-void check_listing(const FileListing& actual, const support::JsonValue& expected, std::string_view context) {
-    INFO(context);
-    const auto& expected_entries = expected.at("entries").get_array();
-    REQUIRE(actual.entries.size() == expected_entries.size());
-    for (std::size_t index = 0; index < expected_entries.size(); ++index) {
-        CHECK(actual.entries[index].path == expected_entries[index].at("path").get_string());
-        CHECK(actual.entries[index].kind == expected_entries[index].at("kind").get_string());
-    }
-    CHECK(actual.truncated == expected.at("truncated").get_boolean());
-}
-
-/// Write every frozen `files` entry of one listing scenario's inputs.
-void write_frozen_files(Environment& env, const FrozenScenario& scenario) {
-    const auto& inputs = scenario.inputs().get_object();
-    REQUIRE(inputs.contains("files"));
-    for (const auto& file : inputs.at("files").get_array())
-        REQUIRE(env.write(file.get_string(), "", {}));
-}
 
 /// This process's resident high-water mark in bytes (`VmHWM`). A read that
 /// loads a whole file raises it by the file's size; a positioned read raises it
@@ -762,7 +753,8 @@ std::uintmax_t high_water_bytes() {
         if (!line.starts_with("VmHWM:")) continue;
         const char* first = line.c_str() + 6;
         const char* last = line.c_str() + line.size();
-        while (first != last && (*first == ' ' || *first == '\t')) ++first;
+        while (first != last && (*first == ' ' || *first == '\t'))
+            ++first;
         std::uintmax_t kilobytes{};
         const auto [end, error] = std::from_chars(first, last, kilobytes);
         if (error != std::errc{} || end == first) return 0;
@@ -772,98 +764,6 @@ std::uintmax_t high_water_bytes() {
 }
 
 } // namespace
-
-TEST_CASE("Durable whole-tree listing follows the frozen depth-first and hidden shapes",
-        "[durable][environment][issue1158]") {
-    namespace fs = std::filesystem;
-    tests::TempWorkspace workspace;
-    auto env = local_environment(workspace.path().string());
-    const auto scenario = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1158/listing.json",
-            "listFiles lists files and directories depth first in name order");
-    REQUIRE(scenario.has_value());
-    write_frozen_files(*env, *scenario);
-    const auto& inputs = scenario->inputs().get_object();
-    REQUIRE(inputs.contains("directories"));
-    for (const auto& directory : inputs.at("directories").get_array()) {
-        std::error_code error;
-        fs::create_directories(workspace.path() / directory.get_string(), error);
-        REQUIRE_FALSE(error);
-    }
-
-    const auto listing = env->list_files(".", ListOptions{}, {});
-    REQUIRE(listing);
-    check_listing(*listing, scenario->expected().at("listing"), "hidden included");
-    // Reserved names are never listed and the tree reports no truncation.
-    CHECK_FALSE(listing->truncated);
-
-    auto options = ListOptions{};
-    options.hidden = false;
-    const auto hidden_off = env->list_files(".", options, {});
-    REQUIRE(hidden_off);
-    check_listing(*hidden_off, scenario->expected().at("hiddenOff"), "hidden excluded");
-    for (const auto& entry : hidden_off->entries)
-        CHECK_FALSE(entry.path.starts_with('.'));
-}
-
-TEST_CASE("Durable whole-tree listing stops at the frozen entry and byte bounds", "[durable][environment][issue1158]") {
-    tests::TempWorkspace workspace;
-    auto env = local_environment(workspace.path().string());
-    const auto scenario = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1158/listing.json",
-            "listFiles stops at its entry and byte bounds and reports truncated");
-    REQUIRE(scenario.has_value());
-    write_frozen_files(*env, *scenario);
-    const auto& cases = scenario->expected().at("cases").get_array();
-    REQUIRE_FALSE(cases.empty());
-    for (const auto& value : cases) {
-        ListOptions options;
-        const auto& frozen_options = value.at("options");
-        if (frozen_options.get_object().contains("maxEntries"))
-            options.max_entries = static_cast<std::size_t>(frozen_options.at("maxEntries").get_number());
-        if (frozen_options.get_object().contains("maxBytes"))
-            options.max_bytes = static_cast<std::size_t>(frozen_options.at("maxBytes").get_number());
-        const auto listing = env->list_files(".", options, {});
-        REQUIRE(listing);
-        INFO("maxEntries " << options.max_entries << ", maxBytes " << options.max_bytes);
-        check_listing(*listing, value.at("listing"), "bounded listing");
-    }
-    // The ceiling is the frozen 15.9 MiB listing payload, not the requested value.
-    auto oversized = ListOptions{};
-    oversized.max_bytes = 64 * 1024 * 1024;
-    const auto clamped = env->list_files(".", oversized, {});
-    REQUIRE(clamped);
-    CHECK(clamped->entries.size() == 3);
-    CHECK_FALSE(clamped->truncated);
-}
-
-TEST_CASE("Durable whole-tree listing applies hidden and excluded names and never lists .git",
-        "[durable][environment][issue1158]") {
-    tests::TempWorkspace workspace;
-    auto env = local_environment(workspace.path().string());
-    const auto scenario = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1158/listing.json",
-            "listFiles applies hidden and excluded names and never lists .git");
-    REQUIRE(scenario.has_value());
-    write_frozen_files(*env, *scenario);
-    const auto* excluded_names = scenario->inputs().at("exclude").get_if<support::JsonValue::array_t>();
-    REQUIRE(excluded_names != nullptr);
-
-    ListOptions options;
-    for (const auto& name : *excluded_names)
-        options.excluded_names.push_back(name.get_string());
-    const auto listing = env->list_files(".", options, {});
-    REQUIRE(listing);
-    check_listing(*listing, scenario->expected().at("excluded"), "excluded names");
-    CHECK(listing->entries.size() < 8);
-
-    options.hidden = false;
-    const auto hidden_off = env->list_files(".", options, {});
-    REQUIRE(hidden_off);
-    check_listing(*hidden_off, scenario->expected().at("hiddenOff"), "hidden and excluded names");
-    for (const auto& entry : hidden_off->entries) {
-        CHECK_FALSE(entry.path == ".git");
-        CHECK_FALSE(entry.path.starts_with(".git/"));
-        CHECK_FALSE(entry.path.starts_with("node_modules"));
-    }
-}
 
 TEST_CASE("Durable positioned reads return the frozen bytes and stop only at end of file",
         "[durable][environment][issue1158]") {
@@ -921,8 +821,8 @@ TEST_CASE("Durable positioned reads return the frozen bytes and stop only at end
     }
 }
 
-TEST_CASE(
-        "Durable listing and positioned reads stay bounded far past their bound", "[durable][environment][issue1158]") {
+TEST_CASE("Durable directory pages and positioned reads stay bounded far past their bound",
+        "[durable][environment][issue1158]") {
     tests::TempWorkspace workspace;
     auto env = local_environment(workspace.path().string());
     constexpr std::size_t kEntries = 3000;
@@ -957,16 +857,6 @@ TEST_CASE(
     names.erase(std::ranges::unique(names).begin(), names.end());
     CHECK(names.size() == kEntries);
 
-    // One-shot listing: the bound decides the result size, not the directory.
-    auto bounded = env->list_files("many", ListOptions{.max_entries = 100}, {});
-    REQUIRE(bounded);
-    CHECK(bounded->entries.size() == 100);
-    CHECK(bounded->truncated);
-    auto whole = env->list_files("many", ListOptions{.max_entries = kEntries}, {});
-    REQUIRE(whole);
-    CHECK(whole->entries.size() == kEntries);
-    CHECK_FALSE(whole->truncated);
-
     // A positioned read of a 512 MiB sparse file touches only its own chunk: a
     // whole-file implementation raises the process high-water mark by the file
     // size, which this bound separates from the chunk-sized read.
@@ -989,101 +879,6 @@ TEST_CASE(
     CHECK(beyond->empty());
     const auto after = high_water_bytes();
     CHECK(after < before + 64 * 1024 * 1024);
-}
-
-TEST_CASE(
-        "Durable read tool exposes byte offset and length without loading the file", "[durable][workflow][issue1158]") {
-    tests::TempWorkspace workspace;
-    Registry registry;
-    auto environment = local_environment(workspace.path().string());
-    REQUIRE(registry.install(coding_tools(environment)).has_value());
-    workspace.write("digits.txt", "0123456789abcdef");
-    bool declared = false;
-    std::atomic_int requests{0};
-    HarnessOptions options{.registry = &registry};
-    options.stream = [&declared, &requests](ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
-        for (const auto& tool : context.tools)
-            if (tool.name == "read") {
-                const auto& properties = tool.parameters.at("properties").get_object();
-                declared = properties.contains("offset") && properties.contains("length");
-            }
-        const int turn = requests++;
-        return ai::ModelStream{ai::ModelStreamProducer{
-                [turn](ai::AssistantEventSink sink, ai::ModelStreamCompletion completion) noexcept {
-                    auto message = ai::assistant_text_message("finished");
-                    if (turn < 2) {
-                        using Json = support::JsonValue;
-                        Json::object_t args{{"path", "digits.txt"}, {"offset", 4.0}, {"length", 4.0}};
-                        if (turn == 1) {
-                            args["offset"] = 4096.0;
-                            args["length"] = 8.0;
-                        }
-                        message.content = {ai::ToolCallContent{
-                                .id = std::to_string(turn), .name = "read", .arguments = Json{std::move(args)}}};
-                        message.stop_reason = ai::AssistantStopReason::ToolUse;
-                    }
-                    auto delivered = sink(ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
-                    if (!delivered)
-                        completion(std::unexpected(delivered.error()));
-                    else
-                        completion(std::move(message));
-                }}};
-    };
-    MemoryStorage storage;
-    auto opened = consume(Harness::open(storage, std::move(options)));
-    REQUIRE(opened.has_value());
-    auto harness = std::move(opened.value());
-    auto root = consume(harness->root());
-    REQUIRE(root.has_value());
-    auto submission = consume(harness->submit(root.value(), text_input("read")));
-    REQUIRE(submission.has_value());
-    auto settled = consume(submission.value().wait());
-
-    // Read the committed tool results without asserting: a malformed record
-    // must not abandon the frame while the Harness still owns threads.
-    const auto tool_texts = [&storage](ConversationId conversation) {
-        std::vector<std::string> texts;
-        auto entries = storage.scan_entries(conversation, 100);
-        if (!entries) return texts;
-        std::ranges::reverse(*entries);
-        for (const auto& entry : *entries) {
-            if (entry.kind != "pi.tool-result") continue;
-            const auto* envelope = entry.data.as_object();
-            if (envelope == nullptr) continue;
-            const auto found = envelope->find("model");
-            if (found == envelope->end()) continue;
-            const auto* messages = found->second.as_array();
-            if (messages == nullptr || messages->empty()) continue;
-            const auto* message = messages->front().as_object();
-            if (message == nullptr) continue;
-            const auto content = message->find("content");
-            if (content == message->end()) continue;
-            const auto* blocks = content->second.as_array();
-            if (blocks == nullptr || blocks->empty()) continue;
-            const auto* block = blocks->front().as_object();
-            if (block == nullptr) continue;
-            const auto text = block->find("text");
-            if (text == block->end()) continue;
-            if (const auto* value = text->second.as_string()) texts.push_back(*value);
-        }
-        return texts;
-    };
-
-    // Release-then-assert (CODING_STANDARDS §11.10): the run is drained, the
-    // tool results recorded and the Harness closed before any assertion can
-    // fail, so a RED run owns no live thread.
-    const auto conversation = root.value();
-    const auto outputs = tool_texts(conversation);
-    const auto closed = consume(harness->close());
-    CHECK(closed.has_value());
-    REQUIRE(settled.has_value());
-    CHECK(settled.value().status == "done");
-    CHECK(requests == 3);
-    CHECK(declared);
-    REQUIRE(outputs.size() == 2);
-    CHECK(outputs[0] == "4567");
-    // An offset past end of file is an empty result, not a tool error.
-    CHECK(outputs[1].empty());
 }
 
 TEST_CASE("compaction tool text follows frozen UTF-16 limits through the model request",

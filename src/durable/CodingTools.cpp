@@ -1,4 +1,3 @@
-#include "Utf8Text.hpp"
 #include "durable/EditDiff.hpp"
 #include "durable/FileMutationQueue.hpp"
 #include "durable/ToolContent.hpp"
@@ -11,8 +10,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cstddef>
-#include <cstdint>
 #include <format>
 #include <optional>
 #include <string>
@@ -106,33 +103,7 @@ std::vector<ai::Content> image_result(PreparedImage image, bool vision) {
             ai::text_content(std::format("<harness>\n[info] {}\n</harness>", message))};
 }
 
-/// The frozen read tool's byte budget (frozen `DEFAULT_MAX_BYTES`): an `offset`
-/// without an explicit `length` reads at most this much, so asking for the tail
-/// of a large file cannot pull the whole remainder into memory.
-constexpr std::size_t kDefaultReadBytes = 50 * 1024;
-
-Result read_path(std::string_view path,
-        Environment& env,
-        const CodingToolOptions& options,
-        std::stop_token stop,
-        std::optional<std::uintmax_t> offset = std::nullopt,
-        std::optional<std::size_t> length = std::nullopt) {
-    // A positioned read transfers only the requested bytes, so a file far larger
-    // than the output bound never enters memory. The range is bytes: a boundary
-    // that splits a UTF-8 sequence becomes U+FFFD rather than invalid text.
-    if (offset || length) {
-        const auto start = offset.value_or(0);
-        auto count = length;
-        if (!count) {
-            auto info = env.stat(path, stop);
-            if (!info) return std::unexpected(info.error());
-            const auto remaining = info->size > start ? info->size - start : 0;
-            count = static_cast<std::size_t>(std::min<std::uintmax_t>(remaining, kDefaultReadBytes));
-        }
-        auto content = env.read(path, start, *count, stop);
-        if (!content) return std::unexpected(content.error());
-        return text_result(decode_utf8(*content));
-    }
+Result read_path(std::string_view path, Environment& env, const CodingToolOptions& options, std::stop_token stop) {
     auto content = env.read(path, stop);
     if (!content) return std::unexpected(content.error());
     const std::span<const std::uint8_t> bytes{reinterpret_cast<const std::uint8_t*>(content->data()), content->size()};
@@ -183,30 +154,7 @@ Result run(std::string_view name,
         if (!result) return std::unexpected(result.error());
         return text_result("Successfully wrote to " + *path);
     }
-    std::optional<std::uintmax_t> offset;
-    std::optional<std::size_t> length;
-    const auto positional = [&args](std::string_view key) -> std::optional<double> {
-        const auto* value = field(args, key);
-        if (!value || !value->holds<double>()) return std::nullopt;
-        const double number = value->get_number();
-        // 2^53 is the last integer a double holds exactly; anything past it
-        // is not a byte count a caller can mean.
-        constexpr double kMaxExact = 9'007'199'254'740'992.0;
-        if (!(number >= 0 && number <= kMaxExact)) return std::nullopt;
-        if (number != static_cast<double>(static_cast<std::uintmax_t>(number))) return std::nullopt;
-        return number;
-    };
-    if (field(args, "offset")) {
-        const auto value = positional("offset");
-        if (!value) return failure("Invalid offset");
-        offset = static_cast<std::uintmax_t>(*value);
-    }
-    if (field(args, "length")) {
-        const auto value = positional("length");
-        if (!value) return failure("Invalid length");
-        length = static_cast<std::size_t>(*value);
-    }
-    return read_path(*path, env, options, stop, offset, length);
+    return read_path(*path, env, options, stop);
 }
 
 /// A rejected edit keeps the frozen `<harness>` diagnostic and carries no
@@ -276,15 +224,6 @@ support::JsonValue parameters(std::string_view name) {
         properties["timeout"] = Json::object_t{{"type", "number"}};
     } else {
         add_string("path");
-        if (name == "read") {
-            // Frozen pi's own read tool takes a 1-based line offset and a line
-            // limit; this durable tool exposes the EnvIO byte range instead
-            // (frozen `BinaryReader.read`), so `limit` is not a parameter.
-            properties["offset"] =
-                    Json::object_t{{"type", "integer"}, {"description", "Byte offset to start reading from"}};
-            properties["length"] =
-                    Json::object_t{{"type", "integer"}, {"description", "Maximum number of bytes to read"}};
-        }
         if (name == "write") add_string("content");
         if (name == "edit") {
             Json::object_t edit_properties{{"oldText", string_schema()}, {"newText", string_schema()}};
