@@ -117,7 +117,9 @@ Discriminating cases that fail on the recorded alternatives:
 ## Validation
 
 Measured on the merged tree, checkout base
-`50a45c53af89a0344638b666037bba517a05de4d` (`origin/main` merged into `1190`):
+`50a45c53af89a0344638b666037bba517a05de4d` (`origin/main` merged into `1190`);
+the delivery selections below were rerun at `6161556d0d1e41c353cc591c198d99c2d3c20278`,
+which adds only a `clang-format` wrap to the merge commit.
 
 - Focused: the new comparison selection passed 9/9; the MCP-related selection
   (`ctest --preset vcpkg -R 'MCP|mcp' -j2`) passed 166/166.

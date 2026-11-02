@@ -62,7 +62,7 @@
         },
         {
           "path": "src/mcp/HttpClient.cpp",
-          "sha256": "700cb9118963d35e74866649f1eb4d8908e4a5b2447e25a27a769ffc0cb1a728"
+          "sha256": "a1572e90184c1dd7f922246c1dec2161e824ff7f0b2e3c080dabe459b4166c9f"
         },
         {
           "path": "src/mcp/HttpClientImpl.hpp",
@@ -232,12 +232,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1101.xml"
         ],
-        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
-        "recordedAt": "2026-11-02T06:16:12Z",
+        "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
+        "recordedAt": "2026-11-02T06:43:10Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1101.xml",
-          "sha256": "304a491c9622566457dab56f377788a776fae025a43539e6a0a3fb5ab7716e48"
+          "sha256": "2eb5b93e2988c3f73d97aff9a27a73899b8e99bdd078e57ffb2f499dfa25890b"
         }
       },
       "rows": [
@@ -513,11 +513,11 @@
           "fixtures/pi-mcp/http_server.py",
           "tests/mcp/McpOwnerTest.cpp"
         ],
-        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1101.xml",
-          "sha256": "304a491c9622566457dab56f377788a776fae025a43539e6a0a3fb5ab7716e48"
+          "sha256": "2eb5b93e2988c3f73d97aff9a27a73899b8e99bdd078e57ffb2f499dfa25890b"
         }
       }
     },
@@ -1741,12 +1741,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1118.xml"
         ],
-        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
-        "recordedAt": "2026-11-02T06:16:12Z",
+        "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
+        "recordedAt": "2026-11-02T06:43:10Z",
         "selected": 19,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1118.xml",
-          "sha256": "8cf3b942ec1fea6d4bbbf32522ad0d0d69a1ea92d7c2448feba0306332e9a1c7"
+          "sha256": "f01d7e874b32f241111177d0b952a3c215910776388d6e7ffdc2f55018feeb21"
         }
       },
       "rows": [
@@ -2109,11 +2109,11 @@
         "changedInputs": [
           "fixtures/pi-mcp/echo_server.py"
         ],
-        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
         "selected": 19,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1118.xml",
-          "sha256": "8cf3b942ec1fea6d4bbbf32522ad0d0d69a1ea92d7c2448feba0306332e9a1c7"
+          "sha256": "f01d7e874b32f241111177d0b952a3c215910776388d6e7ffdc2f55018feeb21"
         }
       }
     },
@@ -2912,7 +2912,7 @@
         },
         {
           "path": "src/mcp/HttpClient.cpp",
-          "sha256": "700cb9118963d35e74866649f1eb4d8908e4a5b2447e25a27a769ffc0cb1a728"
+          "sha256": "a1572e90184c1dd7f922246c1dec2161e824ff7f0b2e3c080dabe459b4166c9f"
         },
         {
           "path": "src/mcp/HttpClientImpl.hpp",
@@ -3222,12 +3222,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1181.xml"
         ],
-        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
-        "recordedAt": "2026-11-02T06:16:12Z",
+        "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
+        "recordedAt": "2026-11-02T06:43:10Z",
         "selected": 16,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1181.xml",
-          "sha256": "94e3791d15e033df6714f6740a2a5cacf3fb374ca600a1cf7c4d0afd32114523"
+          "sha256": "29214d656a11d43b5e7ddc877f103a5f4e20b7f36a4622f9de824aaac04a8651"
         }
       },
       "rows": [
@@ -3583,11 +3583,11 @@
           "fixtures/pi-mcp/http_server.py",
           "fixtures/pi-mcp/echo_server.py"
         ],
-        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
         "selected": 16,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1181.xml",
-          "sha256": "94e3791d15e033df6714f6740a2a5cacf3fb374ca600a1cf7c4d0afd32114523"
+          "sha256": "29214d656a11d43b5e7ddc877f103a5f4e20b7f36a4622f9de824aaac04a8651"
         }
       }
     },
@@ -3717,7 +3717,7 @@
         },
         {
           "path": "src/mcp/HttpClient.cpp",
-          "sha256": "700cb9118963d35e74866649f1eb4d8908e4a5b2447e25a27a769ffc0cb1a728"
+          "sha256": "a1572e90184c1dd7f922246c1dec2161e824ff7f0b2e3c080dabe459b4166c9f"
         },
         {
           "path": "src/mcp/HttpClientImpl.hpp",
@@ -3803,12 +3803,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml"
         ],
-        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
-        "recordedAt": "2026-11-02T06:16:12Z",
+        "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
+        "recordedAt": "2026-11-02T06:43:10Z",
         "selected": 9,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml",
-          "sha256": "9c58b0a3c81fd20c7bc7cc92d958126cfc544cad05da49dcde2bb8696536cc3a"
+          "sha256": "e04694821270c9086db9a4169b998fde8b2dfe91cb5310c62ff52a592f695f2a"
         }
       },
       "rows": [
@@ -3909,11 +3909,11 @@
           "src/mcp/StdioClientImpl.hpp",
           "src/mcp/include/cch/mcp/HttpClient.hpp"
         ],
-        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
         "selected": 9,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml",
-          "sha256": "9c58b0a3c81fd20c7bc7cc92d958126cfc544cad05da49dcde2bb8696536cc3a"
+          "sha256": "e04694821270c9086db9a4169b998fde8b2dfe91cb5310c62ff52a592f695f2a"
         }
       }
     }
