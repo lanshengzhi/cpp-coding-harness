@@ -16,11 +16,13 @@
 namespace cch::tests {
 
 /// A `cch::durable::Storage` that delegates every real operation to an inner
-/// `cch::durable::MemoryStorage` and adds two fault-injection controls the
+/// `cch::durable::MemoryStorage` and adds the fault-injection controls the
 /// frozen memory backend has no equivalent of: holding one commit at a latch
 /// (the pre-settlement observation of `audit-1063` scenario "a prepared draft
-/// is not observable before Storage settles its commit") and failing the next
-/// commit (the frozen "disk vanished" backend failure).
+/// is not observable before Storage settles its commit"), failing the next
+/// commit (the frozen "disk vanished" backend failure), and observing a
+/// committed document read before it is answered (the `audit-1057`
+/// acquisition-cancellation shape).
 ///
 /// The double is never the subject under test: the committed records, the ID
 /// namespace and the sequences come from the real `MemoryStorage` behind it.
