@@ -94,9 +94,12 @@ class Environment {
 public:
     virtual ~Environment() = default;
     virtual support::Expected<std::string> read(std::string_view path, std::stop_token stop) = 0;
-    /// Up to `length` bytes at `offset`; fewer only at end of file. An offset at
-    /// or past the end reads an empty result, not an error, and nothing before
-    /// `offset` is read (frozen pi `BinaryReader.read`).
+    /// Up to `length` bytes at `offset`; fewer only at end of file. A
+    /// representable offset at or past the end reads an empty result, and
+    /// nothing before `offset` is read. A nonempty read that reaches beyond
+    /// the host's `off_t` range returns a Validation error. Each call opens
+    /// the path anew; unlike frozen pi `BinaryReader`, it does not retain file
+    /// identity across calls.
     virtual support::Expected<std::string> read(
             std::string_view path, std::uintmax_t offset, std::size_t length, std::stop_token stop) = 0;
     virtual support::ExpectedVoid write(std::string_view path, std::string_view content, std::stop_token stop) = 0;

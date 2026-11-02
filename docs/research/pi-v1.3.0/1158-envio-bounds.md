@@ -202,9 +202,36 @@ line semantics.
 A possible split is environment pagination and positional reads first, followed
 by listing ignore semantics and bounded line-oriented tool behavior. The first
 slice excludes the incompatible tool API and tree-listing implementation; the
-latter's edge cases must be resolved in its follow-up. Shared delivery receipt
+latter's edge cases must be resolved in its follow-up. The positioned operation
+opens a path for each call: it does not retain the frozen `BinaryReader`'s file
+identity across rename or replacement between calls. It returns a Validation
+error when the requested nonempty range reaches beyond `off_t`'s addressable
+range; the committed EOF comparison does not establish behavior across the full
+`uintmax_t` domain. Follow-up is needed if the selected public contract requires
+an open reader's identity or EOF behavior beyond the addressable range; the
+existing evidence does not establish either property. Shared delivery receipt
 revalidation and serial-merger registration of `audit-1158` remain prerequisites
 for any delivery that changes their pinned inputs or registry.
+
+### Current-tree validation
+
+On merged revision `b9b7c1fb2`, the `issue1158` selection passed 4/4. The
+`durable` selection ran 353 cases: 343 passed, 9 skipped (frozen-pi continuation
+prerequisites), and 1 failed. The failure, `generation publishes the attempt
+before the model stream and usage with the final answer`, observed
+`atomic_answer_commits == 0` instead of 1; a separate rerun failed identically.
+The corresponding test and Harness/Session/Workflow implementation are unchanged
+relative to the merged main. A pre-existing main-checkout binary also failed the
+same case, but its exact revision is unverified. The cause and possible indirect
+relationship to this branch remain unresolved.
+
+The 1090/1101/1104 receipt selection passed 36/36 and the 1184 selection passed
+10/10; their post-merge JUnit artifacts and reviewed changed-input digests replace
+neither prior artifact. Consolidation build and check passed, as did all 42
+`ConsolidationAuditTest.py` cases. Candidate `audit-1158` passed its manifest
+check; registry verification covered 56 registered bundles, 116 artifacts and
+654 scenarios. Registration remains with the serial merger. No unfiltered CTest
+suite was run, at the user's request.
 
 ## Capability status
 
