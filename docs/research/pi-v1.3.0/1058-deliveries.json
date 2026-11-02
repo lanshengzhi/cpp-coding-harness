@@ -546,14 +546,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1173-revalidation-1090-1104.xml"
+          "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml"
         ],
-        "testedRevision": "23f9dd8f7ae7f9d54eecfbc4377e9c6e17bda029",
-        "recordedAt": "2026-11-02T01:40:49Z",
+        "testedRevision": "4e9ad3fbf23a67f0f48abbec51b39ce488bfadfe",
+        "recordedAt": "2026-11-02T08:57:19Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1173-revalidation-1090-1104.xml",
-          "sha256": "b4596d7bf0c1a98b11e50ad0cee2d342319442d4cba62caf0eebfcff2394b8d8"
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml",
+          "sha256": "8d31b11728c6b5a14977d7c0642d79f8d7e665f5b71ab2e3aedc481d27a69ee2"
         }
       },
       "inputs": [
@@ -567,7 +567,7 @@
         },
         {
           "path": "docs/agents/architecture.md",
-          "sha256": "7be8cd40477e6c705d02d78fd0182fff8852a7c13df165f6958b958fc5132a34"
+          "sha256": "ab6fd86b097d98f4dd9223abed8cfa8929aedf02b3d4f86f99d5a43339148e41"
         },
         {
           "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
@@ -926,6 +926,31 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1184": {
+        "reason": "#1184 states the delivered Chord context wait and the durable Session's context-cancelling commit/watch/close semantics in the architecture record, which is a pinned input of this record. The delivered image rows, scenarios and routing digest are unchanged; the recorded durable-image selection was rerun on the #1184 tree into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "docs/agents/architecture.md"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1173-revalidation-1090-1104.xml"
+          ],
+          "testedRevision": "23f9dd8f7ae7f9d54eecfbc4377e9c6e17bda029",
+          "recordedAt": "2026-11-02T01:40:49Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1173-revalidation-1090-1104.xml",
+            "sha256": "b4596d7bf0c1a98b11e50ad0cee2d342319442d4cba62caf0eebfcff2394b8d8"
+          }
+        }
       }
     },
     {
@@ -2168,14 +2193,14 @@
           "chord",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1178-chord.xml"
+          "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml"
         ],
-        "testedRevision": "a3f9e28af4495a8f5ab96b5c06d04e18f4fe643b",
-        "recordedAt": "2026-11-01T02:20:26Z",
-        "selected": 70,
+        "testedRevision": "4e9ad3fbf23a67f0f48abbec51b39ce488bfadfe",
+        "recordedAt": "2026-11-02T08:57:19Z",
+        "selected": 73,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1178-chord.xml",
-          "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
+          "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml",
+          "sha256": "0269c24b4a9ea3aaed4444319df2e3767a92ac7aa7584d5d0c19104ea2c3bad9"
         }
       },
       "rows": [
@@ -2719,7 +2744,7 @@
         },
         {
           "path": "src/chord/ChordContext.cpp",
-          "sha256": "e26523b78954e4d6da4fd28e91e7cdafdd15a6893a50f5a11d171291162c0aaa"
+          "sha256": "4e461bbf0723c261cdd8eedf15b73eacf4293ebb0e34df13de06755c8254ddf1"
         },
         {
           "path": "src/chord/Delta.cpp",
@@ -2751,7 +2776,7 @@
         },
         {
           "path": "src/chord/include/cch/chord/ChordContext.hpp",
-          "sha256": "c5a063a7eee26bb73b7eefcff850b8bdea9024aab549252e7ed496d7e398d856"
+          "sha256": "38985e13280f91efc34bcf298b8e8040149208a261a4ed936e22f232e56c39c3"
         },
         {
           "path": "src/chord/include/cch/chord/Delta.hpp",
@@ -2795,7 +2820,7 @@
         },
         {
           "path": "tests/chord/ChordContextTest.cpp",
-          "sha256": "25730e51299f0baa125ffa58080fb35b6145079edb545ac54b3d3dc28ad16ecd"
+          "sha256": "1b64dadab0ece0ad5180c27f38eb2c9b133316653bab55ab3140b9f2fc012951"
         },
         {
           "path": "tests/chord/DeltaTest.cpp",
@@ -2873,7 +2898,34 @@
           "path": "docs/research/pi-v1.3.0/deliveries/1178-chord.xml",
           "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
         }
-      ]
+      ],
+      "revalidation1184": {
+        "reason": "#1184 adds the Chord waiter-only context wait, its frozen-abort error spelling and its comparison and discriminating cases to this record's pinned Chord production and test sources. The delivered rows, scenarios and routing digest are unchanged; the exact `-L chord` selection was rebuilt and rerun on the #1184 tree into a fresh JUnit artifact (73 cases, including the three new Chord cases), and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "src/chord/ChordContext.cpp",
+          "src/chord/include/cch/chord/ChordContext.hpp",
+          "tests/chord/ChordContextTest.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1178-chord.xml"
+          ],
+          "testedRevision": "a3f9e28af4495a8f5ab96b5c06d04e18f4fe643b",
+          "recordedAt": "2026-11-01T02:20:26Z",
+          "selected": 70,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-chord.xml",
+            "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
+          }
+        }
+      }
     },
     {
       "id": "1181-mcp-comparisons",
@@ -3958,6 +4010,230 @@
           "fixtures/pi-v1.3.0/baselines.json"
         ]
       }
+    },
+    {
+      "id": "1184-chord-context-cancellation",
+      "ticket": "1184",
+      "implementationCommits": [
+        "4e9ad3fbf23a67f0f48abbec51b39ce488bfadfe"
+      ],
+      "report": "docs/research/pi-v1.3.0/1184-chord-context-cancellation.md",
+      "validation": {
+        "command": [
+          "ctest",
+          "--preset",
+          "vcpkg",
+          "-L",
+          "issue1184",
+          "--output-on-failure",
+          "--output-junit",
+          "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml"
+        ],
+        "testedRevision": "4e9ad3fbf23a67f0f48abbec51b39ce488bfadfe",
+        "recordedAt": "2026-11-02T08:57:19Z",
+        "selected": 9,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
+          "sha256": "10360dc419a6765ac9e5a95f195dbfa516df6fe0f932f0aeba983d14895a2836"
+        }
+      },
+      "rows": [
+        {
+          "id": "cch_chord:context:await-with-context",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1057/context-cancellation.json",
+              "scenario": "a context wait rejects with the caller abort reason while the underlying work still completes",
+              "test": "a context wait rejects with the caller abort reason while the underlying work still completes",
+              "testSource": "tests/chord/ChordContextTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "an already cancelled context wait still starts and completes the underlying work",
+            "testSource": "tests/chord/ChordContextTest.cpp",
+            "reason": "A waiter that cancelled, dropped or never started its producer would leave the underlying operation uninitiated: the case cancels the caller before the wait is installed and requires the work to start anyway and to complete after the wait rejected."
+          }
+        },
+        {
+          "id": "cch_chord:context:watch-cancellation",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1057/context-cancellation.json",
+              "scenario": "cancelling a watch ends delivery without aborting a completed callback or later commits",
+              "test": "cancelling a watch ends delivery without aborting a completed callback or later commits",
+              "testSource": "tests/durable/SessionWatchTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "C++ Session cancellation and close with a Context",
+            "testSource": "tests/durable/SessionWatchTest.cpp",
+            "reason": "The frozen input commits under a context without an abort signal, so it cannot separate a masked commit context from the raw one. The composite commits under a context that is already cancelled and still requires the delivered frame to keep the commit's typed value with no abort signal, and requires a later commit not to reach the cancelled watch."
+          }
+        },
+        {
+          "id": "cch_chord:context:close-cancellation",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1057/context-cancellation.json",
+              "scenario": "cancelling the close caller rejects close while storage cleanup still completes",
+              "test": "cancelling the close caller rejects close while storage cleanup still completes",
+              "testSource": "tests/durable/SessionWatchTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "an already cancelled close caller still closes storage",
+            "testSource": "tests/durable/SessionWatchTest.cpp",
+            "reason": "The frozen caller is cancelled while cleanup is already running, so an implementation that checks the caller before starting cleanup still passes it. The case cancels the caller before close() is invoked and requires the rejection together with a started and completed storage close."
+          }
+        },
+        {
+          "id": "cch_chord:context:acquire-cancellation",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1057/context-cancellation.json",
+              "scenario": "cancelling a watch acquisition rejects the wait and leaves no write or partial observer",
+              "test": "cancelling a watch acquisition rejects the wait and leaves no write or partial observer",
+              "testSource": "tests/durable/SessionWatchTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a cancelled watch acquisition registers no observer",
+            "testSource": "tests/durable/SessionWatchTest.cpp",
+            "reason": "The frozen caller observes only the rejected wait. The case starts the acquisition itself and cancels it inside its committed read, so an implementation that registers the observer before its cancellation check returns a watch instead of the rejection and fails."
+          }
+        }
+      ],
+      "routingSha256": "4cfa25ec769c70354c9240fc25e3902c331402670f0b29a1e0e2a6a153bfdb57",
+      "inputs": [
+        {
+          "path": "CMakeLists.txt",
+          "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+        },
+        {
+          "path": "CMakePresets.json",
+          "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+        },
+        {
+          "path": "vcpkg.json",
+          "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+        },
+        {
+          "path": "cmake/targets/Chord.cmake",
+          "sha256": "db34ddc2693d5187df2a94f0e38eacb3262796fe2b0d93ab7ef99167aceccf76"
+        },
+        {
+          "path": "cmake/targets/Durable.cmake",
+          "sha256": "35ad925b149e51b49a2e1162252e84f451b325292a451db0651a405e95e3496d"
+        },
+        {
+          "path": "cmake/tests/ChordTests.cmake",
+          "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+        },
+        {
+          "path": "cmake/tests/DurableTests.cmake",
+          "sha256": "f6840104c20daa76cc8b46d43f7b8c7290d0855941aab09a0a6096da903d5b23"
+        },
+        {
+          "path": "cmake/tests/TestsSetup.cmake",
+          "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+        },
+        {
+          "path": "docs/agents/architecture.md",
+          "sha256": "ab6fd86b097d98f4dd9223abed8cfa8929aedf02b3d4f86f99d5a43339148e41"
+        },
+        {
+          "path": "src/chord/ChordContext.cpp",
+          "sha256": "4e461bbf0723c261cdd8eedf15b73eacf4293ebb0e34df13de06755c8254ddf1"
+        },
+        {
+          "path": "src/chord/include/cch/chord/ChordContext.hpp",
+          "sha256": "38985e13280f91efc34bcf298b8e8040149208a261a4ed936e22f232e56c39c3"
+        },
+        {
+          "path": "src/durable/Session.cpp",
+          "sha256": "3d4a9216f55629de4790bbec2f07a8bae8140c580865e3c6b503c468f4e5862d"
+        },
+        {
+          "path": "src/durable/include/cch/durable/Records.hpp",
+          "sha256": "3cefc99a064d61e776f2f0c1e13bce60d9e4a9f3cb190495c528ce463e774126"
+        },
+        {
+          "path": "src/durable/include/cch/durable/Session.hpp",
+          "sha256": "6346813ad86e087e6e226cee630387e5e69d2d9ed0c3e89268960a4c8499494d"
+        },
+        {
+          "path": "src/durable/include/cch/durable/Storage.hpp",
+          "sha256": "77763b3c250e98f3122d25445a9c8d5b69f16f0dbe876b8de9f0138107ddc73e"
+        },
+        {
+          "path": "src/support/include/cch/support/AsyncResult.hpp",
+          "sha256": "db1e2881ae278abd38df766bc02aaba31963edea2575421d98759b4c21cef188"
+        },
+        {
+          "path": "src/support/include/cch/support/Error.hpp",
+          "sha256": "195585394d91c60b92f5b5ee85bb81e3961cd9a3e4a293298403f8f1032e558f"
+        },
+        {
+          "path": "tests/Catch2Main.cpp",
+          "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+        },
+        {
+          "path": "tests/chord/ChordContextTest.cpp",
+          "sha256": "1b64dadab0ece0ad5180c27f38eb2c9b133316653bab55ab3140b9f2fc012951"
+        },
+        {
+          "path": "tests/durable/DocumentLifecycleTest.cpp",
+          "sha256": "c9da13e57ef3f941c532a4d482b56e48e0e739435a7b5558e6e0a26b5c405c4a"
+        },
+        {
+          "path": "tests/durable/FrozenExpectation.cpp",
+          "sha256": "cab86745d028cbcc6ccb4caef0c07e366e9730bd95c818225f2d445013993f90"
+        },
+        {
+          "path": "tests/durable/FrozenExpectation.hpp",
+          "sha256": "c8081cfca0ac27c0f8bd80713d0ea7869d564c9230ff4c76c4f67fd9534c571b"
+        },
+        {
+          "path": "tests/durable/GatedStorage.hpp",
+          "sha256": "43a7d23f32d460b5de071e7a2dc223be63e20d5eb288635d322e4550c07868a3"
+        },
+        {
+          "path": "tests/durable/HarnessWorkflowTest.cpp",
+          "sha256": "8630c6a7ef81297e3707c34b36408c7710ab0db782d9c5ccc9546083301ab1e3"
+        },
+        {
+          "path": "tests/durable/Outcome.hpp",
+          "sha256": "ae76f3f6052cfe7aaa8e3a5dba0103d3b63e9fcaa958fb26f3e879259c9fd0bd"
+        },
+        {
+          "path": "tests/durable/SessionWatchTest.cpp",
+          "sha256": "41d5f60ec45c40aea5d725c61b3c39495cf09b3ac2486559d4fbb4dbc7e52f86"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+          "sha256": "9b4fa6273547f7b301773571f8bd58066f0574a8c563bdc371be0821c018d817"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
+          "sha256": "d56e0cb0f2a8afbb2045de990390d74e7898d50f7dfad9458cd34a7e23a63e6d"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+        },
+        {
+          "path": "scripts/evidence/audit_evidence.py",
+          "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
+          "sha256": "10360dc419a6765ac9e5a95f195dbfa516df6fe0f932f0aeba983d14895a2836"
+        }
+      ]
     }
   ]
 }
