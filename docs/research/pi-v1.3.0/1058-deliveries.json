@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
+          "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -526,6 +526,13 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1191m": {
+        "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -599,7 +606,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -926,6 +933,13 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1191m": {
+        "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1070,7 +1084,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1473,6 +1487,13 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1191m": {
+        "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1732,11 +1753,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
+          "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2139,6 +2160,13 @@
       },
       "revalidation1190m": {
         "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
+      },
+      "revalidation1191m": {
+        "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
@@ -3228,7 +3256,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
+          "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3236,7 +3264,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
         }
       ],
       "validation": {
@@ -3624,6 +3652,13 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1191m": {
+        "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -3688,7 +3723,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -3696,7 +3731,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
+          "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3953,6 +3988,13 @@
       },
       "revalidation1190m": {
         "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
+      },
+      "revalidation1191m": {
+        "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
