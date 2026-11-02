@@ -2275,14 +2275,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml"
+            "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187.xml"
           ],
-          "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
-          "recordedAt": "2026-11-02T08:57:19Z",
-          "selected": 79,
+          "testedRevision": "70489aa5d05945b7485949b6581658775146a76e",
+          "recordedAt": "2026-11-02T12:45:00Z",
+          "selected": 88,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml",
-            "sha256": "3a726eee891d275d38ddf6a41053e356174fb5ba57d526243b2200b06bfcb47c"
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187.xml",
+            "sha256": "24b5b0959884bcaba75669b70d53fbc1a0f7acb19173d49530935da21c6f7d21"
           }
         },
         "rows": [
@@ -2842,7 +2842,7 @@
           },
           {
             "path": "src/chord/Output.cpp",
-            "sha256": "8fbda3b245bfe902c293691ec49fbe3d7d157c04eb2bbd8c0585f7f11a345d59"
+            "sha256": "54f44fb9f067809ffbc64dbc6c1eb7ac6155c444e68f8e8bb026ce1e9f16f0c4"
           },
           {
             "path": "src/chord/ReplicatedState.cpp",
@@ -2870,7 +2870,7 @@
           },
           {
             "path": "src/chord/include/cch/chord/Output.hpp",
-            "sha256": "02fa83eb4497861eaaffbaa68d6bb88e7460ee1fb4d22a29aa982024c56d0f71"
+            "sha256": "0ca02dada530b5d6e68e8e2cb2f8bebd02af386e837b2335c2177b099a738021"
           },
           {
             "path": "src/chord/include/cch/chord/ReplicatedState.hpp",
@@ -2910,7 +2910,7 @@
           },
           {
             "path": "tests/chord/OutputTest.cpp",
-            "sha256": "8c5ef148c2bdfc8017d4fb7224674578fcf49c33df19ff6dd4657d998888ec56"
+            "sha256": "05623d86fd04506948e150f870f026709cd7b06c92a6a21c0c9509b842e3ef07"
           },
           {
             "path": "tests/chord/ReplicatedStateTest.cpp",
@@ -3013,6 +3013,33 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1185.xml",
               "sha256": "9bfa75c5674ae9981f3f439fe3019a37b14fdec6d69438f168c1b6f1a10c2753"
+            }
+          }
+        },
+        "revalidation1187": {
+          "reason": "#1187 added the frozen progress byte-rate constant and the timer-free progress pacing seam to the Chord output helpers, which changed src/chord/Output.cpp, its Owner header and tests/chord/OutputTest.cpp — three inputs the #1178 receipt pins. The claimed rows, scenarios and routing digest are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1187.xml (88 cases, all passing, including the four new #1187 cases). The original deliveries/1178-chord.xml and the earlier revalidation artifacts are retained.",
+          "changedInputs": [
+            "src/chord/Output.cpp",
+            "src/chord/include/cch/chord/Output.hpp",
+            "tests/chord/OutputTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml"
+            ],
+            "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
+            "recordedAt": "2026-11-02T08:57:19Z",
+            "selected": 79,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml",
+              "sha256": "3a726eee891d275d38ddf6a41053e356174fb5ba57d526243b2200b06bfcb47c"
             }
           }
         }
@@ -4834,6 +4861,144 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
         }
+      },
+      {
+        "id": "1187-chord-progress-pacing",
+        "ticket": "1187",
+        "implementationCommits": [
+          "e168504bed7631b38b096058183cdddd809616ef",
+          "70489aa5d05945b7485949b6581658775146a76e"
+        ],
+        "report": "docs/research/pi-v1.3.0/1187-chord-progress-pacing.md",
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1187",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1187-chord.xml"
+          ],
+          "testedRevision": "70489aa5d05945b7485949b6581658775146a76e",
+          "recordedAt": "2026-11-02T12:45:00Z",
+          "selected": 4,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1187-chord.xml",
+            "sha256": "6d8693e2ffd3aa327527f15a1bd1a2047a026960a479364ce9f0251c07179609"
+          }
+        },
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/targets/Chord.cmake",
+            "sha256": "db34ddc2693d5187df2a94f0e38eacb3262796fe2b0d93ab7ef99167aceccf76"
+          },
+          {
+            "path": "cmake/tests/ChordTests.cmake",
+            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "src/chord/Output.cpp",
+            "sha256": "54f44fb9f067809ffbc64dbc6c1eb7ac6155c444e68f8e8bb026ce1e9f16f0c4"
+          },
+          {
+            "path": "src/chord/include/cch/chord/Output.hpp",
+            "sha256": "0ca02dada530b5d6e68e8e2cb2f8bebd02af386e837b2335c2177b099a738021"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/chord/OutputTest.cpp",
+            "sha256": "05623d86fd04506948e150f870f026709cd7b06c92a6a21c0c9509b842e3ef07"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
+            "sha256": "d56e0cb0f2a8afbb2045de990390d74e7898d50f7dfad9458cd34a7e23a63e6d"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+            "sha256": "754e7ad07a9279754638f6dca161eebd4de46e2197797e57a989b95eb28fc525"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1187/manifest.json",
+            "sha256": "409185e746586ce6fef786f3d78755a61ae71faeadb913303b8d16b35056f7c1"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1187/chord-progress.json",
+            "sha256": "5ed020de959116d1b623c49b56de9900c8e0939e9a8407709a01bb9a093516a0"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1187/capture-1187.mts",
+            "sha256": "2e683abc9aa98b3313961ef8b75b2ebc971eaa2b2349d71c5a94981003887eb1"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1187/scenarios.mts",
+            "sha256": "35769ec4c54e78f96624cea4ad47846ad85c2ec9aef02cdafa205d2a4d9d645a"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1187/pi.mts",
+            "sha256": "64306a35a5536183eb84a3277ccb018121a3966468b16c43a4995df53ecede7d"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.json",
+            "sha256": "5a08743f52e131024bc429023e110ec6ea028f09c4f0a434bf9c5d9f181462ed"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1187-chord-progress-pacing.md",
+            "sha256": "5249785c5343a06aeda0a662331b57e7a2cbf93d9861eb231ce39faa40801f03"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/deliveries/1187-chord.xml",
+            "sha256": "6d8693e2ffd3aa327527f15a1bd1a2047a026960a479364ce9f0251c07179609"
+          }
+        ],
+        "routingSha256": "d73e0d86ee3b9f43f22010d835278a5bce412290233d79bf3f64719dd7994edc",
+        "rows": [
+          {
+            "id": "cch_chord:output:progress-rate",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/json-output-support.json",
+                "scenario": "the progress byte rate is the frozen 100 KiB/s constant",
+                "test": "the progress byte rate is the frozen 100 KiB/s constant",
+                "testSource": "tests/chord/OutputTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "progress pacing separates a byte-rate pause from a constant interval and rounded bytes",
+              "testSource": "tests/chord/OutputTest.cpp",
+              "reason": "The frozen constant is the 100 KiB/s byte rate, so the pause for a 50 KiB commit is 500 ms and a 1 025-byte commit buys 10.009765625 ms. A seam that uses a fixed millisecond interval reports 100 ms for the first and a seam that rounds the bytes or the pause reports 10 ms for the second; both fail here while the bare constant assertion still passes."
+            }
+          }
+        ]
       }
     ]
   },
@@ -5076,8 +5241,8 @@
         "not-applicable": 2
       },
       "cch_chord": {
-        "implemented": 37,
-        "missing": 22,
+        "implemented": 38,
+        "missing": 21,
         "not-applicable": 5,
         "partial": 1
       },
@@ -5116,16 +5281,16 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1073,
-      "missing": 195,
+      "implemented": 1074,
+      "missing": 194,
       "not-applicable": 18,
       "partial": 178
     },
     "verification": {
       "not-applicable": 28,
       "unverified": 1013,
-      "upstream-captured": 365,
-      "verified": 58
+      "upstream-captured": 364,
+      "verified": 59
     },
     "evidenceRoute": {
       "captured": 423,
@@ -15310,15 +15475,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/tool.ts:315",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1187",
       "scenario": "the progress byte rate is the frozen 100 KiB/s constant",
       "comparisonScenarios": [
         "the progress byte rate is the frozen 100 KiB/s constant"
@@ -15330,12 +15495,12 @@
         "capturedScenarios": [
           "the progress byte rate is the frozen 100 KiB/s constant"
         ],
-        "result": "PROGRESS_BYTES_PER_SECOND = 102400."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1187-chord-progress-pacing.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Use the exact constant when implementing durable tool progress.",
+      "remainingWork": null,
+      "notes": "Delivered by #1187; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1187-chord-progress-pacing.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -15348,7 +15513,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "the progress byte rate is the frozen 100 KiB/s constant"
+          ],
+          "result": "PROGRESS_BYTES_PER_SECOND = 102400."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Use the exact constant when implementing durable tool progress."
+      },
+      "delivery": "1187-chord-progress-pacing"
     },
     {
       "id": "cch_chord:output:utf8-byte-length",

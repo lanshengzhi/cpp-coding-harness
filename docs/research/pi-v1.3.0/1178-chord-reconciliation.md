@@ -202,6 +202,14 @@ selected, 79 passed, including every case this record claims) and the record car
 `revalidation1184` entry with the refreshed digests. No claimed row, scenario or routing digest
 changed, and the original `deliveries/1178-chord.xml` stays committed.
 
+[#1187](1187-chord-progress-pacing.md) later changed `src/chord/Output.cpp`, its Owner header and
+`tests/chord/OutputTest.cpp` while adding the frozen progress byte-rate constant and the timer-free
+pacing seam. Three inputs this receipt pins therefore changed, and the selection now has the four new
+Chord progress cases. The shared selection was rerun on the #1187 merged tree into
+`deliveries/1178-revalidation-1187.xml` (88 selected, 88 passed, including every case this record
+claims) and the record carries a `revalidation1187` entry with the refreshed digests. No claimed row,
+scenario or routing digest changed, and the original `deliveries/1178-chord.xml` stays committed.
+
 The receipt pins the exact JUnit bytes, so the selected count, the case names and the scenario
 mapping cannot drift silently.
 
