@@ -68,6 +68,7 @@ public:
     }
     [[nodiscard]] const support::JsonValue& server_capabilities() const noexcept override { return capabilities_; }
     void set_notification_listener(NotificationSink) override {}
+    void set_request_handler(std::string, ServerRequestHandler) override {}
     void close() noexcept override {}
 
     std::string name_{"scripted"};

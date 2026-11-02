@@ -12,6 +12,7 @@
 
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
+#include "support/JsonCompare.hpp"
 #include "support/ReleaseGate.hpp"
 
 #include <cch/support/Error.hpp>
@@ -52,6 +53,7 @@ using namespace std::chrono_literals;
 
 using cch::mcp::HttpClient;
 using cch::mcp::HttpGetStreamOptions;
+using cch::mcp::HttpServerConfig;
 using coding_agent::mcp::McpHttpServerConfig;
 
 [[nodiscard]] support::Error stream_cancelled() {
@@ -336,6 +338,13 @@ private:
     return *client;
 }
 
+[[nodiscard]] std::shared_ptr<HttpClient> connect_client(
+        Loop& loop, const std::shared_ptr<ScriptedTransport>& transport, HttpServerConfig config) {
+    auto client = loop.run(HttpClient::connect(std::move(config), transport));
+    REQUIRE(client.has_value());
+    return *client;
+}
+
 [[nodiscard]] std::string message_event(std::string_view json) {
     return "event: message\ndata: " + std::string{json} + "\n\n";
 }
@@ -559,7 +568,34 @@ TEST_CASE("MCP GET stream: an unknown server request is answered -32601", "[codi
     client->close();
 }
 
-TEST_CASE("MCP GET stream: server request roots/list is answered with file://<cwd>", "[coding_agent][mcp]") {
+TEST_CASE("MCP GET stream: server request roots/list is answered with the connection's configured roots",
+        "[coding_agent][mcp][frozen][issue1190]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->set_default_get(live_stream({message_event(R"({"jsonrpc":"2.0","id":10,"method":"roots/list"})")}));
+    Loop loop;
+    auto config = scripted_config();
+    // Frozen pi-v1.3.0 `McpClientOptions.roots` (audit-1190
+    // `server-requests.json`, same-named scenario): the handler answers with the
+    // roots the connection carries, verbatim, not with a root derived from the
+    // process cwd.
+    config.roots = std::vector<mcp::Root>{{.uri = "file:///workspace", .name = "workspace"}};
+    auto client = connect_client(loop, transport, std::move(config));
+
+    REQUIRE(loop.pump_until([&] { return transport->posted_response(10).has_value(); }, 2s));
+    const auto response = transport->posted_response(10);
+    auto expected = support::read_json(R"({"jsonrpc":"2.0","id":10,"result":{"roots":[
+            {"uri":"file:///workspace","name":"workspace"}]}})");
+    REQUIRE(expected.has_value());
+    client->close();
+    const auto mismatch = tests::json_mismatch(*expected, *response);
+    CHECK_FALSE(mismatch.has_value());
+    if (mismatch) {
+        INFO(*mismatch);
+    }
+}
+
+TEST_CASE("MCP GET stream: server request roots/list without connection roots is answered -32601",
+        "[coding_agent][mcp][discriminating][issue1190]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->set_default_get(live_stream({message_event(R"({"jsonrpc":"2.0","id":10,"method":"roots/list"})")}));
     Loop loop;
@@ -567,21 +603,15 @@ TEST_CASE("MCP GET stream: server request roots/list is answered with file://<cw
 
     REQUIRE(loop.pump_until([&] { return transport->posted_response(10).has_value(); }, 2s));
     const auto response = transport->posted_response(10);
-    const auto* object = response->get_if<support::JsonValue::object_t>();
-    REQUIRE(object != nullptr);
-    const auto result = object->find("result");
-    REQUIRE(result != object->end());
-    const auto* result_object = result->second.get_if<support::JsonValue::object_t>();
-    REQUIRE(result_object != nullptr);
-    const auto roots = result_object->find("roots");
-    REQUIRE(roots != result_object->end());
-    const auto* roots_array = roots->second.get_if<support::JsonValue::array_t>();
-    REQUIRE(roots_array != nullptr);
-    REQUIRE(roots_array->size() == 1);
-    const auto* root_item = roots_array->front().get_if<support::JsonValue::object_t>();
-    REQUIRE(root_item != nullptr);
-    CHECK(root_item->at("uri").get_string().starts_with("file://"));
+    auto expected = support::read_json(
+            R"({"jsonrpc":"2.0","id":10,"error":{"code":-32601,"message":"Method not found: roots/list"}})");
+    REQUIRE(expected.has_value());
     client->close();
+    const auto mismatch = tests::json_mismatch(*expected, *response);
+    CHECK_FALSE(mismatch.has_value());
+    if (mismatch) {
+        INFO(*mismatch);
+    }
 }
 
 TEST_CASE("MCP GET stream: notifications/cancelled aborts the in-flight handler", "[coding_agent][mcp]") {

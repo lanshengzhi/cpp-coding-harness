@@ -12,8 +12,17 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace cch::mcp {
+
+/// pi `Root` (`packages/mcp/src/protocol/types.ts`): one filesystem root a
+/// client advertises to the server. `name` is optional; the server treats
+/// `uri` as the location.
+struct Root {
+    std::string uri;
+    std::optional<std::string> name;
+};
 
 /// The MCP protocol version Pike requests on a connection: pi
 /// `LATEST_PROTOCOL_VERSION`, the version the frozen bundle records under
@@ -45,10 +54,11 @@ inline constexpr std::string_view kClientVersion = "0.1.0";
 namespace detail {
 
 /// The `initialize` parameters (pi `client.ts` `connect`): the client's
-/// protocol version, capabilities (with roots when cwd is non-empty), and
-/// identity. Shared by the initial handshake and a reconnect, and by both
-/// transports.
-[[nodiscard]] inline support::JsonValue initialize_params(bool with_roots = true) {
+/// protocol version, capabilities, and identity. pi advertises the `roots`
+/// capability only when the connection carries roots, so `with_roots` is the
+/// caller's configured-roots flag rather than a protocol constant. Shared by
+/// the initial handshake and a reconnect, and by both transports.
+[[nodiscard]] inline support::JsonValue initialize_params(bool with_roots) {
     support::JsonValue::object_t capabilities;
     if (with_roots) {
         capabilities["roots"] = support::JsonValue::object_t{};

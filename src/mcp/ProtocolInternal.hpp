@@ -4,15 +4,18 @@
 // Not an Owner Interface: it needs the private JSON serializer and is compiled
 // into cch_mcp only.
 
+#include <cch/mcp/Client.hpp>
 #include <cch/mcp/Protocol.hpp>
 
 #include "support/Json.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace cch::mcp::detail {
 
@@ -107,6 +110,40 @@ namespace cch::mcp::detail {
     auto serialized = support::write_json(notification);
     return serialized ? std::move(*serialized) : std::string{"{}"};
 }
+
+/// One JSON-RPC success response to a server-to-client request. `id` is the
+/// server's id, echoed as the JSON value the server chose (a number or a
+/// string, pi `isJsonRpcId`).
+[[nodiscard]] inline support::JsonValue result_response(support::JsonValue id, support::JsonValue result) {
+    return support::JsonValue{support::JsonValue::object_t{
+            {"jsonrpc", "2.0"},
+            {"id", std::move(id)},
+            {"result", std::move(result)},
+    }};
+}
+
+/// One JSON-RPC error response to a server-to-client request (pi
+/// `handleRequest`: `-32601` for an unknown method, `-32603` for a handler
+/// failure).
+[[nodiscard]] inline support::JsonValue error_response(support::JsonValue id, int code, std::string message) {
+    return support::JsonValue{support::JsonValue::object_t{
+            {"jsonrpc", "2.0"},
+            {"id", std::move(id)},
+            {"error",
+                    support::JsonValue::object_t{
+                            {"code", static_cast<double>(code)},
+                            {"message", std::move(message)},
+                    }},
+    }};
+}
+
+/// pi `McpClient` constructor: `ping` is always installed and answers `{}`;
+/// `roots/list` is installed only when the connection carries `roots` and
+/// answers them. A client with no `roots/list` handler leaves the method to
+/// the shared `-32601` path. Both transports install this same set, so the
+/// owner has one definition of the default server-request surface.
+void install_default_request_handlers(
+        std::map<std::string, Client::ServerRequestHandler>& handlers, const std::optional<std::vector<Root>>& roots);
 
 [[nodiscard]] inline std::string json_or_empty(const support::JsonValue& value) {
     auto serialized = support::write_json(value);

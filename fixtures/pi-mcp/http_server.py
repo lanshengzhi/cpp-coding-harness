@@ -47,6 +47,12 @@ When `PIKE_MCP_TRACE` names a file, the server appends one flushed line per
 observed event, so a test can prove a request was genuinely in flight before it
 cancels it.
 
+When `PIKE_MCP_SERVER_REQUESTS=roots`, the server-to-client GET stream issues
+the audit-1190 exchange once after initialization: `ping` (id 101),
+`roots/list` (id 102), and an unhandled `sampling/createMessage` (id 103).
+`PIKE_MCP_ROOTS_TRACE` names the file that records each client response
+verbatim, and the stream stays open until all three arrive.
+
 Debug methods exercise the separation cases:
 
   debug/non_mcp_body          200 application/json that is not a JSON-RPC reply
@@ -76,6 +82,30 @@ REDIRECT_PATH = os.environ.get("PIKE_MCP_REDIRECT_PATH")
 REDIRECT_TARGET = os.environ.get("PIKE_MCP_REDIRECT_TARGET")
 REDIRECT_LOCATION = os.environ.get("PIKE_MCP_REDIRECT_LOCATION", "ftp://127.0.0.1/mcp")
 REQUIRE_AUTHORIZATION = os.environ.get("PIKE_MCP_REQUIRE_AUTHORIZATION")
+# When `PIKE_MCP_SERVER_REQUESTS=roots`, the server-to-client GET stream issues
+# the audit-1190 exchange after the session initializes: `ping` (id 101),
+# `roots/list` (id 102), and an unhandled `sampling/createMessage` (id 103).
+# Every client response is appended verbatim to `PIKE_MCP_ROOTS_TRACE`.
+SERVER_REQUESTS = os.environ.get("PIKE_MCP_SERVER_REQUESTS")
+ROOTS_TRACE = os.environ.get("PIKE_MCP_ROOTS_TRACE")
+SERVER_REQUEST_IDS = {"ping": 101, "roots/list": 102, "sampling/createMessage": 103}
+_roots_lock = threading.Lock()
+_roots_sent = False
+_server_responses = 0
+_roots_done = threading.Event()
+
+
+def record_server_response(message):
+    """Append one client response to a server-to-client request verbatim."""
+    global _server_responses
+    if ROOTS_TRACE:
+        with open(ROOTS_TRACE, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(message, separators=(",", ":"), sort_keys=True) + "\n")
+            handle.flush()
+    with _roots_lock:
+        _server_responses += 1
+        if _server_responses >= len(SERVER_REQUEST_IDS):
+            _roots_done.set()
 
 
 def trace(line):
@@ -151,10 +181,45 @@ class Handler(BaseHTTPRequestHandler):
         # Redirect paths answer every method, including the GET stream probe.
         if self._redirect():
             return
+        if SERVER_REQUESTS == "roots" and self.headers.get("Mcp-Session-Id") == SESSION_ID:
+            self._server_request_stream()
+            return
         # The fixture offers no server-to-client GET stream: 405 is the
         # transport's "feature absent" answer (pi `openSseStream`).
         trace("recv GET")
         self._raw(405, "text/plain", b"")
+
+    def _server_request_stream(self):
+        """The audit-1190 GET stream: issue the three server requests once."""
+        global _roots_sent
+        trace("recv GET server-requests")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        with _roots_lock:
+            send = not _roots_sent
+            _roots_sent = True
+        if send:
+            requests = [
+                {"jsonrpc": "2.0", "id": SERVER_REQUEST_IDS["ping"], "method": "ping"},
+                {"jsonrpc": "2.0", "id": SERVER_REQUEST_IDS["roots/list"], "method": "roots/list"},
+                {
+                    "jsonrpc": "2.0",
+                    "id": SERVER_REQUEST_IDS["sampling/createMessage"],
+                    "method": "sampling/createMessage",
+                    "params": {"messages": []},
+                },
+            ]
+            for request in requests:
+                self.wfile.write(b"event: message\ndata: " +
+                                 json.dumps(request, separators=(",", ":")).encode() + b"\n\n")
+                self.wfile.flush()
+            trace("server-requests sent")
+        # Hold the stream open until every response arrived (or the client
+        # left), so the fixture outlives the responses it records.
+        _roots_done.wait(timeout=10)
+        self.close_connection = True
 
     def do_DELETE(self):
         # pi `close()` ends the session with a DELETE; acknowledge it. Record
@@ -200,6 +265,14 @@ class Handler(BaseHTTPRequestHandler):
             # The client must capture the session id from `initialize` and echo
             # it on every later request; a client that drops it fails here.
             self._raw(400, "application/json", b'{"error":"missing session id"}')
+            return
+
+        if method is None and "id" in message and ("result" in message or "error" in message):
+            # A response to one of this server's own requests (pi
+            # `transport.send` of a response message); acknowledge it and keep
+            # it for the frozen comparison.
+            record_server_response(message)
+            self._raw(202, "application/json", b"{}")
             return
 
         if rid is None:

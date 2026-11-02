@@ -135,6 +135,9 @@ StdioClientImpl::StdioClientImpl(boost::asio::any_io_executor executor, StdioSer
     : executor_(std::move(executor)), config_(std::move(config)), stdin_pipe_(executor_), stdout_pipe_(executor_),
       stderr_pipe_(executor_), stderr_drained_(executor_) {
     stderr_drained_.expires_at(std::chrono::steady_clock::time_point::max());
+    // pi `client.ts`: `ping` is always installed and `roots/list` only when the
+    // connection carries roots. The HTTP transport installs this same set.
+    detail::install_default_request_handlers(request_handlers_, config_.roots);
 }
 
 StdioClientImpl::~StdioClientImpl() {
@@ -354,7 +357,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClientImpl>>> Stdi
         co_return std::unexpected(std::move(spawned.error()));
     }
 
-    support::JsonValue params = initialize_params();
+    support::JsonValue params = initialize_params(client->config_.roots.has_value());
     auto initialized = co_await support::detail::await_async_result(client->request("initialize", std::move(params)));
     if (!initialized) {
         co_return std::unexpected(std::move(initialized.error()));
@@ -506,12 +509,16 @@ void StdioClientImpl::set_notification_listener(NotificationSink listener) {
     start_pump();
 }
 
+void StdioClientImpl::set_request_handler(std::string method, ServerRequestHandler handler) {
+    request_handlers_.insert_or_assign(std::move(method), std::move(handler));
+}
+
 void StdioClientImpl::start_pump() {
     if (idle_reading_) {
         boost::system::error_code ignored;
         stdout_pipe_.cancel(ignored);
     }
-    if (!pumping_ && (!queue_.empty() || (!closed_ && notification_listener_))) {
+    if (!pumping_ && (!queue_.empty() || !closed_)) {
         pumping_ = true;
         // Capture the shared owner in the coroutine frame at creation, so the
         // client outlives the pump even if every external reference drops.
@@ -536,8 +543,8 @@ boost::asio::awaitable<std::optional<support::Error>> StdioClientImpl::reconnect
         co_return std::move(spawned.error());
     }
     const int id = next_id_++;
-    if (auto write_error = co_await write_frame(
-                newline_frame(detail::build_request_body(id, "initialize", initialize_params())));
+    if (auto write_error = co_await write_frame(newline_frame(
+                detail::build_request_body(id, "initialize", initialize_params(config_.roots.has_value()))));
             write_error) {
         closed_ = true;
         co_return std::move(*write_error);
@@ -560,12 +567,17 @@ boost::asio::awaitable<std::optional<support::Error>> StdioClientImpl::reconnect
 boost::asio::awaitable<void> StdioClientImpl::pump() {
     for (;;) {
         if (queue_.empty()) {
-            if (closed_ || !notification_listener_) break;
+            if (closed_) break;
             idle_reading_ = true;
             auto line = co_await read_line(true);
             idle_reading_ = false;
             if (line) {
-                if (auto parsed = support::read_json(*line)) dispatch_notification(*parsed);
+                // pi reads continuously: a server request may arrive with no
+                // request pending and must be served before the connection
+                // closes, so the idle read never waits for a listener.
+                if (auto parsed = support::read_json(*line)) {
+                    (void)co_await dispatch_incoming(*parsed);
+                }
             }
             continue;
         }
@@ -776,7 +788,7 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> StdioClientImpl::a
             }
             continue;
         }
-        if (dispatch_notification(*parsed)) continue;
+        if (co_await dispatch_incoming(*parsed)) continue;
         auto matched = detail::response_for_id(*parsed, id);
         if (!matched) {
             co_return std::unexpected(std::move(matched.error()));
@@ -801,6 +813,46 @@ bool StdioClientImpl::dispatch_notification(const support::JsonValue& message) {
         notification_listener_(method->second.get_string(), params == object->end() ? empty : params->second);
     }
     return true;
+}
+
+boost::asio::awaitable<bool> StdioClientImpl::dispatch_incoming(const support::JsonValue& message) {
+    const auto* object = message.get_if<support::JsonValue::object_t>();
+    if (object == nullptr) {
+        co_return false;
+    }
+    const auto method = object->find("method");
+    if (method == object->end() || !method->second.holds<std::string>()) {
+        co_return false;
+    }
+    const auto id = object->find("id");
+    if (id == object->end() || !(id->second.holds<double>() || id->second.holds<std::string>())) {
+        co_return dispatch_notification(message);
+    }
+    // pi `handleRequest`: a server-to-client request is answered through its
+    // handler, or `-32601` when the method has none. The write is awaited on
+    // the serialized pump, so a response reaches the server before the next
+    // frame is read.
+    const std::string name = method->second.get_string();
+    support::JsonValue params{support::JsonValue::object_t{}};
+    if (const auto found = object->find("params"); found != object->end()) {
+        params = found->second;
+    }
+    support::JsonValue response;
+    const auto handler = request_handlers_.find(name);
+    if (handler == request_handlers_.end()) {
+        response = detail::error_response(id->second, -32601, "Method not found: " + name);
+    } else {
+        const ServerRequestHandler serve = handler->second;
+        auto outcome = co_await support::detail::await_async_result(serve(params, {}));
+        response = outcome ? detail::result_response(id->second, std::move(*outcome))
+                           : detail::error_response(id->second, -32603, outcome.error().message);
+    }
+    if (co_await write_frame(newline_frame(detail::json_or_empty(response)))) {
+        // The server can no longer be answered; the next read observes EOF and
+        // fails the pending request, so the connection is marked closed here.
+        closed_ = true;
+    }
+    co_return true;
 }
 
 void StdioClientImpl::close_transport() noexcept {
