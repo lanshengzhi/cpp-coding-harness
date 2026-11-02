@@ -4321,6 +4321,232 @@
             "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json"
           ]
         }
+      },
+      {
+        "id": "1186-chord-typed-json",
+        "ticket": "1186",
+        "implementationCommits": [
+          "4f548771c5f866c86624fb48e7e1977be84f2942"
+        ],
+        "report": "docs/research/pi-v1.3.0/1186-chord-typed-json.md",
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1186-chord.xml"
+          ],
+          "testedRevision": "4f548771c5f866c86624fb48e7e1977be84f2942",
+          "recordedAt": "2026-11-02T09:40:12Z",
+          "selected": 81,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1186-chord.xml",
+            "sha256": "8a4599b3ac2f5270d1b5e70dda2b39d8c63b410d9d82e723deb4598b0a5f28ce"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_chord:json:copy-json",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/json-output-support.json",
+                "scenario": "copyJson returns a detached strict-JSON value and omits undefined object properties",
+                "test": "copy strict JSON returns a detached copy of the frozen value",
+                "testSource": "tests/chord/StrictJsonTest.cpp"
+              },
+              {
+                "artifact": "audit-1057-typed-json/chord-typed-json.json",
+                "scenario": "copyJson copies strict JSON without retaining aliases",
+                "test": "copy strict JSON keeps equal sibling members independent of the source",
+                "testSource": "tests/chord/StrictJsonTest.cpp"
+              },
+              {
+                "artifact": "audit-1057-typed-json/chord-typed-json.json",
+                "scenario": "copyJson preserves null prototypes and own __proto__ data properties",
+                "test": "copy strict JSON preserves an own __proto__ data member",
+                "testSource": "tests/chord/StrictJsonTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "copy strict JSON keeps equal sibling members independent of the source",
+              "testSource": "tests/chord/StrictJsonTest.cpp",
+              "reason": "A copy that retained an alias would change the sibling and source when the copy's left value is mutated; the case requires the copy at 2 while the sibling and source stay at 1."
+            }
+          },
+          {
+            "id": "cch_chord:json:strict-validation",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/json-output-support.json",
+                "scenario": "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
+                "test": "strict JSON rejects non-finite numbers at any depth",
+                "testSource": "tests/chord/StrictJsonTest.cpp"
+              },
+              {
+                "artifact": "audit-1057-typed-json/chord-typed-json.json",
+                "scenario": "copyJson rejects a non-finite number nested below the root",
+                "test": "strict JSON rejects non-finite numbers at any depth",
+                "testSource": "tests/chord/StrictJsonTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "strict JSON rejects non-finite numbers at any depth",
+              "testSource": "tests/chord/StrictJsonTest.cpp",
+              "reason": "A validator that checked only the root would accept the nested non-finite value; the case requires the deep rejection with the exact frozen message while the top-level cases also fail."
+            }
+          },
+          {
+            "id": "cch_chord:json:json-value",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057-typed-json/chord-typed-json.json",
+                "scenario": "isJsonValue checks strict JSON without normalizing it",
+                "test": "is strict JSON checks a direct JsonValue model without normalizing it",
+                "testSource": "tests/chord/StrictJsonTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "is strict JSON checks a direct JsonValue model without normalizing it",
+              "testSource": "tests/chord/StrictJsonTest.cpp",
+              "reason": "A validator that normalized a non-finite number to null would accept the nested value and return true; the case requires the strict nested value accepted field by field while the non-finite value is rejected."
+            }
+          },
+          {
+            "id": "cch_chord:Chord:json",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057-typed-json/chord-typed-json.json",
+                "scenario": "copyJson copies strict JSON without retaining aliases",
+                "test": "chord JSON admission detaches the support value and preserves immutable ownership",
+                "testSource": "tests/chord/StrictJsonTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "chord JSON admission detaches the support value and preserves immutable ownership",
+              "testSource": "tests/chord/StrictJsonTest.cpp",
+              "reason": "An admission path that retained the support container would observe the later source mutation, and one that allocated a fresh container for every Json copy would fail the shared-container assertion; the case requires source mutation to leave the admitted value unchanged while a copy shares its immutable container."
+            }
+          }
+        ],
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/targets/Chord.cmake",
+            "sha256": "db34ddc2693d5187df2a94f0e38eacb3262796fe2b0d93ab7ef99167aceccf76"
+          },
+          {
+            "path": "cmake/tests/ChordTests.cmake",
+            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "src/chord/StrictJson.cpp",
+            "sha256": "d8b03467a1b1ae028a0e80bb8c7c75d674688c57b3dfdf715e73518ae8cc2d7b"
+          },
+          {
+            "path": "src/chord/include/cch/chord/StrictJson.hpp",
+            "sha256": "8a791ba15dbab9c9e42433dd9c24cd7f884bfb88c606eca353d7173bfd776cc7"
+          },
+          {
+            "path": "src/chord/Json.cpp",
+            "sha256": "10a95224acf9ea62a6e024440066dca84ed8a459949a1e96c9f9b780ad85451a"
+          },
+          {
+            "path": "src/chord/include/cch/chord/Json.hpp",
+            "sha256": "a0770553e00418ca5add8b9437bc9f0809e19f8fa723e47d2812e235541b9839"
+          },
+          {
+            "path": "src/support/include/cch/support/Error.hpp",
+            "sha256": "195585394d91c60b92f5b5ee85bb81e3961cd9a3e4a293298403f8f1032e558f"
+          },
+          {
+            "path": "src/support/include/cch/support/JsonObject.hpp",
+            "sha256": "bd24f86e03a85fdf402246dd4fbbeb812cec21ccd77ab25f09b6d8bd8bc1680d"
+          },
+          {
+            "path": "src/support/include/cch/support/JsonValue.hpp",
+            "sha256": "93875a958f5e36e0d41feb68de0fbfc66e4d242b525eed7dc74eaf64b048dbee"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/chord/StrictJsonTest.cpp",
+            "sha256": "c3f079ea423c6f97c22dfbfda465d5ff4f93b397f69da6cb7bedce8d8cfe98ca"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
+            "sha256": "d56e0cb0f2a8afbb2045de990390d74e7898d50f7dfad9458cd34a7e23a63e6d"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+            "sha256": "754e7ad07a9279754638f6dca161eebd4de46e2197797e57a989b95eb28fc525"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057-typed-json/manifest.json",
+            "sha256": "956be04636a4ddf64575d55325d7499ece8cb148a589500f23ed650de07ded06"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
+            "sha256": "defdb4eeaad4a401e3c29661c6aff9ca5ea52c66d2805f7225a57f65434da0f8"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057-typed-json/capture-1057-typed-json.mts",
+            "sha256": "a6e860c9bdc6d74b5e3acedd8090936ff0a210e2e3d1c1cbca2045b88d9ff06e"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/baselines.json",
+            "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json",
+            "sha256": "06a78d90459c612f89a7b939f2b4733cb0c0868450a6ef1e16dd10a8b2ec5e7a"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1186-chord-typed-json.md",
+            "sha256": "54c20cf701160e733399e40e6d5df1e25bb465a33fc1cdfe87ffddde2c1c44ec"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/deliveries/1186-chord.xml",
+            "sha256": "8a4599b3ac2f5270d1b5e70dda2b39d8c63b410d9d82e723deb4598b0a5f28ce"
+          }
+        ],
+        "routingSha256": "c35ce8797d3e36b7d5663d750fe29b749c84c7fb61c4b07bfe9eb722c4d2f7f8"
       }
     ]
   },
@@ -4563,10 +4789,10 @@
         "not-applicable": 2
       },
       "cch_chord": {
-        "implemented": 29,
-        "missing": 23,
+        "implemented": 33,
+        "missing": 22,
         "not-applicable": 5,
-        "partial": 8
+        "partial": 5
       },
       "cch_codemode": {
         "implemented": 32,
@@ -4603,21 +4829,21 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1065,
-      "missing": 196,
+      "implemented": 1069,
+      "missing": 195,
       "not-applicable": 18,
-      "partial": 185
+      "partial": 182
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1015,
-      "upstream-captured": 371,
-      "verified": 50
+      "unverified": 1013,
+      "upstream-captured": 369,
+      "verified": 54
     },
     "evidenceRoute": {
-      "captured": 421,
+      "captured": 423,
       "artifact-only": 0,
-      "related-captured": 25,
+      "related-captured": 23,
       "declared-comparison": 29,
       "cpp-regression-only": 10,
       "unobserved": 51,
@@ -4627,7 +4853,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1015,
+    "unobservedSupported": 1013,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -4660,7 +4886,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1015,
+    "missingObservationRows": 1013,
     "scenarioCoverage": {
       "scenarios": 649,
       "scenarioNamed": 366,
@@ -11650,36 +11876,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "cch_durable records and documents (planned)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1186",
       "scenario": "copyJson copies strict JSON without retaining aliases",
       "comparisonScenarios": [
         "copyJson copies strict JSON without retaining aliases"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
           "copyJson copies strict JSON without retaining aliases"
         ],
-        "result": "The copied tree is detached: mutating the copy leaves the shared source and the sibling copy unchanged."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "gaps": [
-        "Current Pike JSON support is pi-neutral support code; the durable-required copy/ownership contract is audited with #1057.",
-        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
-        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
-      ],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "notes": "",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11692,7 +11914,30 @@
           "verification": "unverified",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1058-draft",
+        "implementation": "missing",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "copyJson copies strict JSON without retaining aliases"
+          ],
+          "result": "The copied tree is detached: mutating the copy leaves the shared source and the sibling copy unchanged."
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [
+          "Current Pike JSON support is pi-neutral support code; the durable-required copy/ownership contract is audited with #1057.",
+          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+          "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+        ],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": ""
+      },
+      "delivery": "1186-chord-typed-json"
     },
     {
       "id": "cch_chord:Chord:state",
@@ -14197,15 +14442,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/usage.ts:37; packages/durable/src/harness/inbox.ts; packages/durable/src/documents.ts:materializeDocument",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1186",
       "scenario": "copyJson returns a detached strict-JSON value and omits undefined object properties",
       "comparisonScenarios": [
         "copyJson returns a detached strict-JSON value and omits undefined object properties",
@@ -14219,14 +14464,12 @@
         "capturedScenarios": [
           "copyJson returns a detached strict-JSON value and omits undefined object properties"
         ],
-        "result": "Nested copy is detached; default undefined rejects with 'Value contains a non-JSON undefined; expected strict JSON'; with omit, undefined properties disappear."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ `JsonValue` cannot represent undefined; object key order is sorted by `std::map`, unlike JS insertion order."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Use value copying for detachment, but add a strict validator and an explicit omit-undefined policy; C++ `JsonValue` has no undefined.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -14239,7 +14482,28 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "copyJson returns a detached strict-JSON value and omits undefined object properties"
+          ],
+          "result": "Nested copy is detached; default undefined rejects with 'Value contains a non-JSON undefined; expected strict JSON'; with omit, undefined properties disappear."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "C++ `JsonValue` cannot represent undefined; object key order is sorted by `std::map`, unlike JS insertion order."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Use value copying for detachment, but add a strict validator and an explicit omit-undefined policy; C++ `JsonValue` has no undefined."
+      },
+      "delivery": "1186-chord-typed-json"
     },
     {
       "id": "cch_chord:json:json-representation",
@@ -14295,34 +14559,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:Draft<JsonObject>; packages/durable/src/harness/live.ts:JsonValue",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1186",
       "scenario": "isJsonValue checks strict JSON without normalizing it",
       "comparisonScenarios": [
         "isJsonValue checks strict JSON without normalizing it"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "isJsonValue checks strict JSON without normalizing it"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "gaps": [
-        "No captured scenario directly exercises a C++-comparable JsonValue model; the copyJson scenarios cover the JS value constraints."
-      ],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "notes": "Recommendation: Reuse `support::JsonValue` as the data carrier but keep strictness, finite-number and object-shape policy in the durable/chord layer.",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -14335,7 +14597,28 @@
           "verification": "unverified",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "isJsonValue checks strict JSON without normalizing it"
+          ],
+          "result": null
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [
+          "No captured scenario directly exercises a C++-comparable JsonValue model; the copyJson scenarios cover the JS value constraints."
+        ],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": "Recommendation: Reuse `support::JsonValue` as the data carrier but keep strictness, finite-number and object-shape policy in the durable/chord layer."
+      },
+      "delivery": "1186-chord-typed-json"
     },
     {
       "id": "cch_chord:json:strict-validation",
@@ -14345,15 +14628,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/documents.ts:materializeDocument; packages/durable/src/session/transaction.ts:prepared.value",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1186",
       "scenario": "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
       "comparisonScenarios": [
         "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
@@ -14366,14 +14649,12 @@
         "capturedScenarios": [
           "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays"
         ],
-        "result": "Distinct TypeError messages for function, undefined, non-finite, class instance and sparse array."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "The current C++ parser is Glaze-compatible and tolerates trailing content; it is not a strict JSON-value validator."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add a strict validation pass at durable boundaries; do not rely on the JSON text parser alone.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -14386,7 +14667,28 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays"
+          ],
+          "result": "Distinct TypeError messages for function, undefined, non-finite, class instance and sparse array."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "The current C++ parser is Glaze-compatible and tolerates trailing content; it is not a strict JSON-value validator."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Add a strict validation pass at durable boundaries; do not rely on the JSON text parser alone."
+      },
+      "delivery": "1186-chord-typed-json"
     },
     {
       "id": "cch_chord:output:bound-output",
