@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="16"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="1"
+	timestamp="2026-11-02T14:31:08"
+	>
+	<testcase name="HTTPS transport rejects an untrusted certificate" classname="HTTPS transport rejects an untrusted certificate" time="1.49949" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "HTTPS transport rejects an untrusted certificate"
+Randomness seeded to: 2388703799
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a browser callback wait cancelled by the sign-in stop token stops sign-in" classname="a browser callback wait cancelled by the sign-in stop token stops sign-in" time="0.042695" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a browser callback wait cancelled by the sign-in stop token stops sign-in"
+Randomness seeded to: 3090463485
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cancelled MCP OAuth client registration stops before any token request" classname="a cancelled MCP OAuth client registration stops before any token request" time="0.332503" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cancelled MCP OAuth client registration stops before any token request"
+Randomness seeded to: 3846241494
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cancelled MCP OAuth discovery stops before any registration or token request" classname="a cancelled MCP OAuth discovery stops before any registration or token request" time="0.338165" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cancelled MCP OAuth discovery stops before any registration or token request"
+Randomness seeded to: 102582592
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a pasted redirect URL completes the MCP OAuth sign-in" classname="a pasted redirect URL completes the MCP OAuth sign-in" time="0.0482896" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a pasted redirect URL completes the MCP OAuth sign-in"
+Randomness seeded to: 3450324989
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a same-origin redirect is followed and keeps the request auth header" classname="a same-origin redirect is followed and keeps the request auth header" time="0.224372" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a same-origin redirect is followed and keeps the request auth header"
+Randomness seeded to: 798066740
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="agent session lists MCP resources only on demand and can call tools after a resource failure" classname="agent session lists MCP resources only on demand and can call tools after a resource failure" time="0.322611" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1105;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "agent session lists MCP resources only on demand and can call tools after a resource failure"
+Randomness seeded to: 1434835806
+===============================================================================
+All tests passed (38 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP URL must be http or https" classname="an MCP HTTP URL must be http or https" time="0.0389282" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;issue873;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP URL must be http or https"
+Randomness seeded to: 25127316
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an authorization code from another issuer never reaches the token endpoint" classname="an authorization code from another issuer never reaches the token endpoint" time="0.0375334" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an authorization code from another issuer never reaches the token endpoint"
+Randomness seeded to: 838023159
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="authorization server metadata naming another issuer stops before any token request" classname="authorization server metadata naming another issuer stops before any token request" time="0.0258228" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "authorization server metadata naming another issuer stops before any token request"
+Randomness seeded to: 2380056322
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="connecting an MCP HTTP server lists its tools with the pi naming and schema" classname="connecting an MCP HTTP server lists its tools with the pi naming and schema" time="0.736777" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue873;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "connecting an MCP HTTP server lists its tools with the pi naming and schema"
+Randomness seeded to: 359331360
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cross-origin redirect is followed without Authorization and is rejected" classname="cross-origin redirect is followed without Authorization and is rejected" time="0.318995" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "cross-origin redirect is followed without Authorization and is rejected"
+Randomness seeded to: 1827587065
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="protected resource discovery retries the bare origin after a path-suffixed miss" classname="protected resource discovery retries the bare origin after a path-suffixed miss" time="0.0284989" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "protected resource discovery retries the bare origin after a path-suffixed miss"
+Randomness seeded to: 2039630343
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="streamable HTTP transport connects over plain http" classname="streamable HTTP transport connects over plain http" time="0.250144" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "streamable HTTP transport connects over plain http"
+Randomness seeded to: 3037630208
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the MCP HTTP transport attaches a credential only when the server needs one" classname="the MCP HTTP transport attaches a credential only when the server needs one" time="0.640104" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue875;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the MCP HTTP transport attaches a credential only when the server needs one"
+Randomness seeded to: 1204129308
+===============================================================================
+All tests passed (36 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the real stdio fixture lists, templates, and reads over `resources/*`" classname="the real stdio fixture lists, templates, and reads over `resources/*`" time="0.104758" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the real stdio fixture lists\, templates\, and reads over `resources/*`"
+Randomness seeded to: 2987875357
+===============================================================================
+All tests passed (31 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="9"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="1"
+	timestamp="2026-11-02T14:31:17"
+	>
+	<testcase name="MCP OAuth refresh uses pi&apos;s 30-second skew" classname="MCP OAuth refresh uses pi&apos;s 30-second skew" time="0.0305596" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "MCP OAuth refresh uses pi's 30-second skew"
+Randomness seeded to: 1054186892
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cancelled MCP OAuth refresh stops before the request reaches the MCP server" classname="a cancelled MCP OAuth refresh stops before the request reaches the MCP server" time="0.378965" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cancelled MCP OAuth refresh stops before the request reaches the MCP server"
+Randomness seeded to: 1639895304
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes" classname="a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes" time="1.10065" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes"
+Randomness seeded to: 1997382094
+===============================================================================
+All tests passed (66 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a timed-out MCP OAuth request settles at the deadline while the shared refresh completes" classname="a timed-out MCP OAuth request settles at the deadline while the shared refresh completes" time="0.594488" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a timed-out MCP OAuth request settles at the deadline while the shared refresh completes"
+Randomness seeded to: 2493630476
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh" classname="a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh" time="0.337856" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh"
+Randomness seeded to: 440411267
+===============================================================================
+All tests passed (30 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="close during a pending connect returns promptly and drops the late connection" classname="close during a pending connect returns promptly and drops the late connection" time="0.0320709" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "close during a pending connect returns promptly and drops the late connection"
+Randomness seeded to: 2211681308
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token" classname="closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token" time="0.29311" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token"
+Randomness seeded to: 3878383393
+===============================================================================
+All tests passed (33 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="closing while a real initialize is pending returns with pi&apos;s closed error" classname="closing while a real initialize is pending returns with pi&apos;s closed error" time="0.126584" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "closing while a real initialize is pending returns with pi's closed error"
+Randomness seeded to: 3320551595
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="concurrent MCP OAuth requests share one refresh" classname="concurrent MCP OAuth requests share one refresh" time="0.101362" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "concurrent MCP OAuth requests share one refresh"
+Randomness seeded to: 2345421314
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>
