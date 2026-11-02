@@ -415,14 +415,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
+          "docs/research/pi-v1.3.0/deliveries/1158-1090-revalidation.xml"
         ],
-        "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
-        "recordedAt": "2026-11-01T22:03:38Z",
+        "testedRevision": "fc94c20d1bc5293f759ba143ba97128bb81d4f47",
+        "recordedAt": "2026-11-01T22:17:13Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
-          "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
+          "path": "docs/research/pi-v1.3.0/deliveries/1158-1090-revalidation.xml",
+          "sha256": "e574cb4401199d667db30f256eb2d1ba92cbc9233731ec56f03863b3b444f7db"
         }
       },
       "inputs": [
@@ -472,7 +472,7 @@
         },
         {
           "path": "src/durable/CodingTools.cpp",
-          "sha256": "90ae4ec7d27b25b2e8fb80a8851fa8c604bf90a7d7d4b1b50b45bdc478dd643e"
+          "sha256": "8d8a53ea5883752db754a27e7d2b8c9a43d0dcc44ee111fbf5926273d965ee19"
         },
         {
           "path": "src/durable/Images.cpp",
@@ -480,7 +480,7 @@
         },
         {
           "path": "src/durable/include/cch/durable/Environment.hpp",
-          "sha256": "330f4143c285b6aa7d157fee0207567b37f3e4bed5f61f6af9170bd6b2c824d1"
+          "sha256": "6a0e95dc798897039d336d6b23e666bd0956a8044201167548474b51226f69f0"
         },
         {
           "path": "src/durable/include/cch/durable/Images.hpp",
@@ -768,6 +768,32 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "src/durable/CodingTools.cpp"
         ]
+      },
+      "revalidation1158": {
+        "reason": "#1158 bounds the durable environment listing and adds the positioned read, changing the pinned CodingTools.cpp and Environment.hpp inputs. The delivered image rows, scenarios and routing digest are unchanged; issue1090 was rebuilt on the merged tree and its exact 36-case selection rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+        "changedInputs": [
+          "src/durable/CodingTools.cpp",
+          "src/durable/include/cch/durable/Environment.hpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
+          ],
+          "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
+          "recordedAt": "2026-11-01T22:03:38Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
+            "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
+          }
+        }
       }
     },
     {
@@ -2107,7 +2133,7 @@
           "discriminatingCase": {
             "test": "a multi-byte character is cut only on a character boundary",
             "testSource": "tests/chord/OutputTest.cpp",
-            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"a\u00e9\ud83d\ude00\"; the boundary case separates the byte length from a code-point count."
+            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
           }
         },
         {
