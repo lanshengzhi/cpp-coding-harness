@@ -2680,11 +2680,11 @@
       "consumer": "cch_durable document transactions (planned)",
       "boundary": null,
       "implementation_ticket": "#1058-draft",
-      "scenario": "C++ transaction draft revocation after callback settlement",
+      "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
       "evidence": {
-        "artifact": null,
-        "scenario": "C++ transaction draft revocation after callback settlement",
-        "result": "Not captured; the session capture observes committed values and ops, not revoked escaped drafts."
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
+        "result": "An escaped draft write after abort throws 'Cannot use a settled overlay'; adopting the prepared change throws 'Prepared change has been aborted'; the committed value and revision stay unchanged."
       },
       "gaps": [
         "No C++ Draft/tracker exists; owned by #1057.",

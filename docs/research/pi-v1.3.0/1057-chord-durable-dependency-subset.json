@@ -916,7 +916,7 @@
       "gaps": [],
       "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API.",
       "cppSeam": "src/chord/Delta.cpp:apply; src/chord/include/cch/chord/Delta.hpp:apply",
-      "cppEvidence": "tests/chord/DeltaTest.cpp:application follows frozen sequential validation and replacement semantics; mutable application exposes the replacement result and batch classifications",
+      "cppEvidence": "tests/chord/DeltaTest.cpp:application follows frozen sequential validation and replacement semantics; mutable application mutates in place while a root replacement returns a new value",
       "recommendation": "Use mutable application only on values owned by the materializer, never on a committed/shared revision."
     },
     {
