@@ -2,6 +2,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/durable/Harness.hpp>
 #include "durable/FrozenExpectation.hpp"
+#include "durable/Gate.hpp"
 #include "support/Json.hpp"
 #include "durable/Outcome.hpp"
 
@@ -19,6 +20,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -496,25 +498,6 @@ struct ScriptedReply {
             }};
 }
 
-struct Gate {
-    std::mutex mutex;
-    std::condition_variable_any ready;
-    bool open{false};
-
-    void release() {
-        {
-            std::lock_guard lock(mutex);
-            open = true;
-        }
-        ready.notify_all();
-    }
-
-    [[nodiscard]] bool wait(const std::stop_token stop) {
-        std::unique_lock lock(mutex);
-        return ready.wait(lock, stop, [this] { return open; });
-    }
-};
-
 [[nodiscard]] ToolRegistration gated_print_tool(const std::shared_ptr<Gate>& gate, const bool with_details = true) {
     return ToolRegistration{.declaration = print_declaration(),
             .execute_durable = [gate, with_details](support::JsonValue, ToolExecutionContext context) {
@@ -570,7 +553,8 @@ struct Opened {
 
 } // namespace
 
-TEST_CASE("an agent event stream reports a model/tool round in committed order", "[durable][observation][issue1173]") {
+TEST_CASE("an agent event stream reports a model/tool round in committed order",
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(kEventArtifact,
             "a model/tool round reports message, tool, usage and settlement lifecycle in committed order");
     REQUIRE(frozen.has_value());
@@ -586,24 +570,27 @@ TEST_CASE("an agent event stream reports a model/tool round in committed order",
                                           "print", support::JsonValue{support::JsonValue::object_t{{"n", 1.0}}}, "c1")},
                     ScriptedReply{.message = answer_message("done")},
             }));
-    Harness& harness = *opened.harness;
-    auto stream = attach_events(harness, opened.root);
+    auto stream = attach_events(*opened.harness, opened.root);
     auto collector = std::make_shared<EventCollector>();
     REQUIRE(stream.start(collector_listener(collector)).has_value());
     const Json attached = snapshot_summary(stream.snapshot());
 
-    auto admitted = consume(harness.submit(opened.root, text_input("go")));
+    auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
     REQUIRE(admitted.has_value());
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
-    REQUIRE(wait_for_event(collector, "run_end"));
+    const bool delivered_run_end = wait_for_event(collector, "run_end");
     const Json kinds = entry_kinds(storage, opened.root);
     const auto end = stream.stop();
+    const auto closed = consume(opened.harness->close());
 
+    // Release-then-assert (CODING_STANDARDS.md §11.10): the harness is closed
+    // before any discriminating assertion can abort this frame.
+    REQUIRE(closed.has_value());
+    REQUIRE(settled.has_value());
+    REQUIRE(delivered_run_end);
     check_value(attached, "snapshot", *frozen);
     const auto events = collector->flattened();
     check_value(collapse_updates(events), "collapsedEvents", *frozen);
-    const auto batches = collector->batches();
     Object counts;
     const auto type_count = [&events](const std::string_view type) {
         return static_cast<std::int64_t>(std::ranges::count_if(events, [type](const Json& event) {
@@ -689,11 +676,10 @@ TEST_CASE("an agent event stream reports a model/tool round in committed order",
     check_value(Json{Object{{"reason", Json(std::string{end == WatchEndReason::Stopped ? "stopped" : "other"})}}},
             "stop",
             *frozen);
-    REQUIRE(consume(harness.close()).has_value());
 }
 
 TEST_CASE("a tool held by a gate keeps its slot running and a late subscriber sees committed state only",
-        "[durable][observation][issue1173]") {
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(kEventArtifact,
             "a tool held by a gate keeps its slot running and a later subscriber sees committed state only");
     REQUIRE(frozen.has_value());
@@ -710,46 +696,47 @@ TEST_CASE("a tool held by a gate keeps its slot running and a late subscriber se
                                           "print", support::JsonValue{support::JsonValue::object_t{{"n", 1.0}}}, "c1")},
                     ScriptedReply{.message = answer_message("done")},
             }));
-    Harness& harness = *opened.harness;
-    auto stream = attach_events(harness, opened.root);
+    auto stream = attach_events(*opened.harness, opened.root);
     auto collector = std::make_shared<EventCollector>();
     REQUIRE(stream.start(collector_listener(collector)).has_value());
-    auto admitted = consume(harness.submit(opened.root, text_input("go")));
+    auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
     REQUIRE(admitted.has_value());
-    REQUIRE(wait_for_event(collector, "tool_execution_update"));
+    const bool held = wait_for_event(collector, "tool_execution_update");
     const auto held_batches = collector->batches();
 
-    auto later = attach_events(harness, opened.root);
+    auto later = attach_events(*opened.harness, opened.root);
     const Json held_snapshot = snapshot_summary(later.snapshot());
     auto later_collector = std::make_shared<EventCollector>();
     REQUIRE(later.start(collector_listener(later_collector)).has_value());
     const Json late_during_hold = batch_types(later_collector->batches());
-    // A stream that starts after the held commits receives only later batches.
-    CHECK(later_collector->size() == 0);
-    auto inspected = consume(harness.inspect());
-    REQUIRE(inspected.has_value());
-    const Json held_tasks = task_states(inspected.value());
-
+    const std::size_t late_during_hold_count = later_collector->size();
+    auto inspected = consume(opened.harness->inspect());
+    const auto later_end = later.stop();
     gate->release();
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
-    REQUIRE(wait_for_event(collector, "run_end"));
+    const bool delivered_run_end = wait_for_event(collector, "run_end");
     const Json after_release = batch_types(collector->batches());
+    const auto closed = consume(opened.harness->close());
 
+    REQUIRE(closed.has_value());
+    REQUIRE(held);
+    REQUIRE(inspected.has_value());
+    REQUIRE(settled.has_value());
+    REQUIRE(delivered_run_end);
     check_value(held_snapshot, "heldSnapshot", *frozen);
-    check_value(held_tasks, "heldTasks", *frozen);
+    check_value(task_states(inspected.value()), "heldTasks", *frozen);
     check_value(collapse_batch_types(batch_types(held_batches)), "heldBatchesCollapsed", *frozen);
+    // A stream that starts after the held commits receives only later batches.
+    CHECK(late_during_hold_count == 0);
     check_value(late_during_hold, "lateDuringHold", *frozen);
     check_value(collapse_batch_types(after_release), "afterReleaseCollapsed", *frozen);
     check_value(settled_summary(settled.value()), "settled", *frozen);
-    const auto later_end = later.stop();
     CHECK(later_end == WatchEndReason::Stopped);
     check_value(Json{Object{{"reason", Json(std::string{"stopped"})}}}, "lateEnd", *frozen);
-    REQUIRE(consume(harness.close()).has_value());
 }
 
 TEST_CASE("cancelling a run during its tool settles the input unanswered and ends the tool with a result",
-        "[durable][observation][issue1173]") {
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(kEventArtifact,
             "cancelling a run during its tool settles the input unanswered and ends the tool with a result");
     REQUIRE(frozen.has_value());
@@ -767,13 +754,12 @@ TEST_CASE("cancelling a run during its tool settles the input unanswered and end
                     ScriptedReply{.message = answer_message("done")},
                     ScriptedReply{.message = answer_message("after abort")},
             }));
-    Harness& harness = *opened.harness;
-    auto stream = attach_events(harness, opened.root);
+    auto stream = attach_events(*opened.harness, opened.root);
     auto collector = std::make_shared<EventCollector>();
     REQUIRE(stream.start(collector_listener(collector)).has_value());
-    auto admitted = consume(harness.submit(opened.root, text_input("go")));
+    auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
     REQUIRE(admitted.has_value());
-    REQUIRE(collector->wait_until([](const std::vector<std::vector<Json>>& batches) {
+    const bool started = collector->wait_until([](const std::vector<std::vector<Json>>& batches) {
         for (const auto& batch : batches) {
             for (const Json& event : batch) {
                 if (string_of(event, "type") == std::optional<std::string>{"tool_execution_update"} &&
@@ -783,19 +769,35 @@ TEST_CASE("cancelling a run during its tool settles the input unanswered and end
             }
         }
         return false;
-    }));
-    auto aborted = consume(harness.abort_conversation(opened.root));
-    REQUIRE(aborted.has_value());
+    });
+    auto aborted = consume(opened.harness->abort_conversation(opened.root));
     gate->release();
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
-    REQUIRE(wait_for_event(collector, "run_end"));
-
+    const bool delivered_run_end = wait_for_event(collector, "run_end");
     const Json cancelled_batches = collapse_batch_types(batch_types(collector->batches()));
     const auto events = collector->flattened();
     Array summary_events;
     for (const Json& event : events)
         summary_events.emplace_back(summarize(event));
+    auto inspected = consume(opened.harness->inspect());
+    auto second = consume(opened.harness->submit(opened.root, text_input("again")));
+    std::optional<Outcome<SettledSubmission>> second_settled;
+    if (second.has_value()) second_settled.emplace(consume(second.value().wait()));
+    const bool delivered_second_end = second_settled.has_value() && wait_for_event_count(collector, "run_end", 2);
+    const Json after_second = collapse_batch_types(batch_types(collector->batches()));
+    const Json kinds = entry_kinds(storage, opened.root);
+    const auto closed = consume(opened.harness->close());
+
+    REQUIRE(closed.has_value());
+    REQUIRE(started);
+    REQUIRE(aborted.has_value());
+    REQUIRE(settled.has_value());
+    REQUIRE(delivered_run_end);
+    REQUIRE(inspected.has_value());
+    REQUIRE(second.has_value());
+    REQUIRE(second_settled.has_value());
+    REQUIRE(second_settled->has_value());
+    REQUIRE(delivered_second_end);
     check_value(cancelled_batches, "cancelledBatches", *frozen);
     (void)summary_events;
     // A details report the frozen pacing publishes only after the abort is not
@@ -829,24 +831,14 @@ TEST_CASE("cancelling a run during its tool settles the input unanswered and end
     check_value(summarize(*tool_end), "toolEnd", *frozen);
     CHECK(tool_end_index < run_end_index);
     check_value(settled_summary(settled.value()), "settled", *frozen);
-
-    auto inspected = consume(harness.inspect());
-    REQUIRE(inspected.has_value());
     check_value(task_states(inspected.value()), "abortedTasks", *frozen);
-
-    auto second = consume(harness.submit(opened.root, text_input("again")));
-    REQUIRE(second.has_value());
-    auto second_settled = consume(second.value().wait());
-    REQUIRE(second_settled.has_value());
-    REQUIRE(wait_for_event_count(collector, "run_end", 2));
-    check_value(settled_summary(second_settled.value()), "secondSettled", *frozen);
-    check_value(collapse_batch_types(batch_types(collector->batches())), "afterSecond", *frozen);
-    check_value(entry_kinds(storage, opened.root), "entryKinds", *frozen);
-    REQUIRE(consume(harness.close()).has_value());
+    check_value(settled_summary(second_settled->value()), "secondSettled", *frozen);
+    check_value(after_second, "afterSecond", *frozen);
+    check_value(kinds, "entryKinds", *frozen);
 }
 
 TEST_CASE("a retryable provider error reports retry start and end around the recovered answer",
-        "[durable][observation][issue1173]") {
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(
             kEventArtifact, "a retryable provider error reports retry start and end around the recovered answer");
     REQUIRE(frozen.has_value());
@@ -876,20 +868,32 @@ TEST_CASE("a retryable provider error reports retry start and end around the rec
     auto admitted = consume(harness->submit(root.value(), text_input("go")));
     REQUIRE(admitted.has_value());
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
-    REQUIRE(wait_for_event(collector, "run_end"));
+    const bool delivered_run_end = wait_for_event(collector, "run_end");
     const auto events = collector->flattened();
-    Array summary_events;
+    Array summaries;
     for (const Json& event : events)
-        summary_events.emplace_back(summarize(event));
-    check_value(batch_types(collector->batches()), "batches", *frozen);
-    check_value(Json{summary_events}, "events", *frozen);
+        summaries.emplace_back(summarize(event));
+    const Json batches = batch_types(collector->batches());
+    const auto closed = consume(harness->close());
+
+    REQUIRE(closed.has_value());
+    REQUIRE(settled.has_value());
+    REQUIRE(delivered_run_end);
+    check_value(batches, "batches", *frozen);
+    check_value(Json{std::move(summaries)}, "events", *frozen);
     check_value(settled_summary(settled.value()), "settled", *frozen);
-    REQUIRE(consume(harness->close()).has_value());
+    const auto retry_start = std::ranges::find_if(events, [](const Json& event) {
+        return string_of(event, "type") == std::optional<std::string>{"auto_retry_start"};
+    });
+    const auto retry_end = std::ranges::find_if(events,
+            [](const Json& event) { return string_of(event, "type") == std::optional<std::string>{"auto_retry_end"}; });
+    REQUIRE(retry_start != events.end());
+    REQUIRE(retry_end != events.end());
+    CHECK(retry_start < retry_end);
 }
 
 TEST_CASE("a terminal provider error settles the input unanswered and ends the turn",
-        "[durable][observation][issue1173]") {
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(kEventArtifact,
             "a terminal provider error settles the input unanswered and ends the turn without a remaining task");
     REQUIRE(frozen.has_value());
@@ -914,30 +918,34 @@ TEST_CASE("a terminal provider error settles the input unanswered and ends the t
     auto admitted = consume(harness->submit(root.value(), text_input("go")));
     REQUIRE(admitted.has_value());
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
-    REQUIRE(wait_for_event(collector, "run_end"));
+    const bool delivered_run_end = wait_for_event(collector, "run_end");
     const auto events = collector->flattened();
-    Array summary_events;
+    Array summaries;
     for (const Json& event : events)
-        summary_events.emplace_back(summarize(event));
-    check_value(batch_types(collector->batches()), "failedBatches", *frozen);
-    check_value(Json{summary_events}, "events", *frozen);
-    check_value(settled_summary(settled.value()), "settled", *frozen);
+        summaries.emplace_back(summarize(event));
+    const Json batches = batch_types(collector->batches());
     auto inspected = consume(harness->inspect());
-    REQUIRE(inspected.has_value());
-    check_value(task_states(inspected.value()), "afterTasks", *frozen);
     auto second = consume(harness->submit(root.value(), text_input("again")));
+    std::optional<Outcome<SettledSubmission>> second_settled;
+    if (second.has_value()) second_settled.emplace(consume(second.value().wait()));
+    const auto closed = consume(harness->close());
+
+    REQUIRE(closed.has_value());
+    REQUIRE(settled.has_value());
+    REQUIRE(delivered_run_end);
+    REQUIRE(inspected.has_value());
     REQUIRE(second.has_value());
-    auto second_settled = consume(second.value().wait());
     REQUIRE(second_settled.has_value());
-    REQUIRE(wait_for_event_count(collector, "run_end", 2));
-    check_value(settled_summary(second_settled.value()), "secondSettled", *frozen);
-    REQUIRE(collector->wait_for(1));
-    REQUIRE(consume(harness->close()).has_value());
+    REQUIRE(second_settled->has_value());
+    check_value(batches, "failedBatches", *frozen);
+    check_value(Json{std::move(summaries)}, "events", *frozen);
+    check_value(settled_summary(settled.value()), "settled", *frozen);
+    check_value(task_states(inspected.value()), "afterTasks", *frozen);
+    check_value(settled_summary(second_settled->value()), "secondSettled", *frozen);
 }
 
 TEST_CASE("a tool that throws settles an error result on the stream and the round continues",
-        "[durable][observation][issue1173]") {
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(
             kEventArtifact, "a tool that throws settles an error result on the stream and the round continues");
     REQUIRE(frozen.has_value());
@@ -953,67 +961,74 @@ TEST_CASE("a tool that throws settles an error result on the stream and the roun
                                           "print", support::JsonValue{support::JsonValue::object_t{{"n", 1.0}}}, "c1")},
                     ScriptedReply{.message = answer_message("done")},
             }));
-    Harness& harness = *opened.harness;
-    auto stream = attach_events(harness, opened.root);
+    auto stream = attach_events(*opened.harness, opened.root);
     auto collector = std::make_shared<EventCollector>();
     REQUIRE(stream.start(collector_listener(collector)).has_value());
-    auto admitted = consume(harness.submit(opened.root, text_input("go")));
+    auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
     REQUIRE(admitted.has_value());
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
-    REQUIRE(wait_for_event(collector, "run_end"));
+    const bool delivered_run_end = wait_for_event(collector, "run_end");
     const auto events = collector->flattened();
-    Array summary_events;
+    Array summaries;
     for (const Json& event : events)
-        summary_events.emplace_back(summarize(event));
-    check_value(batch_types(collector->batches()), "batches", *frozen);
-    check_value(Json{summary_events}, "events", *frozen);
-    check_value(settled_summary(settled.value()), "settled", *frozen);
+        summaries.emplace_back(summarize(event));
+    const Json batches = batch_types(collector->batches());
+    const Json* tool_end_event = nullptr;
     for (const Json& event : events) {
-        if (string_of(event, "type") != std::optional<std::string>{"tool_execution_end"}) continue;
-        check_value(summarize(event), "toolEnd", *frozen);
+        if (string_of(event, "type") == std::optional<std::string>{"tool_execution_end"}) tool_end_event = &event;
     }
+    const Json kinds = entry_kinds(storage, opened.root);
     auto entries = storage.scan_entries(opened.root, SIZE_MAX);
-    REQUIRE(entries.has_value());
-    std::ranges::reverse(*entries);
-    const Json* result = nullptr;
-    for (const EntryRecord& entry : *entries) {
-        if (entry.kind == "pi.tool-result") {
-            result = &entry.data;
-            break;
+    const Json observed_result = [&entries]() -> Json {
+        if (!entries.has_value()) return Json{};
+        std::ranges::reverse(*entries);
+        const Json* result = nullptr;
+        for (const EntryRecord& entry : *entries) {
+            if (entry.kind == "pi.tool-result") {
+                result = &entry.data;
+                break;
+            }
         }
-    }
-    REQUIRE(result != nullptr);
-    const Json* message = nullptr;
-    if (const Json* model = member_of(*result, "model"); model != nullptr && model->as_array() != nullptr) {
-        message = &model->as_array()->front();
-    }
-    REQUIRE(message != nullptr);
-    std::string text;
-    if (const Json* content = member_of(*message, "content"); content != nullptr && content->as_array() != nullptr) {
-        for (const Json& block : *content->as_array())
-            text += string_of(block, "text").value_or("");
-    }
-    Array content_types;
-    if (const Json* content = member_of(*message, "content"); content != nullptr && content->as_array() != nullptr) {
-        for (const Json& block : *content->as_array())
-            content_types.emplace_back(string_of(block, "type").value_or(""));
-    }
-    const Json observed_result{Object{{"toolCallId", Json(string_of(*message, "toolCallId").value_or(""))},
-            {"toolName", Json(string_of(*message, "toolName").value_or(""))},
-            {"isError",
-                    Json(member_of(*message, "isError") != nullptr &&
-                            member_of(*message, "isError")->as_boolean() != nullptr &&
-                            *member_of(*message, "isError")->as_boolean())},
-            {"contentTypes", Json{std::move(content_types)}},
-            {"text", Json(text)}}};
+        if (result == nullptr) return Json{};
+        const Json* message = nullptr;
+        if (const Json* model = member_of(*result, "model"); model != nullptr && model->as_array() != nullptr) {
+            message = &model->as_array()->front();
+        }
+        if (message == nullptr) return Json{};
+        Array content_types;
+        std::string text;
+        if (const Json* content = member_of(*message, "content");
+                content != nullptr && content->as_array() != nullptr) {
+            for (const Json& block : *content->as_array()) {
+                content_types.emplace_back(string_of(block, "type").value_or(""));
+                text += string_of(block, "text").value_or("");
+            }
+        }
+        return Json{Object{{"toolCallId", Json(string_of(*message, "toolCallId").value_or(""))},
+                {"toolName", Json(string_of(*message, "toolName").value_or(""))},
+                {"isError",
+                        Json(member_of(*message, "isError") != nullptr &&
+                                member_of(*message, "isError")->as_boolean() != nullptr &&
+                                *member_of(*message, "isError")->as_boolean())},
+                {"contentTypes", Json{std::move(content_types)}},
+                {"text", Json(text)}}};
+    }();
+    const auto closed = consume(opened.harness->close());
+
+    REQUIRE(closed.has_value());
+    REQUIRE(settled.has_value());
+    REQUIRE(delivered_run_end);
+    REQUIRE(tool_end_event != nullptr);
+    check_value(batches, "batches", *frozen);
+    check_value(Json{std::move(summaries)}, "events", *frozen);
+    check_value(settled_summary(settled.value()), "settled", *frozen);
+    check_value(summarize(*tool_end_event), "toolEnd", *frozen);
     check_value(observed_result, "result", *frozen);
-    check_value(entry_kinds(storage, opened.root), "entryKinds", *frozen);
-    REQUIRE(consume(harness.close()).has_value());
+    check_value(kinds, "entryKinds", *frozen);
 }
 
 TEST_CASE("stopping a started stream ends its deliveries and leaves persistent work running",
-        "[durable][observation][issue1173]") {
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(
             kEventArtifact, "stopping a started stream ends its deliveries and leaves persistent work running");
     REQUIRE(frozen.has_value());
@@ -1030,34 +1045,26 @@ TEST_CASE("stopping a started stream ends its deliveries and leaves persistent w
                                           "print", support::JsonValue{support::JsonValue::object_t{{"n", 1.0}}}, "c1")},
                     ScriptedReply{.message = answer_message("done")},
             }));
-    Harness& harness = *opened.harness;
-    auto stream = attach_events(harness, opened.root);
+    auto stream = attach_events(*opened.harness, opened.root);
     auto collector = std::make_shared<EventCollector>();
     REQUIRE(stream.start(collector_listener(collector)).has_value());
-    auto admitted = consume(harness.submit(opened.root, text_input("go")));
+    auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
     REQUIRE(admitted.has_value());
-    REQUIRE(wait_for_event(collector, "tool_execution_update"));
+    const bool started = wait_for_event(collector, "tool_execution_update");
     const std::size_t delivered_before_stop = collector->size();
     const auto end = stream.stop();
-    CHECK(end == WatchEndReason::Stopped);
     const auto again = stream.stop();
-    CHECK(again == WatchEndReason::Stopped);
     gate->release();
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
     const std::size_t delivered_after_stop = collector->size();
     const Json kinds = entry_kinds(storage, opened.root);
-    bool restart_rejected = false;
-    {
-        const auto restarted = stream.start(collector_listener(collector));
-        restart_rejected = !restarted.has_value();
-    }
+    const auto restarted = stream.start(collector_listener(collector));
 
-    auto unstarted = attach_events(harness, opened.root);
+    auto unstarted = attach_events(*opened.harness, opened.root);
     const Json buffered_message{Object{{"role", Json(std::string{"user"})},
             {"content", Json(std::string{"buffered"})},
             {"timestamp", number_json(0)}}};
-    const auto committed = consume(harness.session().commit(
+    const auto committed = consume(opened.harness->session().commit(
             [conversation = opened.root, buffered_message](Transaction& tx) -> support::ExpectedVoid {
                 auto entry = tx.append_entry(conversation,
                         "pi.user",
@@ -1067,77 +1074,82 @@ TEST_CASE("stopping a started stream ends its deliveries and leaves persistent w
                 if (!entry) return std::unexpected(entry.error());
                 return {};
             }));
-    REQUIRE(committed.has_value());
     const auto unstarted_end = unstarted.stop();
-    bool unstarted_start_rejected = false;
-    {
-        const auto started = unstarted.start(collector_listener(collector));
-        unstarted_start_rejected = !started.has_value();
-    }
+    const auto unstarted_started = unstarted.start(collector_listener(collector));
+    const auto closed = consume(opened.harness->close());
 
+    REQUIRE(closed.has_value());
+    REQUIRE(started);
+    REQUIRE(settled.has_value());
+    REQUIRE(committed.has_value());
     CHECK(delivered_after_stop == delivered_before_stop);
     CHECK(delivered_before_stop > 0);
-    check_value(Json{Object{{"reason", Json(std::string{"stopped"})}}}, "end", *frozen);
-    check_value(Json{Object{{"reason", Json(std::string{"stopped"})}}}, "unstartedEnd", *frozen);
     check_value(settled_summary(settled.value()), "settled", *frozen);
     check_value(kinds, "entryKinds", *frozen);
-    check_value(Json(restart_rejected), "restartRejected", *frozen);
-    check_value(Json(unstarted_start_rejected), "unstartedStartRejected", *frozen);
+    check_value(Json(!restarted.has_value()), "restartRejected", *frozen);
+    check_value(Json(!unstarted_started.has_value()), "unstartedStartRejected", *frozen);
     check_value(
             number_json(static_cast<std::int64_t>(delivered_after_stop - delivered_before_stop)), "stopGain", *frozen);
     check_value(Json(std::string{"stopped"}), "cancelledReason", *frozen);
     check_value(number_json(static_cast<std::int64_t>(0)), "unstartedBatches", *frozen);
-    REQUIRE(unstarted_end == WatchEndReason::Stopped);
-    REQUIRE(consume(harness.close()).has_value());
+    CHECK(end == WatchEndReason::Stopped);
+    CHECK(again == WatchEndReason::Stopped);
+    CHECK(unstarted_end == WatchEndReason::Stopped);
+    check_value(Json{Object{{"reason", Json(std::string{"stopped"})}}}, "end", *frozen);
+    check_value(Json{Object{{"reason", Json(std::string{"stopped"})}}}, "unstartedEnd", *frozen);
 }
 
 TEST_CASE("an unstarted stream buffers committed batches and replays them when it starts",
-        "[durable][observation][issue1173]") {
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(
             kEventArtifact, "an unstarted stream buffers committed batches and replays them when it starts");
     REQUIRE(frozen.has_value());
     Registry registry;
     MemoryStorage storage;
     auto opened = open_harness(storage, registry, scripted_stream({ScriptedReply{.message = answer_message("done")}}));
-    Harness& harness = *opened.harness;
-    auto stream = attach_events(harness, opened.root);
+    auto stream = attach_events(*opened.harness, opened.root);
     const Json attached = snapshot_summary(stream.snapshot());
-    auto admitted = consume(harness.submit(opened.root, text_input("go")));
+    auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
     REQUIRE(admitted.has_value());
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
     auto collector = std::make_shared<EventCollector>();
-    REQUIRE(stream.start(collector_listener(collector)).has_value());
+    const auto started = stream.start(collector_listener(collector));
     const Json after_start = snapshot_summary(stream.snapshot());
-    REQUIRE(collector->wait_for(1));
+    const bool delivered =
+            collector->wait_until([](const std::vector<std::vector<Json>>& batches) { return !batches.empty(); });
 
-    auto late = attach_events(harness, opened.root);
+    auto late = attach_events(*opened.harness, opened.root);
     const Json late_snapshot = snapshot_summary(late.snapshot());
     auto late_collector = std::make_shared<EventCollector>();
-    REQUIRE(late.start(collector_listener(late_collector)).has_value());
-    CHECK(late_collector->size() == 0);
+    const auto late_started = late.start(collector_listener(late_collector));
+    const std::size_t late_count = late_collector->size();
+    const auto closed = consume(opened.harness->close());
 
+    REQUIRE(closed.has_value());
+    REQUIRE(started.has_value());
+    REQUIRE(settled.has_value());
+    REQUIRE(delivered);
+    REQUIRE(late_started.has_value());
     check_value(attached, "attached", *frozen);
     check_value(settled_summary(settled.value()), "settled", *frozen);
     check_value(batch_types(collector->batches()), "delayedBatches", *frozen);
     check_value(after_start, "afterStart", *frozen);
     check_value(late_snapshot, "lateSnapshot", *frozen);
+    CHECK(late_count == 0);
     check_value(batch_types(late_collector->batches()), "lateDelivered", *frozen);
-    REQUIRE(consume(harness.close()).has_value());
 }
 
 TEST_CASE("more than one hundred undelivered batches collapse into one snapshot replacement",
-        "[durable][observation][issue1173]") {
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(
             kEventArtifact, "more than one hundred undelivered batches collapse into one snapshot replacement");
     REQUIRE(frozen.has_value());
     Registry registry;
     MemoryStorage storage;
     auto opened = open_harness(storage, registry, scripted_stream({ScriptedReply{.message = answer_message("done")}}));
-    Harness& harness = *opened.harness;
-    auto append_note = [&harness, conversation = opened.root](const std::string& text) {
-        auto committed = consume(harness.session().commit([conversation, text](
-                                                                  Transaction& tx) -> support::ExpectedVoid {
+    auto append_note = [&opened](const std::string& text) {
+        auto committed = consume(opened.harness->session().commit([conversation = opened.root, text](
+                                                                          Transaction& tx) -> support::ExpectedVoid {
             const Json message{Object{
                     {"role", Json(std::string{"user"})}, {"content", Json(text)}, {"timestamp", number_json(0)}}};
             auto entry = tx.append_entry(
@@ -1145,23 +1157,36 @@ TEST_CASE("more than one hundred undelivered batches collapse into one snapshot 
             if (!entry) return std::unexpected(entry.error());
             return {};
         }));
-        REQUIRE(committed.has_value());
+        return committed.has_value();
     };
-    auto stream = attach_events(harness, opened.root);
+    auto stream = attach_events(*opened.harness, opened.root);
+    bool appended = true;
     for (int index = 0; index < 101; ++index)
-        append_note("note " + std::to_string(index));
+        appended = append_note("note " + std::to_string(index)) && appended;
     auto collector = std::make_shared<EventCollector>();
-    REQUIRE(stream.start(collector_listener(collector)).has_value());
-    REQUIRE(collector->wait_for(1));
+    const auto started = stream.start(collector_listener(collector));
+    const bool delivered =
+            collector->wait_until([](const std::vector<std::vector<Json>>& batches) { return !batches.empty(); });
     const auto overflow_batches = collector->batches();
 
-    auto short_stream = attach_events(harness, opened.root);
+    auto short_stream = attach_events(*opened.harness, opened.root);
+    bool appended_short = true;
     for (int index = 0; index < 3; ++index)
-        append_note("short " + std::to_string(index));
+        appended_short = append_note("short " + std::to_string(index)) && appended_short;
     auto short_collector = std::make_shared<EventCollector>();
-    REQUIRE(short_stream.start(collector_listener(short_collector)).has_value());
-    REQUIRE(short_collector->wait_for(1));
+    const auto short_started = short_stream.start(collector_listener(short_collector));
+    const bool short_delivered =
+            short_collector->wait_until([](const std::vector<std::vector<Json>>& batches) { return !batches.empty(); });
+    const auto short_batches = short_collector->batches();
+    const auto closed = consume(opened.harness->close());
 
+    REQUIRE(closed.has_value());
+    REQUIRE(appended);
+    REQUIRE(appended_short);
+    REQUIRE(started.has_value());
+    REQUIRE(short_started.has_value());
+    REQUIRE(delivered);
+    REQUIRE(short_delivered);
     check_value(batch_types(overflow_batches), "delivered", *frozen);
     const auto& replacement_batch = overflow_batches.front();
     REQUIRE(replacement_batch.size() == 1);
@@ -1181,9 +1206,9 @@ TEST_CASE("more than one hundred undelivered batches collapse into one snapshot 
             {"entries", number_json(static_cast<std::int64_t>(entries->as_array()->size()))},
             {"lastText", Json(last_text)}}};
     check_value(replacement_summary, "replacement", *frozen);
-    check_value(batch_types(short_collector->batches()), "shortDelivered", *frozen);
+    check_value(batch_types(short_batches), "shortDelivered", *frozen);
     Array short_entries;
-    for (const auto& batch : short_collector->batches()) {
+    for (const auto& batch : short_batches) {
         for (const Json& event : batch) {
             if (string_of(event, "type") != std::optional<std::string>{"message_end"}) continue;
             const Json* entry = member_of(event, "entry");
@@ -1194,11 +1219,10 @@ TEST_CASE("more than one hundred undelivered batches collapse into one snapshot 
         }
     }
     check_value(Json{std::move(short_entries)}, "shortEntries", *frozen);
-    REQUIRE(consume(harness.close()).has_value());
 }
 
 TEST_CASE("a listener failure ends its stream and leaves the run and other subscribers running",
-        "[durable][observation][issue1173]") {
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen = FrozenScenario::load(
             kEventArtifact, "a listener failure ends its stream and leaves the run and other subscribers running");
     REQUIRE(frozen.has_value());
@@ -1208,91 +1232,136 @@ TEST_CASE("a listener failure ends its stream and leaves the run and other subsc
             registry,
             scripted_stream({ScriptedReply{.message = answer_message("done")},
                     ScriptedReply{.message = answer_message("second")}}));
-    Harness& harness = *opened.harness;
-    auto stream = attach_events(harness, opened.root);
+    auto stream = attach_events(*opened.harness, opened.root);
     auto attempts = std::make_shared<EventCollector>();
     auto failing = [attempts](const AgentEventBatch& batch) -> support::ExpectedVoid {
         attempts->push(batch);
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "listener exploded"));
     };
     REQUIRE(stream.start(std::move(failing)).has_value());
-    auto admitted = consume(harness.submit(opened.root, text_input("go")));
+    auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
     REQUIRE(admitted.has_value());
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
     const auto end = stream.stop();
-    CHECK(end == WatchEndReason::ListenerError);
-    REQUIRE(stream.listener_error().has_value());
-    CHECK(*stream.listener_error() == "listener exploded");
+    const auto listener_error = stream.listener_error();
     const Json kinds = entry_kinds(storage, opened.root);
-    bool restart_rejected = false;
-    {
-        const auto restarted = stream.start([](const AgentEventBatch&) -> support::ExpectedVoid { return {}; });
-        restart_rejected = !restarted.has_value();
-    }
+    const auto restarted = stream.start([](const AgentEventBatch&) -> support::ExpectedVoid { return {}; });
 
-    auto second = attach_events(harness, opened.root);
+    auto second = attach_events(*opened.harness, opened.root);
     auto second_collector = std::make_shared<EventCollector>();
     REQUIRE(second.start(collector_listener(second_collector)).has_value());
-    auto second_admitted = consume(harness.submit(opened.root, text_input("again")));
+    auto second_admitted = consume(opened.harness->submit(opened.root, text_input("again")));
     REQUIRE(second_admitted.has_value());
     auto second_settled = consume(second_admitted.value().wait());
-    REQUIRE(second_settled.has_value());
-    REQUIRE(wait_for_event(second_collector, "run_end"));
+    const bool second_delivered = wait_for_event(second_collector, "run_end");
+    const Json second_batches = batch_types(second_collector->batches());
+    const std::size_t second_count = second_collector->batches().size();
     const auto second_end = second.stop();
+    const auto closed = consume(opened.harness->close());
 
+    REQUIRE(closed.has_value());
+    REQUIRE(settled.has_value());
+    REQUIRE(second_settled.has_value());
+    REQUIRE(second_delivered);
+    CHECK(end == WatchEndReason::ListenerError);
     check_value(Json{Object{{"reason", Json(std::string{"listener_error"})}}}, "end", *frozen);
-    CHECK(*stream.listener_error() == "listener exploded");
+    REQUIRE(listener_error.has_value());
+    CHECK(*listener_error == "listener exploded");
     check_value(batch_types(attempts->batches()), "attempts", *frozen);
     check_value(settled_summary(settled.value()), "settled", *frozen);
     check_value(kinds, "entryKinds", *frozen);
-    check_value(Json(restart_rejected), "restartRejected", *frozen);
-    check_value(batch_types(second_collector->batches()), "secondBatches", *frozen);
+    check_value(Json(!restarted.has_value()), "restartRejected", *frozen);
+    check_value(second_batches, "secondBatches", *frozen);
     check_value(settled_summary(second_settled.value()), "secondSettled", *frozen);
-    check_value(number_json(static_cast<std::int64_t>(second_collector->batches().size())), "secondAttempts", *frozen);
+    check_value(number_json(static_cast<std::int64_t>(second_count)), "secondAttempts", *frozen);
     CHECK(second_end == WatchEndReason::Stopped);
-    REQUIRE(consume(harness.close()).has_value());
 }
 
-TEST_CASE("an aborted attachment context cancels its stream and never the run", "[durable][observation][issue1173]") {
+TEST_CASE("an aborted attachment context cancels its stream and never the run",
+        "[durable][observation][frozen][issue1173]") {
     const auto frozen =
             FrozenScenario::load(kEventArtifact, "an aborted attachment context cancels its stream and never the run");
     REQUIRE(frozen.has_value());
     Registry registry;
     MemoryStorage storage;
     auto opened = open_harness(storage, registry, scripted_stream({ScriptedReply{.message = answer_message("done")}}));
-    Harness& harness = *opened.harness;
     auto stop = std::stop_source{};
-    auto attached = consume(harness.watch_events(opened.root, stop.get_token()));
+    auto attached = consume(opened.harness->watch_events(opened.root, stop.get_token()));
     REQUIRE(attached.has_value());
     auto stream = std::move(attached.value());
     auto collector = std::make_shared<EventCollector>();
     REQUIRE(stream.start(collector_listener(collector)).has_value());
-    auto admitted = consume(harness.submit(opened.root, text_input("go")));
+    auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
     REQUIRE(admitted.has_value());
-    REQUIRE(wait_for_event(collector, "run_end"));
+    const bool delivered = wait_for_event(collector, "run_end");
     stop.request_stop();
     const auto end = stream.stop();
-    CHECK(end == WatchEndReason::Cancelled);
     const std::size_t at_abort = collector->size();
     auto settled = consume(admitted.value().wait());
-    REQUIRE(settled.has_value());
     const std::size_t after_run = collector->size();
-    CHECK(at_abort == after_run);
     const Json kinds = entry_kinds(storage, opened.root);
 
     auto pre_aborted = std::stop_source{};
     pre_aborted.request_stop();
-    const auto rejected = consume(harness.watch_events(opened.root, pre_aborted.get_token()));
-    REQUIRE_FALSE(rejected.has_value());
-    CHECK(rejected.error().code == support::ErrorCode::Cancelled);
+    const auto rejected = consume(opened.harness->watch_events(opened.root, pre_aborted.get_token()));
+    const auto closed = consume(opened.harness->close());
 
+    REQUIRE(closed.has_value());
+    REQUIRE(delivered);
+    REQUIRE(settled.has_value());
+    CHECK(end == WatchEndReason::Cancelled);
+    CHECK(at_abort == after_run);
     check_value(Json{Object{{"reason", Json(std::string{"cancelled"})}}}, "end", *frozen);
     check_value(number_json(static_cast<std::int64_t>(at_abort)), "atAbort", *frozen);
     check_value(number_json(static_cast<std::int64_t>(after_run)), "afterRun", *frozen);
     check_value(settled_summary(settled.value()), "settled", *frozen);
     check_value(kinds, "entryKinds", *frozen);
-    REQUIRE(consume(harness.close()).has_value());
+    REQUIRE_FALSE(rejected.has_value());
+    CHECK(rejected.error().code == support::ErrorCode::Cancelled);
+}
+
+TEST_CASE("closing the Harness ends a live event stream with session_closed",
+        "[durable][observation][frozen][issue1173]") {
+    const auto frozen =
+            FrozenScenario::load(kEventArtifact, "closing the Harness ends a live event stream with session_closed");
+    REQUIRE(frozen.has_value());
+    auto gate = std::make_shared<Gate>();
+    Registry registry;
+    Extension extensions{.name = "event-tools"};
+    extensions.tools.push_back(gated_print_tool(gate));
+    REQUIRE(registry.install(std::move(extensions)).has_value());
+    MemoryStorage storage;
+    auto opened = open_harness(storage,
+            registry,
+            scripted_stream({
+                    ScriptedReply{.message = tool_call_message(
+                                          "print", support::JsonValue{support::JsonValue::object_t{{"n", 1.0}}}, "c1")},
+                    ScriptedReply{.message = answer_message("done")},
+            }));
+    auto stream = attach_events(*opened.harness, opened.root);
+    auto collector = std::make_shared<EventCollector>();
+    REQUIRE(stream.start(collector_listener(collector)).has_value());
+    auto admitted = consume(opened.harness->submit(opened.root, text_input("go")));
+    REQUIRE(admitted.has_value());
+    const bool started = wait_for_event(collector, "tool_execution_update");
+    const auto closed = consume(opened.harness->close());
+    gate->release();
+    const std::size_t after_close = collector->size();
+    // No publication after close returns may reach the stream.
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    const std::size_t after_wait = collector->size();
+    const auto end = stream.stop();
+
+    // Release-then-assert: the Harness is closed above; the stream's terminal
+    // result is read after close, which is the frozen `session_closed` path.
+    REQUIRE(closed.has_value());
+    REQUIRE(started);
+    CHECK(after_wait == after_close);
+    check_value(Json{Object{{"reason", Json(std::string{"session_closed"})}}}, "end", *frozen);
+    CHECK(end == WatchEndReason::SessionClosed);
+    // The frozen capture records `JSON.stringify(end)`, not the end object.
+    check_value(Json(std::string{"{\"reason\":\"session_closed\"}"}), "stopAfterClose", *frozen);
+    (void)admitted;
 }
 
 } // namespace cch::tests::durable

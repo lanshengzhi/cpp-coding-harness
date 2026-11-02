@@ -1,10 +1,9 @@
 #include "ToolTask.hpp"
 
-#include "durable/WorkflowRuntime.hpp"
-
 #include "durable/AwaitResult.hpp"
 #include "durable/JsonFields.hpp"
 #include "durable/ToolContent.hpp"
+#include "durable/WorkflowRuntime.hpp"
 #include "support/Json.hpp"
 
 #include <cch/durable/Records.hpp>
@@ -570,7 +569,7 @@ support::ExpectedVoid run_tool(TaskRuntime& runtime,
             // its caller sees (frozen pi `harnessError`); a tool that already
             // formats its own harness error keeps it verbatim.
             const std::string& message = blocks.error().message;
-            const bool wrapped = message.rfind("<harness>", 0) == 0;
+            const bool wrapped = message.starts_with("<harness>");
             output = ai::ToolResultMessage{.content = wrapped ? std::vector<ai::Content>{ai::text_content(message)}
                                                               : harness_error_content(message),
                     .is_error = true};

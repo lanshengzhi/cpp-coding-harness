@@ -4,6 +4,7 @@
 #include <cch/durable/Storage.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -75,7 +76,7 @@ struct ViewMount {
 /// that outlives it cannot call into freed state.
 struct ObservationReportSink {
     std::mutex mutex;
-    std::function<void(const support::Error&)> report;
+    std::move_only_function<void(const support::Error&)> report;
 };
 
 /// Advance the task-graph mount from one committed publication (frozen pi

@@ -50,7 +50,8 @@ retryable provider error (`auto_retry_start`/`auto_retry_end`), a terminal
 provider error, a throwing tool (frozen harness error text), a stopped stream
 (deliveries stop, work continues, an unstarted stream drops its buffer), replay
 of buffered batches on start, the 100-batch overflow replacement, a listener
-failure, and an aborted attachment context. The capture resolves the baseline
+failure, an aborted attachment context, and closing the Harness while a stream
+is live (frozen `session_closed`). The capture resolves the baseline
 from `baselines.json`, refuses a checkout whose `HEAD` is not the registered
 revision or whose tracked tree is dirty, re-executes under that checkout's
 `tsx`, and writes the artifact and manifest itself. Expected event sequences,
@@ -79,7 +80,17 @@ and unchanged.
   the round's tasks, `finishToolRound` applies the round's controls and the
   `postTools` boundary in one commit, and the run passes to a successor
   generation. That hand-over produces the frozen turn boundaries and the
-  generating task's `completing` hold.
+  generating task's `completing` hold. This substrate is in scope rather than
+  neighbouring scope creep: the issue's first criterion requires tool updates
+  and terminal results **linked to the correct call/run/submission**, and its
+  second requires the held-tool path. The inline generation had no per-call
+  durable task, so it had neither a tool `taskId` to link nor a held tool to
+  observe; synthesizing those events from inline commits would fabricate a
+  lifecycle the durable records do not have. The frozen capture is the
+  authority for the resulting task shape, turn boundaries and harness error
+  text, and the previously inline-only assertions were updated to it (the
+  `beforeTool` argument chain was also corrected to the frozen per-handler
+  current-arguments rule that the tool task already documents).
 - `pi.live.tools` slots are published from the committed round: `pending` when
   the round opens, `running` with the task at intent, `output`/`details` from
   the tool's `ToolExecutionContext::report_output`/`report_details` sinks, and
@@ -103,13 +114,14 @@ and unchanged.
 Measured on this branch, base `23f9dd8f7` (`origin/main`), Debug preset.
 
 - Focused event-stream selection `ctest --preset vcpkg -L issue1173`:
-  **11 selected, 11 passed, 0 failed**, 413 assertions
-  (`/tmp/cch-1173-focused.log`).
+  **12 selected, 12 passed, 0 failed** (`/tmp/cch-1173-focused-final.log`).
+  The cases carry `[frozen]`, so the frozen label also selects them.
 - Durable shard `ctest --preset vcpkg -L durable`: **341 selected, 100% passed**,
   with the pinned cross-implementation skips (`/tmp/cch-1173-durable5.log`).
-- Frozen selection `ctest --preset vcpkg -L frozen`: **5 selected, 5 passed**
-  (the four #1088 observation scenarios plus the audit-1054 schema baseline);
-  no frozen expectation was changed (`/tmp/cch-1173-frozen.log`).
+- Frozen selection `ctest --preset vcpkg -L frozen`: **17 selected, 17 passed**
+  (the twelve #1173 event-stream comparisons, the four #1088 observation
+  scenarios and the audit-1054 schema baseline); no frozen expectation was
+  changed (`/tmp/cch-1173-frozen-final.log`).
 - Architecture `ctest --preset vcpkg -L architecture` after a full build:
   **43 selected, 43 passed**, including `cch_warning_gate`
   (`/tmp/cch-1173-architecture2.log`, `/tmp/cch-1173-warning-gate3.log`).
@@ -117,15 +129,15 @@ Measured on this branch, base `23f9dd8f7` (`origin/main`), Debug preset.
   `check` passed; the two consolidation CTest cases passed 2/2
   (`/tmp/cch-1173-consolidation.log`).
 - Repository Full Validation: `cmake --build --preset vcpkg` succeeded, then
-  `TERM_PROGRAM=herdr ctest --preset vcpkg` selected **4186 tests: 4184 passed,
-  2 failed, 0 skipped** (`/tmp/cch-1173-full2.log`). The two failures are
+  `TERM_PROGRAM=herdr ctest --preset vcpkg` selected **4187 tests: 4185 passed,
+  2 failed, 0 skipped** (`/tmp/cch-1173-full3.log`). The two failures are
   load-sensitive timing bounds, not this change's cases: `Projection publishes
   100 message-update chunks inside the issue cost bound` is the quarantined
-  #632/#617 bound, and `bounded parallel cancellation leaves queued tool
-  capabilities unstarted` is an agent tool-executor timing case; both passed
-  individually and repeatedly on rerun (3/3 and 2/2). The earlier full run on
-  the same tree additionally showed four codemode worker timing cases that also
-  passed individually (`/tmp/cch-1173-full.log`).
+  #632/#617 bound, and `Native TUI fullscreen scroll-to-end indicator paints on
+  a direct-fullscreen launch` is the PTY scroll-indicator case; both passed
+  individually on rerun (1/1 each). Earlier full runs on the same tree
+  additionally showed codemode worker and agent tool-executor timing cases that
+  also passed individually (`/tmp/cch-1173-full.log`, `/tmp/cch-1173-full2.log`).
 - Formatting: `scripts/format-check.sh origin/main` reports clean after
   `git clang-format`.
 - Frozen evidence: `python3 scripts/evidence/audit_evidence.py check --manifest

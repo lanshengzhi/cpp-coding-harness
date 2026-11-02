@@ -335,6 +335,11 @@ using JsonObject = chord::Json::Object;
     return value != nullptr && value->as_array() != nullptr ? *value : chord::Json(JsonArray{});
 }
 
+/// The `pi.usage` initial value a missing or retired usage document reads as.
+[[nodiscard]] chord::Json empty_usage() {
+    return chord::Json(JsonObject{{"models", chord::Json(JsonObject{})}, {"tools", chord::Json(JsonObject{})}});
+}
+
 [[nodiscard]] const chord::Json& doc_of(const chord::Json& view, const std::string_view bare_kind) {
     static const chord::Json kEmpty{};
     const chord::Json* docs = json_member(view, "docs");
@@ -1020,10 +1025,7 @@ chord::Json agent_event_snapshot(const chord::Json& view) {
     }
     snapshot.emplace("inbox", queued_items(parts.inbox));
     snapshot.emplace("agent", parts.agent != nullptr ? *parts.agent : chord::Json(JsonObject{}));
-    snapshot.emplace("usage",
-            parts.usage != nullptr ? *parts.usage
-                                   : chord::Json(JsonObject{{"models", chord::Json(JsonObject{})},
-                                             {"tools", chord::Json(JsonObject{})}}));
+    snapshot.emplace("usage", parts.usage != nullptr ? *parts.usage : empty_usage());
     return chord::Json(std::move(snapshot));
 }
 
