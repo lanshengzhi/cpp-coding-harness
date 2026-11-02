@@ -1,0 +1,131 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1057",
+  "family": "audit-1057-typed-json",
+  "capturedAt": "2026-11-02T09:21:52.738Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/chord/src/json.ts:copyJson,isJsonValue",
+    "packages/chord/test/json.test.ts:JsonValue model; copyJson alias, prototype and rejection observations"
+  ],
+  "scenarios": [
+    {
+      "name": "copyJson copies strict JSON without retaining aliases",
+      "source": "packages/chord/test/json.test.ts:copies strict JSON without retaining aliases; packages/chord/src/json.ts:copyJson",
+      "inputs": {
+        "value": {
+          "left": {
+            "value": 1
+          },
+          "right": {
+            "value": 1
+          }
+        },
+        "sharedInput": "left and right name one object"
+      },
+      "expected": {
+        "copiedBeforeMutation": {
+          "left": {
+            "value": 1
+          },
+          "right": {
+            "value": 1
+          }
+        },
+        "copiedIsInput": false,
+        "leftIsShared": false,
+        "rightIsShared": false,
+        "leftIsRight": false,
+        "sharedValueAfterCopyMutation": 1,
+        "sourceAfterCopyMutation": {
+          "left": {
+            "value": 1
+          },
+          "right": {
+            "value": 1
+          }
+        },
+        "copiedAfterMutation": {
+          "left": {
+            "value": 2
+          },
+          "right": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "copyJson preserves null prototypes and own __proto__ data properties",
+      "source": "packages/chord/test/json.test.ts:preserves null prototypes and own __proto__ data properties; packages/chord/src/json.ts:copyJson",
+      "inputs": {
+        "value": {
+          "__proto__": {
+            "safe": true
+          }
+        },
+        "nullPrototype": true,
+        "ownProtoDataProperty": true
+      },
+      "expected": {
+        "copiedPrototypeIsNull": true,
+        "copiedHasOwnProto": true,
+        "copiedProtoValue": {
+          "safe": true
+        },
+        "copiedEqualsInputShape": true
+      }
+    },
+    {
+      "name": "copyJson rejects a non-finite number nested below the root",
+      "source": "packages/chord/src/json.ts:copyJson (non-finite recursion)",
+      "inputs": {
+        "value": {
+          "outer": {
+            "inner": [
+              1,
+              "NaN"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "failure": {
+          "name": "TypeError",
+          "message": "Value contains a non-finite number and is not strict JSON"
+        }
+      }
+    },
+    {
+      "name": "isJsonValue checks strict JSON without normalizing it",
+      "source": "packages/chord/test/json.test.ts:checks strict JSON without normalizing it; packages/chord/src/json.ts:isJsonValue",
+      "inputs": {
+        "cases": [
+          "strict",
+          "undefinedObject",
+          "uint8Array",
+          "infinity",
+          "cycle"
+        ]
+      },
+      "expected": {
+        "results": {
+          "strict": true,
+          "undefinedObject": false,
+          "uint8Array": false,
+          "infinity": false,
+          "cycle": false
+        }
+      }
+    }
+  ]
+}

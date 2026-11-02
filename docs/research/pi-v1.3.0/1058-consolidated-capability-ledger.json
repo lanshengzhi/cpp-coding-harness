@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
+            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -563,6 +563,12 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1186m": {
+          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -636,7 +642,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+            "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -970,6 +976,12 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1186m": {
+          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -1114,7 +1126,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+            "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1524,6 +1536,12 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1186m": {
+          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -1783,11 +1801,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+            "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
+            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2200,6 +2218,13 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
+          ]
+        },
+        "revalidation1186m": {
+          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
         }
       },
@@ -3294,7 +3319,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
+            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3302,7 +3327,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+            "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
           }
         ],
         "validation": {
@@ -3697,6 +3722,13 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1186m": {
+          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -3761,7 +3793,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+            "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -3769,7 +3801,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
+            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4037,6 +4069,13 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1186m": {
+          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -4260,7 +4299,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json",
-            "sha256": "3a986f6ca6df66492b2cae5d63b2ba37bb762e182ec0db33636291ba1ab5e0b1"
+            "sha256": "06a78d90459c612f89a7b939f2b4733cb0c0868450a6ef1e16dd10a8b2ec5e7a"
           },
           {
             "path": "docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.json",
@@ -4275,7 +4314,13 @@
             "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
           }
         ],
-        "routingSha256": "e10f486b2f341da5cfff683f179814cc61459d6b807afbce2150711e88c97d05"
+        "routingSha256": "e10f486b2f341da5cfff683f179814cc61459d6b807afbce2150711e88c97d05",
+        "revalidation1186": {
+          "reason": "#1186 re-paired the coarse 1054 Chord:json row to the captured audit-1057-typed-json alias-detachment scenario. The 1054 source audit is a pinned input of this record; the digest refreshes here. Its rows, scenarios and routing digest are unchanged.",
+          "changedInputs": [
+            "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json"
+          ]
+        }
       }
     ]
   },
@@ -4572,10 +4617,10 @@
     "evidenceRoute": {
       "captured": 421,
       "artifact-only": 0,
-      "related-captured": 23,
-      "declared-comparison": 30,
+      "related-captured": 25,
+      "declared-comparison": 29,
       "cpp-regression-only": 10,
-      "unobserved": 52,
+      "unobserved": 51,
       "unobserved-static": 0,
       "historical-v1.0.4": 858,
       "not-audited": 42,
@@ -4617,8 +4662,8 @@
     ],
     "missingObservationRows": 1015,
     "scenarioCoverage": {
-      "scenarios": 645,
-      "scenarioNamed": 362,
+      "scenarios": 649,
+      "scenarioNamed": 366,
       "artifactCovered": 56,
       "orphaned": [
         "audit-1105/session-binding.json:real Session reads resources on demand and binds a late tool",
@@ -11614,24 +11659,26 @@
       ],
       "boundary": null,
       "implementation_ticket": "#1058-draft",
-      "scenario": "C++ JSON value ownership across a durable store",
+      "scenario": "copyJson copies strict JSON without retaining aliases",
       "comparisonScenarios": [
-        "C++ JSON value ownership across a durable store"
+        "copyJson copies strict JSON without retaining aliases"
       ],
       "evidence": {
-        "route": "declared-comparison",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
-        "result": "Not captured directly; committed snapshot identity/immutability is asserted by frozen tests, not this capture."
+        "route": "related-captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
+        "scenarioMatch": "direct",
+        "capturedScenarios": [
+          "copyJson copies strict JSON without retaining aliases"
+        ],
+        "result": "The copied tree is detached: mutating the copy leaves the shared source and the sibling copy unchanged."
       },
-      "missingObservation": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [
         "Current Pike JSON support is pi-neutral support code; the durable-required copy/ownership contract is audited with #1057.",
         "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
         "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
       ],
-      "remainingWork": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "notes": "",
       "lane": "1054",
       "frozenSymbolsSource": null,
@@ -14161,7 +14208,9 @@
       "implementation_ticket": null,
       "scenario": "copyJson returns a detached strict-JSON value and omits undefined object properties",
       "comparisonScenarios": [
-        "copyJson returns a detached strict-JSON value and omits undefined object properties"
+        "copyJson returns a detached strict-JSON value and omits undefined object properties",
+        "copyJson copies strict JSON without retaining aliases",
+        "copyJson preserves null prototypes and own __proto__ data properties"
       ],
       "evidence": {
         "route": "captured",
@@ -14255,20 +14304,24 @@
       ],
       "boundary": null,
       "implementation_ticket": null,
-      "scenario": null,
-      "comparisonScenarios": [],
+      "scenario": "isJsonValue checks strict JSON without normalizing it",
+      "comparisonScenarios": [
+        "isJsonValue checks strict JSON without normalizing it"
+      ],
       "evidence": {
-        "route": "unobserved",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
+        "route": "related-captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
+        "scenarioMatch": "direct-global",
+        "capturedScenarios": [
+          "isJsonValue checks strict JSON without normalizing it"
+        ],
         "result": null
       },
-      "missingObservation": "no frozen capture recorded for this row; source-only audit",
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [
         "No captured scenario directly exercises a C++-comparable JsonValue model; the copyJson scenarios cover the JS value constraints."
       ],
-      "remainingWork": "no frozen capture recorded for this row; source-only audit",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "notes": "Recommendation: Reuse `support::JsonValue` as the data carrier but keep strictness, finite-number and object-shape policy in the durable/chord layer.",
       "lane": "1057",
       "frozenSymbolsSource": null,
@@ -14303,7 +14356,8 @@
       "implementation_ticket": null,
       "scenario": "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
       "comparisonScenarios": [
-        "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays"
+        "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
+        "copyJson rejects a non-finite number nested below the root"
       ],
       "evidence": {
         "route": "captured",

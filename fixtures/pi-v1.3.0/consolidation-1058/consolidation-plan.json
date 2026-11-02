@@ -763,6 +763,39 @@
         "mcp-external-signin-pickup"
       ],
       "authority": "#1104 registered frozen capture plus tests/coding_agent/McpSessionManagerTest.cpp turn-start pickup comparison; verification via the #1104 receipt"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "copyJson copies strict JSON without retaining aliases",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:Chord:json"
+      ],
+      "authority": "#1186 supplemental audit-1057-typed-json capture plus tests/chord/StrictJsonTest.cpp public copy comparison"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "copyJson preserves null prototypes and own __proto__ data properties",
+      "rows": [
+        "cch_chord:json:copy-json"
+      ],
+      "authority": "#1186 supplemental audit-1057-typed-json capture plus tests/chord/StrictJsonTest.cpp own-key copy comparison"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "copyJson rejects a non-finite number nested below the root",
+      "rows": [
+        "cch_chord:json:strict-validation"
+      ],
+      "authority": "#1186 supplemental audit-1057-typed-json capture plus tests/chord/StrictJsonTest.cpp depth rejection comparison"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "isJsonValue checks strict JSON without normalizing it",
+      "rows": [
+        "cch_chord:json:json-value"
+      ],
+      "authority": "#1186 supplemental audit-1057-typed-json capture plus tests/chord/StrictJsonTest.cpp direct JsonValue model comparison"
     }
   ],
   "orphanScenarios": [

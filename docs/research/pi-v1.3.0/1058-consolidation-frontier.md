@@ -68,7 +68,7 @@ folded into membership.
 | Membership | supported:1435, excluded:29, no-decision:0 |
 | Implementation | implemented:1065, missing:196, not-applicable:18, partial:185 |
 | Verification | not-applicable:28, unverified:1015, upstream-captured:371, verified:50 |
-| Evidence route | captured:421, related-captured:23, declared-comparison:30, cpp-regression-only:10, unobserved:52, historical-v1.0.4:858, not-audited:42, excluded:28 |
+| Evidence route | captured:421, related-captured:25, declared-comparison:29, cpp-regression-only:10, unobserved:51, historical-v1.0.4:858, not-audited:42, excluded:28 |
 
 The three dimensions stay separate. A supported row can be implemented and still unverified, and a
 row with an upstream capture is not promoted because a similar row exists elsewhere: a declared

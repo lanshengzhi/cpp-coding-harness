@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -533,6 +533,12 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1186m": {
+        "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -606,7 +612,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -940,6 +946,12 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1186m": {
+        "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1084,7 +1096,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1494,6 +1506,12 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1186m": {
+        "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1753,11 +1771,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2171,6 +2189,13 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1186m": {
+        "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -2522,7 +2547,7 @@
           "discriminatingCase": {
             "test": "a multi-byte character is cut only on a character boundary",
             "testSource": "tests/chord/OutputTest.cpp",
-            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"a\u00e9\ud83d\ude00\"; the boundary case separates the byte length from a code-point count."
+            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
           }
         },
         {
@@ -2903,7 +2928,7 @@
         }
       ],
       "revalidation1185": {
-        "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp \u2014 three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
+        "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp — three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
         "changedInputs": [
           "src/chord/Delta.cpp",
           "src/chord/include/cch/chord/Delta.hpp",
@@ -3264,7 +3289,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3272,7 +3297,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
         }
       ],
       "validation": {
@@ -3667,6 +3692,13 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1186m": {
+        "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -3731,7 +3763,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
+          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -3739,7 +3771,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -4007,6 +4039,13 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
         ]
+      },
+      "revalidation1186m": {
+        "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/baselines.json",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -4230,7 +4269,7 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json",
-          "sha256": "3a986f6ca6df66492b2cae5d63b2ba37bb762e182ec0db33636291ba1ab5e0b1"
+          "sha256": "06a78d90459c612f89a7b939f2b4733cb0c0868450a6ef1e16dd10a8b2ec5e7a"
         },
         {
           "path": "docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.json",
@@ -4245,7 +4284,13 @@
           "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
         }
       ],
-      "routingSha256": "e10f486b2f341da5cfff683f179814cc61459d6b807afbce2150711e88c97d05"
+      "routingSha256": "e10f486b2f341da5cfff683f179814cc61459d6b807afbce2150711e88c97d05",
+      "revalidation1186": {
+        "reason": "#1186 re-paired the coarse 1054 Chord:json row to the captured audit-1057-typed-json alias-detachment scenario. The 1054 source audit is a pinned input of this record; the digest refreshes here. Its rows, scenarios and routing digest are unchanged.",
+        "changedInputs": [
+          "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json"
+        ]
+      }
     }
   ]
 }
