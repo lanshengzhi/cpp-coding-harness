@@ -140,6 +140,15 @@ Measured on this branch, base `23f9dd8f7` (`origin/main`), Debug preset.
   also passed individually (`/tmp/cch-1173-full.log`, `/tmp/cch-1173-full2.log`).
 - Formatting: `scripts/format-check.sh origin/main` reports clean after
   `git clang-format`.
+- Merged tree (`origin/main` at `ba45599a1`, merge `96a9e9940`), after a full
+  build: focused `-L issue1173` **12/12**, frozen `-L frozen` **17/17**, durable
+  `-L durable` **342 selected, all passed**, architecture **43/43**,
+  consolidation **2/2**, and `consolidate_audits.py build` + `check` passed
+  (`/tmp/cch-1173-merged-*.log`). The merged-tree full run selected **4190
+  tests: 4186 passed, 4 failed, 0 skipped**; all four are load-sensitive and
+  rerun green individually (the PTY stop/EIO case passed 1/2 on rerun and is the
+  known #1141/#1019 race; the generation-attempt, theme-timeout and agent
+  tool-executor cases passed on rerun).
 - Frozen evidence: `python3 scripts/evidence/audit_evidence.py check --manifest
   fixtures/pi-v1.3.0/audit-1173/manifest.json` passes and prints the registry
   record. Registration in `baselines.json` and the classification of this
