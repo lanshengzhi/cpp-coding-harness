@@ -184,7 +184,7 @@ Measured on this ticket's implementation commit `4e9ad3fbf` and, after the
 | `ctest --preset vcpkg -L issue1184 --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml` | 10/10 passed, 0 failed, 0 skipped |
 | `ctest --preset vcpkg -N -L chord` | 79 selected on the merged tree (70 delivered + 3 new Chord cases + 6 from the merged #1185 packet) |
 | `ctest --preset vcpkg -L chord --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml` | 79/79 passed, 0 failed, 0 skipped |
-| `ctest --preset vcpkg -L architecture` | 43/43 passed |
+| `ctest --preset vcpkg -L architecture` | 43/43 passed on the pre-merge tree; the final unfiltered run covers the same 43 cases |
 | `ctest --preset vcpkg -L '^(issue1090\|issue1101\|issue1104)$'` | 36/36 passed |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` | ledger rebuilt; 54 delivery-backed rows (4 from this record, 5 from the merged #1185 packet) |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check` | PASS |
