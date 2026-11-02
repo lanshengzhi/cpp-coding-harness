@@ -67,7 +67,7 @@ folded into membership.
 | By owner | cch_tui:925, cch_durable:212, cch_coding_agent:159, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
 | Membership | supported:1435, excluded:29, no-decision:0 |
 | Implementation | implemented:1074, missing:194, not-applicable:18, partial:178 |
-| Verification | not-applicable:28, unverified:1013, upstream-captured:363, verified:60 |
+| Verification | not-applicable:28, unverified:1013, upstream-captured:356, verified:67 |
 | Evidence route | captured:423, related-captured:23, declared-comparison:29, cpp-regression-only:10, unobserved:51, historical-v1.0.4:858, not-audited:42, excluded:28 |
 
 The three dimensions stay separate. A supported row can be implemented and still unverified, and a

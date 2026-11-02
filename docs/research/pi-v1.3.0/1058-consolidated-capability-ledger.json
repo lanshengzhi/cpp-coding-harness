@@ -5088,6 +5088,305 @@
           }
         ],
         "routingSha256": "e7975ba65c4a7efab08925838d63c3855cfdedc42ecd43dc4d07a08dfefd7517"
+      },
+      {
+        "id": "1182-tui-comparisons",
+        "ticket": "1182",
+        "implementationCommits": [
+          "f56b8bd42ab7cbdba308913b25ff12d6f42664f7"
+        ],
+        "report": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1182",
+            "--output-on-failure",
+            "--output-junit",
+            "/home/lansy/.herdr/worktrees/cpp-coding-harness/1182/docs/research/pi-v1.3.0/deliveries/1182-tui.xml"
+          ],
+          "testedRevision": "f56b8bd42ab7cbdba308913b25ff12d6f42664f7",
+          "recordedAt": "2026-11-02T13:56:30Z",
+          "selected": 13,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui.xml",
+            "sha256": "2486e5c35ad9cc05c87f426ed3425cb4e25ee60bdeecd4a0231b4f7e16bb37b7"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_tui:TUI.getShowHardwareCursor",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1050/hardware-cursor.json",
+                "scenario": "main-screen-default-hidden",
+                "test": "frozen hardware-cursor observations replay across MainScreen and AltScreen",
+                "testSource": "tests/tui/HardwareCursorEvidenceTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "ITui roots support hardware-cursor preference and IME positioning",
+              "testSource": "tests/tui/ITuiTest.cpp",
+              "reason": "The frozen scenario observes the default hidden preference on the main screen; a root that always hides the cursor satisfies it. The ITui case separates a preference that is always hidden from one that follows the root preference and re-positions the IME cursor when the viewport scrolls."
+            }
+          },
+          {
+            "id": "cch_tui:TUI.setShowHardwareCursor",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1050/hardware-cursor.json",
+                "scenario": "main-screen-toggle",
+                "test": "frozen hardware-cursor observations replay across MainScreen and AltScreen",
+                "testSource": "tests/tui/HardwareCursorEvidenceTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "ITui roots support hardware-cursor preference and IME positioning",
+              "testSource": "tests/tui/ITuiTest.cpp",
+              "reason": "The toggle scenario observes the visible frame after setShowHardwareCursor(true); a setter that stores the value without re-rendering satisfies the stored state but not the frame. The ITui case separates the stored preference from the rendered cursor and its IME positioning."
+            }
+          },
+          {
+            "id": "cch_tui:ProgramStatus",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1050/program-status-format.json",
+                "scenario": "format-program-status-encodes-fields-and-limits",
+                "test": "Program status format encodes frozen OSC 7501 fields and limits",
+                "testSource": "tests/tui/ProgramStatusTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "Program status reply recognition accepts only the frozen query echoes",
+              "testSource": "tests/tui/ProgramStatusTest.cpp",
+              "reason": "A formatter that emits the frozen field order still passes if the same predicate silently accepts an unrelated OSC 7501 body. The reply-recognition case separates encoding from recognition: a status report and a color report must be rejected while all three query echoes are accepted."
+            }
+          },
+          {
+            "id": "cch_tui:formatProgramStatus",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1050/program-status-format.json",
+                "scenario": "format-program-status-encodes-fields-and-limits",
+                "test": "Program status format encodes frozen OSC 7501 fields and limits",
+                "testSource": "tests/tui/ProgramStatusTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "Program status reply recognition accepts only the frozen query echoes",
+              "testSource": "tests/tui/ProgramStatusTest.cpp",
+              "reason": "The frozen scenario pins omission of an invalid app, of a non-blocked kind and of a blank message plus the base64/UTF-8 message bound; an implementation that appends every field passes a shape check but fails those rows. The reply-recognition case additionally separates formatter behavior from the reply predicate the terminal relies on."
+            }
+          },
+          {
+            "id": "cch_tui:Text",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1050/padding-and-selection-reset.json",
+                "scenario": "text-set-padding-x-rerenders-dynamic-width",
+                "test": "Text re-wraps at a new horizontal padding like frozen pi",
+                "testSource": "tests/tui/ContainerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "Box padding change invalidates the render cache",
+              "testSource": "tests/tui/ContainerTest.cpp",
+              "reason": "A Text that re-renders from scratch on every call passes the three padding transitions without carrying any invalidation. The Box cache case separates a changed padding that invalidates a cached composition from one that returns the previous frame."
+            }
+          },
+          {
+            "id": "cch_tui:Text.setPaddingX",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1050/padding-and-selection-reset.json",
+                "scenario": "text-set-padding-x-rerenders-dynamic-width",
+                "test": "Text re-wraps at a new horizontal padding like frozen pi",
+                "testSource": "tests/tui/ContainerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "Box padding change invalidates the render cache",
+              "testSource": "tests/tui/ContainerTest.cpp",
+              "reason": "The frozen scenario observes re-wrapping at the narrowed content width; a setter that only re-clamps the visible padding keeps the previous single line. The cache case separates an invalidating setter from one that reuses the cached composition."
+            }
+          },
+          {
+            "id": "cch_tui:TuiAltScreen.applySelection",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1050/selection-multiclick.json",
+                "scenario": "styled-cjk-wrapped-selection",
+                "test": "AltScreen selection replays styled CJK cells across wrapped rows and copies frozen text",
+                "testSource": "tests/tui/SelectionEvidenceTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "AltScreen selection preserves the cell range through content and focus changes",
+              "testSource": "tests/tui/SelectionEvidenceTest.cpp",
+              "reason": "The styled CJK scenario observes one drag across two wrapped rows; a highlight pass that paints the first drag and drops the range on the next frame passes it. The lifecycle case separates a stored cell range from a per-frame highlight."
+            }
+          }
+        ],
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/tests/TuiTests.cmake",
+            "sha256": "7811fa385713a39c130ba289e854649bb5d20e3c7c6adfd9aa516cf412a887ec"
+          },
+          {
+            "path": "cmake/tests/EvidenceTests.cmake",
+            "sha256": "18ceaf5fc91cf70d10d2e10fce6cf0caa20c6ed484bad6d8e5adaf071e02a32e"
+          },
+          {
+            "path": "src/tui/AltScreen.cpp",
+            "sha256": "359063c3f3d955dd4b6d703552d1fb866172a547edaa564d54a3e2e3e10be714"
+          },
+          {
+            "path": "src/tui/Text.cpp",
+            "sha256": "31effb8b5a90520cbdb3da87b8bb2a66936d5412c05ba4c22c69a9f36b5fcb2c"
+          },
+          {
+            "path": "src/tui/Tui.cpp",
+            "sha256": "8b88602adbb6766a214c39c7724aaa5ffcd8af80cb61dfdb4cbbd6ba7f0bb81a"
+          },
+          {
+            "path": "src/tui/ProgramStatus.cpp",
+            "sha256": "2f21ac5382fb8e1944d7f1ed0f915921e09b65984bfdcb7613e9be617e406b8b"
+          },
+          {
+            "path": "src/tui/VirtualTerminal.cpp",
+            "sha256": "c08c9eba3fba837aac35bfa4cd62a87e2554451306eb9ce032ef79547ed9612a"
+          },
+          {
+            "path": "src/tui/include/cch/tui/AltScreen.hpp",
+            "sha256": "98b9dd9c0459b05db5736df782c6b6a46cb7871a25177144c4c18af4c9a3bf4b"
+          },
+          {
+            "path": "src/tui/include/cch/tui/CursorMarkers.hpp",
+            "sha256": "42853df1ca6e52f59653ef94ad459c9ba912a64d261b5291a13fa302dcc8ee16"
+          },
+          {
+            "path": "src/tui/include/cch/tui/ProgramStatus.hpp",
+            "sha256": "5a55f21ef30b72b1d92385abf7c13ce617a46bdd0406ce7d998fa8d4487a0f19"
+          },
+          {
+            "path": "src/tui/include/cch/tui/Text.hpp",
+            "sha256": "db82c4deaed191f235196ed55e4169fb20f37beed0fb572f3ea04e197fded9e2"
+          },
+          {
+            "path": "src/tui/include/cch/tui/Tui.hpp",
+            "sha256": "58b3b60930801ffff1e135aa2a848f3cafb52c24f01b2010c40e6d1db27d267f"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "src/support/Json.hpp",
+            "sha256": "b28d2fa0c12b4b923e63d54dae09b24dee9d26c164c5f7ea59a0a52fd3d60322"
+          },
+          {
+            "path": "tests/support/PiTuiEvidence.hpp",
+            "sha256": "d56aaad87fe854f7b8e1d5958f96dd100c7a8120b579c22e33077abf51046dd3"
+          },
+          {
+            "path": "tests/tui/ContainerTest.cpp",
+            "sha256": "4b79021373a60de4467f317f262ebfab21785efa7cf29dbcb7bf0203fc071ca8"
+          },
+          {
+            "path": "tests/tui/HardwareCursorEvidenceTest.cpp",
+            "sha256": "2c130bfbf15521aa04d603d66f68e1ca384b6424c403a08e36d773b553277713"
+          },
+          {
+            "path": "tests/tui/ITuiTest.cpp",
+            "sha256": "4b37da4451902515dc6a8fd06e666f3cc406e416831af34339531d9d14524fff"
+          },
+          {
+            "path": "tests/tui/ProgramStatusTest.cpp",
+            "sha256": "f4ee948cc6c536f4c9c6ba05065dd4c515c776faf9fc7d8819640b24cf3646c0"
+          },
+          {
+            "path": "tests/tui/SelectionEvidenceTest.cpp",
+            "sha256": "1a3a56a1f458c140075a97c6210ef32349cf16d84987647fe54c375a92538f27"
+          },
+          {
+            "path": "tests/evidence/TuiReconciliationTest.py",
+            "sha256": "c78936d86f7fda5751335d381fd572b8685a14a74f8847991cc8f80cd0ec6e7a"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/baselines.json",
+            "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
+            "sha256": "3f479083b10886287684afe88a068769ea3989a4020e0559b949c0f937746999"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1050/hardware-cursor.json",
+            "sha256": "081e4e8ebd20b5f8665091a6c36a565852dd17076e3506d774c1e044b3508871"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1050/padding-and-selection-reset.json",
+            "sha256": "134c1297e51205d722e00f7923a1f5598a9d39533ae2aa510dff6d674eba5223"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1050/program-status-format.json",
+            "sha256": "e41cd21e549ef606e09304b7ade4e420490f91af49b96eb0bbd629c47ea434b8"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1050/selection-multiclick.json",
+            "sha256": "ee33e3f9776bdd136099cc54a6636644be17a83720d23db73ddd515aac04a481"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
+            "sha256": "253e99a6ddf3976d055f611e4438ab0e5919776865944502779d2918b9c45f6f"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
+            "sha256": "bf89b3ef3dd190e0908e986b287263444b0da3a8ab42b1a58848bdf72d07c167"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
+            "sha256": "d85f2203f1c4edd21e383f3c9c18ac65d4b3249b096bd140f55b7015bbeb2a93"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui.xml",
+            "sha256": "2486e5c35ad9cc05c87f426ed3425cb4e25ee60bdeecd4a0231b4f7e16bb37b7"
+          }
+        ],
+        "routingSha256": "0ef2caef4a2ec6ed84f61f0eec0c1672d488fe0f0ed01f23e280be5d7b08364c"
       }
     ]
   },
@@ -5378,8 +5677,8 @@
     "verification": {
       "not-applicable": 28,
       "unverified": 1013,
-      "upstream-captured": 363,
-      "verified": 60
+      "upstream-captured": 356,
+      "verified": 67
     },
     "evidenceRoute": {
       "captured": 423,
@@ -59404,7 +59703,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_tui",
       "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
       "consumerOwners": [
@@ -59412,7 +59711,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1123",
+      "implementation_ticket": "#1182",
       "scenario": "format-program-status-encodes-fields-and-limits",
       "comparisonScenarios": [
         "format-program-status-encodes-fields-and-limits"
@@ -59424,12 +59723,12 @@
         "capturedScenarios": [
           "format-program-status-encodes-fields-and-limits"
         ],
-        "result": "frozen ProgramStatus is {state: idle|working|blocked|done|error|clear, app?, kind?, message?}"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1182-tui-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "v1.3.0 addition; absent from the v1.0.4 index.",
+      "remainingWork": null,
+      "notes": "Delivered by #1182; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
       "lane": "1050",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -59442,7 +59741,26 @@
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1123",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-format.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "format-program-status-encodes-fields-and-limits"
+          ],
+          "result": "frozen ProgramStatus is {state: idle|working|blocked|done|error|clear, app?, kind?, message?}"
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "v1.3.0 addition; absent from the v1.0.4 index."
+      },
+      "delivery": "1182-tui-comparisons"
     },
     {
       "id": "cch_tui:RenderLatexOptions",
@@ -68133,7 +68451,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_tui",
       "consumer": "cch_coding_agent settings and InteractiveEngine",
       "consumerOwners": [
@@ -68141,7 +68459,7 @@
         "cch_tui"
       ],
       "boundary": "TUI/Container/Component/Overlay/listeners",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1182",
       "scenario": "main-screen-default-hidden",
       "comparisonScenarios": [
         "main-screen-default-hidden"
@@ -68153,14 +68471,12 @@
         "capturedScenarios": [
           "main-screen-default-hidden"
         ],
-        "result": "hardware cursor hidden by default; the same frozen scenario is re-captured at v1.3.0"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1182-tui-reconciliation.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "no v1.3.0 C++ comparison recorded"
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "v1.3.0 behavior change applied from the curated change map.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1182; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
       "lane": "1050",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -68173,7 +68489,28 @@
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1050/hardware-cursor.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "main-screen-default-hidden"
+          ],
+          "result": "hardware cursor hidden by default; the same frozen scenario is re-captured at v1.3.0"
+        },
+        "missingObservation": null,
+        "gaps": [
+          "no v1.3.0 C++ comparison recorded"
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "v1.3.0 behavior change applied from the curated change map."
+      },
+      "delivery": "1182-tui-comparisons"
     },
     {
       "id": "cch_tui:TUI.hasOverlay",
@@ -68834,7 +69171,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_tui",
       "consumer": "cch_coding_agent settings and InteractiveEngine",
       "consumerOwners": [
@@ -68842,7 +69179,7 @@
         "cch_tui"
       ],
       "boundary": "TUI/Container/Component/Overlay/listeners",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1182",
       "scenario": "main-screen-toggle",
       "comparisonScenarios": [
         "main-screen-toggle"
@@ -68854,14 +69191,12 @@
         "capturedScenarios": [
           "main-screen-toggle"
         ],
-        "result": "preference toggles cursor visibility; the same frozen scenario is re-captured at v1.3.0"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1182-tui-reconciliation.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "no v1.3.0 C++ comparison recorded"
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "v1.3.0 behavior change applied from the curated change map.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1182; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
       "lane": "1050",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -68874,7 +69209,28 @@
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1050/hardware-cursor.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "main-screen-toggle"
+          ],
+          "result": "preference toggles cursor visibility; the same frozen scenario is re-captured at v1.3.0"
+        },
+        "missingObservation": null,
+        "gaps": [
+          "no v1.3.0 C++ comparison recorded"
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "v1.3.0 behavior change applied from the curated change map."
+      },
+      "delivery": "1182-tui-comparisons"
     },
     {
       "id": "cch_tui:TUI.setTerminalColorSchemeNotifications",
@@ -70177,7 +70533,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_tui",
       "consumer": "boxes/loaders/markdown chrome",
       "consumerOwners": [
@@ -70185,7 +70541,7 @@
         "cch_coding_agent"
       ],
       "boundary": "Text render/setText",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1182",
       "scenario": "text-set-padding-x-rerenders-dynamic-width",
       "comparisonScenarios": [
         "text-set-padding-x-rerenders-dynamic-width"
@@ -70197,17 +70553,12 @@
         "capturedScenarios": [
           "text-set-padding-x-rerenders-dynamic-width"
         ],
-        "result": "frozen setPaddingX invalidates and re-wraps at the new horizontal padding"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1182-tui-reconciliation.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "export name appears in changed source hunks; not individually re-audited against v1.3.0",
-        "member name appears in changed source hunks; not individually re-audited against v1.3.0",
-        "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Frozen source file changed since v1.0.4 and the diff names this export; no dedicated v1.3.0 observation was captured for its unchanged operations.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1182; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
       "lane": "1050",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -70220,7 +70571,31 @@
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1050/padding-and-selection-reset.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "text-set-padding-x-rerenders-dynamic-width"
+          ],
+          "result": "frozen setPaddingX invalidates and re-wraps at the new horizontal padding"
+        },
+        "missingObservation": null,
+        "gaps": [
+          "no v1.3.0 C++ comparison recorded",
+          "export name appears in changed source hunks; not individually re-audited against v1.3.0",
+          "member name appears in changed source hunks; not individually re-audited against v1.3.0",
+          "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Frozen source file changed since v1.0.4 and the diff names this export; no dedicated v1.3.0 observation was captured for its unchanged operations."
+      },
+      "delivery": "1182-tui-comparisons"
     },
     {
       "id": "cch_tui:Text.cachedLines",
@@ -70581,7 +70956,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_tui",
       "consumer": "none yet (C++ Text::set_padding_x exists; no product caller)",
       "consumerOwners": [
@@ -70589,7 +70964,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1182",
       "scenario": "text-set-padding-x-rerenders-dynamic-width",
       "comparisonScenarios": [
         "text-set-padding-x-rerenders-dynamic-width"
@@ -70601,14 +70976,12 @@
         "capturedScenarios": [
           "text-set-padding-x-rerenders-dynamic-width"
         ],
-        "result": "frozen setPaddingX invalidates and re-wraps at the new horizontal padding"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1182-tui-reconciliation.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "no v1.3.0 C++ comparison recorded"
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1182; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
       "lane": "1050",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -70621,7 +70994,28 @@
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1050/padding-and-selection-reset.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "text-set-padding-x-rerenders-dynamic-width"
+          ],
+          "result": "frozen setPaddingX invalidates and re-wraps at the new horizontal padding"
+        },
+        "missingObservation": null,
+        "gaps": [
+          "no v1.3.0 C++ comparison recorded"
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "v1.3.0 addition; absent from the v1.0.4 ledger."
+      },
+      "delivery": "1182-tui-comparisons"
     },
     {
       "id": "cch_tui:Text.setText",
@@ -71970,7 +72364,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_tui",
       "consumer": "cch_coding_agent fullscreen text selection",
       "consumerOwners": [
@@ -71978,7 +72372,7 @@
         "cch_tui"
       ],
       "boundary": "TuiAltScreen / ViewportTUI",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1182",
       "scenario": "styled-cjk-wrapped-selection",
       "comparisonScenarios": [
         "styled-cjk-wrapped-selection"
@@ -71990,15 +72384,12 @@
         "capturedScenarios": [
           "styled-cjk-wrapped-selection"
         ],
-        "result": "selection styling is unchanged and re-captured at v1.3.0; v1.3.0 resolves fake cursors before applySelection, but the cursor/selection overlap itself is not separately captured"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1182-tui-reconciliation.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "fake-cursor/selection overlap is inferred from the render order, not captured as its own scenario"
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "v1.3.0 behavior change applied from the curated change map.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1182; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
       "lane": "1050",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -72011,7 +72402,29 @@
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1050/selection-multiclick.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "styled-cjk-wrapped-selection"
+          ],
+          "result": "selection styling is unchanged and re-captured at v1.3.0; v1.3.0 resolves fake cursors before applySelection, but the cursor/selection overlap itself is not separately captured"
+        },
+        "missingObservation": null,
+        "gaps": [
+          "no v1.3.0 C++ comparison recorded",
+          "fake-cursor/selection overlap is inferred from the render order, not captured as its own scenario"
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "v1.3.0 behavior change applied from the curated change map."
+      },
+      "delivery": "1182-tui-comparisons"
     },
     {
       "id": "cch_tui:TuiAltScreen.applySelectionHighlight",
@@ -81391,7 +81804,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_tui",
       "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
       "consumerOwners": [
@@ -81399,7 +81812,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1123",
+      "implementation_ticket": "#1182",
       "scenario": "format-program-status-encodes-fields-and-limits",
       "comparisonScenarios": [
         "format-program-status-encodes-fields-and-limits"
@@ -81411,12 +81824,12 @@
         "capturedScenarios": [
           "format-program-status-encodes-fields-and-limits"
         ],
-        "result": "frozen formatProgramStatus encodes state/app/kind/base64 message; control characters become spaces and the message is truncated at a UTF-8 boundary to 2048 bytes"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1182-tui-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "v1.3.0 addition; absent from the v1.0.4 index.",
+      "remainingWork": null,
+      "notes": "Delivered by #1182; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
       "lane": "1050",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -81429,7 +81842,26 @@
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1123",
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-format.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "format-program-status-encodes-fields-and-limits"
+          ],
+          "result": "frozen formatProgramStatus encodes state/app/kind/base64 message; control characters become spaces and the message is truncated at a UTF-8 boundary to 2048 bytes"
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "v1.3.0 addition; absent from the v1.0.4 index."
+      },
+      "delivery": "1182-tui-comparisons"
     },
     {
       "id": "cch_tui:fuzzyFilter",
