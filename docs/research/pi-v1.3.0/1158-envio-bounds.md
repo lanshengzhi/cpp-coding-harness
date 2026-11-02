@@ -12,8 +12,8 @@ The ticket remains open for tree-listing and read-tool work.
 
 ## Scope
 
-Aligns the durable environment's file IO with the frozen Linux EnvIO surfaces
-that `[#1089](1089-local-environment.md)` left as an implementation gap, under
+Advances the durable environment's file IO toward the frozen Linux EnvIO surfaces
+that [#1089](1089-local-environment.md) left as an implementation gap, under
 [ADR 0075](../../adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md)
 and [#1044](https://github.com/lanshengzhi/cpp-coding-harness/issues/1044), with
 [#1158](https://github.com/lanshengzhi/cpp-coding-harness/issues/1158) as its
@@ -36,7 +36,7 @@ Frozen pi exposes instead:
   (`packages/durable/src/env/index.ts:177-208`), implemented by the pi-env
   daemon's `ignore`-based walk (`packages/env/daemon/src/list.rs`).
 
-The durable coding-tools `read` registration read the whole file and had no
+The durable coding-tools `read` registration still reads the whole file and has no
 positional parameters. Whole-row verification, capability promotion and the
 consolidated ledger rebuild stay with
 [#1180](https://github.com/lanshengzhi/cpp-coding-harness/issues/1180); the
@@ -80,7 +80,7 @@ Scenarios:
    bytes and at `2 MiB` for 1 MiB returns the exact requested bytes, recorded as
    length, SHA-256 and head/tail (the `BinaryReader` reads in 1 MiB chunks).
 
-`NodeExecutionEnv` implements the first, second and last groups directly.
+`NodeExecutionEnv` implements directory paging and positioned reads directly.
 `listFiles` is the optional daemon-backed member, so the capture starts the
 checkout's own daemon and builds it from the frozen sources with
 `cargo build --locked` when the binary is missing; `gitignore` is disabled on
@@ -91,10 +91,11 @@ the daemon binary is a prerequisite, built by the script on first use.
 `python3 scripts/evidence/audit_evidence.py check --manifest
 fixtures/pi-v1.3.0/audit-1158/manifest.json` accepts the unregistered bundle.
 
-## Delivered behavior
+## Current delivered behavior
 
-`<cch/durable/Environment.hpp>` replaces the unbounded `list` with the frozen
-two listing surfaces and adds the positional read:
+`<cch/durable/Environment.hpp>` adds directory paging and a positioned byte
+read. The existing unbounded `list` remains available and the read tool is
+unchanged:
 
 - `open_directory(path)` returns a `DirectoryReader`; `next(max_entries)` yields
   `ListingPage{entries, done}`. The reader holds the directory open, so a page
@@ -102,35 +103,30 @@ two listing surfaces and adds the positional read:
   may arrive with the last entries or with an empty page. A zero
   `max_entries` is a `Validation` error (frozen `DirReader.next`). An entry that
   vanishes before its metadata is read is skipped instead of failing the page.
-- `list_files(path, ListOptions)` returns
-  `FileListing{entries, truncated}`. `ListOptions` carries `max_entries`
-  (50,000), `max_bytes` (4 MiB, clamped to the frozen 15.9 MiB payload
-  ceiling), `hidden` (dot names included by default), `excluded_names` (skipped
-  with their subtree) and `timeout` (10 s). The walk is depth first, parents
-  before their entries, siblings in byte order; entries cost their UTF-8
-  relative path plus two bytes; the first entry beyond a bound stops the listing
-  and sets `truncated`. `.git` is never listed, symbolic links are listed but not
-  followed, and entries that cannot be read are skipped.
-- `read(path, offset, length)` returns up to `length` bytes at `offset` with
-  `pread`, so bytes before `offset` are never transferred, fewer bytes only mean
-  end of file, and an offset at or past the end returns an empty result rather
-  than an error. The whole-file `read(path)` is unchanged for `edit`.
+- `read(path, offset, length)` uses `pread` to transfer up to `length` bytes
+  starting at `offset`, with a 64 KiB transfer buffer plus the requested result.
+  For representable offsets, a read at or past EOF returns empty. A nonempty
+  request reaching beyond the host `off_t` range returns a Validation error.
+  Each call opens the path anew, so it does not establish the frozen opened
+  reader's file identity across calls. The whole-file `read(path)` remains for
+  `edit` and the existing read tool.
 
-The durable `read` tool declares optional `offset` and `length` byte parameters
-(frozen `readFile` semantics) and routes that call through the positional read;
-without them it keeps the whole-file read and image detection. A range boundary
-inside a UTF-8 sequence becomes U+FFFD so the tool still returns valid text.
-Validation refuses negative, fractional or imprecise (above 2^53) byte counts.
+The current tree has no `list_files` surface and does not expose byte range
+parameters through the read tool. Its paging and positioned-read tests do not
+accept the remaining tree-listing or line-oriented read-tool obligations.
 
-Memory is bounded by the listing's own bound rather than the directory or file
-size: `smallest_names` keeps only the smallest `remaining + 1` names of one
-directory while the directory streams past, so a level never holds more names
-than the listing may still emit, and the positional read allocates only its
-64 KiB transfer buffer plus the requested range.
+## Historical implementation and validation
 
-## Validation
+The earlier implementation at `dda2d8ce` also supplied a bounded `list_files`
+walk and exposed byte `offset`/`length` on the read tool. Those changes and their
+associated tests were removed in `b9b7c1fb2`; their recorded measurements below
+apply only to that earlier tree, not the current delivery. In particular, its
+listing covered explicit names and hidden entries but did not implement frozen
+gitignore behavior, and its tool byte parameters did not match the frozen
+line-oriented tool contract.
 
-Measured on the default strict Debug preset, base `origin/main` `7e2ccc288`.
+The following historical measurements used the default strict Debug preset,
+base `origin/main` `7e2ccc288`.
 
 - Focused Validation: `ctest --preset vcpkg -L issue1158` selected **7** and
   passed **7/7** in 0.29 s.
@@ -150,7 +146,7 @@ Measured on the default strict Debug preset, base `origin/main` `7e2ccc288`.
   `7e2ccc28` changed `fixtures/pi-v1.3.0/baselines.json` after the `1090`
   delivery's revalidation, so `consolidate_audits.py check` reports
   `1090-durable-images: delivery digest mismatch`. The PM owns that repair on
-  main; this slice changes no pinned delivery input. Three runner-sensitive cases
+  main. Three runner-sensitive cases
   failed once under the serial run and pass in isolation: the #990 TUI late-reply
   timing case, the #1096 codemode close/admission case and the documented #617
   `[quarantine]` projection cost bound (2.53 ms against the 2 ms Debug bound).
@@ -160,9 +156,9 @@ Measured on the default strict Debug preset, base `origin/main` `7e2ccc288`.
   `max_entries`, `-L issue1158` fails — the 512 MiB sparse read raises the
   process `VmHWM` to 583,376,896 bytes against a 64 MiB allowance, the bounded
   listing returns 3000 entries instead of 100, and `truncated` stays false. With
-  the delivered code the same case passes: the sparse read raises `VmHWM` by
-  less than 64 MiB, the listing stops at 100 with `truncated`, and a 3000-entry
-  directory pages in 31 pages of at most 100 entries.
+  that earlier implementation the same case passed: the sparse read raised
+  `VmHWM` by less than 64 MiB, the listing stopped at 100 with `truncated`, and
+  a 3000-entry directory paged in 31 pages of at most 100 entries.
 - Frozen comparison: four of the seven focused cases read the committed frozen
   artifact (`FrozenScenario`) rather than C++-invented values; the page case
   compares page sizes, `done` marks and the union of the page names, and the
@@ -176,14 +172,16 @@ This ticket remains open. The owner resolved the issue wording against frozen
 empty at or past EOF; the durable `read` tool instead uses one-based line
 `offset` and `limit`, reports an offset beyond the line count as an error, and
 applies the frozen default output limits. The issue's “same treatment” cannot
-mean identical parameter units on both surfaces. The prior proposed tool byte `offset`/`length` interface and its focused test
-were removed. The restored tool's no-parameter path still reads the whole file. Frozen reference:
+mean identical parameter units on both surfaces. The prior proposed tool byte
+`offset`/`length` interface and its focused test were removed. The restored
+tool's no-parameter path still reads the whole file. Frozen reference:
 `packages/durable/src/env/index.ts` `BinaryReader` and
 `packages/durable/src/tools/read.ts` `readSchema`, `readText`, `readHead`.
 
-The environment interface and focused tests cover paged directory continuation,
-entry/byte limits, hidden and explicit excluded names, positional bytes, EOF,
-and large inputs. They do not cover the frozen default gitignore behavior:
+The current environment interface and focused tests cover paged directory
+continuation, positional bytes, EOF at the captured offsets, and large inputs.
+The removed tree-listing tests covered entry/byte limits and explicit exclusions,
+but did not cover the frozen default gitignore behavior:
 work-tree detection, parent and nested `.gitignore`, `.git/info/exclude`, global
 excludes, rule precedence, and `gitignore:false`. The capture explicitly disables
 that behavior. Frozen `packages/env/daemon/src/list.rs` uses the Rust `ignore`
@@ -196,8 +194,8 @@ failures are skipped only after retaining the bounded prefix, and unsupported
 file types were classified as files. Frozen listing skips unsupported
 kinds and checks its timeout as it walks. Frozen tool comparison still needs
 line selection, past-end error, default byte/line limits, BOM/UTF-8, diagnostics,
-and bounded memory, including the no-parameter path. The removed tool test asserted byte parameters and is not evidence for
-line semantics.
+and bounded memory, including the no-parameter path. The removed tool test
+asserted byte parameters and is not evidence for line semantics.
 
 A possible split is environment pagination and positional reads first, followed
 by listing ignore semantics and bounded line-oriented tool behavior. The first
@@ -262,26 +260,22 @@ serial merger. No unfiltered CTest suite was run, at the user's request.
 
 ## Capability status
 
-No capability row is claimed and no ledger membership changes. This slice closes
-the EnvIO bounds gap recorded against `#1089`; whole-row verification and the
-`audit-1158` registration remain with #1180.
+No capability row is claimed and no ledger membership changes. This slice
+advances the EnvIO bounds gap recorded against `#1089`; the gap remains open.
+Whole-row verification and `audit-1158` registration remain with #1180.
 
 ## Remaining boundary
 
-- `list_files` does not implement frozen `gitignore` handling (`.gitignore`
-  files, `.git/info/exclude`, the global excludes file, work-tree detection).
-  The `ignore`-crate semantics behind frozen `listFiles` are not ported; the
-  capture disables `gitignore` so its observations stay host-independent. Only
-  `hidden`, `excluded_names` and the unconditional `.git` exclusion are claimed.
-- Frozen `DirReader` pages one directory; it has no byte bound and no exclusion
-  filter, so those live in `list_files`, exactly as in the frozen surfaces.
-- The durable `read` tool's positional parameters are bytes, not the frozen
-  `packages/durable/src/tools/read.ts` line-oriented `offset`/`limit` slice with
-  its truncation diagnostics. Line selection, BOM-stripped line counting and the
-  "Showing lines …" diagnostics remain unimplemented.
-- Frozen `listFiles` reports `{path, kind}`; `FileListEntry` also carries `size`,
-  which the frozen shape leaves to `fileInfo`.
-- Sibling ordering in `list_files` keeps frozen byte order by retaining a
-  bounded prefix per directory; a directory larger than the remaining entry
-  bound is therefore truncated at the bound rather than fully sorted first
-  (frozen sorts the whole level, which is unbounded in that one directory).
+- Frozen `listFiles` remains unimplemented. Its bounds, truncation, hidden and
+  name exclusions, default gitignore handling, timeout and ordering need a
+  complete implementation and frozen comparisons. The removed prototype's
+  deadline, metadata and unsupported-kind gaps are recorded above.
+- Frozen `DirReader` pages one directory and has no byte bound or exclusion
+  filter; those belong to the separate `listFiles` contract.
+- The existing durable `read` tool still reads whole files and has no positional
+  parameters. Frozen line-oriented `offset`/`limit`, bounded default output,
+  BOM-aware line counting and truncation diagnostics remain unimplemented.
+- Positioned `read` opens a path on each call and does not establish the frozen
+  opened reader's identity across calls. EOF outside the host `off_t` range is
+  not covered by the frozen comparisons; nonempty requests beyond that range
+  return a Validation error.
