@@ -213,6 +213,27 @@ existing evidence does not establish either property. Shared delivery receipt
 revalidation and serial-merger registration of `audit-1158` remain prerequisites
 for any delivery that changes their pinned inputs or registry.
 
+### Exact-full-page observation
+
+The independent [exact-page probe](1158-exact-page-probe.mts), run on a clean
+`71023aec1546d6d677a65669c5665c0927ce0dd0` checkout, created four files and
+called `next(2)` three times. It observed `(entry count, done)` of
+`(2, false), (2, false), (0, true)`. The observed names were `c,d` then `a,b`;
+filesystem order is not part of the assertion. Frozen
+`packages/durable/src/env/node.ts` `NodeDirReader.next` sets `done` only after
+`dir.read()` returns `null` and stops as soon as the page fills. The C++
+large-directory test exercises this exact multiple (3000 entries, 100 per page)
+and requires 31 pages. Reproduce the read-only observation with:
+
+```sh
+PI_CHECKOUT=/tmp/pi-1113-frozen TSX_TSCONFIG_PATH=/tmp/pi-1113-frozen/tsconfig.json \
+  NODE_OPTIONS=--conditions=source /tmp/pi-1113-frozen/node_modules/.bin/tsx \
+  docs/research/pi-v1.3.0/1158-exact-page-probe.mts
+```
+
+This probe is separate from the candidate audit family and changes no baseline
+registration.
+
 ### Current-tree validation
 
 On merged revision `b9b7c1fb2`, the `issue1158` selection passed 4/4. The
