@@ -910,34 +910,40 @@ TEST_CASE("a callback rejection that settles after unsubscribe is still reported
 // `maxConcurrentCallbacks` 1 and `finalValue` {value: 2}.
 //
 // Negative controls: a listener invoked reentrantly enters the second delivery
-// while the first is in flight (values and the concurrency counter both
-// separate it), and a state that drops the frame committed while a callback is
-// running never reaches [1,2].
+// while the first is in flight (the delivered order and the concurrency counter
+// both separate it), and a state that drops the frame committed while a
+// callback is running never reaches [1,2].
 TEST_CASE("a watch acquired before start buffers frames and serializes callbacks",
         "[chord][replicated_state][issue1188][spec]") {
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
 
-    std::vector<double> hydrated;
-    std::vector<double> updates;
+    std::vector<DeliveryEvent> observed;
     int active = 0;
     int max_active = 0;
     std::optional<Completion> in_flight;
-    auto unsubscribe = attached->subscribe([&](Json value, Context, ReplicatedStateDelivery delivery) {
-        if (delivery.kind == ReplicatedStateDeliveryKind::Hydrate) {
-            hydrated.push_back(number_of(value));
-            return ready();
-        }
+    const auto update_values = [&observed] {
+        std::vector<double> values;
+        for (const DeliveryEvent& event : observed)
+            if (event.kind == ReplicatedStateDeliveryKind::Update) values.push_back(event.value);
+        return values;
+    };
+    auto unsubscribe = attached->subscribe([&observed, &active, &max_active, &in_flight](
+                                                   Json value, Context context, ReplicatedStateDelivery delivery) {
+        observed.push_back(DeliveryEvent{.kind = delivery.kind,
+                .sequence = delivery.sequence,
+                .value = number_of(value),
+                .signal_present = context.stop_token().stop_possible()});
+        if (delivery.kind == ReplicatedStateDeliveryKind::Hydrate) return ready();
         ++active;
         max_active = std::max(max_active, active);
-        updates.push_back(number_of(value));
-        if (number_of(value) != 1.0) {
+        if (delivery.sequence != 1) {
             --active;
             return ready();
         }
-        // The first committed frame stays in flight until the test releases it;
-        // the completion is the end of the listener's awaited body.
+        // The first committed frame stays in flight until the test releases
+        // it; the completion is the end of the listener's awaited body.
         return support::AsyncResult<void>{
                 support::AsyncProducer<void, support::Error>{[&active, &in_flight](Completion completion) noexcept {
                     in_flight.emplace([&active, completion = std::move(completion)](
@@ -948,22 +954,40 @@ TEST_CASE("a watch acquired before start buffers frames and serializes callbacks
                 }}};
     });
 
-    CHECK((hydrated == std::vector<double>{0.0}));
+    // The cold hydration is the acquisition revision, not part of the frozen
+    // watch's post-acquisition frame sequence.
+    REQUIRE(observed.size() == 1);
+    CHECK(observed[0].kind == ReplicatedStateDeliveryKind::Hydrate);
+    CHECK(observed[0].sequence == 0);
+    CHECK(observed[0].value == 0.0);
+    CHECK_FALSE(observed[0].signal_present);
+
     source.commit(revision(1));
-    CHECK((updates == std::vector<double>{1.0}));
+    REQUIRE(observed.size() == 2);
+    CHECK(observed[1].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(observed[1].sequence == 1);
+    CHECK(observed[1].value == 1.0);
+    CHECK_FALSE(observed[1].signal_present);
     CHECK(active == 1);
+    CHECK((update_values() == std::vector<double>{1.0}));
 
     // The second committed frame buffers behind the in-flight delivery instead
     // of being delivered concurrently (frozen `valuesBeforeRelease`).
     source.commit(revision(2));
-    CHECK((updates == std::vector<double>{1.0}));
+    REQUIRE(observed.size() == 2);
     CHECK(active == 1);
     CHECK(max_active == 1);
+    CHECK((update_values() == std::vector<double>{1.0}));
 
     settle(in_flight);
-    CHECK((updates == std::vector<double>{1.0, 2.0}));
+    REQUIRE(observed.size() == 3);
+    CHECK(observed[2].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(observed[2].sequence == 2);
+    CHECK(observed[2].value == 2.0);
+    CHECK_FALSE(observed[2].signal_present);
     CHECK(active == 0);
     CHECK(max_active == 1);
+    CHECK((update_values() == std::vector<double>{1.0, 2.0}));
     CHECK(attached->value() == revision(2));
     unsubscribe();
 }
