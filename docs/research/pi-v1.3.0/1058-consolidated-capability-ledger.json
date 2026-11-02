@@ -2226,14 +2226,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1178-chord.xml"
+            "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1185.xml"
           ],
-          "testedRevision": "a3f9e28af4495a8f5ab96b5c06d04e18f4fe643b",
-          "recordedAt": "2026-11-01T02:20:26Z",
-          "selected": 70,
+          "testedRevision": "60b043a722f137cd89ba64d89c9caa06332c6e58",
+          "recordedAt": "2026-11-02T08:40:13Z",
+          "selected": 76,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1178-chord.xml",
-            "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1185.xml",
+            "sha256": "9bfa75c5674ae9981f3f439fe3019a37b14fdec6d69438f168c1b6f1a10c2753"
           }
         },
         "rows": [
@@ -2781,7 +2781,7 @@
           },
           {
             "path": "src/chord/Delta.cpp",
-            "sha256": "8f99ccf1bebc645eee26c10b07ed8c9f4ea64dcdb1c72fa43e98ffd21cb01705"
+            "sha256": "28192bf6d308de9c907da1af04d0809f7003b1f2961a2ff61f5ace019ca2425b"
           },
           {
             "path": "src/chord/DeltaInternal.hpp",
@@ -2813,7 +2813,7 @@
           },
           {
             "path": "src/chord/include/cch/chord/Delta.hpp",
-            "sha256": "2841496851cde80b117d454d3165bf7de6879e837f467c1c16d37c1127877363"
+            "sha256": "57ac34ffd820f82bfecc45850ddfdda904e7259e279ba81266bb0032d7980d5c"
           },
           {
             "path": "src/chord/include/cch/chord/Json.hpp",
@@ -2857,7 +2857,7 @@
           },
           {
             "path": "tests/chord/DeltaTest.cpp",
-            "sha256": "d8a2f8169dee839214c15802dbf4811aa1656bdcbacace2090027ec32c15119a"
+            "sha256": "1f6169bf069455b9f6f3b76a742ce49c50c1240926584c2b672f1628747136c9"
           },
           {
             "path": "tests/chord/OutputTest.cpp",
@@ -2931,7 +2931,15 @@
             "path": "docs/research/pi-v1.3.0/deliveries/1178-chord.xml",
             "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
           }
-        ]
+        ],
+        "revalidation1185": {
+          "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp — three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
+          "changedInputs": [
+            "src/chord/Delta.cpp",
+            "src/chord/include/cch/chord/Delta.hpp",
+            "tests/chord/DeltaTest.cpp"
+          ]
+        }
       },
       {
         "id": "1181-mcp-comparisons",
@@ -4030,6 +4038,244 @@
             "fixtures/pi-v1.3.0/baselines.json"
           ]
         }
+      },
+      {
+        "id": "1185-chord-delta-ingestion",
+        "ticket": "1185",
+        "implementationCommits": [
+          "86afd3134c9fb04a1f2bd6b4a3c33d69e0d2a4dd",
+          "60b043a722f137cd89ba64d89c9caa06332c6e58"
+        ],
+        "report": "docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1185-chord.xml"
+          ],
+          "testedRevision": "60b043a722f137cd89ba64d89c9caa06332c6e58",
+          "recordedAt": "2026-11-02T08:40:07Z",
+          "selected": 76,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1185-chord.xml",
+            "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_chord:delta:op-validation",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
+                "test": "decoded operation ingestion rejects the frozen malformed shapes before any target access",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "decoded application keeps the preceding mutable write when a later tuple is rejected",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "The frozen applier validates each operation as it reaches it, so a leading set stays applied when a later tuple is rejected. Whole-batch pre-validation would leave the caller at its initial value, and an ingestion seam that accepted an unknown verb or a string splice index would not report those messages at all."
+            }
+          },
+          {
+            "id": "cch_chord:delta:path-validation",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
+                "test": "decoded operation ingestion rejects the frozen malformed shapes before any target access",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "decoded ingestion rejects every reserved segment and never yields a partial batch",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "A path check that special-cased only the frozen __proto__ spelling would accept constructor and prototype, which reach the same JavaScript prototype surface, and an ingest-as-you-go seam that returned the accepted prefix would hand a caller a partially validated batch; the case requires all three reserved segments and whole-batch rejection."
+            }
+          },
+          {
+            "id": "cch_chord:delta:root-replacement",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
+                "test": "mutable application mutates in place while a root replacement returns a new value",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a root replacement keeps the preceding incremental write and adopts a new root",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "An applier that wrote the adopted replacement into the caller's value would make replacementIsNew false, and one that discarded the writes before a replacement would lose the preceding set; the case requires the caller's prior write to survive and the returned root to be a distinct container that shares the replacement payload."
+            }
+          },
+          {
+            "id": "cch_chord:Chord:delta",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1054/session-transactions.json",
+                "scenario": "document watches and states deliver only committed frames",
+                "test": "a committed watch frame's frozen delta vocabulary matches the tracker draft and value",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a whole-root replacement is not the delta a committed watch frame delivers",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "A delta vocabulary that also accepted a whole-root replacement as the committed frame's shape would pass decoding while not matching the frozen two-set frame; the case requires the committed frame to be a non-base batch and the tracker's prepared replacement of the same value to differ from it."
+            }
+          },
+          {
+            "id": "cch_chord:Chord:draft",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
+                "test": "aborting a prepared change revokes escaped draft handles",
+                "testSource": "tests/chord/TrackerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "aborting a prepared change revokes escaped draft handles",
+              "testSource": "tests/chord/TrackerTest.cpp",
+              "reason": "An implementation that refuses prepare but leaves an escaped draft handle usable would apply the escaped write and advance the revision; the case requires the settled overlay error, the aborted-preparation error, and the unchanged committed value and revision."
+            }
+          }
+        ],
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/targets/Chord.cmake",
+            "sha256": "db34ddc2693d5187df2a94f0e38eacb3262796fe2b0d93ab7ef99167aceccf76"
+          },
+          {
+            "path": "cmake/tests/ChordTests.cmake",
+            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "src/chord/Delta.cpp",
+            "sha256": "28192bf6d308de9c907da1af04d0809f7003b1f2961a2ff61f5ace019ca2425b"
+          },
+          {
+            "path": "src/chord/DeltaInternal.hpp",
+            "sha256": "e10711e4d398c29e109e0fb83a8b7c3ca8b5913d6e164ffb231e989c2f4861db"
+          },
+          {
+            "path": "src/chord/Json.cpp",
+            "sha256": "10a95224acf9ea62a6e024440066dca84ed8a459949a1e96c9f9b780ad85451a"
+          },
+          {
+            "path": "src/chord/Tracker.cpp",
+            "sha256": "e6abb2fabb5b0b88ac8a6381ca256834cdb2ed64ef27e0b11069b282f21ebe5f"
+          },
+          {
+            "path": "src/chord/include/cch/chord/Delta.hpp",
+            "sha256": "57ac34ffd820f82bfecc45850ddfdda904e7259e279ba81266bb0032d7980d5c"
+          },
+          {
+            "path": "src/chord/include/cch/chord/Json.hpp",
+            "sha256": "a0770553e00418ca5add8b9437bc9f0809e19f8fa723e47d2812e235541b9839"
+          },
+          {
+            "path": "src/support/include/cch/support/Error.hpp",
+            "sha256": "195585394d91c60b92f5b5ee85bb81e3961cd9a3e4a293298403f8f1032e558f"
+          },
+          {
+            "path": "src/support/include/cch/support/JsonObject.hpp",
+            "sha256": "bd24f86e03a85fdf402246dd4fbbeb812cec21ccd77ab25f09b6d8bd8bc1680d"
+          },
+          {
+            "path": "src/support/include/cch/support/JsonValue.hpp",
+            "sha256": "93875a958f5e36e0d41feb68de0fbfc66e4d242b525eed7dc74eaf64b048dbee"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/chord/DeltaTest.cpp",
+            "sha256": "1f6169bf069455b9f6f3b76a742ce49c50c1240926584c2b672f1628747136c9"
+          },
+          {
+            "path": "tests/chord/TrackerTest.cpp",
+            "sha256": "caf97023d0a2fc6f06a6195ffeb70012688a3abf4f7b7331de33e95ebfc182ad"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1054/manifest.json",
+            "sha256": "e9039b53cfccdf6caf62e09702377ca45e53e91cedbea4dee6d1b92d18e38a44"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+            "sha256": "47119905f291f9fdeecf6312c46ebd5d81154699b3748e531973ecf0fc43db1f"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
+            "sha256": "d56e0cb0f2a8afbb2045de990390d74e7898d50f7dfad9458cd34a7e23a63e6d"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+            "sha256": "5b5241721f64f50380b2fe7a5c22c528a4d38d7ebfc9035f2c9de3429c335518"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1061/manifest.json",
+            "sha256": "1532caab7462c64e9008195685a55b001f9dc45a8d4d8e86e7603034ddcaf70b"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1061/validation-order.json",
+            "sha256": "0c1065e8f9f1f34c8a8f7ce1b949bf236b0ccd4f418896c203123c2f511f7553"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json",
+            "sha256": "3a986f6ca6df66492b2cae5d63b2ba37bb762e182ec0db33636291ba1ab5e0b1"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.json",
+            "sha256": "5a08743f52e131024bc429023e110ec6ea028f09c4f0a434bf9c5d9f181462ed"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
+            "sha256": "bd883dca682aa04f5a6cd1e205011b8311eb90ab25ee3d4e477d9e8dd6c51bbd"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/deliveries/1185-chord.xml",
+            "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
+          }
+        ],
+        "routingSha256": "e10f486b2f341da5cfff683f179814cc61459d6b807afbce2150711e88c97d05"
       }
     ]
   },
@@ -4272,8 +4518,8 @@
         "not-applicable": 2
       },
       "cch_chord": {
-        "implemented": 24,
-        "missing": 28,
+        "implemented": 29,
+        "missing": 23,
         "not-applicable": 5,
         "partial": 8
       },
@@ -4312,22 +4558,22 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1060,
-      "missing": 201,
+      "implemented": 1065,
+      "missing": 196,
       "not-applicable": 18,
       "partial": 185
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1016,
-      "upstream-captured": 375,
-      "verified": 45
+      "unverified": 1015,
+      "upstream-captured": 371,
+      "verified": 50
     },
     "evidenceRoute": {
-      "captured": 420,
+      "captured": 421,
       "artifact-only": 0,
       "related-captured": 23,
-      "declared-comparison": 31,
+      "declared-comparison": 30,
       "cpp-regression-only": 10,
       "unobserved": 52,
       "unobserved-static": 0,
@@ -4336,7 +4582,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1016,
+    "unobservedSupported": 1015,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -4369,7 +4615,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1016,
+    "missingObservationRows": 1015,
     "scenarioCoverage": {
       "scenarios": 645,
       "scenarioNamed": 362,
@@ -11215,15 +11461,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "cch_durable document storage and watches (planned)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1185",
       "scenario": "document watches and states deliver only committed frames",
       "comparisonScenarios": [
         "document watches and states deliver only committed frames"
@@ -11235,15 +11481,12 @@
         "capturedScenarios": [
           "document watches and states deliver only committed frames"
         ],
-        "result": "The watch carried the exact set ops [['s',['text'],'b'],['s',['revision'],2]] and the JSONL delta stored [['s',['text'],'two']]."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "No C++ Chord delta vocabulary or apply implementation exists.",
-        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11256,7 +11499,29 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1058-draft",
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "document watches and states deliver only committed frames"
+          ],
+          "result": "The watch carried the exact set ops [['s',['text'],'b'],['s',['revision'],2]] and the JSONL delta stored [['s',['text'],'two']]."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "No C++ Chord delta vocabulary or apply implementation exists.",
+          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": ""
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:Chord:draft",
@@ -11268,34 +11533,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "cch_durable document transactions (planned)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
-      "scenario": "C++ transaction draft revocation after callback settlement",
+      "implementation_ticket": "#1185",
+      "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
       "comparisonScenarios": [
-        "C++ transaction draft revocation after callback settlement"
+        "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
       ],
       "evidence": {
-        "route": "declared-comparison",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
-        "result": "Not captured; the session capture observes committed values and ops, not revoked escaped drafts."
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenarioMatch": "direct",
+        "capturedScenarios": [
+          "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
+        ],
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
-      "missingObservation": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
-      "gaps": [
-        "No C++ Draft/tracker exists; owned by #1057.",
-        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
-        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
-      ],
-      "remainingWork": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
-      "notes": "",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11308,7 +11571,30 @@
           "verification": "unverified",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1058-draft",
+        "implementation": "missing",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
+          ],
+          "result": "An escaped draft write after abort throws 'Cannot use a settled overlay'; adopting the prepared change throws 'Prepared change has been aborted'; the committed value and revision stay unchanged."
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [
+          "No C++ Draft/tracker exists; owned by #1057.",
+          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+          "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+        ],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": ""
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:Chord:json",
@@ -12375,15 +12661,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/memory.ts; packages/durable/src/storage/sqlite/storage.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1185",
       "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
       "comparisonScenarios": [
         "unsafe prototype segments and malformed operation tuples are rejected before mutation"
@@ -12395,12 +12681,12 @@
         "capturedScenarios": [
           "unsafe prototype segments and malformed operation tuples are rejected before mutation"
         ],
-        "result": "Unknown verb 'x' throws TypeError; string splice index throws the recorded typed error."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Validate the entire batch before applying any operation; make failure leave the target untouched.",
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -12413,7 +12699,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "unsafe prototype segments and malformed operation tuples are rejected before mutation"
+          ],
+          "result": "Unknown verb 'x' throws TypeError; string splice index throws the recorded typed error."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Validate the entire batch before applying any operation; make failure leave the target untouched."
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:delta:op-vocabulary",
@@ -12557,15 +12862,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/memory.ts; packages/durable/src/storage/sqlite/storage.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1185",
       "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
       "comparisonScenarios": [
         "unsafe prototype segments and malformed operation tuples are rejected before mutation"
@@ -12577,12 +12882,12 @@
         "capturedScenarios": [
           "unsafe prototype segments and malformed operation tuples are rejected before mutation"
         ],
-        "result": "Path ['__proto__','polluted'] throws UnsafePathError 'unsafe path segment: __proto__'."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Represent paths as validated segment vectors; reject `__proto__`, `constructor` and `prototype` before any target access.",
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -12595,7 +12900,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "unsafe prototype segments and malformed operation tuples are rejected before mutation"
+          ],
+          "result": "Path ['__proto__','polluted'] throws UnsafePathError 'unsafe path segment: __proto__'."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Represent paths as validated segment vectors; reject `__proto__`, `constructor` and `prototype` before any target access."
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:delta:prepare-replace",
@@ -12678,15 +13002,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:RETIREMENT_OPERATIONS; packages/durable/src/storage/sqlite/storage.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1185",
       "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
       "comparisonScenarios": [
         "mutable application mutates in place except for a root replacement, which returns a new value"
@@ -12698,12 +13022,12 @@
         "capturedScenarios": [
           "mutable application mutates in place except for a root replacement, which returns a new value"
         ],
-        "result": "isBase([['r',...]]) true; isReplace true; a root replacement returns a distinct value and leaves the old target unchanged."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Classify a root replacement as a base, reset any path/revision decoding state, and never apply it as an incremental delta.",
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -12716,7 +13040,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "mutable application mutates in place except for a root replacement, which returns a new value"
+          ],
+          "result": "isBase([['r',...]]) true; isReplace true; a root replacement returns a distinct value and leaves the old target unchanged."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Classify a root replacement as a base, reset any path/revision decoding state, and never apply it as an incremental delta."
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:delta:stale-preparation",
