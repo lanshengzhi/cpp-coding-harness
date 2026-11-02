@@ -121,7 +121,7 @@ Measured on the merged tree, checkout base
 the delivery selections below were rerun at `6161556d0d1e41c353cc591c198d99c2d3c20278`,
 which adds only a `clang-format` wrap to the merge commit.
 
-- Focused: the new comparison selection passed 9/9; the MCP-related selection
+- Focused: the merged-tree `roots|unhandled` selection passed 18/18; the MCP-related selection
   (`ctest --preset vcpkg -R 'MCP|mcp' -j2`) passed 166/166.
 - Full build: `cmake --build --preset vcpkg -j4` passed.
 - Architecture: 43/43 selected names passed (`ctest --preset vcpkg -L architecture`).
