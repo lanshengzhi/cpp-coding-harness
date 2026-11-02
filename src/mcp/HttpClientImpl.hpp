@@ -61,7 +61,8 @@ public:
             HttpServerConfig config,
             std::shared_ptr<support::StreamTransport> transport,
             std::shared_ptr<RequestAuthSource> request_auth,
-            HttpGetStreamOptions get_stream_options);
+            HttpGetStreamOptions get_stream_options,
+            std::stop_token stop_token = {});
 
     /// One JSON-RPC request. Completes with the response `result`, the
     /// server's JSON-RPC error, or a transport error (HTTP status, unsupported
@@ -178,7 +179,7 @@ private:
     /// response body (JSON or SSE). `stop_token` is carried on the request so
     /// the transport can cancel it. `on_body_chunk` observes the response
     /// stream as it arrives (pi `consumeResponseStream`'s progress events).
-    [[nodiscard]] boost::asio::awaitable<support::Expected<support::StreamResponse>> post(std::string_view body,
+    [[nodiscard]] boost::asio::awaitable<support::Expected<support::StreamResponse>> post(std::string body,
             std::stop_token stop_token,
             support::BodyChunkHandler on_body_chunk = {},
             std::shared_ptr<std::atomic_bool> request_sent = {});

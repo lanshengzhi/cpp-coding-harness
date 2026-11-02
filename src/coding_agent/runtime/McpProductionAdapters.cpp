@@ -194,7 +194,7 @@ support::AsyncResult<void> ProductionMcpConnection::refresh() {
         support::Expected<ConnectedMcpTransport> connected =
                 ConnectedMcpTransport{.client = self->client_, .instructions = self->instructions_};
         if (!self->client_) {
-            connected = co_await self->connect_source_();
+            connected = co_await self->connect_source_({});
         }
         if (!connected) {
             if (self->state_ == McpServerState::Closed) co_return std::unexpected(std::move(connected.error()));
@@ -323,9 +323,10 @@ std::shared_ptr<mcp::McpAuthStore> ProductionMcpConnectionFactory::auth_store() 
 }
 
 support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnectionFactory::connect(
-        const mcp::McpConfigEntry& entry) {
+        const mcp::McpConfigEntry& entry, std::stop_token stop_token) {
     return support::detail::make_async_result(
-            [this, entry]() mutable -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpLiveConnection>>> {
+            [this, entry, stop_token]() mutable
+                    -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpLiveConnection>>> {
                 const std::string name = entry.name;
                 // The connect source the connection re-runs on reconnect: one fresh
                 // transport plus handshake. For an OAuth-eligible HTTP server the
@@ -354,10 +355,13 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                         }
                     }
                     const mcp::McpHttpServerConfig config = *http;
-                    source = [config, request_auth]()
+                    source = [config, request_auth](std::stop_token token)
                             -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
-                        auto client = co_await support::detail::await_async_result(cch::mcp::HttpClient::connect(
-                                config, std::make_shared<support::BoostBeastStreamTransport>(), request_auth));
+                        auto client = co_await support::detail::await_async_result(cch::mcp::HttpClient::connect(config,
+                                std::make_shared<support::BoostBeastStreamTransport>(),
+                                request_auth,
+                                {},
+                                token));
                         if (!client) {
                             co_return std::unexpected(std::move(client.error()));
                         }
@@ -368,9 +372,10 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                     };
                 } else {
                     const mcp::McpStdioServerConfig config = std::get<mcp::McpStdioServerConfig>(entry.config);
-                    source = [config]() -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
-                        auto client =
-                                co_await support::detail::await_async_result(cch::mcp::StdioClient::connect(config));
+                    source = [config](std::stop_token token)
+                            -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
+                        auto client = co_await support::detail::await_async_result(
+                                cch::mcp::StdioClient::connect(config, token));
                         if (!client) {
                             co_return std::unexpected(std::move(client.error()));
                         }
@@ -380,7 +385,15 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                         co_return connected;
                     };
                 }
-                auto connected = co_await source();
+                auto connected = co_await source(stop_token);
+                if (!connected && stop_token.stop_requested()) {
+                    // pi `McpConnectionClosedError`: close aborts the pending
+                    // initialize and the connect rejects with the closed error
+                    // (the manager wraps it as the frozen
+                    // `pendingInitializeError` message).
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Cancelled, "MCP client is closed"));
+                }
                 auto connection = std::make_shared<ProductionMcpConnection>(name,
                         source,
                         connected ? std::move(*connected) : ConnectedMcpTransport{},

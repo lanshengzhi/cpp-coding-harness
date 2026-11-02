@@ -347,17 +347,35 @@ support::Error StdioClientImpl::failure_with_stderr_tail(support::Error error) c
 }
 
 boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClientImpl>>> StdioClientImpl::connect_impl(
-        StdioServerConfig config) {
+        StdioServerConfig config, std::stop_token stop_token) {
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(detail::cancelled_error(config.name));
+    }
     auto executor = co_await boost::asio::this_coro::executor;
     auto client = std::make_shared<StdioClientImpl>(std::move(executor), std::move(config));
     if (auto spawned = client->spawn(); !spawned) {
         co_return std::unexpected(std::move(spawned.error()));
     }
+    // Closing the manager aborts a pending initialize by shutting the child
+    // down exactly like pi's client close: the pending request fails and no
+    // process is left behind. The callback only posts onto the client's
+    // serialized executor.
+    std::stop_callback cancel{stop_token, [weak = std::weak_ptr<StdioClientImpl>{client}] {
+                                  if (auto owned = weak.lock()) {
+                                      boost::asio::post(owned->executor_, [owned] { owned->close(); });
+                                  }
+                              }};
 
     support::JsonValue params = initialize_params();
-    auto initialized = co_await support::detail::await_async_result(client->request("initialize", std::move(params)));
+    auto initialized = co_await support::detail::await_async_result(
+            client->request("initialize", std::move(params), RequestOptions{.stop_token = stop_token}));
     if (!initialized) {
+        client->close();
         co_return std::unexpected(std::move(initialized.error()));
+    }
+    if (stop_token.stop_requested()) {
+        client->close();
+        co_return std::unexpected(detail::cancelled_error(client->config_.name));
     }
     if (auto valid = detail::validate_initialize_result(client->config_.name, *initialized); !valid) {
         co_return std::unexpected(std::move(valid.error()));
@@ -866,11 +884,12 @@ void StdioClientImpl::teardown_process_group() noexcept {
     child_pid_ = -1;
 }
 
-support::AsyncResult<std::shared_ptr<StdioClient>> StdioClient::connect(StdioServerConfig config) {
+support::AsyncResult<std::shared_ptr<StdioClient>> StdioClient::connect(
+        StdioServerConfig config, std::stop_token stop_token) {
     return support::detail::make_async_result(
-            [config = std::move(
-                     config)]() mutable -> boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClient>>> {
-                auto connected = co_await StdioClientImpl::connect_impl(std::move(config));
+            [config = std::move(config),
+                    stop_token]() mutable -> boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClient>>> {
+                auto connected = co_await StdioClientImpl::connect_impl(std::move(config), stop_token);
                 if (!connected) {
                     co_return std::unexpected(std::move(connected.error()));
                 }

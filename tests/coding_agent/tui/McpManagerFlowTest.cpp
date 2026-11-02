@@ -191,7 +191,7 @@ public:
     std::map<std::string, std::shared_ptr<tests::ConnectionGate>> gates;
 
     [[nodiscard]] support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(
-            const McpConfigEntry& entry) override {
+            const McpConfigEntry& entry, std::stop_token) override {
         return support::detail::make_async_result(
                 [this, name = entry.name]()
                         -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpLiveConnection>>> {
