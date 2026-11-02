@@ -1,0 +1,189 @@
+Independent comparison of one CTest case
+
+Baseline: clean detached worktree at b5b88e11ff0d45a806abe3fd828ac256ee0e1af4; configured and built cch_tests_durable in that worktree.
+Branch source revision: aca335867d395769eaf8fba1ab9bda960cbad4f2; durable target last built after 1f6a0b7, with subsequent changes confined to evidence documentation.
+Command in each worktree, repeated five times:
+ctest --preset vcpkg -R '^generation publishes the attempt before the model stream and usage with the final answer$' --output-on-failure
+
+Baseline full output:
+revision=b5b88e11ff0d45a806abe3fd828ac256ee0e1af4
+
+run=1
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build/main-baseline-1158/build
+    Start 269: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #269: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1163    =   0.01 sec*proc (1 test)
+workflow     =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.02 sec
+exit=0
+
+run=2
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build/main-baseline-1158/build
+    Start 269: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #269: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1163    =   0.01 sec*proc (1 test)
+workflow     =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.02 sec
+exit=0
+
+run=3
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build/main-baseline-1158/build
+    Start 269: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #269: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1163    =   0.01 sec*proc (1 test)
+workflow     =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.02 sec
+exit=0
+
+run=4
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build/main-baseline-1158/build
+    Start 269: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #269: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1163    =   0.01 sec*proc (1 test)
+workflow     =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.02 sec
+exit=0
+
+run=5
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build/main-baseline-1158/build
+    Start 269: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #269: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1163    =   0.01 sec*proc (1 test)
+workflow     =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.02 sec
+exit=0
+
+Branch full output:
+
+run=1
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build
+    Start 462: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #462: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.05 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.05 sec*proc (1 test)
+issue1163    =   0.05 sec*proc (1 test)
+workflow     =   0.05 sec*proc (1 test)
+
+Total Test time (real) =   0.19 sec
+exit=0
+
+run=2
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build
+    Start 462: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #462: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1163    =   0.01 sec*proc (1 test)
+workflow     =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.13 sec
+exit=0
+
+run=3
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build
+    Start 462: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #462: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1163    =   0.01 sec*proc (1 test)
+workflow     =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.14 sec
+exit=0
+
+run=4
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build
+    Start 462: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #462: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1163    =   0.01 sec*proc (1 test)
+workflow     =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.15 sec
+exit=0
+
+run=5
+Test project /home/lansy/.herdr/worktrees/cpp-coding-harness/1158/build
+    Start 462: generation publishes the attempt before the model stream and usage with the final answer
+1/1 Test #462: generation publishes the attempt before the model stream and usage with the final answer ...   Passed    0.01 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1163    =   0.01 sec*proc (1 test)
+workflow     =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.14 sec
+exit=0
+
+Earlier branch durable-selection failure (before the five branch repetitions):
+        Start 443: generation publishes the attempt before the model stream and usage with the final answer
+269/353 Test #443: generation publishes the attempt before the model stream and usage with the final answer ..................................................................***Failed    0.01 sec
+Filters: "generation publishes the attempt before the model stream and usage with the final answer"
+Randomness seeded to: 3370886857
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+generation publishes the attempt before the model stream and usage with the
+final answer
+-------------------------------------------------------------------------------
+/home/lansy/.herdr/worktrees/cpp-coding-harness/1158/tests/durable/HarnessWorkflowTest.cpp:3392
+...............................................................................
+
+/home/lansy/.herdr/worktrees/cpp-coding-harness/1158/tests/durable/HarnessWorkflowTest.cpp:3490: FAILED:
+  CHECK( atomic_answer_commits == 1 )
+with expansion:
+  0 == 1
+
+===============================================================================
+test cases:  1 |  0 passed | 1 failed
+assertions: 48 | 47 passed | 1 failed
+
+

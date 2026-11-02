@@ -244,7 +244,11 @@ before the model stream and usage with the final answer`, observed
 The corresponding test and Harness/Session/Workflow implementation are unchanged
 relative to the merged main. A pre-existing main-checkout binary also failed the
 same case, but its exact revision is unverified. The cause and possible indirect
-relationship to this branch remain unresolved.
+relationship to this branch remain unresolved. A later independent build of
+exact main `b5b88e11ff0d45a806abe3fd828ac256ee0e1af4` passed that single case
+5/5; the branch then passed the same case 5/5. This limited comparison does not
+explain or invalidate the earlier two branch failures. The exact commands,
+revisions and individual output are in [1158-main-comparison.txt](1158-main-comparison.txt).
 
 The 1090/1101/1104 receipt selection passed 36/36 and the 1184 selection passed
 10/10; their post-merge JUnit artifacts and reviewed changed-input digests replace
