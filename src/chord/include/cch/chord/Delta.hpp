@@ -147,6 +147,13 @@ using OpBatch = std::vector<Op>;
 /// containers must not be aliased by another revision.
 [[nodiscard]] support::Expected<Json> apply(Json& target, const OpBatch& ops);
 
+/// Apply a frozen op-tuple array, decoding and validating each tuple exactly
+/// when the frozen applier reaches it (pi `apply` over decoded tuples). A later
+/// rejected tuple keeps the writes the earlier tuples applied, and a root
+/// replacement still returns a new root. This is the sequential entry point;
+/// `decode_ops` is the whole-batch admission seam that returns no prefix.
+[[nodiscard]] support::Expected<Json> apply(Json& target, const Json& decoded_tuples);
+
 /// Longest suffix of `a` that is a prefix of `b`, bounded like pi `overlap`.
 /// Lengths count UTF-16 code units, matching the frozen string contract.
 [[nodiscard]] std::size_t overlap(std::string_view a,

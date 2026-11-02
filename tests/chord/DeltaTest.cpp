@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <format>
 #include <string>
 #include <utility>
 #include <variant>
@@ -252,7 +253,7 @@ TEST_CASE("decoded ingestion rejects every reserved segment and never yields a p
     for (const char* segment : {"__proto__", "constructor", "prototype"}) {
         auto decoded = decode_op(array({Json{"s"}, array({Json{segment}, Json{"polluted"}}), Json{true}}));
         REQUIRE_FALSE(decoded);
-        CHECK(decoded.error().message == "unsafe path segment: " + std::string{segment});
+        CHECK(decoded.error().message == std::format("unsafe path segment: {}", segment));
     }
 
     auto batch = decode_ops(array({
@@ -261,6 +262,78 @@ TEST_CASE("decoded ingestion rejects every reserved segment and never yields a p
     }));
     REQUIRE_FALSE(batch);
     CHECK(batch.error().message == "p index");
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1061/validation-order.json
+// "a later empty path keeps the preceding mutable write and reports the empty path";
+// "a later unsafe path keeps the preceding mutable write and reports the unsafe segment";
+// "a later string splice index keeps the preceding mutable write and reports the splice index";
+// "a later non-bijective permutation keeps the preceding mutable write and reports the permutation";
+// "a root replacement adopted before a failing operation leaves the caller object unchanged".
+TEST_CASE("decoded application keeps the preceding mutable write when a later tuple is rejected",
+        "[chord][delta][decode][validation][ordering][issue1185][spec]") {
+    const Json initial = object({{"value", Json{1}}, {"items", array({Json{"a"}})}});
+
+    Json empty_path = initial;
+    const auto empty_path_failure = apply(empty_path,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"s"}, array({}), Json{3}}),
+            }));
+    REQUIRE_FALSE(empty_path_failure);
+    CHECK(empty_path_failure.error().message == "path is empty");
+    CHECK(empty_path == object({{"value", Json{2}}, {"items", array({Json{"a"}})}}));
+
+    Json unsafe_path = object({{"value", Json{1}}});
+    const auto unsafe_path_failure = apply(unsafe_path,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"s"}, array({Json{"__proto__"}, Json{"polluted"}}), Json{true}}),
+            }));
+    REQUIRE_FALSE(unsafe_path_failure);
+    CHECK(unsafe_path_failure.error().message == "unsafe path segment: __proto__");
+    CHECK(unsafe_path == object({{"value", Json{2}}}));
+
+    Json string_index = initial;
+    const auto string_index_failure = apply(string_index,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"p"}, array({Json{"items"}}), Json{"0"}, Json{0}, array({Json{"x"}})}),
+            }));
+    REQUIRE_FALSE(string_index_failure);
+    CHECK(string_index_failure.error().message == "p index");
+    CHECK(string_index == object({{"value", Json{2}}, {"items", array({Json{"a"}})}}));
+
+    Json unknown_verb = object({{"value", Json{1}}});
+    const auto unknown_verb_failure = apply(unknown_verb,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"x"}, array({Json{"value"}})}),
+            }));
+    REQUIRE_FALSE(unknown_verb_failure);
+    CHECK(unknown_verb_failure.error().message == "unknown op verb: x");
+    CHECK(unknown_verb == object({{"value", Json{2}}}));
+
+    Json permutation = object({{"value", Json{1}}, {"a", array({Json{"x"}, Json{"y"}})}});
+    const auto permutation_failure = apply(permutation,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"m"}, array({Json{"a"}}), array({Json{0}, Json{0}})}),
+            }));
+    REQUIRE_FALSE(permutation_failure);
+    CHECK(permutation_failure.error().message == "m permutation is not a bijection");
+    CHECK(permutation == object({{"value", Json{2}}, {"a", array({Json{"x"}, Json{"y"}})}}));
+
+    // A root replacement adopted before the failing tuple leaves the caller object unchanged.
+    Json replaced = object({{"value", Json{1}}});
+    const auto replaced_failure = apply(replaced,
+            array({
+                    array({Json{"r"}, object({{"other", Json{2}}})}),
+                    array({Json{"s"}, array({}), Json{3}}),
+            }));
+    REQUIRE_FALSE(replaced_failure);
+    CHECK(replaced_failure.error().message == "path is empty");
+    CHECK(replaced == object({{"value", Json{1}}}));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1054/session-transactions.json
@@ -312,11 +385,11 @@ TEST_CASE("a whole-root replacement is not the delta a committed watch frame del
     CHECK(prepared->ops() != *decoded);
 }
 
-// Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
-
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1061/validation-order.json
-// records per-operation validation; typed C++ operations cannot represent the
-// malformed-tuple and string-index cases, so checks below cover representable cases.
+// records per-operation validation; the typed operations below cover the
+// representable shapes, and "decoded application keeps the preceding mutable
+// write when a later tuple is rejected" covers the malformed-tuple and
+// string-index shapes through the decoded ingestion entry point.
 TEST_CASE("application follows frozen sequential validation and replacement semantics",
         "[chord][delta][validation][issue1061][spec]") {
     Json target = object({{"value", Json{1}}, {"items", array({Json{"a"}})}});
