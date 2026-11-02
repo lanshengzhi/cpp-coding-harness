@@ -755,10 +755,7 @@ void translate_publication(const ConversationId conversation_id,
     }
     if (!json_equal(now.usage, was.usage)) {
         events.push_back(chord::Json(JsonObject{{"type", chord::Json(std::string{"usage_changed"})},
-                {"usage",
-                        now.usage != nullptr ? *now.usage
-                                             : chord::Json(JsonObject{{"models", chord::Json(JsonObject{})},
-                                                       {"tools", chord::Json(JsonObject{})}})}}));
+                {"usage", now.usage != nullptr ? *now.usage : empty_usage()}}));
     }
     if (run != nullptr && run_changed) {
         events.push_back(chord::Json(JsonObject{{"type", chord::Json(std::string{"run_start"})},
