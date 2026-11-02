@@ -566,14 +566,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml"
+          "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1179.xml"
         ],
-        "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
-        "recordedAt": "2026-11-02T08:57:19Z",
+        "testedRevision": "3f791c298a9628e283135862c46fd7af2b8fbc24",
+        "recordedAt": "2026-11-02T15:22:34Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml",
-          "sha256": "e7d0d8670971150dbfff24f696f65613a6b7429b349e0df999f561b593771946"
+          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1179.xml",
+          "sha256": "5d8a81fb6c8bd6d2a003630eb3d3c4e5bda3bb0540a286da4ad60ae3b71921a6"
         }
       },
       "inputs": [
@@ -591,7 +591,7 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
-          "sha256": "f7ef0d18893f14bc5f4d95f629ed59ab16cf90abb928e43358a44a2fee000769"
+          "sha256": "db53f3d82c129f0a72b5cb09b332a998d34b25005a04b43037a08a5939cd62c5"
         },
         {
           "path": "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
@@ -990,6 +990,12 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
           "fixtures/pi-v1.3.0/baselines.json"
+        ]
+      },
+      "revalidation1179": {
+        "reason": "#1179 corrected the stale 1056 planning status for cch_codemode:codemode-remote after #1098 delivered the generic Remote host; that ledger is a pinned input of this record. The durable image rows, scenarios and routing digest are unchanged, and the shared issue1090/issue1101/issue1104 selection was rerun on the merged tree into deliveries/1090-revalidation-1179.xml (36 cases, all passing).",
+        "changedInputs": [
+          "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json"
         ]
       }
     },
@@ -5288,6 +5294,1157 @@
           }
         }
       ]
+    },
+    {
+      "id": "1179-codemode-comparisons",
+      "ticket": "1179",
+      "implementationCommits": [
+        "1c72b76a9956b7d044ba2ee50b715274fa361ca5",
+        "bf35717d91cfa9f5159ac17ff3588b5703461c8b",
+        "df158c3e87c173105a33cbbb2493ae9269be70c7",
+        "0a7a46ae59c32772c1f5c0b5dd731b2659ec10ac",
+        "ec2e2e053279e56dc1264aeb41bc773f5cadbadf",
+        "e019bed82f7f9f493ee376a80046867b94ebde54",
+        "dd58cfca72cee8e4ce52bee5d7ef1b2ed2e1927f",
+        "5ca172c7e4d6ee54a6134aab68464eb9e320a55a",
+        "2bb01652305981179db7f496ae3d0b734d1d1e64",
+        "23e7589d9da16bb2c759cfd796311d25a565a98e",
+        "506e7aebbae3961ff2db84487bb458766da87281",
+        "cd2ac90773ea7859f2bc4c73a873bcd0f4baff21",
+        "97fdcc39bba4343b7fc08435ed527f5e2878c2c6"
+      ],
+      "report": "docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "inputs": [
+        {
+          "path": "CMakeLists.txt",
+          "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+        },
+        {
+          "path": "CMakePresets.json",
+          "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+        },
+        {
+          "path": "vcpkg.json",
+          "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+        },
+        {
+          "path": "cmake/targets/Codemode.cmake",
+          "sha256": "c2b1069f80fab8deb195e2f5aa12b866f8a43b8e07984e0e345e58963f5d94d1"
+        },
+        {
+          "path": "cmake/tests/CodemodeTests.cmake",
+          "sha256": "ad093240be81f3ab367fd2a843a7adeeaff989d3eb15e4c71ed423090eb1e61b"
+        },
+        {
+          "path": "cmake/tests/CodingAgentTests.cmake",
+          "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
+        },
+        {
+          "path": "cmake/tests/TestsSetup.cmake",
+          "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+        },
+        {
+          "path": "src/codemode/Declarations.cpp",
+          "sha256": "8878e6d834988f82fbf0c47baba413e906469adc612d9e8e7b80e38af1e90788"
+        },
+        {
+          "path": "src/codemode/Deterministic.cpp",
+          "sha256": "6170402661c8928eeb6e7d883dee3b3f9f883b64ff6a1d7473c36b410da271c1"
+        },
+        {
+          "path": "src/codemode/Deterministic.hpp",
+          "sha256": "a2001aa9599da7623ef80dd96758a38fc0c7709e8301dadcc54a609909a89f1f"
+        },
+        {
+          "path": "src/codemode/Guest.cpp",
+          "sha256": "3d946fb2e658ce51c09c663b89dbc5d378d3bb1641b9b8f1a39332f198dfbf80"
+        },
+        {
+          "path": "src/codemode/Guest.hpp",
+          "sha256": "1ed5549788598fe66c93508ab2b9e92f224a8f26a41e4d2ba07296fe0b6c0958"
+        },
+        {
+          "path": "src/codemode/Prelude.hpp",
+          "sha256": "b051e2bee183e78bf2cdf8b6936bbfeed934e466a9a2e5031485cf6e1a1ceb7a"
+        },
+        {
+          "path": "src/codemode/Remote.cpp",
+          "sha256": "817203201989c8bb3a0e8b9394fe5200f20b7485b1aa26c22a00c80a1f4b9c46"
+        },
+        {
+          "path": "src/codemode/Sandbox.cpp",
+          "sha256": "0d7a8f8ffebd4bc00f388b060ffe5386778df54f71c51005cf0fae1034c331f9"
+        },
+        {
+          "path": "src/codemode/Shared.cpp",
+          "sha256": "4cf295d6ad2b791f9639133af9cf9f63126c9114ec26d81311445a76cef5921d"
+        },
+        {
+          "path": "src/codemode/Shared.hpp",
+          "sha256": "9bd8c0556fe58bf8a524aa70458481900b7f3a4db552fcfb2240ffe96f4c4e30"
+        },
+        {
+          "path": "src/codemode/Source.cpp",
+          "sha256": "84be7f0f753a94c5b65f8a029563d3a77ed92f43d08ea0aab7c8d325ab899553"
+        },
+        {
+          "path": "src/codemode/include/cch/codemode/Declarations.hpp",
+          "sha256": "9647acb67bae019d9a87430aa5e465ebc3f3eb5bbe41e3726f420af6b6b5c404"
+        },
+        {
+          "path": "src/codemode/include/cch/codemode/Remote.hpp",
+          "sha256": "3914f525f2fdedf199db890cf20a639b19dfdcb36cf6486bc1d71f9dbabf4515"
+        },
+        {
+          "path": "src/codemode/include/cch/codemode/Sandbox.hpp",
+          "sha256": "255c6c8d3a2a37e9dfb9c259b96b2e68076e8a339b06ced060cd59835774ada2"
+        },
+        {
+          "path": "src/codemode/include/cch/codemode/Source.hpp",
+          "sha256": "543bc0215fe1b702dae7141eec2d28016396cb1f7d874027d8d4368939d34e93"
+        },
+        {
+          "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
+          "sha256": "0e2b3744149defdd66f3b2a42a08bb6a0357e6804a3dc9486fa788f590586dd2"
+        },
+        {
+          "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.hpp",
+          "sha256": "ebfa80fc4c78b3dc8b835037b8270cac115fbd88e4ea7afb144384164fada573"
+        },
+        {
+          "path": "src/support/AsyncResultBridge.hpp",
+          "sha256": "a8df9d396854060a9b5f9586de2d853c97633201a3fb797a49284dbcf3d110dc"
+        },
+        {
+          "path": "src/support/Json.cpp",
+          "sha256": "918e66aef3214726db77269ad8bfd45d91bae871a2d4672402cd6dc2d0467feb"
+        },
+        {
+          "path": "src/support/Json.hpp",
+          "sha256": "b28d2fa0c12b4b923e63d54dae09b24dee9d26c164c5f7ea59a0a52fd3d60322"
+        },
+        {
+          "path": "src/support/include/cch/support/AsyncResult.hpp",
+          "sha256": "db1e2881ae278abd38df766bc02aaba31963edea2575421d98759b4c21cef188"
+        },
+        {
+          "path": "src/support/include/cch/support/Error.hpp",
+          "sha256": "195585394d91c60b92f5b5ee85bb81e3961cd9a3e4a293298403f8f1032e558f"
+        },
+        {
+          "path": "src/support/include/cch/support/JsonValue.hpp",
+          "sha256": "93875a958f5e36e0d41feb68de0fbfc66e4d242b525eed7dc74eaf64b048dbee"
+        },
+        {
+          "path": "src/ai/include/cch/ai/Tool.hpp",
+          "sha256": "081378a4f2809de9b2e4535bbe691b9894bee179a99778b65b5fb3ad2e7bb9d8"
+        },
+        {
+          "path": "tests/Catch2Main.cpp",
+          "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+        },
+        {
+          "path": "tests/codemode/CodemodeOwnerTest.cpp",
+          "sha256": "fae6f7702ab09d4eacfae75790209317cf625cddc2f527954ce816e52890d84b"
+        },
+        {
+          "path": "tests/codemode/CodemodeRemoteTest.cpp",
+          "sha256": "da15328cb17189892fa332576ede0a3682741c71580dafb7bae9a8fb1a75712c"
+        },
+        {
+          "path": "tests/coding_agent/CodemodeSandboxTest.cpp",
+          "sha256": "1212804f227138c246ed7b6a035f3bb44ebd2f0994a9eae868545fc36f3da19a"
+        },
+        {
+          "path": "fixtures/codemode/quickjs/prelude.js",
+          "sha256": "57c8dc8c0e812117d82167fa751bc368f249d5aaee56d321066fc5280c785281"
+        },
+        {
+          "path": "fixtures/codemode/quickjs/quickjs.wasm",
+          "sha256": "d4c9375f2b1ca4dc95f72c8aa2982a7a9951ac8011490d79c6582df732b4bbd9"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1053/manifest.json",
+          "sha256": "f4c48cc5db9bf4a0e40db6651e5c43e17023d9635a1dd9f85f2b9a472cb793bf"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1053/source-options.json",
+          "sha256": "664109294d1f852cee1b142acf8de400d9066861dc10b81e7e210f24e42c8f56"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1053/declarations.json",
+          "sha256": "a29f7a798b15cb4dacce608f4018a5c917162ce16f4ee5a4e37f86f6f34939c5"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
+          "sha256": "267ba6f2774da433809a783e0656b7d3703f4457906ab8bb54e5c9b1c209f0c9"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1053/inline-interrupt.json",
+          "sha256": "b01e9ff3b21d6d47bf7b2009b1cc5a79e503116e8ad5ca5b18d55e827cdb401d"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
+          "sha256": "24105ec690559628886d9431c98c11c5598f70f25e738f318b2bb714e031e329"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json",
+          "sha256": "0292c4f696715a46f87442203a949c65006e60b991cd864351f9d1cf0f57b2ab"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json",
+          "sha256": "1ca3ecef15ea78d9e4fbec315a8640ba09a50f2f114cd796ce59aee49a426dcf"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/baselines.json",
+          "sha256": "11aa32a1002d67333765c04c102f9477b2fb750dbaef51ceb9270c5041435d44"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "sha256": "5dbe09bc386211ddcfcd660100c85971f40f36bb3fc7214be7c367cba9dcb523"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+        },
+        {
+          "path": "scripts/evidence/audit_evidence.py",
+          "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/1053-codemode-audit-ledger.json",
+          "sha256": "c4597091c47f0acb5a2117f529817882640ec5ff3391be2cb7ea45f61574e6a2"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
+          "sha256": "db53f3d82c129f0a72b5cb09b332a998d34b25005a04b43037a08a5939cd62c5"
+        }
+      ],
+      "rows": [
+        {
+          "id": "cch_codemode:codemode-source-constants",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/source-options.json",
+              "scenario": "the public options prefix and grammar constants are fixed",
+              "test": "the public codemode source parser keeps only a first-line options command",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "the public codemode source parser rejects a misplaced options line with its line number",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A parser that drops the option constants but still parses accepted forms passes the comparison; the misplaced-line case proves the option contract is enforced at the first line."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-source-parse",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/source-options.json",
+              "scenario": "source keeps plain JavaScript and a leading ordinary comment unchanged",
+              "test": "the public codemode source parser keeps only a first-line options command",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/source-options.json",
+              "scenario": "first-line options are parsed and replaced by an empty line to preserve line numbers",
+              "test": "the public codemode source parser keeps only a first-line options command",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/source-options.json",
+              "scenario": "options accept leading whitespace, CRLF, an empty object and a zero token budget",
+              "test": "the public codemode source parser keeps only a first-line options command",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/source-options.json",
+              "scenario": "only the first line is an options line",
+              "test": "the public codemode source parser keeps only a first-line options command",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "the public codemode source parser rejects a misplaced options line with its line number",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "An implementation that parses any // @options: line as options passes the accepted forms; the misplaced-line case requires only the first line to be an options line."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-source-placement-errors",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/source-options.json",
+              "scenario": "a misplaced options line is rejected with its line number",
+              "test": "the public codemode source parser rejects a misplaced options line with its line number",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/source-options.json",
+              "scenario": "invalid options and empty input are rejected with typed errors",
+              "test": "the public codemode source parser rejects invalid options and empty input with typed errors",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "the public codemode source parser keeps only a first-line options command",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A parser that rejects every option-like line passes the rejection cases but fails the accepted first-line/ordinary-comment forms."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-source-timeout-option",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "a script that computes past its deadline is a timeout",
+              "test": "an over-limit script is interrupted with a timeout error",
+              "testSource": "tests/coding_agent/CodemodeSandboxTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "a script failure keeps prior output and reports the script error with its line",
+              "test": "a public codemode caller reports a script error with its name message stack and prior output",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller reports the deadline when a tool waits past it and keeps partial output",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A deadline that only stops computing scripts passes the computing case; the tool-wait deadline case proves the whole-execution deadline is independent of the VM compute path."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-declaration-identifier",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "tool identifiers replace invalid characters and preserve MCP names",
+              "test": "the public codemode declaration preserves the relocated tool identifiers",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "the public codemode declaration preserves the relocated tool identifiers",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "The frozen table includes punctuation, empty and multi-byte names; a replacement that only handles one punctuation form fails."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-declaration-input-budget",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "tool signatures and samples use the output schema and input budget",
+              "test": "the public codemode declaration renders frozen tool signatures samples and blocks",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "the public codemode declaration covers the frozen schema renderings",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "The schema renderings case observes the input-budget degradation (tags dropped, then unknown), so a signature that always prints the full schema fails."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-schema-to-type",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "schema primitives, literals, unions and references render as TypeScript types",
+              "test": "the public codemode declaration renders frozen schema types",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "object properties are sorted on one line with quoted non-identifier keys",
+              "test": "the public codemode declaration covers the frozen schema renderings",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "property descriptions become comment lines",
+              "test": "the public codemode declaration covers the frozen schema renderings",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "constraint tags render integer bounds, defaults, patterns and deprecated markers",
+              "test": "the public codemode declaration covers the frozen schema renderings",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "optional non-null branches keep their constraint tags",
+              "test": "the public codemode declaration covers the frozen schema renderings",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "draft-04 boolean exclusive bounds become exclusive tags",
+              "test": "the public codemode declaration covers the frozen schema renderings",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "long tags are dropped, line terminators are escaped, and line breaks stay in comments",
+              "test": "the public codemode declaration covers the frozen schema renderings",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "types over the character budget drop tags, then become unknown",
+              "test": "the public codemode declaration covers the frozen schema renderings",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "local references resolve and recursive or remote references render unknown",
+              "test": "the public codemode declaration covers the frozen schema renderings",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "the public codemode declaration renders frozen tool signatures samples and blocks",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A renderer that handles only the primitive table passes the base case; the tool signature case requires the output schema rendering and the same budget path at the declaration seam."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-render-tool-signature",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "tool signatures and samples use the output schema and input budget",
+              "test": "the public codemode declaration renders frozen tool signatures samples and blocks",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/declarations.json",
+              "scenario": "renderDeclarations groups tools, globals and namespaces with doc comments",
+              "test": "the public codemode declaration groups tools globals and namespaces with doc comments",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "the public codemode declaration renders frozen schema types",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A hard-coded Promise<unknown> would still group declarations, so the schema-types case checks the same rendering pipeline the signature consumes."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-globals",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "globals support top-level spread calls and dotted frozen namespaces",
+              "test": "a public codemode caller binds a dotted global into its frozen namespace and spreads arguments",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "invalid global names, duplicates and namespace conflicts are rejected at construction",
+              "test": "a public codemode caller rejects invalid globals at construction with the frozen errors",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "globals count as issued calls and rejection properties reach the script Error",
+              "test": "a public codemode caller numbers globals with tools and gets rejection properties on the script Error",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller binds a dotted global into its frozen namespace and spreads arguments",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A host that always passes an empty globals list passes the validation cases; the spread/dotted call proves globals reach the script and keep the dotted namespace."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-store-load",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "store and load use a JSON snapshot and only successful executions report writes",
+              "test": "a public codemode caller reads a store snapshot across calls and drops failed writes",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "exit() succeeds with prior output and store writes and stops later output",
+              "test": "a public codemode caller treats exit() as success with prior output and the write set",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller reads a store snapshot across calls and drops failed writes",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A run that reports writes on failure or drops the snapshot passes the exit case; the store case reloads the merged snapshot and checks the failed run reports no writes."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-output-text-image-console",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "a script returns a JSON value after top-level await and collects output in order",
+              "test": "a public codemode caller collects mixed output in order with the console marker and image MIME",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "text values are stringified and image accepts data URLs and image blocks",
+              "test": "a public codemode caller stringifies text and accepts image blocks with the frozen type errors",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "invalid image arguments throw a catchable TypeError inside the script",
+              "test": "a public codemode caller stringifies text and accepts image blocks with the frozen type errors",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller stringifies text and accepts image blocks with the frozen type errors",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A core that only handles data-URI images and string text passes the mixed-output case; the image-block and TypeError cases separate the helper contract."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-image-format",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "text values are stringified and image accepts data URLs and image blocks",
+              "test": "a public codemode caller stringifies text and accepts image blocks with the frozen type errors",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "invalid image arguments throw a catchable TypeError inside the script",
+              "test": "a public codemode caller stringifies text and accepts image blocks with the frozen type errors",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller collects mixed output in order with the console marker and image MIME",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A MIME detector that trusts the data-URI type passes the image-block form; the mixed-output case pins the MIME detected from the base64 signature."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-exit",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "exit() succeeds with prior output and store writes and stops later output",
+              "test": "a public codemode caller treats exit() as success with prior output and the write set",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller reads a store snapshot across calls and drops failed writes",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "An exit that drops the write set passes the prior-output assertion; the store case proves writes survive a successful terminal path."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-error-taxonomy",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "a script failure keeps prior output and reports the script error with its line",
+              "test": "a public codemode caller reports a script error with its name message stack and prior output",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "non-Error throws, syntax errors and non-serializable returns are script errors",
+              "test": "a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "a memory-limited VM reports out of memory as a script error",
+              "test": "a public codemode caller reports guest memory exhaustion as an out-of-memory script error",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "unknown tools and thrown tool errors are catchable, with error call status",
+              "test": "a public codemode caller catches unknown tools and thrown tool errors with error call status",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller reports a script error with its name message stack and prior output",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A generic message-only error passes the catchability cases; the script-error case requires name, message, stack and prior output."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-output-limits",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "the guest prelude is the frozen sandbox prelude with output and store limits",
+              "test": "the public codemode prelude is the frozen sandbox prelude with output and store limits",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller fails the run when the guest hits its output item limit",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A byte-equal prelude is necessary but not sufficient; the over-limit case exercises the limit the prelude enforces and fails a prelude whose limit is inert."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-unawaited-calls",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "an unawaited tool call is aborted when the script returns and its record is cancelled",
+              "test": "a public codemode caller records an unawaited call as cancelled and aborts it",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller records settled calls with ok and error statuses",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A record that marks every call ok passes a status-only check; the settled-calls case separates ok, error and cancelled records."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-memory-limit",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "a memory-limited VM reports out of memory as a script error",
+              "test": "a public codemode caller reports guest memory exhaustion as an out-of-memory script error",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller reports the deadline when a tool waits past it and keeps partial output",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A run that reports the deadline for an exhausted heap passes a timing-only check; the memory case requires the InternalError out-of-memory shape."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-script-abort-reason",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "a caller abort ends a waiting script, aborts its tool and keeps partial output",
+              "test": "a public codemode caller aborting while a tool waits keeps partial output and cancels the call",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/script-execution.json",
+              "scenario": "a pre-aborted execution never starts the guest and reports the caller reason",
+              "test": "a public codemode caller reports a pre-aborted run with the abort reason and never starts it",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "abort in a deterministic run is an uncatchable aborted error and finished becomes true",
+              "test": "a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller aborting while a tool waits keeps partial output and cancels the call",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A fixed cancellation message passes the kind check; the abort case requires the caller reason, the partial output and the cancelled tool record."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-deterministic-start",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "the same script, start time, seed and answers make the same calls and output",
+              "test": "a public codemode caller replays a deterministic run from the same start seed and answers",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "results are applied in seq order even when delivered in reverse order",
+              "test": "a public codemode caller applies reversed answers by result number not arrival order",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "a run-supplied jsName overrides the derived script name",
+              "test": "a run-supplied jsName overrides the derived script name",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a run-supplied jsName overrides the derived script name",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A start that derives the script name from the raw tool name passes the replay case because the two names coincide there; the jsName case separates the run-supplied identifier."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-deterministic-clock-seed",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef",
+              "test": "a public codemode caller gets UTC and no WeakRef in a deterministic run",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "a changed seed is a replay mismatch and changes randomness without changing the start time",
+              "test": "a public codemode caller sees a seed mismatch change randomness without changing the start time",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller sees a seed mismatch change randomness without changing the start time",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A driver that ignores the seed produces the same draw for seed 0 and 1; the seed case requires the frozen draws, the same start time and the replay refusal."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-deterministic-seq",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "results are applied in seq order even when delivered in reverse order",
+              "test": "a public codemode caller applies reversed answers by result number not arrival order",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "deliver rejects a wrong call, a reused result number and a non-finite clock without settling the run",
+              "test": "a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "a nonserializable answer leaves the call waiting and a later valid answer settles it",
+              "test": "a public codemode caller keeps a call waiting when its answer cannot be serialized",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller applies reversed answers by result number not arrival order",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "An arrival-order delivery passes the single-call cases; the reversed case requires seq 2 to wait for seq 1 and the frozen idle sequence."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-deterministic-during",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "during reports the result the VM was processing when the script ended",
+              "test": "a public codemode caller gets during for the result the VM was processing when the script ended",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "execute() is not deterministic while start() is",
+              "test": "a normal codemode run is not deterministic while start is",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller gets during for the result the VM was processing when the script ended",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A driver that reports during only for the first run passes no-result cases; the during case checks the {0,0}, {2,2} and failing {3,3} observations."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-deterministic-fingerprint",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "the VM fingerprint arrives before calls, idles report issued calls, and a different heap changes the fingerprint",
+              "test": "a public codemode caller gets the fingerprint before the first call and a reused result number is refused",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller sees a seed mismatch change randomness without changing the start time",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A fingerprint that omits the heap passes the started-before-call case; the seed case compares the same fingerprint against a different heap and requires the mismatch."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-deterministic-validation",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "start rejects invalid start times, seeds and duplicate script names",
+              "test": "a public codemode caller gets illegal start options refused before any VM exists",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "a changed seed is a replay mismatch and changes randomness without changing the start time",
+              "test": "a public codemode caller sees a seed mismatch change randomness without changing the start time",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "abort in a deterministic run is an uncatchable aborted error and finished becomes true",
+              "test": "a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller gets illegal start options refused before any VM exists",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A start that accepts any options passes the replay case; the illegal-start case checks the exact rejection messages before a VM exists."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-deterministic-properties",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "globals count as issued calls and rejection properties reach the script Error",
+              "test": "a public codemode caller numbers globals with tools and gets rejection properties on the script Error",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller binds a dotted global into its frozen namespace and spreads arguments",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A tool-only call numbering passes the properties case only if the global is omitted; the globals case checks numbering and the dotted namespace independently."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-deterministic-vs-execute",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/deterministic-replay.json",
+              "scenario": "execute() is not deterministic while start() is",
+              "test": "a normal codemode run is not deterministic while start is",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller replays a deterministic run from the same start seed and answers",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A driver that reuses the deterministic clock for run passes a single run; the replay case requires start to be reproducible while the non-determinism case requires run to read the real clock and fresh randomness."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-inline-success",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/inline-interrupt.json",
+              "scenario": "a successful inline execution returns its value and text output",
+              "test": "a public codemode caller returns its value and text output from a successful budgeted run",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller returns its value and text output from a successful budgeted run",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "The case checks the value, text output, empty calls and present empty write set, so a worker-shaped result with missing store writes fails."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-inline-interrupt-budget",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/inline-interrupt.json",
+              "scenario": "an inline script that computes without awaiting is stopped by its interrupt budget, not the deadline",
+              "test": "a public codemode caller stops pure computation with the interrupt budget, not the deadline",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/inline-interrupt.json",
+              "scenario": "the interrupt budget counts across awaits on tools",
+              "test": "a public codemode caller counts the interrupt budget across tool waits",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller reports the deadline when a tool waits past it and keeps partial output",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A deadline alias passes the compute case; the deadline-while-waiting case requires the deadline message rather than the budget message."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-inline-deadline-abort",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/inline-interrupt.json",
+              "scenario": "caller abort during an inline tool wait aborts the tool and keeps partial output",
+              "test": "a public codemode caller aborting while a tool waits keeps partial output and cancels the call",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/inline-interrupt.json",
+              "scenario": "an inline deadline while a tool waits reports the deadline, not the interrupt budget",
+              "test": "a public codemode caller reports the deadline when a tool waits past it and keeps partial output",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/inline-interrupt.json",
+              "scenario": "an inline execution with an already-aborted signal never creates a VM",
+              "test": "a public codemode caller reports a pre-aborted run with the abort reason and never starts it",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a public codemode caller stops pure computation with the interrupt budget, not the deadline",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "An implementation that uses one message for both controls passes the abort case; the budget case requires the budget message even with an earlier deadline pending."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-remote-exchange",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/remote-exchange.json",
+              "scenario": "a generic remote runs the script and calls the caller's tools across the exchange",
+              "test": "RemoteCodemodeSandbox runs tools in the caller and the script on the remote",
+              "testSource": "tests/codemode/CodemodeRemoteTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/remote-exchange.json",
+              "scenario": "remote output is buffered instead of one exchange per output item",
+              "test": "RemoteCodemodeSandbox batches output instead of making one exchange per line",
+              "testSource": "tests/codemode/CodemodeRemoteTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "RemoteCodemodeSandbox batches output instead of making one exchange per line",
+            "testSource": "tests/codemode/CodemodeRemoteTest.cpp",
+            "reason": "A remote that makes one exchange per output item passes the small exchange case; the batching case requires the frozen six-exchange count and sizes."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-remote-output-batching",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/remote-exchange.json",
+              "scenario": "remote output is buffered instead of one exchange per output item",
+              "test": "RemoteCodemodeSandbox batches output instead of making one exchange per line",
+              "testSource": "tests/codemode/CodemodeRemoteTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "RemoteCodemodeSandbox runs tools in the caller and the script on the remote",
+            "testSource": "tests/codemode/CodemodeRemoteTest.cpp",
+            "reason": "A buffering implementation that drops ordering passes a count-only check; the normal case checks the output/call message order and the terminal done exchange."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-remote-caps",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/remote-exchange.json",
+              "scenario": "the remote caps the requested interrupt budget and memory limit",
+              "test": "RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits",
+              "testSource": "tests/codemode/CodemodeRemoteTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits",
+            "testSource": "tests/codemode/CodemodeRemoteTest.cpp",
+            "reason": "Both sides are checked: a remote that accepts a billion polls must report the 1000-budget timeout, and the memory cap must report InternalError out of memory."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-remote-abort-stop",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/remote-exchange.json",
+              "scenario": "caller abort answers the remote's exchange with stop and settles without waiting for remote compute",
+              "test": "RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately",
+              "testSource": "tests/codemode/CodemodeRemoteTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit",
+            "testSource": "tests/codemode/CodemodeRemoteTest.cpp",
+            "reason": "A caller that waits for remote compute still returns the stop reply eventually; the slow-exit case requires local settlement before the remote returns."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-remote-failures",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/remote-exchange.json",
+              "scenario": "a failing, silent or unreachable remote is a sandbox error with the transport reason",
+              "test": "RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason",
+              "testSource": "tests/codemode/CodemodeRemoteTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason",
+            "testSource": "tests/codemode/CodemodeRemoteTest.cpp",
+            "reason": "The case checks all three distinct messages and kinds, so collapsing them into one generic sandbox error fails."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-remote-protocol",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/remote-exchange.json",
+              "scenario": "a generic remote runs the script and calls the caller's tools across the exchange",
+              "test": "RemoteCodemodeSandbox runs tools in the caller and the script on the remote",
+              "testSource": "tests/codemode/CodemodeRemoteTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "Remote deterministic execution runs the script remotely and answers through deliver",
+            "testSource": "tests/codemode/CodemodeRemoteTest.cpp",
+            "reason": "A request/result-only protocol passes the normal case; the deterministic case exercises started, idle, call, output and done messages through the same exchange variant."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-remote-deterministic",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/remote-exchange.json",
+              "scenario": "a deterministic start over a transport that reorders replies still applies results in seq order",
+              "test": "Remote deterministic execution applies reversed answers by result number",
+              "testSource": "tests/codemode/CodemodeRemoteTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "Remote deterministic execution runs the script remotely and answers through deliver",
+            "testSource": "tests/codemode/CodemodeRemoteTest.cpp",
+            "reason": "An arrival-order remote passes the single-answer case; the reversed case requires result 2 to wait for result 1 and the frozen idle sequence."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-worker-admission",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/worker-lifetime.json",
+              "scenario": "admission denial rejects before a worker starts and keeps the start hook uncalled",
+              "test": "codemode worker results settle before exit while admission stays bounded",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/worker-lifetime.json",
+              "scenario": "a wasm loading failure does not reserve admission",
+              "test": "codemode worker admission follows wasm load and releases a failed start once",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/worker-lifetime.json",
+              "scenario": "a worker construction failure returns its reserved admission exactly once",
+              "test": "codemode worker admission follows wasm load and releases a failed start once",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "codemode worker results settle before exit while admission stays bounded",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A capacity check after worker start passes the load-failure case; the settle case holds two real workers at the exit gate and requires the third denial before start."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-worker-repeated-cancellation",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/worker-lifetime.json",
+              "scenario": "repeated abort results settle while cancelled workers remain unreleased; exits release every admission",
+              "test": "codemode worker results settle before exit while admission stays bounded",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "codemode worker admission follows wasm load and releases a failed start once",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A result-only release counter passes the first cancellation; the repeated case checks each actual exit releases exactly one admission and a later run is admitted."
+          }
+        },
+        {
+          "id": "cch_codemode:codemode-worker-construction-failure",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1053/worker-lifetime.json",
+              "scenario": "a wasm loading failure does not reserve admission",
+              "test": "codemode worker admission follows wasm load and releases a failed start once",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            },
+            {
+              "artifact": "audit-1053/worker-lifetime.json",
+              "scenario": "a worker construction failure returns its reserved admission exactly once",
+              "test": "codemode worker admission follows wasm load and releases a failed start once",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "codemode worker results settle before exit while admission stays bounded",
+            "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+            "reason": "A start failure that leaks the reservation passes an error-only check; the probe counts one acquisition, one start attempt and exactly one release."
+          }
+        }
+      ],
+      "routingSha256": "d32c5624f3212357fe9344514b2034403eb9db8de411eae746ee95966f5a9b1d",
+      "validation": {
+        "command": [
+          "ctest",
+          "--preset",
+          "vcpkg",
+          "-R",
+          "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+          "--output-on-failure",
+          "--output-junit",
+          "docs/research/pi-v1.3.0/deliveries/1179-codemode.xml"
+        ],
+        "testedRevision": "3f791c298a9628e283135862c46fd7af2b8fbc24",
+        "recordedAt": "2026-11-02T15:38:35Z",
+        "selected": 52,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode.xml",
+          "sha256": "94c4a58c0f9f202569d3ab709f087454bfd032675743dacb1d07a77d2138353b"
+        }
+      }
     }
   ]
 }

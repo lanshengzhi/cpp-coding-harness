@@ -182,14 +182,14 @@
         ],
         "scenarios": []
       },
-      "cppSeam": "`CodemodeSource.cpp:76` parses and stores `max_output_tokens`; `CodemodeToolSource.cpp:to_extension_result` never reads it. There is no output joining, truncation, spill file or `fullOutputPath` in the coding-agent path.",
-      "cppEvidence": "The option is parsed but has no effect. A large script result is returned whole as text; no truncation marker or full-output file is available. This is a structural Application gap, not just a missing test.",
+      "cppSeam": "`CodemodeExecution` joins the output text, applies the parsed `max_output_tokens` budget (default 10,000 estimated tokens, four UTF-16 units per token), keeps head and tail, writes the full text to a temporary file and exposes `details.fullOutputPath`.",
+      "cppEvidence": "Delivered by #1119; `tests/coding_agent/CodemodeExecutionTest.cpp` compares the frozen budget/spill and live-session output. The row stays unverified pending a whole-row receipt and an independent capture for the option itself.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "unverified"
       },
-      "recommendation": "Implement the Application formatter before adding a differential output-budget test; keep the library parser behavior unchanged.",
+      "recommendation": "Keep the Application formatter; a follow-up frozen capture must observe the option through the public tool wrapper before this row can be verified.",
       "blockers": []
     },
     {
@@ -948,7 +948,7 @@
       "cppEvidence": "The entire deterministic host-delivery API is absent. A caller cannot observe call/ idle events, choose a start time or seed, or answer calls later. This is the largest library-surface gap in A09.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add the deterministic execution state machine as a separate library seam; do not try to emulate it by blocking `run`. Port the captured scenario family before application use.",
@@ -973,7 +973,7 @@
       "cppEvidence": "Pike can pin UTC but cannot freeze or advance time, seed randomness, or remove `WeakRef`. The captured deterministic clock/seed values and replay-mismatch behavior are absent.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Implement the deterministic VM controls as part of the start seam; the UTC host offset is not sufficient and must not be mistaken for replay support.",
@@ -999,7 +999,7 @@
       "cppEvidence": "The complete ordered-delivery contract is absent. Pike cannot buffer an out-of-order result, reject a bad seq, or report idle progress.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Build this on the start seam with explicit `PendingCall`/`appliedSeq` state; test the captured rejection messages and out-of-order case.",
@@ -1024,7 +1024,7 @@
       "cppEvidence": "The field does not exist in C++. Captured `{0,0}`, `{2,2}`, `{3,3}` and `executeHasDuring:false` cannot be produced.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Track applied seq and issued calls in the deterministic run; expose `during` only for start runs.",
@@ -1049,7 +1049,7 @@
       "cppEvidence": "C++ cannot identify the VM, so a replay cannot reject a different engine/options. The captured fingerprint string and callback ordering are absent.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Expose a host-computed fingerprint from the start seam (version/prelude/stack/heap/budget), compare it in replay, and test the different-heap branch.",
@@ -1074,7 +1074,7 @@
       "cppEvidence": "The validation and abort semantics cannot be exercised. The captured exact messages are library contract, not merely tests.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Implement validation in the start seam and reuse the captured messages verbatim; keep `execute` seedless.",
@@ -1099,7 +1099,7 @@
       "cppEvidence": "Both the transport field and the prelude merge are absent, so a structured tool failure cannot expose properties to a script. The captured deterministic case fails.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Carry serialized error properties through the host result/transport and merge them in the prelude; keep the excluded-key rule.",
@@ -1123,7 +1123,7 @@
       "cppEvidence": "Pike has one execution mode. There is no deterministic entry point to keep separate, so this row is missing rather than a behavioral mismatch.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Do not add deterministic behavior to `run`; add a separate start API.",
@@ -1370,7 +1370,7 @@
       "cppEvidence": "This is the intersection of two missing seams. The captured trace `[started, call, call, idle, idle, done]` is the target once both land.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Implement start/deliver before Remote deterministic support; then assert the exact message trace and reordered reply handling.",

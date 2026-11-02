@@ -1377,7 +1377,7 @@
       "consumer": "Durable callers using remote execution.",
       "owner": "cch_codemode",
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "unverified",
       "boundary": null,
       "dependencies": [],
@@ -1389,12 +1389,10 @@
         ],
         "scenarios": []
       },
-      "cppSeam": "The application sandbox is in-process; there is no generic remote execution/exchange C++ contract or Linux host.",
-      "cppEvidence": "No C++ remote codemode host or test. `CodemodeSandboxTest.cpp` covers the in-process guest only.",
+      "cppSeam": "`src/codemode/include/cch/codemode/Remote.hpp` (`CodemodeRemote`, `RemoteCodemodeSandbox`, `serve_codemode_remote`) and `src/codemode/Remote.cpp`.",
+      "cppEvidence": "Delivered by #1098: the public remote protocol, Linux host and caller-side exchange run in `tests/codemode/CodemodeRemoteTest.cpp`. The row remains unverified because it has no independent frozen scenario; #1179 routes the capture/comparison follow-up.",
       "recommendation": "Include the generic Remote contract and a Linux host in cch_codemode; exclude only Cloudflare-specific deployment code.",
-      "blockers": [
-        "no generic remote codemode host"
-      ]
+      "blockers": []
     },
     {
       "id": "codemode-models",

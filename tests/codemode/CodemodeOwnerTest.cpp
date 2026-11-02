@@ -13,6 +13,7 @@
 #include <cch/codemode/Sandbox.hpp>
 #include <cch/codemode/Source.hpp>
 
+#include "codemode/Prelude.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 
@@ -867,6 +868,73 @@ TEST_CASE("the public codemode limits are the frozen public constants", "[codemo
             static_cast<std::size_t>(member(expected, "interruptBudget").get_number()));
 }
 
+TEST_CASE("the public codemode prelude is the frozen sandbox prelude with output and store limits",
+        "[codemode][limits][issue1179][spec]") {
+    // Frozen pi v1.3.0 (`script-execution.json`, "the guest prelude is the
+    // frozen sandbox prelude with output and store limits"): the prelude is a
+    // byte-for-byte copy, so the output/store limits and every helper keep
+    // pi's v1.3.0 behavior. A stale v1.0.4 literal fails this comparison even
+    // while its own committed fixture matches.
+    const auto artifact = read_artifact("script-execution.json");
+    const auto* scenario =
+            find_scenario(artifact, "the guest prelude is the frozen sandbox prelude with output and store limits");
+    REQUIRE(scenario != nullptr);
+    CHECK(std::string{codemode::kCodemodePreludeSource} == member(*scenario, "expected").get_string());
+}
+
+TEST_CASE("a public codemode caller stringifies text and accepts image blocks with the frozen type errors",
+        "[codemode][output][issue1179][spec]") {
+    // Frozen pi v1.3.0 (`script-execution.json`, "text values are stringified
+    // and image accepts data URLs and image blocks" and "invalid image
+    // arguments throw a catchable TypeError inside the script"). The first
+    // scenario fixes the stringification of non-string text() arguments plus
+    // the object image-block form; the second fixes the catchable TypeError.
+    const auto artifact = read_artifact("script-execution.json");
+    auto sandbox = make_sandbox();
+
+    const auto* text_scenario =
+            find_scenario(artifact, "text values are stringified and image accepts data URLs and image blocks");
+    REQUIRE(text_scenario != nullptr);
+    const auto& text_expected = member(*text_scenario, "expected");
+    const auto& expected_output = member(text_expected, "output").get_array();
+    REQUIRE(expected_output.size() == 4);
+    const std::string b64 = member(expected_output[3], "data").get_string();
+    const std::string script =
+            "const b64 = \"" + b64 + "\"; " + member(member(*text_scenario, "inputs"), "script").get_string();
+    auto result = run_async(sandbox->run(script, {}, limits(), {}, nullptr));
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    CHECK(result->value_json.value_or("") == "1");
+    REQUIRE(result->output.size() == expected_output.size());
+    for (std::size_t i = 0; i < expected_output.size(); ++i) {
+        const auto& want = expected_output[i];
+        const std::string type = member(want, "type").get_string();
+        if (type == "text") {
+            CHECK(result->output[i].kind == codemode::CodemodeOutputItem::Kind::Text);
+            CHECK(result->output[i].data == member(want, "text").get_string());
+            CHECK_FALSE(result->output[i].console);
+        } else {
+            CHECK(result->output[i].kind == codemode::CodemodeOutputItem::Kind::Image);
+            CHECK(result->output[i].data == member(want, "data").get_string());
+            CHECK(result->output[i].mime_type == member(want, "mimeType").get_string());
+        }
+    }
+    REQUIRE(result->store_writes.has_value());
+    CHECK(result->store_writes->set.empty());
+    CHECK(result->store_writes->deleted.empty());
+
+    const auto* invalid =
+            find_scenario(artifact, "invalid image arguments throw a catchable TypeError inside the script");
+    REQUIRE(invalid != nullptr);
+    auto invalid_result = run_async(
+            sandbox->run(member(member(*invalid, "inputs"), "script").get_string(), {}, limits(), {}, nullptr));
+    REQUIRE(invalid_result.has_value());
+    REQUIRE_FALSE(invalid_result->error.has_value());
+    auto expected_json = support::write_json(member(member(*invalid, "expected"), "value"));
+    REQUIRE(expected_json.has_value());
+    CHECK(invalid_result->value_json == *expected_json);
+}
+
 TEST_CASE("a public codemode caller executes a script against an injected nested tool",
         "[codemode][sandbox][issue1064][spec]") {
     auto sandbox = make_sandbox();
@@ -1580,6 +1648,52 @@ TEST_CASE("a public codemode caller records settled calls with ok and error stat
     CHECK(result->calls[1].name == "fail");
     CHECK(result->calls[1].status == codemode::CodemodeCallRecord::Status::Error);
     CHECK(result->calls[1].duration_ms.has_value());
+}
+
+TEST_CASE("a public codemode caller catches unknown tools and thrown tool errors with error call status",
+        "[codemode][errors][issue1179][spec]") {
+    // Frozen pi v1.3.0 (`script-execution.json`, "unknown tools and thrown
+    // tool errors are catchable, with error call status"): the unknown tool is
+    // a catchable TypeError naming the close matches, the thrown tool error is
+    // a catchable Error, and only the real call records an `error` row with a
+    // duration.
+    const auto artifact = read_artifact("script-execution.json");
+    const auto* scenario =
+            find_scenario(artifact, "unknown tools and thrown tool errors are catchable, with error call status");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = member(*scenario, "expected");
+    auto expected_json = support::write_json(member(expected, "value"));
+    REQUIRE(expected_json.has_value());
+    const auto& expected_calls = member(expected, "calls").get_array();
+    REQUIRE(expected_calls.size() == 1);
+
+    auto sandbox = make_sandbox();
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "fail", .js_name = "fail", .description = "Fail the call."},
+    };
+    codemode::CodemodeToolCallHandler handler = [](std::string_view, std::string_view, std::stop_token) {
+        return support::AsyncResult<std::string>{support::Expected<std::string>{
+                std::unexpected(support::make_error(support::ErrorCode::Validation, "boom"))}};
+    };
+    auto result = run_async(sandbox->run("let unknown;\n"
+                                         "try { await tools.nope(); } catch (error) { unknown = [error.name, "
+                                         "error.message]; }\n"
+                                         "let failed;\n"
+                                         "try { await tools.fail(); } catch (error) { failed = [error.name, "
+                                         "error.message]; }\n"
+                                         "return [unknown[0], unknown[1], failed[0], failed[1]];",
+            tools,
+            limits(),
+            {},
+            std::move(handler)));
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json == *expected_json);
+    REQUIRE(result->calls.size() == expected_calls.size());
+    CHECK(result->calls[0].name == member(expected_calls[0], "name").get_string());
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Error);
+    CHECK(result->calls[0].duration_ms.has_value() == member(expected_calls[0], "durationPresent").get_boolean());
 }
 
 TEST_CASE("a public codemode caller binds a dotted global into its frozen namespace and spreads arguments",
@@ -2461,6 +2575,76 @@ TEST_CASE("a public codemode caller gets UTC and no WeakRef in a deterministic r
     REQUIRE(result.has_value());
     REQUIRE_FALSE(result->error.has_value());
     CHECK(result->value_json == "[1768471200000,0,0.34227450605335275,0,0,\"undefined\",\"undefined\"]");
+}
+
+TEST_CASE("a run-supplied jsName overrides the derived script name", "[codemode][deterministic][issue1179][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "a run-supplied jsName
+    // overrides the derived script name"): the run's tool descriptor decides
+    // the script identifier, while the raw registered name stays callable.
+    const auto artifact = read_artifact("deterministic-replay.json");
+    const auto* scenario = find_scenario(artifact, "a run-supplied jsName overrides the derived script name");
+    REQUIRE(scenario != nullptr);
+    auto expected = support::write_json(member(member(*scenario, "expected"), "value"));
+    REQUIRE(expected.has_value());
+    const auto& tools = member(member(*scenario, "inputs"), "tools").get_array();
+    REQUIRE(tools.size() == 1);
+
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.timeout = std::chrono::seconds{20};
+    options.tools.push_back(codemode::CodemodeToolDescriptor{.name = member(tools[0], "name").get_string(),
+            .js_name = member(tools[0], "jsName").get_string(),
+            .description = {}});
+    auto sandbox = make_sandbox();
+    auto started =
+            sandbox->start("return [typeof tools.renamed, Object.keys(tools), ALL_TOOLS.map((tool) => tool.name)]",
+                    std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json == *expected);
+}
+
+TEST_CASE("a normal codemode run is not deterministic while start is", "[codemode][deterministic][issue1179][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "execute() is not
+    // deterministic while start() is"): ordinary execution reads the real
+    // wall clock, its randomness changes per run, and it reports no `during`.
+    // A host that reuses the deterministic driver for execute() fails one of
+    // these observations.
+    const auto artifact = read_artifact("deterministic-replay.json");
+    const auto* scenario = find_scenario(artifact, "execute() is not deterministic while start() is");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = member(*scenario, "expected");
+    CHECK(member(expected, "nowWithinRun").get_boolean());
+    CHECK(member(expected, "randomDiffers").get_boolean());
+
+    auto sandbox = make_sandbox();
+    auto sample = [&]() -> std::string {
+        auto result = run_async(sandbox->run("const before = Date.now(); while (Date.now() === before) {} "
+                                             "const after = Date.now(); return [before, after, Math.random()];",
+                {},
+                limits()));
+        REQUIRE(result.has_value());
+        REQUIRE_FALSE(result->error.has_value());
+        REQUIRE(result->value_json.has_value());
+        CHECK_FALSE(result->during.has_value());
+        return *result->value_json;
+    };
+    auto first = support::read_json(sample());
+    auto second = support::read_json(sample());
+    REQUIRE(first.has_value());
+    REQUIRE(second.has_value());
+    const auto& first_values = first->get_array();
+    const auto& second_values = second->get_array();
+    REQUIRE(first_values.size() == 3);
+    REQUIRE(second_values.size() == 3);
+    CHECK(first_values[0].get_number() > 0.0);
+    CHECK(first_values[1].get_number() > first_values[0].get_number());
+    CHECK(first_values[2].get_number() != second_values[2].get_number());
 }
 
 TEST_CASE("a public codemode caller sees the outcome before the result settles when the caller aborts",

@@ -139,7 +139,7 @@ TEST_CASE("an over-limit script is interrupted with a timeout error", "[coding_a
 
     REQUIRE(result.error.has_value());
     CHECK(result.error->kind == CodemodeError::Kind::Timeout);
-    CHECK(result.error->message.find("timed out") != std::string::npos);
+    CHECK(result.error->message == "Execution timed out after 150 ms");
 }
 
 TEST_CASE("a pre-cancelled run never starts the script", "[coding_agent][codemode][issue874][spec]") {

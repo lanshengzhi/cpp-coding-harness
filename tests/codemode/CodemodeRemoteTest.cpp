@@ -425,6 +425,11 @@ TEST_CASE("RemoteCodemodeSandbox runs tools in the caller and the script on the 
     CHECK(result->calls[0].name == "add");
     CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Ok);
     CHECK(result->calls[0].duration_ms.has_value());
+    // The frozen exchange reports an empty store write set for a successful
+    // run; a remote that drops the terminal `writes` payload fails here.
+    REQUIRE(result->store_writes.has_value());
+    CHECK(result->store_writes->set.empty());
+    CHECK(result->store_writes->deleted.empty());
 
     REQUIRE(seen_args.size() == 1);
     auto parsed_seen = support::read_json(seen_args[0]);
