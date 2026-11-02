@@ -3132,6 +3132,58 @@
         "cch_mcp:mcp-stdio-stderr-tail"
       ],
       "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1057-typed-json",
+      "artifact": "chord-typed-json.json",
+      "scenario": "copyJson copies strict JSON without retaining aliases",
+      "reason": "Captured by #1186 from the clean pi-v1.3.0 checkout through the public Chord Owner; no audit lane routes to this supplemental artifact before #1180.",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:json:strict-validation",
+        "cch_chord:json:json-value",
+        "cch_chord:Chord:json"
+      ],
+      "disposition": "#1186 compares these scenarios on its branch; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1057-typed-json",
+      "artifact": "chord-typed-json.json",
+      "scenario": "copyJson preserves null prototypes and own __proto__ data properties",
+      "reason": "Captured by #1186 from the clean pi-v1.3.0 checkout through the public Chord Owner; no audit lane routes to this supplemental artifact before #1180.",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:json:strict-validation",
+        "cch_chord:json:json-value",
+        "cch_chord:Chord:json"
+      ],
+      "disposition": "#1186 compares these scenarios on its branch; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1057-typed-json",
+      "artifact": "chord-typed-json.json",
+      "scenario": "copyJson rejects a non-finite number nested below the root",
+      "reason": "Captured by #1186 from the clean pi-v1.3.0 checkout through the public Chord Owner; no audit lane routes to this supplemental artifact before #1180.",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:json:strict-validation",
+        "cch_chord:json:json-value",
+        "cch_chord:Chord:json"
+      ],
+      "disposition": "#1186 compares these scenarios on its branch; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1057-typed-json",
+      "artifact": "chord-typed-json.json",
+      "scenario": "isJsonValue checks strict JSON without normalizing it",
+      "reason": "Captured by #1186 from the clean pi-v1.3.0 checkout through the public Chord Owner; no audit lane routes to this supplemental artifact before #1180.",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:json:strict-validation",
+        "cch_chord:json:json-value",
+        "cch_chord:Chord:json"
+      ],
+      "disposition": "#1186 compares these scenarios on its branch; #1180 owns the whole-row durable receipt."
     }
   ],
   "groups": [

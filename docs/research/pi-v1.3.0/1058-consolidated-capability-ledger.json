@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+            "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1830,7 +1830,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+            "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -3371,7 +3371,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+            "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3853,7 +3853,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+            "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4801,7 +4801,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+            "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5405,7 +5405,11 @@
         "audit-1191/mcp-http-session-stream.json:HTTP: notifications/cancelled aborts an in-flight server request handler",
         "audit-1191/mcp-http-session-stream.json:HTTP: close aborts the GET stream without a dropped-stream error",
         "audit-1191/mcp-stdio-stderr-tail.json:stdio: the transport ring keeps the last 64 KiB of a larger stderr stream",
-        "audit-1191/mcp-stdio-stderr-tail.json:stdio: a failed connect appends pi's bounded 2000-character stderr tail"
+        "audit-1191/mcp-stdio-stderr-tail.json:stdio: a failed connect appends pi's bounded 2000-character stderr tail",
+        "audit-1057-typed-json/chord-typed-json.json:copyJson copies strict JSON without retaining aliases",
+        "audit-1057-typed-json/chord-typed-json.json:copyJson preserves null prototypes and own __proto__ data properties",
+        "audit-1057-typed-json/chord-typed-json.json:copyJson rejects a non-finite number nested below the root",
+        "audit-1057-typed-json/chord-typed-json.json:isJsonValue checks strict JSON without normalizing it"
       ],
       "uncovered": []
     }
@@ -9875,6 +9879,58 @@
         "cch_mcp:mcp-stdio-stderr-tail"
       ],
       "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1057-typed-json",
+      "artifact": "chord-typed-json.json",
+      "scenario": "copyJson copies strict JSON without retaining aliases",
+      "reason": "Captured by #1186 from the clean pi-v1.3.0 checkout through the public Chord Owner; no audit lane routes to this supplemental artifact before #1180.",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:json:strict-validation",
+        "cch_chord:json:json-value",
+        "cch_chord:Chord:json"
+      ],
+      "disposition": "#1186 compares these scenarios on its branch; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1057-typed-json",
+      "artifact": "chord-typed-json.json",
+      "scenario": "copyJson preserves null prototypes and own __proto__ data properties",
+      "reason": "Captured by #1186 from the clean pi-v1.3.0 checkout through the public Chord Owner; no audit lane routes to this supplemental artifact before #1180.",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:json:strict-validation",
+        "cch_chord:json:json-value",
+        "cch_chord:Chord:json"
+      ],
+      "disposition": "#1186 compares these scenarios on its branch; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1057-typed-json",
+      "artifact": "chord-typed-json.json",
+      "scenario": "copyJson rejects a non-finite number nested below the root",
+      "reason": "Captured by #1186 from the clean pi-v1.3.0 checkout through the public Chord Owner; no audit lane routes to this supplemental artifact before #1180.",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:json:strict-validation",
+        "cch_chord:json:json-value",
+        "cch_chord:Chord:json"
+      ],
+      "disposition": "#1186 compares these scenarios on its branch; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1057-typed-json",
+      "artifact": "chord-typed-json.json",
+      "scenario": "isJsonValue checks strict JSON without normalizing it",
+      "reason": "Captured by #1186 from the clean pi-v1.3.0 checkout through the public Chord Owner; no audit lane routes to this supplemental artifact before #1180.",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:json:strict-validation",
+        "cch_chord:json:json-value",
+        "cch_chord:Chord:json"
+      ],
+      "disposition": "#1186 compares these scenarios on its branch; #1180 owns the whole-row durable receipt."
     }
   ],
   "correctionsIndex": [

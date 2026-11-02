@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1800,7 +1800,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2572,7 +2572,7 @@
           "discriminatingCase": {
             "test": "a multi-byte character is cut only on a character boundary",
             "testSource": "tests/chord/OutputTest.cpp",
-            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
+            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"a\u00e9\ud83d\ude00\"; the boundary case separates the byte length from a code-point count."
           }
         },
         {
@@ -2953,7 +2953,7 @@
         }
       ],
       "revalidation1185": {
-        "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp — three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
+        "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp \u2014 three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
         "changedInputs": [
           "src/chord/Delta.cpp",
           "src/chord/include/cch/chord/Delta.hpp",
@@ -3341,7 +3341,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3823,7 +3823,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -4771,7 +4771,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
