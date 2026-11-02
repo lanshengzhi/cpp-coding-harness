@@ -1,0 +1,149 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1187",
+  "family": "audit-1187",
+  "capturedAt": "2026-11-02T10:35:20.112Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1187/capture-1187.mts",
+    "sha256": "2e683abc9aa98b3313961ef8b75b2ebc971eaa2b2349d71c5a94981003887eb1",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1187/capture-1187.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1187/capture-1187.mts",
+        "sha256": "2e683abc9aa98b3313961ef8b75b2ebc971eaa2b2349d71c5a94981003887eb1"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1187/scenarios.mts",
+        "sha256": "35769ec4c54e78f96624cea4ad47846ad85c2ec9aef02cdafa205d2a4d9d645a"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1187/pi.mts",
+        "sha256": "64306a35a5536183eb84a3277ccb018121a3966468b16c43a4995df53ecede7d"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "chord-progress.json",
+      "family": "audit-1187",
+      "bytes": 2993,
+      "sha256": "5ed020de959116d1b623c49b56de9900c8e0939e9a8407709a01bb9a093516a0",
+      "sourceEndpoints": [
+        "packages/chord/src/output.ts:PROGRESS_BYTES_PER_SECOND,Progress",
+        "packages/chord/test/output.test.ts:Progress",
+        "packages/durable/src/harness/tool.ts:publishProgress,PROGRESS_BYTES_PER_SECOND"
+      ],
+      "scenarios": [
+        {
+          "name": "progress commits the first change at once then paces later commits by their written bytes",
+          "inputs": {
+            "minIntervalMs": 100,
+            "writeBytes": [
+              51200,
+              10,
+              10
+            ],
+            "steps": [
+              {
+                "mark": 1
+              },
+              {
+                "advanceMs": 0
+              },
+              {
+                "mark": 2
+              },
+              {
+                "advanceMs": 499
+              },
+              {
+                "advanceMs": 1
+              },
+              {
+                "mark": 1
+              },
+              {
+                "advanceMs": 99
+              },
+              {
+                "advanceMs": 1
+              }
+            ]
+          },
+          "expected": {
+            "bytesPerSecond": 102400,
+            "commits": [
+              {
+                "atMs": 0,
+                "bytes": 51200
+              },
+              {
+                "atMs": 500,
+                "bytes": 10
+              },
+              {
+                "atMs": 600,
+                "bytes": 10
+              }
+            ]
+          },
+          "normalizations": [
+            "the frozen Progress class runs under deterministic virtual timers, so the observation is its pacing arithmetic and never a wall-clock latency measurement",
+            "commit timestamps and written byte counts are recorded exactly; no elapsed-time bound or tolerance is applied"
+          ]
+        },
+        {
+          "name": "progress keeps the exact fractional byte-rate pause instead of rounding it",
+          "inputs": {
+            "minIntervalMs": 0,
+            "writeBytes": [
+              1025,
+              1
+            ],
+            "steps": [
+              {
+                "mark": 1
+              },
+              {
+                "advanceMs": 0
+              },
+              {
+                "mark": 1
+              },
+              {
+                "advanceMs": 10.009765625
+              }
+            ]
+          },
+          "expected": {
+            "bytesPerSecond": 102400,
+            "commits": [
+              {
+                "atMs": 0,
+                "bytes": 1025
+              },
+              {
+                "atMs": 10.009765625,
+                "bytes": 1
+              }
+            ]
+          },
+          "normalizations": [
+            "the frozen Progress class runs under deterministic virtual timers, so the observation is its pacing arithmetic and never a wall-clock latency measurement",
+            "commit timestamps and written byte counts are recorded exactly; no elapsed-time bound or tolerance is applied"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1264,7 +1264,12 @@ TEST_CASE("CLI gateway success after malformed settings keeps the warning visibl
             gateway.runtime);
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text == "gateway reply\n");
-    CHECK(result.stderr_text.find("could not load global settings") != std::string::npos);
+    // pi `collectSettingsDiagnostics` text (fixtures/pi-v1.3.0/audit-1115/
+    // settings-diagnostics.json, scenario "a malformed global settings file
+    // yields one warning naming the file path").
+    CHECK(result.stderr_text.find(
+                  "Invalid settings file " + (home.path() / ".config/pike/agent/settings.json").string() + ": ") !=
+            std::string::npos);
 }
 
 TEST_CASE("CLI skips project skills by default when project trust is unknown", "[cli][project-trust][spec][issue626]") {
@@ -2407,7 +2412,8 @@ TEST_CASE("CLI malformed settings keep default session storage with a warning", 
     });
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stderr_text.find("could not load global settings") != std::string::npos);
+    CHECK(result.stderr_text.find("Invalid settings file " + (agent_dir / "settings.json").string() + ": ") !=
+            std::string::npos);
     require_single_automatic_session(agent_dir / "sessions", canonical_workspace);
 }
 

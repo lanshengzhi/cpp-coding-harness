@@ -4,6 +4,8 @@
 
 #include <cch/support/Error.hpp>
 
+#include <catch2/catch_test_macros.hpp>
+
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -126,6 +128,17 @@ namespace cch::tests {
                 support::ErrorCode::Unknown, "audit candidate artifact could not be read: " + path.string()));
     }
     return support::read_json(payload);
+}
+
+/// The registered scenario named `name` inside a verified bundle. A replay compares the frozen
+/// observation, so a missing scenario is a failed comparison rather than a silently skipped case;
+/// the returned reference keeps the scenario's own fields authoritative.
+[[nodiscard]] inline const support::JsonValue& find_scenario(const support::JsonValue& bundle, std::string_view name) {
+    for (const auto& scenario : bundle.at("scenarios").get_array()) {
+        if (scenario.at("name").get_string() == name) return scenario;
+    }
+    FAIL("missing frozen scenario: " << name);
+    return bundle;
 }
 
 } // namespace cch::tests

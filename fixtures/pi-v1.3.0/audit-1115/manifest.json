@@ -1,0 +1,335 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1115",
+  "family": "audit-1115",
+  "capturedAt": "2026-11-02T01:14:41.740Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1115/capture-1115.mts",
+    "sha256": "2dc6463a11df36cc73d0aea744003166f126b94782781cafe6847d53214695b8",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1115/capture-1115.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1115/capture-1115.mts",
+        "sha256": "2dc6463a11df36cc73d0aea744003166f126b94782781cafe6847d53214695b8"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "settings-diagnostics.json",
+      "family": "audit-1115",
+      "bytes": 9721,
+      "sha256": "29109c98ab29da336741891e4f79d73790d6a24c8f667149c8893e564e950cc2",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/settings-manager.ts:SettingsManager,SettingsError,FileSettingsStorage",
+        "packages/coding-agent/src/core/settings-diagnostics.ts:collectSettingsDiagnostics,deduplicateDiagnostics",
+        "packages/coding-agent/src/core/settings-schema.ts:SettingsSchema",
+        "packages/coding-agent/src/main.ts:startupSettingsDiagnostics,startupDiagnostics"
+      ],
+      "scenarios": [
+        {
+          "name": "a malformed global settings file yields one warning naming the file path",
+          "inputs": {
+            "scope": "global",
+            "settingsPath": "<agent-dir>/settings.json",
+            "content": "{not valid json"
+          },
+          "expected": {
+            "diagnosticCount": 1,
+            "diagnosticType": "warning",
+            "diagnosticTemplate": "Invalid settings file <path>: <message>",
+            "reportedPath": "<agent-dir>/settings.json",
+            "settingsKeyCount": 0
+          },
+          "normalizations": [
+            "<path> stands for the reported settings file path"
+          ],
+          "observed": {
+            "diagnosticCount": 1,
+            "diagnosticType": "warning",
+            "diagnostic": {
+              "template": "Invalid settings file <path>: <message>",
+              "path": "<agent-dir>/settings.json",
+              "errorMessage": "Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+            },
+            "settingsKeyCount": 0
+          }
+        },
+        {
+          "name": "a malformed project settings file reports its own path only while the project is trusted",
+          "inputs": {
+            "projectSettingsPath": "<workspace>/.pi/settings.json",
+            "content": "{not valid json",
+            "trusted": true,
+            "untrusted": false
+          },
+          "expected": {
+            "trustedCount": 1,
+            "trustedDiagnosticTemplate": "Invalid settings file <path>: <message>",
+            "trustedReportedPath": "<workspace>/.pi/settings.json",
+            "untrustedCount": 0
+          },
+          "normalizations": [
+            "<path> stands for the reported settings file path"
+          ],
+          "observed": {
+            "trustedCount": 1,
+            "trustedDiagnostic": {
+              "template": "Invalid settings file <path>: <message>",
+              "path": "<workspace>/.pi/settings.json",
+              "errorMessage": "Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+            },
+            "untrustedCount": 0
+          }
+        },
+        {
+          "name": "the same settings file diagnostic from two managers deduplicates to one message",
+          "inputs": {
+            "managers": 2,
+            "settingsPath": "<agent-dir>/settings.json",
+            "content": "{not valid json"
+          },
+          "expected": {
+            "beforeCount": 2,
+            "afterCount": 1,
+            "sameMessage": true
+          },
+          "normalizations": [],
+          "observed": {
+            "beforeCount": 2,
+            "afterCount": 1,
+            "sameMessage": true
+          }
+        },
+        {
+          "name": "the settings schema rejects an invalid thinking level and a negative compaction reserve naming the key",
+          "inputs": {
+            "invalidThinking": {
+              "defaultThinkingLevel": "bogus"
+            },
+            "negativeReserve": {
+              "compaction": {
+                "reserveTokens": -1
+              }
+            },
+            "unknownTopLevel": {
+              "futureSetting": true
+            },
+            "schema": "SettingsSchema"
+          },
+          "expected": {
+            "invalidThinkingCheck": false,
+            "invalidThinkingInstancePath": "/defaultThinkingLevel",
+            "invalidThinkingMessage": "must be equal to one of the allowed values",
+            "negativeReserveCheck": false,
+            "negativeReserveInstancePath": "/compaction/reserveTokens",
+            "negativeReserveMessage": "must be >= 0",
+            "unknownTopLevelCheck": true
+          },
+          "normalizations": [],
+          "observed": {
+            "invalidThinkingCheck": false,
+            "invalidThinkingErrors": [
+              {
+                "instancePath": "/defaultThinkingLevel",
+                "keyword": "enum",
+                "message": "must be equal to one of the allowed values"
+              }
+            ],
+            "negativeReserveCheck": false,
+            "negativeReserveErrors": [
+              {
+                "instancePath": "/compaction/reserveTokens",
+                "keyword": "minimum",
+                "message": "must be >= 0"
+              }
+            ],
+            "unknownTopLevelCheck": true
+          }
+        },
+        {
+          "name": "the settings schema names the offending path and pi message for each rejected shape",
+          "inputs": {
+            "documents": [
+              {
+                "tuiMode": "bogus"
+              },
+              {
+                "outputPad": 5
+              },
+              {
+                "hideThinkingBlock": "yes"
+              },
+              {
+                "compaction": {
+                  "reserveTokens": "abc"
+                }
+              },
+              {
+                "enabledModels": [
+                  1
+                ]
+              },
+              {
+                "compaction": "x"
+              },
+              {
+                "fullscreenWheelScrollLines": true
+              }
+            ],
+            "schema": "SettingsSchema"
+          },
+          "expected": {
+            "tuiMode": {
+              "instancePath": "/tuiMode",
+              "message": "must match a schema in anyOf"
+            },
+            "outputPad": {
+              "instancePath": "/outputPad",
+              "message": "must match a schema in anyOf"
+            },
+            "hideThinkingBlock": {
+              "instancePath": "/hideThinkingBlock",
+              "message": "must be boolean"
+            },
+            "reserveTokens": {
+              "instancePath": "/compaction/reserveTokens",
+              "message": "must be integer"
+            },
+            "enabledModelsElement": {
+              "instancePath": "/enabledModels/0",
+              "message": "must be string"
+            },
+            "compactionObject": {
+              "instancePath": "/compaction",
+              "message": "must be object"
+            },
+            "wheelScrollLines": {
+              "instancePath": "/fullscreenWheelScrollLines",
+              "message": "must match a schema in anyOf"
+            }
+          },
+          "normalizations": [],
+          "observed": [
+            {
+              "name": "tuiMode union",
+              "check": false,
+              "instancePath": "/tuiMode",
+              "message": "must match a schema in anyOf"
+            },
+            {
+              "name": "outputPad literal union",
+              "check": false,
+              "instancePath": "/outputPad",
+              "message": "must match a schema in anyOf"
+            },
+            {
+              "name": "hideThinkingBlock boolean",
+              "check": false,
+              "instancePath": "/hideThinkingBlock",
+              "message": "must be boolean"
+            },
+            {
+              "name": "reserveTokens integer",
+              "check": false,
+              "instancePath": "/compaction/reserveTokens",
+              "message": "must be integer"
+            },
+            {
+              "name": "enabledModels element",
+              "check": false,
+              "instancePath": "/enabledModels/0",
+              "message": "must be string"
+            },
+            {
+              "name": "compaction object",
+              "check": false,
+              "instancePath": "/compaction",
+              "message": "must be object"
+            },
+            {
+              "name": "wheelScrollLines union",
+              "check": false,
+              "instancePath": "/fullscreenWheelScrollLines",
+              "message": "must match a schema in anyOf"
+            }
+          ]
+        },
+        {
+          "name": "a schema-rejected thinking level loads without a diagnostic and the runtime keeps the raw value",
+          "inputs": {
+            "storedSettings": {
+              "defaultThinkingLevel": "bogus"
+            },
+            "schema": "SettingsSchema"
+          },
+          "expected": {
+            "diagnosticCount": 0,
+            "defaultThinkingLevel": "bogus",
+            "schemaCheck": false
+          },
+          "normalizations": [],
+          "observed": {
+            "diagnosticCount": 0,
+            "defaultThinkingLevel": "bogus",
+            "schemaCheck": false
+          }
+        },
+        {
+          "name": "the compaction consumer rejects negative and fractional token settings naming the field",
+          "inputs": {
+            "storedSettings": [
+              {
+                "compaction": {
+                  "reserveTokens": -1
+                }
+              },
+              {
+                "compaction": {
+                  "keepRecentTokens": -1
+                }
+              },
+              {
+                "compaction": {
+                  "reserveTokens": 1.5
+                }
+              }
+            ],
+            "consumer": "SettingsManager.getCompactionSettings"
+          },
+          "expected": {
+            "negativeReserveMessage": "Invalid compaction.reserveTokens setting: -1. Expected a non-negative safe integer.",
+            "negativeKeepRecentMessage": "Invalid compaction.keepRecentTokens setting: -1. Expected a non-negative safe integer.",
+            "fractionalReserveMessage": "Invalid compaction.reserveTokens setting: 1.5. Expected a non-negative safe integer.",
+            "diagnosticCount": 0
+          },
+          "normalizations": [],
+          "observed": {
+            "negativeReserve": {
+              "diagnosticCount": 0,
+              "error": "Invalid compaction.reserveTokens setting: -1. Expected a non-negative safe integer."
+            },
+            "negativeKeepRecent": {
+              "diagnosticCount": 0,
+              "error": "Invalid compaction.keepRecentTokens setting: -1. Expected a non-negative safe integer."
+            },
+            "fractionalReserve": {
+              "diagnosticCount": 0,
+              "error": "Invalid compaction.reserveTokens setting: 1.5. Expected a non-negative safe integer."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

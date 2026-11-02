@@ -3,8 +3,13 @@
 #include "chord/DeltaInternal.hpp"
 
 #include <algorithm>
+#include <array>
+#include <charconv>
+#include <cmath>
+#include <format>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -43,6 +48,79 @@ constexpr std::size_t kMaxOverlapCandidates = 8;
 
 [[nodiscard]] support::Error type_error(std::string message) {
     return support::make_error(support::ErrorCode::Validation, std::move(message));
+}
+
+/// JavaScript prints integral values below 1e21 in fixed notation and larger
+/// magnitudes in exponential notation; the frozen error text uses `String()`.
+constexpr double kFixedNumberLimit = 1e21;
+
+[[nodiscard]] std::string frozen_string(double value) {
+    if (value == 0) return "0";
+    if (std::isnan(value)) return "NaN";
+    if (std::isinf(value)) return value < 0 ? "-Infinity" : "Infinity";
+    std::array<char, 400> buffer{};
+    const auto written =
+            std::trunc(value) == value && std::abs(value) < kFixedNumberLimit
+                    ? std::to_chars(buffer.data(), buffer.data() + buffer.size(), value, std::chars_format::fixed)
+                    : std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+    return std::string{buffer.data(), written.ptr};
+}
+
+/// The frozen `String(value)` spelling used by the rejection vocabulary. Object
+/// and array spellings follow JavaScript's `Array.prototype.toString`, which is
+/// what a non-string verb or path segment is rendered through.
+[[nodiscard]] std::string frozen_string(const Json& value) {
+    if (const auto* text = value.as_string()) return *text;
+    if (const auto* number = value.as_number()) return frozen_string(*number);
+    if (const auto* flag = value.as_boolean()) return *flag ? "true" : "false";
+    if (value.is_null()) return "null";
+    if (const auto* array = value.as_array()) {
+        std::string result;
+        for (std::size_t index = 0; index < array->size(); ++index) {
+            if (index != 0) result += ',';
+            if (!(*array)[index].is_null()) result += frozen_string((*array)[index]);
+        }
+        return result;
+    }
+    return "[object Object]";
+}
+
+/// A frozen index or count: any integral double at or above zero. A value above
+/// `std::size_t` saturates, which keeps the frozen applier's clamping of splice
+/// and truncate bounds.
+[[nodiscard]] std::optional<std::size_t> decoded_size(const Json& value) {
+    const auto* number = value.as_number();
+    if (number == nullptr || !std::isfinite(*number) || std::trunc(*number) != *number || *number < 0) {
+        return std::nullopt;
+    }
+    if (*number >= static_cast<double>(std::numeric_limits<std::size_t>::max())) {
+        return std::numeric_limits<std::size_t>::max();
+    }
+    return static_cast<std::size_t>(*number);
+}
+
+/// Decode a frozen path argument. `allow_empty` is true only for the two root
+/// operations (`p` and `m`), matching frozen `assertPathArg`.
+[[nodiscard]] support::Expected<Path> decode_path(const Json& value, bool allow_empty) {
+    const auto* segments = value.as_array();
+    if (segments == nullptr) return std::unexpected(type_error("path is not an array"));
+    if (!allow_empty && segments->empty()) return std::unexpected(type_error("path is empty"));
+    Path path;
+    path.reserve(segments->size());
+    for (const Json& segment : *segments) {
+        if (const auto* key = segment.as_string()) {
+            if (detail::is_reserved_segment(*key)) {
+                return std::unexpected(type_error(std::format("unsafe path segment: {}", *key)));
+            }
+            path.push_back(path_key(*key));
+            continue;
+        }
+        const auto index = decoded_size(segment);
+        if (!index.has_value())
+            return std::unexpected(type_error(std::format("unsafe path segment: {}", frozen_string(segment))));
+        path.push_back(path_index(*index));
+    }
+    return path;
 }
 
 [[nodiscard]] bool is_high_surrogate(char16_t unit) { return unit >= 0xD800 && unit <= 0xDBFF; }
@@ -419,6 +497,39 @@ support::Expected<Json> move_path(const Json& root, const Path& path, const std:
 
 } // namespace detail
 
+namespace {
+
+/// The one sequential applier behind both `apply` entry points. It keeps the
+/// caller's value and the adopted root apart: a root replacement is returned to
+/// the caller, never written into the caller's value.
+class Applier {
+public:
+    explicit Applier(Json& target) : target_(target), root_(target) {}
+
+    [[nodiscard]] support::ExpectedVoid step(const Op& op) {
+        if (auto valid = validate_op(op); !valid) return valid;
+        auto next = apply_immutable(root_, OpBatch{op});
+        if (!next) return std::unexpected(std::move(next.error()));
+        root_ = std::move(*next);
+        if (is_replace(op)) {
+            root_replaced_ = true;
+            return {};
+        }
+        if (!root_replaced_) target_ = root_;
+        return {};
+    }
+
+    [[nodiscard]] support::Expected<Json> finish() { return root_; }
+
+private:
+    /// Borrowed from the caller; the applier never outlives one apply call.
+    Json& target_;
+    Json root_;
+    bool root_replaced_{false};
+};
+
+} // namespace
+
 bool is_replace(const Op& op) { return std::holds_alternative<ReplaceOp>(op); }
 
 bool is_base(const OpBatch& ops) { return !ops.empty() && is_replace(ops.front()); }
@@ -447,6 +558,97 @@ support::ExpectedVoid validate_batch(const OpBatch& ops) {
         if (auto valid = validate_op(op); !valid) return valid;
     }
     return {};
+}
+
+support::Expected<Op> decode_op(const Json& tuple) {
+    const auto* fields = tuple.as_array();
+    if (fields == nullptr || fields->empty()) return std::unexpected(type_error("op is not a tuple"));
+    const auto* verb = (*fields)[0].as_string();
+    if (verb == nullptr)
+        return std::unexpected(type_error(std::format("unknown op verb: {}", frozen_string((*fields)[0]))));
+    const std::size_t arity = fields->size();
+    if (*verb == "r") {
+        if (arity != 2) return std::unexpected(type_error("r arity"));
+        return Op{ReplaceOp{.value = (*fields)[1]}};
+    }
+    if (*verb == "s") {
+        if (arity != 3) return std::unexpected(type_error("s arity"));
+        auto path = decode_path((*fields)[1], false);
+        if (!path) return std::unexpected(std::move(path.error()));
+        return Op{SetOp{.path = std::move(*path), .value = (*fields)[2]}};
+    }
+    if (*verb == "d") {
+        if (arity != 2) return std::unexpected(type_error("d arity"));
+        auto path = decode_path((*fields)[1], false);
+        if (!path) return std::unexpected(std::move(path.error()));
+        return Op{DeleteOp{.path = std::move(*path)}};
+    }
+    if (*verb == "a") {
+        if (arity != 3 || (*fields)[2].as_string() == nullptr) return std::unexpected(type_error("a shape"));
+        auto path = decode_path((*fields)[1], false);
+        if (!path) return std::unexpected(std::move(path.error()));
+        return Op{AppendOp{.path = std::move(*path), .text = *(*fields)[2].as_string()}};
+    }
+    if (*verb == "t") {
+        if (arity != 3) return std::unexpected(type_error("t shape"));
+        const auto count = decoded_size((*fields)[2]);
+        if (!count.has_value()) return std::unexpected(type_error("t shape"));
+        auto path = decode_path((*fields)[1], false);
+        if (!path) return std::unexpected(std::move(path.error()));
+        return Op{TruncateOp{.path = std::move(*path), .count = *count}};
+    }
+    if (*verb == "p") {
+        if (arity != 5) return std::unexpected(type_error("p arity"));
+        auto path = decode_path((*fields)[1], true);
+        if (!path) return std::unexpected(std::move(path.error()));
+        const auto index = decoded_size((*fields)[2]);
+        if (!index.has_value()) return std::unexpected(type_error("p index"));
+        const auto remove = decoded_size((*fields)[3]);
+        if (!remove.has_value()) return std::unexpected(type_error("p remove"));
+        const auto* encoded_items = (*fields)[4].as_array();
+        if (encoded_items == nullptr) return std::unexpected(type_error("p items"));
+        std::vector<Json> items{encoded_items->begin(), encoded_items->end()};
+        return Op{SpliceOp{
+                .path = std::move(*path),
+                .index = *index,
+                .remove = *remove,
+                .items = std::move(items),
+        }};
+    }
+    if (*verb == "m") {
+        if (arity != 3) return std::unexpected(type_error("m arity"));
+        auto path = decode_path((*fields)[1], true);
+        if (!path) return std::unexpected(std::move(path.error()));
+        const auto* encoded = (*fields)[2].as_array();
+        if (encoded == nullptr) return std::unexpected(type_error("m permutation is not an array"));
+        std::vector<std::size_t> permutation;
+        permutation.reserve(encoded->size());
+        for (const Json& entry : *encoded) {
+            const auto index = decoded_size(entry);
+            if (!index.has_value()) {
+                return std::unexpected(type_error("m permutation is not a bijection"));
+            }
+            permutation.push_back(*index);
+        }
+        if (auto valid = detail::validate_permutation(permutation); !valid) {
+            return std::unexpected(std::move(valid.error()));
+        }
+        return Op{MoveOp{.path = std::move(*path), .permutation = std::move(permutation)}};
+    }
+    return std::unexpected(type_error(std::format("unknown op verb: {}", *verb)));
+}
+
+support::Expected<OpBatch> decode_ops(const Json& tuples) {
+    const auto* entries = tuples.as_array();
+    if (entries == nullptr) return std::unexpected(type_error("op batch is not an array"));
+    OpBatch ops;
+    ops.reserve(entries->size());
+    for (const Json& tuple : *entries) {
+        auto op = decode_op(tuple);
+        if (!op) return std::unexpected(std::move(op.error()));
+        ops.push_back(std::move(*op));
+    }
+    return ops;
 }
 
 support::Expected<Json> apply_immutable(const Json& target, const OpBatch& ops) {
@@ -498,22 +700,26 @@ support::Expected<Json> apply_immutable_batches(const Json& target, const std::v
     return root;
 }
 
-support::ExpectedVoid apply(Json& target, const OpBatch& ops) {
-    Json root = target;
-    bool root_replaced = false;
+support::Expected<Json> apply(Json& target, const OpBatch& ops) {
+    Applier applier{target};
     for (const auto& op : ops) {
-        if (auto valid = validate_op(op); !valid) return valid;
-        auto result = apply_immutable(root, OpBatch{op});
-        if (!result) return std::unexpected(std::move(result.error()));
-        root = std::move(*result);
-        if (is_replace(op)) {
-            root_replaced = true;
-        } else if (!root_replaced) {
-            target = root;
+        if (auto stepped = applier.step(op); !stepped) return std::unexpected(std::move(stepped.error()));
+    }
+    return applier.finish();
+}
+
+support::Expected<Json> apply(Json& target, const Json& decoded_tuples) {
+    const auto* entries = decoded_tuples.as_array();
+    if (entries == nullptr) return std::unexpected(type_error("op batch is not an array"));
+    Applier applier{target};
+    for (const Json& tuple : *entries) {
+        auto decoded = decode_op(tuple);
+        if (!decoded) return std::unexpected(std::move(decoded.error()));
+        if (auto stepped = applier.step(*decoded); !stepped) {
+            return std::unexpected(std::move(stepped.error()));
         }
     }
-    target = std::move(root);
-    return {};
+    return applier.finish();
 }
 
 std::size_t overlap(

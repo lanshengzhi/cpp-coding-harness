@@ -40,6 +40,44 @@ struct ViewWatch::Impl {
     ViewFrameListener listener{};
 };
 
+struct AgentEventStream::Impl {
+    /// Frozen pi `MAX_PENDING_WATCH_FRAMES`: the exact committed batches one
+    /// unavailable listener may keep before the buffer is replaced.
+    static constexpr std::size_t kMaxPendingBatches = 100;
+
+    std::shared_ptr<ViewMount> mount{};
+    ConversationId conversation_id{};
+    /// The constant `snapshot` event at attachment.
+    chord::Json snapshot{};
+    /// Generation tasks already held at `completing` at attachment; the
+    /// translation mutates it in commit order (frozen pi `held`).
+    std::vector<TaskId> held{};
+    std::shared_ptr<AgentEventListener> listener_holder{};
+    std::vector<AgentEventBatch> pending{};
+    bool started{false};
+    bool stopped{false};
+    bool delivering{false};
+    WatchEndReason end{WatchEndReason::Stopped};
+    std::optional<std::string> listener_error{};
+    std::shared_ptr<ObservationReportSink> reporter{};
+    std::unique_ptr<std::stop_callback<std::move_only_function<void()>>> cancellation{};
+    std::mutex mutex{};
+
+    /// Translate one publication and buffer its batch; delivers when started.
+    void advance(const chord::Json& before,
+            const chord::Json& after,
+            const chord::OpBatch& ops,
+            const CommitPublication& publication);
+
+    /// End the stream once: drop buffered batches, detach the mount, and settle
+    /// the terminal result. Never waits for an entered listener.
+    void terminate(WatchEndReason reason, std::optional<std::string> error = std::nullopt);
+
+    /// Deliver buffered batches in commit order until empty, stopped, or a
+    /// listener reports an error.
+    void drain();
+};
+
 namespace {
 
 std::mutex view_dispatch_hook_mutex;
@@ -222,17 +260,542 @@ void deliver(ViewMount& mount, chord::Json next, chord::OpBatch ops) {
 /// End every live watcher of one mount (Session end; frozen pi
 /// `WatchEvents.close`).
 void end_watchers(ViewMount& mount, const bool failed) {
-    std::lock_guard lock(mount.mutex);
+    std::vector<std::shared_ptr<AgentEventStream::Impl>> streams;
+    {
+        std::lock_guard lock(mount.mutex);
+        const WatchEndReason reason = failed ? WatchEndReason::SessionFailed : WatchEndReason::SessionClosed;
+        for (const std::weak_ptr<ViewWatch::Impl>& weak : mount.watchers) {
+            if (const std::shared_ptr<ViewWatch::Impl> watcher = weak.lock(); watcher != nullptr) {
+                // A claimed delivery is cancelled in place and observes `stopped`
+                // on its recheck; an entered callback may finish. No wait, so a
+                // blocked listener cannot hang Session end.
+                mark_stopped(*watcher, reason);
+            }
+        }
+        mount.watchers.clear();
+        for (const std::weak_ptr<AgentEventStream::Impl>& weak : mount.event_streams) {
+            if (const std::shared_ptr<AgentEventStream::Impl> stream = weak.lock(); stream != nullptr) {
+                streams.push_back(std::move(stream));
+            }
+        }
+        mount.event_streams.clear();
+    }
+    // Terminate outside the mount lock: a stream's terminate takes its own
+    // mutex and a callback already entered may finish.
     const WatchEndReason reason = failed ? WatchEndReason::SessionFailed : WatchEndReason::SessionClosed;
-    for (const std::weak_ptr<ViewWatch::Impl>& weak : mount.watchers) {
-        if (const std::shared_ptr<ViewWatch::Impl> watcher = weak.lock(); watcher != nullptr) {
-            // A claimed delivery is cancelled in place and observes `stopped`
-            // on its recheck; an entered callback may finish. No wait, so a
-            // blocked listener cannot hang Session end.
-            mark_stopped(*watcher, reason);
+    for (const std::shared_ptr<AgentEventStream::Impl>& stream : streams) {
+        stream->terminate(reason);
+    }
+}
+
+// ── Agent event stream translation (frozen pi `harness/events.ts`) ─────────
+//
+// One committed publication becomes zero or more frozen `AgentEvent`s in the
+// frozen order. The translation reads only committed state: the conversation
+// view before and after the commit, its operations, and the record changes of
+// the publication. It introduces no scheduler and mutates nothing.
+
+using JsonArray = chord::Json::Array;
+using JsonObject = chord::Json::Object;
+
+[[nodiscard]] const chord::Json* json_member(const chord::Json& value, std::string_view name) {
+    const auto* object = value.as_object();
+    if (object == nullptr) return nullptr;
+    const auto found = object->find(std::string{name});
+    return found == object->end() ? nullptr : &found->second;
+}
+
+[[nodiscard]] const JsonArray* json_array(const chord::Json& value, std::string_view name) {
+    const chord::Json* member = json_member(value, name);
+    return member == nullptr ? nullptr : member->as_array();
+}
+
+[[nodiscard]] std::optional<std::string> json_string(const chord::Json& value, std::string_view name) {
+    const chord::Json* member = json_member(value, name);
+    if (member == nullptr || member->as_string() == nullptr) return std::nullopt;
+    return *member->as_string();
+}
+
+[[nodiscard]] std::optional<std::int64_t> json_integer(const chord::Json& value, std::string_view name) {
+    const chord::Json* member = json_member(value, name);
+    if (member == nullptr || member->as_number() == nullptr) return std::nullopt;
+    return static_cast<std::int64_t>(*member->as_number());
+}
+
+/// Two optional members are equal when both are absent, or both are present and
+/// equal as JSON values. Absent and present-but-null stay distinct.
+[[nodiscard]] bool json_equal(const chord::Json* left, const chord::Json* right) {
+    if (left == nullptr || right == nullptr) return left == right;
+    return *left == *right;
+}
+
+[[nodiscard]] chord::Json number(const std::int64_t value) { return chord::Json(static_cast<double>(value)); }
+
+[[nodiscard]] chord::Json array_or_empty(const chord::Json* value) {
+    return value != nullptr && value->as_array() != nullptr ? *value : chord::Json(JsonArray{});
+}
+
+/// The `pi.usage` initial value a missing or retired usage document reads as.
+[[nodiscard]] chord::Json empty_usage() {
+    return chord::Json(JsonObject{{"models", chord::Json(JsonObject{})}, {"tools", chord::Json(JsonObject{})}});
+}
+
+[[nodiscard]] const chord::Json& doc_of(const chord::Json& view, const std::string_view bare_kind) {
+    static const chord::Json kEmpty{};
+    const chord::Json* docs = json_member(view, "docs");
+    if (docs == nullptr) return kEmpty;
+    const chord::Json* doc = json_member(*docs, bare_kind);
+    return doc == nullptr ? kEmpty : *doc;
+}
+
+struct ViewParts {
+    const chord::Json* live{nullptr};
+    const chord::Json* inbox{nullptr};
+    const chord::Json* agent{nullptr};
+    const chord::Json* usage{nullptr};
+};
+
+[[nodiscard]] ViewParts view_parts(const chord::Json& view) {
+    const chord::Json* docs = json_member(view, "docs");
+    if (docs == nullptr) return {};
+    return ViewParts{
+            .live = json_member(*docs, "pi.live"),
+            .inbox = json_member(*docs, "pi.inbox"),
+            .agent = json_member(*docs, "pi.agent"),
+            .usage = json_member(*docs, "pi.usage"),
+    };
+}
+
+/// The queued inbox items an event reports (frozen `queued(inbox)`).
+[[nodiscard]] chord::Json queued_items(const chord::Json* inbox) {
+    JsonArray items;
+    if (inbox != nullptr) {
+        if (const JsonArray* listed = json_array(*inbox, "items"); listed != nullptr) {
+            for (const chord::Json& item : *listed) {
+                if (const auto id = json_integer(item, "id"); id.has_value()) {
+                    if (const auto mode = json_string(item, "mode"); mode.has_value()) {
+                        items.emplace_back(JsonObject{{"id", number(*id)}, {"mode", chord::Json(*mode)}});
+                    }
+                }
+            }
         }
     }
-    mount.watchers.clear();
+    return chord::Json(std::move(items));
+}
+
+[[nodiscard]] std::optional<std::string> slot_call_id(const chord::Json& slot) { return json_string(slot, "callId"); }
+
+[[nodiscard]] std::optional<std::string> slot_status(const chord::Json& slot) { return json_string(slot, "status"); }
+
+/// The identifying members every tool event carries (frozen `ToolEventCall`).
+void add_tool_call(JsonObject& event, const chord::Json& slot) {
+    if (const auto call_id = slot_call_id(slot); call_id.has_value()) {
+        event.insert_or_assign("toolCallId", chord::Json(*call_id));
+    }
+    if (const auto name = json_string(slot, "name"); name.has_value()) {
+        event.insert_or_assign("toolName", chord::Json(*name));
+    }
+    if (const auto task = json_integer(slot, "taskId"); task.has_value()) {
+        event.insert_or_assign("taskId", number(*task));
+    }
+}
+
+[[nodiscard]] bool path_has_prefix(const chord::Path& path, const chord::Path& prefix) {
+    return path.size() >= prefix.size() && std::equal(prefix.begin(), prefix.end(), path.begin());
+}
+
+[[nodiscard]] const chord::Path* operation_path(const chord::Op& op) {
+    return std::visit(
+            [](const auto& value) -> const chord::Path* {
+                using Operation = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<Operation, chord::ReplaceOp>) {
+                    return nullptr;
+                } else {
+                    return &value.path;
+                }
+            },
+            op);
+}
+
+/// Output, details and diagnostics changes of one running slot from the view
+/// operations on it (frozen `toolUpdate`). Absent when the commit changed none
+/// of them.
+[[nodiscard]] std::optional<JsonObject> tool_update(
+        const chord::OpBatch& ops, const std::size_t index, const chord::Json& slot, const chord::Json& previous) {
+    const chord::Path output_path{chord::path_key("docs"),
+            chord::path_key("pi.live"),
+            chord::path_key("tools"),
+            chord::path_index(index),
+            chord::path_key("output")};
+    std::int64_t trim_start = 0;
+    std::string append{};
+    bool set = false;
+    for (const chord::Op& op : ops) {
+        const chord::Path* path = operation_path(op);
+        if (path == nullptr || !path_has_prefix(*path, output_path)) continue;
+        if (const auto* truncate = std::get_if<chord::TruncateOp>(&op); truncate != nullptr) {
+            trim_start += static_cast<std::int64_t>(truncate->count);
+        } else if (const auto* appended = std::get_if<chord::AppendOp>(&op); appended != nullptr) {
+            append += appended->text;
+        } else {
+            set = true;
+        }
+    }
+    const chord::Json* slot_output = json_member(slot, "output");
+    const chord::Json* previous_output = json_member(previous, "output");
+    std::optional<chord::Json> output;
+    if (set || (!json_equal(slot_output, previous_output) && trim_start == 0 && append.empty())) {
+        output = chord::Json(JsonObject{{"set", slot_output != nullptr ? *slot_output : chord::Json(std::string{})}});
+    } else if (trim_start > 0 || !append.empty()) {
+        JsonObject window;
+        if (trim_start > 0) window.emplace("trimStart", number(trim_start));
+        if (!append.empty()) window.emplace("append", chord::Json(append));
+        output = chord::Json(std::move(window));
+    }
+    JsonObject update;
+    if (output.has_value()) update.emplace("output", *output);
+    const chord::Json* slot_details = json_member(slot, "details");
+    if (!json_equal(slot_details, json_member(previous, "details"))) {
+        update.emplace("details", slot_details != nullptr ? *slot_details : chord::Json{});
+    }
+    const chord::Json* slot_diagnostics = json_member(slot, "diagnostics");
+    if (!json_equal(slot_diagnostics, json_member(previous, "diagnostics"))) {
+        update.emplace("diagnostics", array_or_empty(slot_diagnostics));
+    }
+    if (update.empty()) return std::nullopt;
+    return update;
+}
+
+/// One tool end the batch has to place: before its result entry when that entry
+/// is in this commit, otherwise after every entry (frozen `toolEnds`).
+struct ToolEnd {
+    chord::Json event{};
+    std::optional<std::int64_t> entry_id{};
+};
+
+/// Translate one publication into frozen `AgentEvent` objects in frozen order.
+/// `held` carries the generation tasks whose turn already ended at a
+/// `completing` hold (frozen `watchEvents` `held`).
+void translate_publication(const ConversationId conversation_id,
+        const chord::Json& before,
+        const chord::Json& after,
+        const chord::OpBatch& ops,
+        const CommitPublication& publication,
+        std::vector<TaskId>& held,
+        std::vector<chord::Json>& events) {
+    std::vector<const EntryRecord*> entries;
+    std::vector<const TaskRecord*> task_order;
+    std::map<std::int64_t, const TaskRecord*> tasks;
+    std::vector<const SubmissionRecord*> submissions;
+    for (const CommitChange& change : publication.changes) {
+        if (const auto* table = std::get_if<TableCommitChange>(&change); table != nullptr) {
+            if (table->type == "entry" && table->entry.has_value() &&
+                    table->conversation_id.value == conversation_id.value) {
+                entries.push_back(&*table->entry);
+            } else if (table->type == "task" && table->task.has_value() &&
+                       table->task->conversation_id.value == conversation_id.value) {
+                if (tasks.try_emplace(table->task->id.value, &*table->task).second) {
+                    task_order.push_back(&*table->task);
+                }
+            }
+            continue;
+        }
+        if (const auto* submission = std::get_if<SubmissionCommitChange>(&change); submission != nullptr) {
+            if (submission->value.conversation_id.value == conversation_id.value) {
+                submissions.push_back(&submission->value);
+            }
+        }
+    }
+    if (ops.empty() && entries.empty() && tasks.empty() && submissions.empty()) return;
+
+    std::ranges::sort(entries, {}, [](const EntryRecord* entry) { return entry->id.value; });
+    std::ranges::sort(submissions, {}, [](const SubmissionRecord* record) { return record->id.value; });
+
+    const ViewParts was = view_parts(before);
+    const ViewParts now = view_parts(after);
+    const JsonArray* slots = now.live != nullptr ? json_array(*now.live, "tools") : nullptr;
+
+    // Progress: tool starts, tool updates, retry and deferred state.
+    std::map<std::string, const chord::Json*> slots_before;
+    if (was.live != nullptr) {
+        if (const JsonArray* listed = json_array(*was.live, "tools"); listed != nullptr) {
+            for (const chord::Json& slot : *listed) {
+                if (const auto call_id = slot_call_id(slot); call_id.has_value()) {
+                    slots_before.emplace(*call_id, &slot);
+                }
+            }
+        }
+    }
+    if (slots != nullptr) {
+        for (const chord::Json& slot : *slots) {
+            const auto call_id = slot_call_id(slot);
+            if (!call_id.has_value()) continue;
+            const auto previous = slots_before.find(*call_id);
+            const bool running_now = slot_status(slot) == std::optional<std::string>{"running"};
+            const bool running_before = previous != slots_before.end() &&
+                                        slot_status(*previous->second) == std::optional<std::string>{"running"};
+            if (!running_now || running_before) continue;
+            JsonObject event{{"type", chord::Json(std::string{"tool_execution_start"})}};
+            add_tool_call(event, slot);
+            // A model-issued call's arguments are in its tool task's intent
+            // checkpoint (frozen `tool_execution_start`); a call without a task
+            // carries them on its slot.
+            chord::Json args = chord::Json(JsonObject{});
+            bool from_checkpoint = false;
+            if (const auto task = json_integer(slot, "taskId"); task.has_value()) {
+                if (const auto found = tasks.find(*task);
+                        found != tasks.end() && found->second->state.checkpoint.has_value()) {
+                    if (const chord::Json* declared = json_member(*found->second->state.checkpoint, "arguments");
+                            declared != nullptr) {
+                        args = *declared;
+                        from_checkpoint = true;
+                    }
+                }
+            }
+            if (!from_checkpoint) {
+                if (const chord::Json* declared = json_member(slot, "arguments"); declared != nullptr) {
+                    args = *declared;
+                }
+            }
+            event.emplace("args", args);
+            events.push_back(chord::Json(std::move(event)));
+        }
+    }
+    if (slots != nullptr) {
+        for (std::size_t index = 0; index < slots->size(); ++index) {
+            const chord::Json& slot = (*slots)[index];
+            const auto call_id = slot_call_id(slot);
+            if (!call_id.has_value()) continue;
+            const auto previous = slots_before.find(*call_id);
+            if (previous == slots_before.end()) continue;
+            if (slot_status(slot) != std::optional<std::string>{"running"} ||
+                    slot_status(*previous->second) != std::optional<std::string>{"running"}) {
+                continue;
+            }
+            auto update = tool_update(ops, index, slot, *previous->second);
+            if (!update.has_value()) continue;
+            JsonObject event{{"type", chord::Json(std::string{"tool_execution_update"})}};
+            add_tool_call(event, slot);
+            for (auto& [key, value] : *update)
+                event.insert_or_assign(key, std::move(value));
+            events.push_back(chord::Json(std::move(event)));
+        }
+    }
+    const chord::Json* generation = now.live != nullptr ? json_member(*now.live, "generation") : nullptr;
+    const chord::Json* generation_before = was.live != nullptr ? json_member(*was.live, "generation") : nullptr;
+    const chord::Json* retry = generation != nullptr ? json_member(*generation, "retry") : nullptr;
+    const chord::Json* retry_before = generation_before != nullptr ? json_member(*generation_before, "retry") : nullptr;
+    if (retry != nullptr && retry_before == nullptr) {
+        JsonObject event{{"type", chord::Json(std::string{"auto_retry_start"})}};
+        if (const auto attempt = json_integer(*generation, "attempt"); attempt.has_value()) {
+            event.emplace("attempt", number(*attempt));
+        }
+        if (const chord::Json* at = json_member(*retry, "at"); at != nullptr) event.emplace("at", *at);
+        if (const auto error = json_string(*retry, "error"); error.has_value()) {
+            event.emplace("errorMessage", chord::Json(*error));
+        }
+        events.push_back(chord::Json(std::move(event)));
+    }
+    if (retry_before != nullptr && retry == nullptr) {
+        JsonObject event{{"type", chord::Json(std::string{"auto_retry_end"})}};
+        if (const auto attempt = json_integer(*generation_before, "attempt"); attempt.has_value()) {
+            event.emplace("attempt", number(*attempt));
+        }
+        events.push_back(chord::Json(std::move(event)));
+    }
+    const chord::Json* deferred = generation != nullptr ? json_member(*generation, "deferred") : nullptr;
+    const chord::Json* deferred_before =
+            generation_before != nullptr ? json_member(*generation_before, "deferred") : nullptr;
+    if (deferred != nullptr && !json_equal(deferred, deferred_before)) {
+        if (const chord::Json* poll_at = json_member(*deferred, "pollAt"); poll_at != nullptr) {
+            events.push_back(
+                    chord::Json(JsonObject{{"type", chord::Json(std::string{"deferred_poll"})}, {"pollAt", *poll_at}}));
+        }
+    }
+
+    // Tool ends: a slot that became done, one created done, or an unfinished
+    // one that vanished because its run ended. A done slot that vanishes ended
+    // earlier.
+    std::vector<ToolEnd> tool_ends;
+    const auto entry_json = [&entries](const std::int64_t id) -> std::optional<chord::Json> {
+        for (const EntryRecord* entry : entries) {
+            if (entry->id.value == id) return encode_entry_record(*entry);
+        }
+        return std::nullopt;
+    };
+    const auto result_of = [&entries](const std::string& call_id) -> std::optional<std::int64_t> {
+        for (const EntryRecord* entry : entries) {
+            if (entry->model.empty()) continue;
+            const chord::Json& message = entry->model.front();
+            if (const auto role = json_string(message, "role"); role != std::optional<std::string>{"toolResult"}) {
+                continue;
+            }
+            if (json_string(message, "toolCallId") == std::optional<std::string>{call_id}) {
+                return entry->id.value;
+            }
+        }
+        return std::nullopt;
+    };
+    const auto end_tool = [&](const chord::Json& slot, const std::optional<std::int64_t> entry_id) {
+        JsonObject event{{"type", chord::Json(std::string{"tool_execution_end"})}};
+        add_tool_call(event, slot);
+        if (entry_id.has_value()) {
+            if (auto encoded = entry_json(*entry_id); encoded.has_value()) {
+                event.emplace("entry", *encoded);
+            }
+        }
+        tool_ends.push_back(ToolEnd{.event = chord::Json(std::move(event)), .entry_id = entry_id});
+    };
+    for (const auto& [call_id, previous] : slots_before) {
+        if (slot_status(*previous) == std::optional<std::string>{"done"}) continue;
+        const chord::Json* current = nullptr;
+        if (slots != nullptr) {
+            for (const chord::Json& slot : *slots) {
+                if (slot_call_id(slot) == std::optional<std::string>{call_id}) {
+                    current = &slot;
+                    break;
+                }
+            }
+        }
+        if (current != nullptr && slot_status(*current) == std::optional<std::string>{"done"}) {
+            end_tool(*current, json_integer(*current, "entry"));
+        } else if (current == nullptr) {
+            end_tool(*previous, result_of(call_id));
+        }
+    }
+    if (slots != nullptr) {
+        for (const chord::Json& slot : *slots) {
+            const auto call_id = slot_call_id(slot);
+            if (!call_id.has_value() || slots_before.contains(*call_id)) continue;
+            if (slot_status(slot) != std::optional<std::string>{"done"}) continue;
+            end_tool(slot, json_integer(slot, "entry"));
+        }
+    }
+
+    // Entries in append order; a tool's end directly precedes its result's
+    // message, as in the coding agent.
+    for (const EntryRecord* entry : entries) {
+        const chord::Json encoded = encode_entry_record(*entry);
+        for (const ToolEnd& end : tool_ends) {
+            if (end.entry_id == std::optional<std::int64_t>{entry->id.value}) events.push_back(end.event);
+        }
+        if (entry->model.empty()) {
+            events.push_back(
+                    chord::Json(JsonObject{{"type", chord::Json(std::string{"entry_appended"})}, {"entry", encoded}}));
+            continue;
+        }
+        const chord::Json& message = entry->model.front();
+        events.push_back(
+                chord::Json(JsonObject{{"type", chord::Json(std::string{"message_start"})}, {"message", message}}));
+        events.push_back(
+                chord::Json(JsonObject{{"type", chord::Json(std::string{"message_end"})}, {"entry", encoded}}));
+    }
+    for (const ToolEnd& end : tool_ends) {
+        if (!end.entry_id.has_value()) events.push_back(end.event);
+    }
+
+    // Task failures and turn ends. A generation's turn ends when its outcome is
+    // committed, at a `completing` hold or at terminal, whichever comes first.
+    bool turn_ended = false;
+    for (const TaskRecord* task : task_order) {
+        const std::string& status = task->state.status;
+        if (task->kind == "pi.generation" && status == "completing" &&
+                std::ranges::find(held, task->id) == held.end()) {
+            held.push_back(task->id);
+            turn_ended = true;
+        }
+        if (status != "terminal") continue;
+        if (task->kind == "pi.generation") {
+            if (const auto found = std::ranges::find(held, task->id); found != held.end()) {
+                held.erase(found);
+            } else {
+                turn_ended = true;
+            }
+        }
+        if (task->state.outcome.has_value()) {
+            const std::string& outcome = task->state.outcome->status;
+            if (outcome == "faulted" || outcome == "orphaned") {
+                const std::string message = outcome == "faulted"
+                                                    ? task->state.outcome->error.value_or(TaskOutcomeError{}).message
+                                                    : task->state.outcome->reason.value_or("");
+                events.push_back(chord::Json(JsonObject{{"type", chord::Json(std::string{"task_failed"})},
+                        {"taskId", number(task->id.value)},
+                        {"kind", chord::Json(task->kind)},
+                        {"message", chord::Json(message)}}));
+            }
+        }
+    }
+    if (turn_ended) events.push_back(chord::Json(JsonObject{{"type", chord::Json(std::string{"turn_end"})}}));
+
+    const chord::Json* run = now.live != nullptr ? json_member(*now.live, "run") : nullptr;
+    const chord::Json* run_before = was.live != nullptr ? json_member(*was.live, "run") : nullptr;
+    const auto first_input = [](const chord::Json* marker) -> const chord::Json* {
+        if (marker == nullptr) return nullptr;
+        const JsonArray* inputs = json_array(*marker, "inputs");
+        return inputs == nullptr || inputs->empty() ? nullptr : &inputs->front();
+    };
+    const bool run_changed = !json_equal(first_input(run), first_input(run_before));
+    if (run_before != nullptr && run_changed) {
+        events.push_back(chord::Json(JsonObject{{"type", chord::Json(std::string{"run_end"})},
+                {"inputs", array_or_empty(json_member(*run_before, "inputs"))}}));
+    }
+
+    // Submissions, document state, then what began.
+    for (const SubmissionRecord* record : submissions) {
+        events.push_back(chord::Json(JsonObject{
+                {"type", chord::Json(std::string{"submission"})}, {"record", encode_submission_record(*record)}}));
+    }
+    if (!json_equal(now.inbox, was.inbox)) {
+        events.push_back(chord::Json(
+                JsonObject{{"type", chord::Json(std::string{"inbox_update"})}, {"items", queued_items(now.inbox)}}));
+    }
+    if (!json_equal(now.agent, was.agent)) {
+        events.push_back(chord::Json(JsonObject{{"type", chord::Json(std::string{"agent_changed"})},
+                {"agent", now.agent != nullptr ? *now.agent : chord::Json(JsonObject{})}}));
+    }
+    if (!json_equal(now.usage, was.usage)) {
+        events.push_back(chord::Json(JsonObject{{"type", chord::Json(std::string{"usage_changed"})},
+                {"usage", now.usage != nullptr ? *now.usage : empty_usage()}}));
+    }
+    if (run != nullptr && run_changed) {
+        events.push_back(chord::Json(JsonObject{{"type", chord::Json(std::string{"run_start"})},
+                {"inputs", array_or_empty(json_member(*run, "inputs"))}}));
+    }
+    if (run != nullptr &&
+            json_integer(*run, "task") != (run_before != nullptr ? json_integer(*run_before, "task") : std::nullopt)) {
+        const auto task = json_integer(*run, "task");
+        if (task.has_value()) {
+            const auto found = tasks.find(*task);
+            if (found != tasks.end() && found->second->kind == "pi.generation") {
+                events.push_back(chord::Json(JsonObject{{"type", chord::Json(std::string{"turn_start"})}}));
+            }
+        }
+    }
+}
+
+/// Deliver one publication to every live event stream of a mount. Runs on the
+/// Session commit-publication line, outside the mount lock so a listener may
+/// stop its own or another stream.
+void deliver_events(ViewMount& mount,
+        const chord::Json& before,
+        const chord::Json& after,
+        const chord::OpBatch& ops,
+        const CommitPublication& publication) {
+    std::vector<std::shared_ptr<AgentEventStream::Impl>> streams;
+    {
+        std::lock_guard lock(mount.mutex);
+        std::vector<std::weak_ptr<AgentEventStream::Impl>> live;
+        for (const std::weak_ptr<AgentEventStream::Impl>& weak : mount.event_streams) {
+            std::shared_ptr<AgentEventStream::Impl> stream = weak.lock();
+            if (stream == nullptr) continue;
+            live.push_back(weak);
+            streams.push_back(std::move(stream));
+        }
+        mount.event_streams = std::move(live);
+    }
+    for (const std::shared_ptr<AgentEventStream::Impl>& stream : streams) {
+        stream->advance(before, after, ops, publication);
+    }
 }
 
 } // namespace
@@ -250,6 +813,218 @@ void clear_view_dispatch_hook() {
 }
 
 } // namespace testing
+
+AgentEventStream::AgentEventStream(std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
+
+std::string AgentEvent::type() const {
+    if (const chord::Json* member = json_member(value, "type"); member != nullptr) {
+        if (const std::string* text = member->as_string(); text != nullptr) return *text;
+    }
+    return {};
+}
+
+void AgentEventStream::Impl::advance(const chord::Json& before,
+        const chord::Json& after,
+        const chord::OpBatch& ops,
+        const CommitPublication& publication) {
+    std::vector<chord::Json> translated;
+    translate_publication(conversation_id, before, after, ops, publication, held, translated);
+    if (translated.empty()) return;
+    AgentEventBatch batch;
+    batch.reserve(translated.size());
+    for (chord::Json& event : translated) {
+        batch.push_back(AgentEvent{.value = std::move(event)});
+    }
+    bool ready = false;
+    {
+        std::lock_guard lock(mutex);
+        if (stopped) return;
+        if (pending.size() >= kMaxPendingBatches) {
+            // Frozen `CommittedWatch.advance`: overflow replaces every
+            // undelivered batch with one snapshot of the newest committed view.
+            pending.clear();
+            pending.push_back(AgentEventBatch{AgentEvent{.value = agent_event_snapshot(after)}});
+        } else {
+            pending.push_back(std::move(batch));
+        }
+        ready = started && !delivering;
+    }
+    if (ready) drain();
+}
+
+void AgentEventStream::Impl::drain() {
+    {
+        std::lock_guard lock(mutex);
+        if (stopped || !started || delivering) return;
+        delivering = true;
+    }
+    for (;;) {
+        AgentEventBatch batch;
+        std::shared_ptr<AgentEventListener> listener;
+        {
+            std::lock_guard lock(mutex);
+            if (stopped || pending.empty()) {
+                delivering = false;
+                return;
+            }
+            batch = std::move(pending.front());
+            pending.erase(pending.begin());
+            listener = listener_holder;
+        }
+        const support::ExpectedVoid outcome = (*listener)(batch);
+        if (!outcome) {
+            {
+                std::lock_guard lock(mutex);
+                delivering = false;
+            }
+            terminate(WatchEndReason::ListenerError, outcome.error().message);
+            return;
+        }
+    }
+}
+
+void AgentEventStream::Impl::terminate(WatchEndReason reason, std::optional<std::string> error) {
+    std::unique_ptr<std::stop_callback<std::move_only_function<void()>>> cancellation;
+    std::shared_ptr<ObservationReportSink> reporter;
+    std::optional<std::string> reported;
+    {
+        std::lock_guard lock(mutex);
+        if (stopped) return;
+        stopped = true;
+        end = reason;
+        listener_error = std::move(error);
+        pending.clear();
+        listener_holder.reset();
+        cancellation = std::move(this->cancellation);
+        mount.reset();
+        if (reason == WatchEndReason::ListenerError) {
+            reporter = this->reporter;
+            reported = listener_error;
+        }
+    }
+    if (reporter != nullptr) {
+        std::lock_guard lock(reporter->mutex);
+        if (reporter->report) {
+            reporter->report(support::make_error(support::ErrorCode::Validation,
+                    "An agent event listener reported an error" +
+                            (reported.has_value() ? ": " + *reported : std::string{})));
+        }
+    }
+    // Destroy the stop callback outside the lock: destroying one waits for a
+    // running callback, which may be waiting for the stream mutex.
+    cancellation.reset();
+}
+
+AgentEventStream::AgentEventStream(AgentEventStream&&) noexcept = default;
+AgentEventStream& AgentEventStream::operator=(AgentEventStream&& other) noexcept {
+    if (this != &other) {
+        static_cast<void>(stop());
+        impl_ = std::move(other.impl_);
+    }
+    return *this;
+}
+
+AgentEventStream::~AgentEventStream() {
+    if (impl_ != nullptr) {
+        static_cast<void>(stop());
+    }
+}
+
+const chord::Json& AgentEventStream::snapshot() const noexcept {
+    static const chord::Json kEmpty{};
+    return impl_ == nullptr ? kEmpty : impl_->snapshot;
+}
+
+support::ExpectedVoid AgentEventStream::start(AgentEventListener listener) {
+    if (impl_ == nullptr) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Agent event stream is stopped"));
+    }
+    {
+        std::lock_guard lock(impl_->mutex);
+        if (impl_->started) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "Agent event stream is already started"));
+        }
+        if (impl_->stopped) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "Agent event stream is stopped"));
+        }
+        impl_->started = true;
+        impl_->listener_holder = std::make_shared<AgentEventListener>(std::move(listener));
+    }
+    impl_->drain();
+    return {};
+}
+
+WatchEndReason AgentEventStream::stop() {
+    if (impl_ == nullptr) return WatchEndReason::Stopped;
+    impl_->terminate(WatchEndReason::Stopped);
+    std::lock_guard lock(impl_->mutex);
+    return impl_->end;
+}
+
+std::optional<std::string> AgentEventStream::listener_error() const {
+    if (impl_ == nullptr) return std::nullopt;
+    std::lock_guard lock(impl_->mutex);
+    return impl_->listener_error;
+}
+
+AgentEventStream AgentEventStream::attach(std::shared_ptr<ViewMount> mount,
+        ConversationId conversation_id,
+        chord::Json snapshot,
+        std::vector<TaskId> held,
+        std::shared_ptr<ObservationReportSink> reporter,
+        std::stop_token stop) {
+    std::shared_ptr<Impl> impl = std::make_shared<Impl>();
+    impl->mount = mount;
+    impl->conversation_id = conversation_id;
+    impl->snapshot = std::move(snapshot);
+    impl->held = std::move(held);
+    impl->reporter = std::move(reporter);
+    {
+        std::lock_guard lock(impl->mount->mutex);
+        impl->mount->event_streams.push_back(impl);
+    }
+    if (stop.stop_possible()) {
+        impl->cancellation = std::make_unique<std::stop_callback<std::move_only_function<void()>>>(
+                stop, [weak = std::weak_ptr<Impl>{impl}] {
+                    if (const std::shared_ptr<Impl> stream = weak.lock(); stream != nullptr) {
+                        stream->terminate(WatchEndReason::Cancelled);
+                    }
+                });
+    }
+    return AgentEventStream{std::move(impl)};
+}
+
+chord::Json agent_event_snapshot(const chord::Json& view) {
+    const JsonArray* entries = json_array(view, "entries");
+    const ViewParts parts = view_parts(view);
+    JsonObject snapshot;
+    snapshot.emplace("type", chord::Json(std::string{"snapshot"}));
+    snapshot.emplace("entries", entries != nullptr ? chord::Json(*entries) : chord::Json(JsonArray{}));
+    if (parts.live != nullptr) {
+        if (const chord::Json* run = json_member(*parts.live, "run"); run != nullptr) {
+            snapshot.emplace("run", chord::Json(JsonObject{{"inputs", array_or_empty(json_member(*run, "inputs"))}}));
+        }
+        if (const chord::Json* generation = json_member(*parts.live, "generation"); generation != nullptr) {
+            snapshot.emplace("generation", *generation);
+        }
+        snapshot.emplace("tools", array_or_empty(json_member(*parts.live, "tools")));
+        snapshot.emplace("nestedTools", array_or_empty(json_member(*parts.live, "nestedTools")));
+        snapshot.emplace("compactions", array_or_empty(json_member(*parts.live, "compactions")));
+        if (const chord::Json* failure = json_member(*parts.live, "compactionFailure"); failure != nullptr) {
+            snapshot.emplace("compactionFailure", *failure);
+        }
+    } else {
+        snapshot.emplace("tools", chord::Json(JsonArray{}));
+        snapshot.emplace("nestedTools", chord::Json(JsonArray{}));
+        snapshot.emplace("compactions", chord::Json(JsonArray{}));
+    }
+    snapshot.emplace("inbox", queued_items(parts.inbox));
+    snapshot.emplace("agent", parts.agent != nullptr ? *parts.agent : chord::Json(JsonObject{}));
+    snapshot.emplace("usage", parts.usage != nullptr ? *parts.usage : empty_usage());
+    return chord::Json(std::move(snapshot));
+}
 
 ViewWatch::ViewWatch(std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
@@ -631,6 +1406,9 @@ void advance_conversation_view(
     if (root == nullptr) {
         return;
     }
+    // The revision before this commit: the event translation compares it with
+    // the revision after the ops, and the view watchers receive the latter.
+    const chord::Json before = mount.value;
     const auto* initial_entries = root->find("entries") != root->end() ? root->at("entries").as_array() : nullptr;
     chord::Json::Array entries = initial_entries != nullptr ? *initial_entries : chord::Json::Array{};
     // The document operations precede the entry operations in the frame,
@@ -731,16 +1509,20 @@ void advance_conversation_view(
         }
     }
 
-    if (ops.empty()) {
-        return;
+    chord::Json next = before;
+    if (!ops.empty()) {
+        next = mount.value;
+        if (auto applied = chord::apply(next, ops); !applied) {
+            // A frame whose ops do not apply to the mounted value can never
+            // replay; skip the delivery rather than publish a broken frame.
+            return;
+        }
+        deliver(mount, next, ops);
     }
-    chord::Json next = mount.value;
-    if (auto applied = chord::apply(next, ops); !applied) {
-        // A frame whose ops do not apply to the mounted value can never
-        // replay; skip the delivery rather than publish a broken frame.
-        return;
-    }
-    deliver(mount, std::move(next), std::move(ops));
+    // Every publication reaches the event streams, including one whose view
+    // operations are empty: a task or submission change still produces
+    // lifecycle events (frozen pi `ViewObserver.publication`).
+    deliver_events(mount, before, next, ops, publication);
 }
 
 std::shared_ptr<ViewMount> ViewMountRegistry::task_graph_mount(const chord::Json& hydrated) {

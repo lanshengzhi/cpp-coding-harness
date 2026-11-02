@@ -11,9 +11,12 @@ namespace cch::coding_agent::runtime {
 namespace {
 
 [[nodiscard]] bool is_incrementally_persisted_message(const ai::MessageVariant& message) {
-    return std::holds_alternative<ai::UserMessage>(message) ||
-           std::holds_alternative<ai::AssistantMessage>(message) ||
-           std::holds_alternative<ai::ToolResultMessage>(message);
+    return std::holds_alternative<ai::UserMessage>(message) || std::holds_alternative<ai::AssistantMessage>(message) ||
+           std::holds_alternative<ai::ToolResultMessage>(message) ||
+           // pi `_appendCustomMessage` appends the custom message entry at the
+           // same commitment point; before_agent_start contributions and
+           // extension-triggered messages therefore survive a resume.
+           std::holds_alternative<ai::CustomMessage>(message);
 }
 
 } // namespace

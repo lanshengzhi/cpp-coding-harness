@@ -1,6 +1,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "support/ImageCapabilitiesGuard.hpp"
+#include "support/Json.hpp"
 
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -17,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 using namespace cch;
 
@@ -138,10 +140,9 @@ TEST_CASE("Built-in themes match baseline fixtures and resolve every semantic to
     CHECK(*dark_fixture == coding_agent::tui::builtin_dark_theme());
     CHECK(*light_fixture == coding_agent::tui::builtin_light_theme());
     CHECK(coding_agent::tui::all_theme_tokens().size() == coding_agent::tui::kThemeTokenCount);
-    // pi v1.3.0's theme schema requires 51 colors and declares 56 in total
-    // (the three optional ones are scrollbarTrack, searchMatchBg and
-    // searchMatchText); the pinned v0.99.2 fixture omits the optional three
-    // and still loads through pi's fallback rule.
+    // pi v1.3.0's theme schema requires 51 colors and declares 56 in total; the
+    // five optional tokens declare a fallback. The pinned v0.99.2 fixture omits
+    // the optional five and still loads through pi's fallback rule.
     CHECK(coding_agent::tui::kRequiredThemeTokenCount == 51);
     CHECK(coding_agent::tui::kThemeTokenCount == 56);
     for (const auto token : coding_agent::tui::all_theme_tokens()) {
@@ -567,4 +568,49 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     CHECK(color_at_text(dark_terminal, "heading") == "38;2;205;154;34");
     CHECK(color_at_text(dark_terminal, "label") == "38;2;105;173;208");
     CHECK(color_at_text(dark_terminal, "https://example.com") == "38;2;157;165;169");
+}
+
+TEST_CASE("the theme token set matches the frozen pi-v1.3.0 capture", "[coding_agent][theme][issue1115][spec]") {
+    // fixtures/pi-v1.3.0/audit-1049/configuration-schema.json, scenario
+    // "theme schema accepts the 56-token built-in shape": the frozen
+    // `THEME_TOKENS` descriptors give the total, the required count and the
+    // optional set (the tokens that declare a fallback).
+    const auto artifact = std::filesystem::path(CCH_SOURCE_DIR) / "fixtures" / "pi-v1.3.0" / "audit-1049" /
+                          "configuration-schema.json";
+    std::ifstream input(artifact, std::ios::binary);
+    REQUIRE(input.good());
+    const std::string text{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    auto document = support::read_json(text);
+    REQUIRE(document);
+    const auto* root = document->get_if<support::JsonValue::object_t>();
+    REQUIRE(root != nullptr);
+    const auto* scenarios = root->at("scenarios").get_if<support::JsonValue::array_t>();
+    REQUIRE(scenarios != nullptr);
+    const support::JsonValue::object_t* expected = nullptr;
+    for (const auto& scenario : *scenarios) {
+        const auto* object = scenario.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        if (object->at("name").get<std::string>() == "theme schema accepts the 56-token built-in shape") {
+            expected = object->at("expected").get_if<support::JsonValue::object_t>();
+        }
+    }
+    REQUIRE(expected != nullptr);
+
+    CHECK(coding_agent::tui::kThemeTokenCount == static_cast<std::size_t>(expected->at("tokenCount").get<double>()));
+    CHECK(coding_agent::tui::kRequiredThemeTokenCount ==
+            static_cast<std::size_t>(expected->at("requiredTokenCount").get<double>()));
+
+    std::vector<std::string> optional;
+    for (const auto token : coding_agent::tui::all_theme_tokens()) {
+        if (!coding_agent::tui::theme_token_fallback(token).empty()) {
+            optional.emplace_back(coding_agent::tui::theme_token_name(token));
+        }
+    }
+    std::vector<std::string> frozen;
+    for (const auto& entry : expected->at("optionalTokens").get_array()) {
+        frozen.push_back(entry.get<std::string>());
+    }
+    std::ranges::sort(optional);
+    std::ranges::sort(frozen);
+    CHECK(optional == frozen);
 }

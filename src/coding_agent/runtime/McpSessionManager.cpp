@@ -211,6 +211,15 @@ std::vector<McpServerSnapshot> McpSessionManager::servers() const {
             connection.oauth = server.connection->uses_oauth();
             connection.instructions = server.connection->instructions();
             snapshot.connection = std::move(connection);
+        } else if (closed_) {
+            // pi `session_end`: every server is `closed` after shutdown. A
+            // connect that was pending settles with the closed error and
+            // exposes it through the snapshot (#1189); the frozen capture's
+            // `pendingInitializeError` is this message.
+            McpConnectionSnapshot closed;
+            closed.state = McpServerState::Closed;
+            closed.error = server.connect_error;
+            snapshot.connection = std::move(closed);
         } else if (server.start_pending) {
             // pi `startConnection` publishes a `connecting` connection while
             // the background connect is in flight (#1104): the management
@@ -269,6 +278,9 @@ void McpSessionManager::close() noexcept {
     tokens_at_sign_in_.clear();
     for (auto& server : servers_) {
         server.generation += 1;
+        // Abort a pending initialize through the connect seam; the factory's
+        // closed error lands on the snapshot when the connect settles.
+        server.connect_stop.request_stop();
         if (server.connection) {
             server.connection->close();
         }
@@ -399,7 +411,10 @@ void McpSessionManager::launch_start(const boost::asio::any_io_executor& executo
     }
     record->start_pending = true;
     record->generation += 1;
+    record->connect_error.reset();
+    record->connect_stop = std::stop_source{};
     const auto generation = record->generation;
+    const std::stop_token connect_stop = record->connect_stop.get_token();
     ++pending_starts_;
     // The panel's first read after `start()` should show the server
     // connecting (pi renders the tracked connection's `connecting` state).
@@ -407,12 +422,13 @@ void McpSessionManager::launch_start(const boost::asio::any_io_executor& executo
     std::weak_ptr<McpSessionManager> weak = weak_from_this();
     boost::asio::co_spawn(
             executor,
-            [weak, name = std::string{server}, generation]() mutable -> boost::asio::awaitable<void> {
+            [weak, name = std::string{server}, generation, connect_stop]() mutable -> boost::asio::awaitable<void> {
                 auto self = weak.lock();
                 if (!self) {
                     co_return;
                 }
-                auto outcome = co_await support::detail::await_async_result(self->start_connection(name, generation));
+                auto outcome = co_await support::detail::await_async_result(
+                        self->start_connection(name, generation, connect_stop));
                 auto* record = self->find(name);
                 self->pending_starts_ -= 1;
                 if (record != nullptr) {
@@ -422,11 +438,24 @@ void McpSessionManager::launch_start(const boost::asio::any_io_executor& executo
                     // pi `startConnection`'s `isCurrent` drop: a server
                     // disabled (or a manager closed) while the connect flew
                     // loses the late connection instead of resurrecting it.
-                    if (record != nullptr && record->connection) {
-                        auto stale = std::move(record->connection);
-                        record->connection.reset();
-                        stale->close();
-                        self->hide_tools(name);
+                    if (record != nullptr) {
+                        // A pending initialize that close aborted settles with
+                        // pi's closed error; surface the wrapped message as the
+                        // closed connection's error (#1189).
+                        if (!outcome) {
+                            record->connect_error = std::format(
+                                    "MCP server \"{}\" failed to connect: {}", name, outcome.error().message);
+                        }
+                        if (record->connection) {
+                            auto stale = std::move(record->connection);
+                            record->connection.reset();
+                            if (const auto& error = stale->error(); error.has_value()) {
+                                record->connect_error =
+                                        std::format("MCP server \"{}\" failed to connect: {}", name, *error);
+                            }
+                            stale->close();
+                            self->hide_tools(name);
+                        }
                     }
                     co_return;
                 }
@@ -491,15 +520,16 @@ boost::asio::awaitable<void> McpSessionManager::reconnect_signed_in() {
 }
 
 support::AsyncResult<void> McpSessionManager::start_connection(
-        std::string_view server, std::uint64_t expected_generation) {
+        std::string_view server, std::uint64_t expected_generation, std::stop_token stop_token) {
     return support::detail::make_async_result(
-            [this, name = std::string{server}, expected_generation]() -> boost::asio::awaitable<support::ExpectedVoid> {
+            [this, name = std::string{server}, expected_generation, stop_token]()
+                    -> boost::asio::awaitable<support::ExpectedVoid> {
                 auto* record = find(name);
                 if (record == nullptr) {
                     co_return support::ExpectedVoid{};
                 }
-                auto connection =
-                        co_await support::detail::await_async_result(dependencies_.connections->connect(record->entry));
+                auto connection = co_await support::detail::await_async_result(
+                        dependencies_.connections->connect(record->entry, stop_token));
                 if (!connection) {
                     co_return std::unexpected(std::move(connection.error()));
                 }
@@ -509,6 +539,9 @@ support::AsyncResult<void> McpSessionManager::start_connection(
                 // late connection instead of registering tools on the
                 // already-released Agent (#1104).
                 if (closed_ || (expected_generation != 0 && record->generation != expected_generation)) {
+                    if (const auto& error = (*connection)->error(); error.has_value()) {
+                        record->connect_error = std::format("MCP server \"{}\" failed to connect: {}", name, *error);
+                    }
                     (*connection)->close();
                     co_return support::ExpectedVoid{};
                 }

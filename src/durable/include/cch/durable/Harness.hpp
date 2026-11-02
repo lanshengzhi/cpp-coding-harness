@@ -113,6 +113,26 @@ public:
     [[nodiscard]] support::AsyncResult<ViewWatch> watch_conversation(
             ConversationId conversation_id, ViewFrameListener listener);
 
+    /// Attach to one conversation's durable agent event stream (frozen pi
+    /// `watchEvents`): a `snapshot` of the committed view, live run and
+    /// generation state, tool slots, inbox, agent and usage at this revision,
+    /// then every later committed batch of run/turn/message/tool/submission/
+    /// usage lifecycle events, in commit order. Rejects a missing conversation.
+    ///
+    /// The stream is a weak observation: it is not a scheduler, commits
+    /// nothing, and stopping it cannot abort the run or another subscriber.
+    /// A `stop` request made before attachment ends the stream with
+    /// `Cancelled`, which ends this observer only. More than 100 undelivered
+    /// batches are replaced by one `snapshot` batch.
+    ///
+    /// Lifetime: the producer dereferences this Harness and its Session until
+    /// the acquisition completes. The Harness and its Session must outlive the
+    /// operation until its completion callback returns; the returned stream
+    /// owns its mount independently of the Harness afterwards, and Session end
+    /// (`close`) terminates it.
+    [[nodiscard]] support::AsyncResult<AgentEventStream> watch_events(
+            ConversationId conversation_id, std::stop_token stop = std::stop_token{});
+
     /// Start one manual compaction of a conversation (frozen pi
     /// `Harness.compact`): a conversation-owned, non-background task that a
     /// blocking state never waits for. `instructions` steers the

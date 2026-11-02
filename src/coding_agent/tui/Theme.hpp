@@ -101,6 +101,9 @@ struct ResolvedTheme {
 
 [[nodiscard]] std::span<const ThemeToken> all_theme_tokens();
 [[nodiscard]] std::string_view theme_token_name(ThemeToken token);
+/// pi `ThemeTokenDescriptor.fallback`: the token whose resolved color an
+/// optional token inherits when a theme omits it. Empty for a required token.
+[[nodiscard]] std::string_view theme_token_fallback(ThemeToken token);
 [[nodiscard]] const ResolvedThemeColor& color_for(const ResolvedTheme& theme, ThemeToken token);
 
 [[nodiscard]] support::Expected<ResolvedTheme> parse_theme_json(

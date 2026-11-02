@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -895,6 +896,100 @@ TEST_CASE("a callback rejection that settles after unsubscribe is still reported
 
     CHECK((errors == std::vector<std::string>{"stopped callback"}));
     CHECK(received == std::vector<double>{0.0});
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json
+// "a watch acquired before start buffers frames and serializes callbacks".
+//
+// Seam mapping: the frozen durable watch installs its listener at `start`, so its
+// delivered sequence begins at the first frame committed after the acquisition
+// revision; Chord installs the listener at `subscribe`, so the acquisition
+// revision itself arrives as the cold hydration and its update sequence is the
+// frozen frame sequence. Every frozen expectation is compared exactly:
+// `valuesBeforeRelease` [1], `valuesAfterRelease` [1,2],
+// `maxConcurrentCallbacks` 1 and `finalValue` {value: 2}.
+//
+// Negative controls: a listener invoked reentrantly enters the second delivery
+// while the first is in flight (the delivered order and the concurrency counter
+// both separate it), and a state that drops the frame committed while a
+// callback is running never reaches [1,2].
+TEST_CASE("a watch acquired before start buffers frames and serializes callbacks",
+        "[chord][replicated_state][issue1188][spec]") {
+    TestSource source{revision(0)};
+    auto attached = AttachedReplicatedState::attach(source);
+    REQUIRE(attached.has_value());
+
+    std::vector<DeliveryEvent> observed;
+    int active = 0;
+    int max_active = 0;
+    std::optional<Completion> in_flight;
+    const auto update_values = [&observed] {
+        std::vector<double> values;
+        for (const DeliveryEvent& event : observed)
+            if (event.kind == ReplicatedStateDeliveryKind::Update) values.push_back(event.value);
+        return values;
+    };
+    auto unsubscribe = attached->subscribe([&observed, &active, &max_active, &in_flight](
+                                                   Json value, Context context, ReplicatedStateDelivery delivery) {
+        observed.push_back(DeliveryEvent{.kind = delivery.kind,
+                .sequence = delivery.sequence,
+                .value = number_of(value),
+                .signal_present = context.stop_token().stop_possible()});
+        if (delivery.kind == ReplicatedStateDeliveryKind::Hydrate) return ready();
+        ++active;
+        max_active = std::max(max_active, active);
+        if (delivery.sequence != 1) {
+            --active;
+            return ready();
+        }
+        // The first committed frame stays in flight until the test releases
+        // it; the completion is the end of the listener's awaited body.
+        return support::AsyncResult<void>{
+                support::AsyncProducer<void, support::Error>{[&active, &in_flight](Completion completion) noexcept {
+                    in_flight.emplace([&active, completion = std::move(completion)](
+                                              std::expected<void, support::Error> outcome) mutable noexcept {
+                        --active;
+                        completion(std::move(outcome));
+                    });
+                }}};
+    });
+
+    // The cold hydration is the acquisition revision, not part of the frozen
+    // watch's post-acquisition frame sequence.
+    REQUIRE(observed.size() == 1);
+    CHECK(observed[0].kind == ReplicatedStateDeliveryKind::Hydrate);
+    CHECK(observed[0].sequence == 0);
+    CHECK(observed[0].value == 0.0);
+    CHECK_FALSE(observed[0].signal_present);
+
+    source.commit(revision(1));
+    REQUIRE(observed.size() == 2);
+    CHECK(observed[1].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(observed[1].sequence == 1);
+    CHECK(observed[1].value == 1.0);
+    CHECK_FALSE(observed[1].signal_present);
+    CHECK(active == 1);
+    CHECK((update_values() == std::vector<double>{1.0}));
+
+    // The second committed frame buffers behind the in-flight delivery instead
+    // of being delivered concurrently (frozen `valuesBeforeRelease`).
+    source.commit(revision(2));
+    REQUIRE(observed.size() == 2);
+    CHECK(active == 1);
+    CHECK(max_active == 1);
+    CHECK((update_values() == std::vector<double>{1.0}));
+
+    settle(in_flight);
+    REQUIRE(observed.size() == 3);
+    CHECK(observed[2].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(observed[2].sequence == 2);
+    CHECK(observed[2].value == 2.0);
+    CHECK_FALSE(observed[2].signal_present);
+    CHECK(active == 0);
+    CHECK(max_active == 1);
+    CHECK((update_values() == std::vector<double>{1.0, 2.0}));
+    CHECK(attached->value() == revision(2));
+    unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json

@@ -121,7 +121,7 @@ public:
     std::map<std::string, std::shared_ptr<TestConnection>> outcomes;
     std::vector<std::string> connect_order;
     [[nodiscard]] support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(
-            const McpConfigEntry& entry) override {
+            const McpConfigEntry& entry, std::stop_token) override {
         connect_order.push_back(entry.name);
         const auto found = outcomes.find(entry.name);
         if (found == outcomes.end()) {

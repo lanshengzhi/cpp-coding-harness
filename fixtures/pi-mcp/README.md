@@ -31,6 +31,14 @@ responses on stdout, diagnostics on stderr.
 | `debug/emit_invalid_jsonrpc` | Writes valid JSON that is not a JSON-RPC message. |
 | `debug/exit` | Responds, then exits 0 (a server that dies between `tools/list` and `tools/call`). |
 
+When `PIKE_MCP_SERVER_REQUESTS=roots`, the server issues the audit-1190
+server-to-client exchange after `notifications/initialized`: `ping` (id 101),
+`roots/list` (id 102), and an unhandled `sampling/createMessage` (id 103). With
+`PIKE_MCP_ROOTS_TRACE` naming a file, every client response is appended there
+verbatim (one compact JSON object per line), so a test can compare the client's
+answers with the frozen pi-v1.3.0 observation from `audit-1190`. Without the
+mode the server sends no server-initiated request.
+
 
 `http_server.py` (the streamable-HTTP TLS fixture) also carries two debug
 methods used by the OAuth slice (#875) to observe credential attachment over
@@ -64,6 +72,12 @@ the same wire contract as `echo_server.py` over `POST`/SSE and issuing an
 responding. The same `PIKE_MCP_TRACE` trace file applies (`recv <method>
 id=<n>`, `hang-start id=<n>`), so a test can prove a request was in flight
 before it cancelled it.
+
+When `PIKE_MCP_SERVER_REQUESTS=roots`, the server-to-client GET stream (instead
+of answering 405) issues the audit-1190 exchange once: `ping` (id 101),
+`roots/list` (id 102), and an unhandled `sampling/createMessage` (id 103). With
+`PIKE_MCP_ROOTS_TRACE` naming a file, every client response is appended there
+verbatim, and the stream stays open until all three arrive.
 
 
 ## `mcp.json`

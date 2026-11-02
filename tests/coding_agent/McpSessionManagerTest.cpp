@@ -15,9 +15,11 @@
 #include "coding_agent/mcp/McpConfigWrite.hpp"
 #include "coding_agent/mcp/McpExposure.hpp"
 #include "coding_agent/mcp/McpNamespace.hpp"
+#include "coding_agent/runtime/McpProductionAdapters.hpp"
 #include "coding_agent/runtime/McpSessionManager.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ConnectionGate.hpp"
+#include "support/McpTestKit.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -190,7 +192,7 @@ public:
     std::vector<std::string> connect_order;
 
     [[nodiscard]] support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(
-            const McpConfigEntry& entry) override {
+            const McpConfigEntry& entry, std::stop_token) override {
         connect_order.push_back(entry.name);
         return support::detail::make_async_result(
                 [this, name = entry.name]()
@@ -1003,8 +1005,91 @@ TEST_CASE("close during a pending connect returns promptly and drops the late co
     CHECK(harness.manager->pending_start_count() == 0);
     const auto after = snapshot_for(*harness.manager, "slow");
     REQUIRE(after.has_value());
-    CHECK_FALSE(after->connection.has_value());
+    REQUIRE(after->connection.has_value());
+    // pi `session_end`: the server reads `closed` with no tools; this factory
+    // ignored the stop seam and produced a healthy late connection, so it is
+    // dropped without a closed error.
+    CHECK(after->connection->state == McpServerState::Closed);
+    CHECK(after->connection->tools.empty());
+    CHECK_FALSE(after->connection->error.has_value());
     CHECK(connection->close_calls == 1);
+}
+
+TEST_CASE("closing while a real initialize is pending returns with pi's closed error",
+        "[coding_agent][mcp][issue1189][spec]") {
+    tests::TempWorkspace workspace;
+    const auto agent_dir = workspace.path() / "agent";
+    std::filesystem::create_directories(agent_dir);
+    // A real never-answering child: it records that it started, then reads
+    // stdin forever without writing an initialize response.
+    const auto script = workspace.path() / "never_initialize.py";
+    const auto marker = workspace.path() / "started";
+    {
+        std::ofstream output(script, std::ios::binary | std::ios::trunc);
+        output << "import pathlib, sys\n"
+                  "pathlib.Path(sys.argv[1]).write_text('started')\n"
+                  "for line in sys.stdin:\n"
+                  "    pass\n";
+    }
+    McpStdioServerConfig stdio;
+    stdio.name = "slow";
+    stdio.command = "python3";
+    stdio.args = {script.string(), marker.string()};
+    McpConfigEntry entry;
+    entry.name = "slow";
+    entry.enabled = true;
+    entry.source = agent_dir / "mcp.json";
+    entry.config = std::move(stdio);
+    McpConfigLoad config;
+    config.servers.push_back(std::move(entry));
+
+    auto surface = std::make_shared<RecordingSurface>();
+    McpManagerDependencies dependencies;
+    dependencies.connections = std::make_shared<coding_agent::runtime::ProductionMcpConnectionFactory>(agent_dir);
+    dependencies.tools = surface;
+    auto manager = std::make_shared<McpSessionManager>(
+            std::move(config), agent_dir, std::vector<std::string>{}, std::move(dependencies));
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(manager->start()).has_value());
+    const auto started = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<bool>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        co_await tests::wait_for(executor, [&] { return std::filesystem::exists(marker); }, std::chrono::seconds{5});
+        co_return support::Expected<bool>{std::filesystem::exists(marker)};
+    }());
+    INFO("the never-answering child records its start");
+    REQUIRE(started.has_value());
+    REQUIRE(*started);
+    CHECK(manager->pending_start_count() == 1);
+
+    const auto close_started = std::chrono::steady_clock::now();
+    manager->close();
+    const auto close_elapsed = std::chrono::steady_clock::now() - close_started;
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    (void)close_elapsed;
+#else
+    CHECK(close_elapsed < std::chrono::milliseconds{250});
+#endif
+
+    const auto settled = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<bool>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        co_await tests::wait_for(
+                executor, [&] { return manager->pending_start_count() == 0; }, std::chrono::seconds{10});
+        co_return support::Expected<bool>{manager->pending_start_count() == 0};
+    }());
+    REQUIRE(settled.has_value());
+    REQUIRE(*settled);
+
+    const auto after = snapshot_for(*manager, "slow");
+    REQUIRE(after.has_value());
+    REQUIRE(after->connection.has_value());
+    CHECK(after->connection->state == McpServerState::Closed);
+    CHECK(after->connection->tools.empty());
+    // The frozen audit-1052 `pendingInitializeError`: the production factory
+    // aborts the pending initialize and the manager surfaces the wrapped
+    // closed error on the snapshot.
+    CHECK(after->connection->error ==
+            std::optional<std::string>{"MCP server \"slow\" failed to connect: MCP client is closed"});
 }
 
 TEST_CASE(

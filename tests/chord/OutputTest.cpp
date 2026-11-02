@@ -2,9 +2,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <iterator>
+#include <optional>
 #include <string>
+#include <vector>
 
 using namespace cch;
 using namespace cch::chord;
@@ -12,6 +16,57 @@ using namespace cch::chord;
 namespace {
 
 const std::string kMixed = "a\xc3\xa9\xf0\x9f\x98\x80"; // "aé😀"
+
+using namespace std::chrono_literals;
+
+/// One step of a declared progress schedule: coalescing marks at the current
+/// time, then an optional advance that runs every commit the pacer allows.
+struct ProgressStep {
+    int marks{0};
+    std::optional<ProgressTime> advance{};
+};
+
+[[nodiscard]] ProgressStep mark_step(int times = 1) { return ProgressStep{.marks = times, .advance = std::nullopt}; }
+
+[[nodiscard]] ProgressStep advance_step(double milliseconds) {
+    return ProgressStep{.marks = 0, .advance = ProgressTime{milliseconds}};
+}
+
+struct ProgressCommit {
+    ProgressTime at;
+    std::size_t bytes{0};
+};
+
+/// Drive the pacer with the same declared schedule the frozen capture uses.
+/// The caller's virtual clock starts at zero and only the steps move it.
+[[nodiscard]] std::vector<ProgressCommit> run_progress_schedule(std::chrono::milliseconds min_interval,
+        const std::vector<ProgressStep>& steps,
+        const std::vector<std::size_t>& write_bytes) {
+    ProgressPacer pacer{min_interval};
+    std::vector<ProgressCommit> commits;
+    ProgressTime now{};
+    std::size_t next_write = 0;
+    const auto commit_due = [&](ProgressTime target) {
+        while (pacer.pending() && pacer.due(target) && next_write < write_bytes.size()) {
+            now = std::max(now, pacer.next_commit_at());
+            pacer.begin();
+            pacer.committed(now, write_bytes[next_write]);
+            commits.push_back(ProgressCommit{.at = now, .bytes = write_bytes[next_write]});
+            ++next_write;
+        }
+    };
+    for (const auto& step : steps) {
+        for (int count = 0; count < step.marks; ++count)
+            pacer.mark();
+        if (step.advance) {
+            const ProgressTime target = now + *step.advance;
+            commit_due(target);
+            now = target;
+        }
+    }
+    commit_due(now);
+    return commits;
+}
 
 } // namespace
 
@@ -212,4 +267,85 @@ TEST_CASE("output buffer snapshot removes interlinear controls and preserves mul
     CHECK(multibyte_snapshot.text == "a\xc3\xa9\xf0\x9f\x98\x80\tend\n");
     CHECK(multibyte_snapshot.dropped_bytes == 0);
     CHECK(multibyte_snapshot.dropped_lines == 0);
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1057/json-output-support.json
+// "the progress byte rate is the frozen 100 KiB/s constant" (bytesPerSecond 102400).
+TEST_CASE("the progress byte rate is the frozen 100 KiB/s constant", "[chord][output][progress][issue1187][spec]") {
+    CHECK(kProgressBytesPerSecond == 102400);
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1187/chord-progress.json
+// "progress commits the first change at once then paces later commits by their written bytes".
+// The declared inputs are minIntervalMs 100, writeBytes 51200/10/10, and the
+// capture's mark/advance steps; the frozen commits are 0, 500 and 600 ms.
+TEST_CASE("progress commits the first change at once then paces later commits by their written bytes",
+        "[chord][output][progress][issue1187][spec]") {
+    const std::vector<ProgressStep> steps{
+            mark_step(),
+            advance_step(0.0),
+            mark_step(2),
+            advance_step(499.0),
+            advance_step(1.0),
+            mark_step(),
+            advance_step(99.0),
+            advance_step(1.0),
+    };
+    const auto commits = run_progress_schedule(100ms, steps, {51'200, 10, 10});
+
+    REQUIRE(commits.size() == 3);
+    CHECK(kProgressBytesPerSecond == 102400);
+    CHECK(commits[0].at.count() == 0.0);
+    CHECK(commits[0].bytes == 51'200);
+    CHECK(commits[1].at.count() == 500.0);
+    CHECK(commits[1].bytes == 10);
+    CHECK(commits[2].at.count() == 600.0);
+    CHECK(commits[2].bytes == 10);
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1187/chord-progress.json
+// "progress keeps the exact fractional byte-rate pause instead of rounding it".
+// The declared inputs are minIntervalMs 0 and writeBytes 1025/1; 1025 bytes
+// buy exactly 10.009765625 ms, not a whole millisecond or a whole KiB.
+TEST_CASE("progress keeps the exact fractional byte-rate pause instead of rounding it",
+        "[chord][output][progress][issue1187][spec]") {
+    const std::vector<ProgressStep> steps{
+            mark_step(),
+            advance_step(0.0),
+            mark_step(),
+            advance_step(10.009765625),
+    };
+    const auto commits = run_progress_schedule(0ms, steps, {1'025, 1});
+
+    REQUIRE(commits.size() == 2);
+    CHECK(commits[0].at.count() == 0.0);
+    CHECK(commits[0].bytes == 1'025);
+    CHECK(commits[1].at.count() == 10.009765625);
+    CHECK(commits[1].bytes == 1);
+}
+
+// The discriminating cases separate the frozen pacing from the three plausible
+// stand-ins: publishing per chunk (no throttle), always waiting one fixed
+// millisecond interval, and rounding the written bytes or the pause.
+TEST_CASE("progress pacing separates a byte-rate pause from a constant interval and rounded bytes",
+        "[chord][output][progress][issue1187][discriminating]") {
+    // The written bytes dominate the 100 ms minimum: 50 KiB buys 500 ms.
+    CHECK(progress_pause(51'200, 100ms).count() == 500.0);
+    // A small commit waits the configured minimum instead of its 0.09765625 ms.
+    CHECK(progress_pause(10, 100ms).count() == 100.0);
+    // Rounding the bytes to whole KiBs or the pause to whole milliseconds both
+    // read 10 ms here; the frozen fraction is kept exactly.
+    CHECK(progress_pause(1'025, 0ms).count() == 10.009765625);
+
+    ProgressPacer pacer{100ms};
+    pacer.mark();
+    CHECK(pacer.due(ProgressTime{}));
+    pacer.begin();
+    pacer.committed(ProgressTime{}, 51'200);
+    CHECK_FALSE(pacer.pending());
+    // A per-chunk pacer would be due immediately after this mark; the frozen
+    // one waits until the written bytes have been paced.
+    pacer.mark();
+    CHECK_FALSE(pacer.due(ProgressTime{499.0}));
+    CHECK(pacer.due(ProgressTime{500.0}));
 }

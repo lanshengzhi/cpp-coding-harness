@@ -43,28 +43,40 @@ using Path = std::vector<PathSegment>;
 [[nodiscard]] inline PathSegment path_index(std::size_t index) { return PathIndex{index}; }
 
 /// The seven frozen Chord delta operations. `ReplaceOp` is the only whole-root
-/// operation; the path-bearing operations may not have an empty path.
+/// operation; the path-bearing operations may not have an empty path. Equality
+/// compares the decoded fields, so a batch a producer emitted can be compared
+/// with the batch an ingestion boundary decoded.
 struct ReplaceOp {
     Json value;
+
+    [[nodiscard]] bool operator==(const ReplaceOp&) const = default;
 };
 
 struct SetOp {
     Path path;
     Json value;
+
+    [[nodiscard]] bool operator==(const SetOp&) const = default;
 };
 
 struct DeleteOp {
     Path path;
+
+    [[nodiscard]] bool operator==(const DeleteOp&) const = default;
 };
 
 struct AppendOp {
     Path path;
     std::string text;
+
+    [[nodiscard]] bool operator==(const AppendOp&) const = default;
 };
 
 struct TruncateOp {
     Path path;
     std::size_t count{0};
+
+    [[nodiscard]] bool operator==(const TruncateOp&) const = default;
 };
 
 struct SpliceOp {
@@ -72,11 +84,15 @@ struct SpliceOp {
     std::size_t index{0};
     std::size_t remove{0};
     std::vector<Json> items;
+
+    [[nodiscard]] bool operator==(const SpliceOp&) const = default;
 };
 
 struct MoveOp {
     Path path;
     std::vector<std::size_t> permutation;
+
+    [[nodiscard]] bool operator==(const MoveOp&) const = default;
 };
 
 using Op = std::variant<ReplaceOp, SetOp, DeleteOp, AppendOp, TruncateOp, SpliceOp, MoveOp>;
@@ -95,6 +111,22 @@ using OpBatch = std::vector<Op>;
 /// Validate the complete batch before any target access.
 [[nodiscard]] support::ExpectedVoid validate_batch(const OpBatch& ops);
 
+/// Decode one frozen Chord op tuple (pi `Op`) into a typed operation.
+///
+/// This is the decoded-input ingestion boundary: paths are inline, there are no
+/// path ids and no shortened tuples. It owns the frozen verb, arity and payload
+/// rejection vocabulary (`unknown op verb: x`, `s arity`, `p index`, `p remove`,
+/// `m permutation is not a bijection`, `path is empty`, `path is not an array`,
+/// `unsafe path segment: <segment>`), so an untyped tuple that the typed `Op`
+/// variant cannot represent is still rejected with its recorded message. A
+/// payload value is not inspected beyond its shape, matching frozen `apply`.
+[[nodiscard]] support::Expected<Op> decode_op(const Json& tuple);
+
+/// Decode a complete frozen op-tuple array into a typed batch. The first
+/// rejected tuple fails the whole batch, so no prefix of a rejected batch is
+/// returned and no target is ever reached.
+[[nodiscard]] support::Expected<OpBatch> decode_ops(const Json& tuples);
+
 /// Apply decoded operations without changing `target`; untouched containers
 /// are shared between `target` and the result.
 [[nodiscard]] support::Expected<Json> apply_immutable(const Json& target, const OpBatch& ops);
@@ -103,12 +135,24 @@ using OpBatch = std::vector<Op>;
 /// not exposed, and `target` is unchanged.
 [[nodiscard]] support::Expected<Json> apply_immutable_batches(const Json& target, const std::vector<OpBatch>& batches);
 
-/// Apply decoded operations to a caller-owned mutable value. Operations are
-/// validated and executed sequentially, so each successful operation remains
-/// applied if a later operation fails. A root replacement stays local until the
-/// whole batch completes. Shared input containers must not be aliased by another
-/// revision.
-[[nodiscard]] support::ExpectedVoid apply(Json& target, const OpBatch& ops);
+/// Apply decoded operations to a caller-owned mutable value and return the
+/// adopted root (pi `apply`). Operations are validated and executed
+/// sequentially, so each successful operation before a root replacement stays
+/// applied to `target` if a later operation fails.
+///
+/// A root replacement is adopted as a new root, never written into `target`:
+/// the returned value shares the replacement payload's container and `target`
+/// keeps the value it had when the replacement was reached. Without a root
+/// replacement the returned value shares `target`'s root container. Shared input
+/// containers must not be aliased by another revision.
+[[nodiscard]] support::Expected<Json> apply(Json& target, const OpBatch& ops);
+
+/// Apply a frozen op-tuple array, decoding and validating each tuple exactly
+/// when the frozen applier reaches it (pi `apply` over decoded tuples). A later
+/// rejected tuple keeps the writes the earlier tuples applied, and a root
+/// replacement still returns a new root. This is the sequential entry point;
+/// `decode_ops` is the whole-batch admission seam that returns no prefix.
+[[nodiscard]] support::Expected<Json> apply(Json& target, const Json& decoded_tuples);
 
 /// Longest suffix of `a` that is a prefix of `b`, bounded like pi `overlap`.
 /// Lengths count UTF-16 code units, matching the frozen string contract.

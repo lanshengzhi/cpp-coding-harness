@@ -1,6 +1,7 @@
-// Named pi-v1.0.4 acceptance for hardware cursor preference and IME positioning (#1037).
-// Every expectation is read from the verified `hardware-cursor.json` artifact;
-// nothing here is derived from Pike assertions alone.
+// Named pi-v1.3.0 acceptance for hardware cursor preference and IME positioning (#1037).
+// Every expectation is read from the registered `audit-1050/hardware-cursor.json`
+// observation (#1182), whose scenarios are identical to the historical pi-v1.0.4 bundle but
+// bound to revision 71023aec; nothing here is derived from Pike assertions alone.
 
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/Component.hpp>
@@ -394,8 +395,8 @@ void verify_altscreen_step_protocol(const ProtocolRecordingTerminal& recording_t
 } // namespace
 
 TEST_CASE("frozen hardware-cursor observations replay across MainScreen and AltScreen",
-        "[tui][hardware-cursor][issue1037][compat-pi][spec]") {
-    const auto bundle = cch::tests::read_pi_tui_evidence("hardware-cursor.json");
+        "[tui][hardware-cursor][issue1037][issue1182][compat-pi][spec]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "hardware-cursor.json");
     REQUIRE(bundle.has_value());
     REQUIRE(bundle->at("scenarios").get_array().size() == 13);
 

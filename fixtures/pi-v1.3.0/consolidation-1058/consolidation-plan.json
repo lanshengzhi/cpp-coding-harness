@@ -763,6 +763,55 @@
         "mcp-external-signin-pickup"
       ],
       "authority": "#1104 registered frozen capture plus tests/coding_agent/McpSessionManagerTest.cpp turn-start pickup comparison; verification via the #1104 receipt"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "copyJson copies strict JSON without retaining aliases",
+      "rows": [
+        "cch_chord:json:copy-json",
+        "cch_chord:Chord:json"
+      ],
+      "authority": "#1186 supplemental audit-1057-typed-json capture plus tests/chord/StrictJsonTest.cpp public copy comparison"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "copyJson preserves null prototypes and own __proto__ data properties",
+      "rows": [
+        "cch_chord:json:copy-json"
+      ],
+      "authority": "#1186 supplemental audit-1057-typed-json capture plus tests/chord/StrictJsonTest.cpp own-key copy comparison"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "copyJson rejects a non-finite number nested below the root",
+      "rows": [
+        "cch_chord:json:strict-validation"
+      ],
+      "authority": "#1186 supplemental audit-1057-typed-json capture plus tests/chord/StrictJsonTest.cpp depth rejection comparison"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "isJsonValue checks strict JSON without normalizing it",
+      "rows": [
+        "cch_chord:json:json-value"
+      ],
+      "authority": "#1186 supplemental audit-1057-typed-json capture plus tests/chord/StrictJsonTest.cpp direct JsonValue model comparison"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "progress commits the first change at once then paces later commits by their written bytes",
+      "rows": [
+        "cch_chord:output:progress"
+      ],
+      "authority": "#1187 registered frozen capture plus tests/chord/OutputTest.cpp public Output comparisons; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "progress keeps the exact fractional byte-rate pause instead of rounding it",
+      "rows": [
+        "cch_chord:output:progress"
+      ],
+      "authority": "#1187 registered frozen capture plus tests/chord/OutputTest.cpp public Output comparisons; verification remains upstream-captured"
     }
   ],
   "orphanScenarios": [
@@ -2582,6 +2631,523 @@
         "cch_durable:builtin-tools"
       ],
       "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a model/tool round reports message, tool, usage and settlement lifecycle in committed order",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool held by a gate keeps its slot running and a later subscriber sees committed state only",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool held at completing by live owned work keeps its turn open until that work settles",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "cancelling a run during its tool settles the input unanswered and ends the tool with a result",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a retryable provider error reports retry start and end around the recovered answer",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a terminal provider error settles the input unanswered and ends the turn without a remaining task",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool that throws settles an error result on the stream and the round continues",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "stopping a started stream ends its deliveries and leaves persistent work running",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "an unstarted stream buffers committed batches and replays them when it starts",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "more than one hundred undelivered batches collapse into one snapshot replacement",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "closing the Harness ends a live event stream with session_closed",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a listener failure ends its stream and leaves the run and other subscribers running",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "an aborted attachment context cancels its stream and never the run",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "a malformed global settings file yields one warning naming the file path",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "a malformed project settings file reports its own path only while the project is trusted",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the same settings file diagnostic from two managers deduplicates to one message",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the settings schema rejects an invalid thinking level and a negative compaction reserve naming the key",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the settings schema names the offending path and pi message for each rejected shape",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "a schema-rejected thinking level loads without a diagnostic and the runtime keeps the raw value",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the compaction consumer rejects negative and fractional token settings naming the field",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1190",
+      "artifact": "server-requests.json",
+      "scenario": "a stdio server ping is answered with an empty result and roots/list returns the connection's configured roots",
+      "reason": "Captured by #1190 from the clean pi-v1.3.0 checkout through the public MCP Owner; the consolidate row routes no audit lane into this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-roots-list"
+      ],
+      "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1190",
+      "artifact": "server-requests.json",
+      "scenario": "a streamable HTTP server ping is answered with an empty result and roots/list returns the connection's configured roots",
+      "reason": "Captured by #1190 from the clean pi-v1.3.0 checkout through the public MCP Owner; the consolidate row routes no audit lane into this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-roots-list"
+      ],
+      "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1190",
+      "artifact": "server-requests.json",
+      "scenario": "a server request with no matching handler is answered -32601 before the connection closes",
+      "reason": "Captured by #1190 from the clean pi-v1.3.0 checkout through the public MCP Owner; the consolidate row routes no audit lane into this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-roots-list"
+      ],
+      "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "tools/list follows nextCursor across pages and ends on an empty cursor",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "a null nextCursor ends tools/list without another request",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "an empty nextCursor ends tools/list without another request",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "a repeated nextCursor is an explicit duplicate-cursor error",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "tools/list stops after pi's 1000-page bound",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "application tool names sanitize punctuation, bound at 64 and hash collisions from the raw pair",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "application tool names hash every colliding sanitized name order-independently",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "stdio: onProgress injects _meta.progressToken and delivers only matching progress",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "HTTP: onProgress injects _meta.progressToken and delivers only matching progress",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "stdio: a progress notification re-arms the request deadline",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "HTTP: a progress notification re-arms the request deadline",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "application progress text uses the message verbatim or Progress <n>[/<total>]",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "stdio: aborting an in-flight call notifies the server and leaves the child usable",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "HTTP: aborting an in-flight call posts notifications/cancelled and reuses the session",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "stdio: a timed-out request fails with pi's timeout error and reason",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "HTTP: a timed-out request fails with pi's timeout error and reason",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "an already-aborted request is never sent and emits no notifications/cancelled",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "a failed HTTP request does not emit notifications/cancelled",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "a failed stdio request does not emit notifications/cancelled",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: session headers carry through and a 405 GET is feature-absent",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: a server retry hint overrides the client reconnect delay and resumes with Last-Event-ID",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: an out-of-range retry hint reconnects without throwing or hanging",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: an event on the server-to-client GET stream reaches the notification listener",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: the client answers ping and roots/list requests delivered on the GET stream",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: notifications/cancelled aborts an in-flight server request handler",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: close aborts the GET stream without a dropped-stream error",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-stdio-stderr-tail.json",
+      "scenario": "stdio: the transport ring keeps the last 64 KiB of a larger stderr stream",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-stdio-stderr-tail"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-stdio-stderr-tail.json",
+      "scenario": "stdio: a failed connect appends pi's bounded 2000-character stderr tail",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-stdio-stderr-tail"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
     }
   ],
   "groups": [

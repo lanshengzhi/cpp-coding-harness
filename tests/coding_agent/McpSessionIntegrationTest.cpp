@@ -289,7 +289,7 @@ public:
     void open() { gate.open(); }
 
     [[nodiscard]] support::AsyncResult<std::shared_ptr<coding_agent::runtime::McpLiveConnection>> connect(
-            const coding_agent::mcp::McpConfigEntry& entry) override {
+            const coding_agent::mcp::McpConfigEntry& entry, std::stop_token) override {
         ++connect_calls;
         return support::detail::make_async_result([self = shared_from_this(), name = entry.name]
                 -> boost::asio::awaitable<

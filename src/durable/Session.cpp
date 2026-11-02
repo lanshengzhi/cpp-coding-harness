@@ -512,6 +512,47 @@ support::Expected<DocumentDefinition> define_document_family(
 // ── DocumentWatch ───────────────────────────────────────────────────────────
 
 struct DocumentWatch::Impl {
+    /// One committed frame waiting for the watch to start, with the commit
+    /// context it was committed under.
+    struct BufferedFrame {
+        DocumentFrame frame;
+        chord::Context context;
+    };
+
+    /// The context the watch was acquired under; every delivery and `stop()`
+    /// samples it, so a cancelled watch delivers nothing.
+    explicit Impl(chord::Context acquisition) : context(std::move(acquisition)) {}
+
+    /// Whether the acquisition context has been cancelled.
+    [[nodiscard]] bool cancelled() const { return context.aborted(); }
+
+    /// End delivery because the acquisition context was cancelled (frozen pi
+    /// `CommittedWatch.observeCancellation`): the terminal reason becomes
+    /// `Cancelled`, buffered frames are dropped and committed state is
+    /// untouched. Cancellation separates observer lifetime from producer
+    /// lifetime.
+    void end_cancelled() {
+        stopped = true;
+        end = WatchEndReason::Cancelled;
+        pending.clear();
+    }
+
+    /// End delivery by an explicit stop: the terminal reason is `Stopped` and
+    /// buffered frames are dropped.
+    void end_stopped() {
+        stopped = true;
+        end = WatchEndReason::Stopped;
+        pending.clear();
+    }
+
+    /// Sample the acquisition context once and end delivery when it was
+    /// cancelled. Idempotent: a watch that already ended keeps its first
+    /// terminal reason.
+    void sample_cancellation() {
+        if (!stopped && cancelled()) end_cancelled();
+    }
+
+    chord::Context context;
     chord::Json value{};
     bool started{false};
     bool stopped{false};
@@ -522,7 +563,7 @@ struct DocumentWatch::Impl {
     /// `observedOperations`).
     std::uint32_t observed_version{1};
     /// The frames committed since the acquisition, in commit order.
-    std::vector<DocumentFrame> pending{};
+    std::vector<BufferedFrame> pending{};
 };
 
 // ── Session ─────────────────────────────────────────────────────────────────
@@ -557,6 +598,10 @@ struct Session::Impl {
     struct PendingCommit {
         std::move_only_function<support::Expected<void>(Transaction&)> change{};
         support::AsyncCompletion<void, support::Error> completion{};
+        /// The caller's commit context (frozen `Session.commit`); observers of
+        /// the committed frames receive it masked by
+        /// `chord::without_abort_signal()`.
+        chord::Context context;
     };
 
     /// One admitted committed read whose turn on the line has not come yet
@@ -574,8 +619,13 @@ struct Session::Impl {
     /// prepared documents stay alive until the settlement, and the committed
     /// values become observable only after it.
     struct CommitState {
+        /// The caller's commit context, delivered to observers of this commit's
+        /// frames.
+        explicit CommitState(chord::Context caller) : context(std::move(caller)) {}
+
         Session::Impl* session{nullptr};
         Storage* storage{nullptr};
+        chord::Context context;
         std::vector<StorageWrite> writes{};
         std::vector<StagedDocument> documents{};
         /// The prepared revision of each staged document, aligned with
@@ -736,6 +786,19 @@ struct Session::Impl {
                 if (registered == session->watches.end()) {
                     continue;
                 }
+                // The commit context every observer of this commit receives:
+                // the commit's typed values without the producer's cancellation
+                // (frozen pi `withoutAbortSignal(context)` in `#publish`), so a
+                // frame never inherits the committer's abort signal.
+                const chord::Context observer_context = chord::without_abort_signal(context);
+                // A watch whose acquisition context was cancelled ends
+                // delivery with `Cancelled` and leaves the registry; a watch
+                // that was stopped normally leaves the registry too. Neither
+                // touches the commit that is being published.
+                std::erase_if(registered->second, [](const std::shared_ptr<DocumentWatch::Impl>& watch) {
+                    watch->sample_cancellation();
+                    return watch->stopped;
+                });
                 const bool retired = change.record.retired_at.has_value();
                 for (const std::shared_ptr<DocumentWatch::Impl>& watch : registered->second) {
                     if (watch->stopped) {
@@ -763,16 +826,23 @@ struct Session::Impl {
                     if (observed.empty()) {
                         continue;
                     }
-                    watch->pending.push_back(DocumentFrame{.value = change.value, .ops = std::move(observed)});
+                    watch->pending.push_back(DocumentWatch::Impl::BufferedFrame{
+                            .frame = DocumentFrame{.value = change.value, .ops = std::move(observed)},
+                            .context = observer_context});
                     if (!watch->started) {
                         // A watch that is not started yet buffers its frames.
                         continue;
                     }
-                    std::vector<DocumentFrame> pending = std::move(watch->pending);
+                    std::vector<DocumentWatch::Impl::BufferedFrame> pending = std::move(watch->pending);
                     watch->pending.clear();
-                    for (DocumentFrame& frame : pending) {
-                        watch->value = frame.value;
-                        watch->listener(frame);
+                    for (DocumentWatch::Impl::BufferedFrame& buffered : pending) {
+                        // A callback that stopped or cancelled this watch ends
+                        // the batch: the queued frames are discarded and the
+                        // running callback is neither aborted nor joined.
+                        watch->sample_cancellation();
+                        if (watch->stopped) break;
+                        watch->value = buffered.frame.value;
+                        watch->listener(std::move(buffered.frame), buffered.context);
                     }
                     if (retired) {
                         watch->stopped = true;
@@ -841,7 +911,7 @@ struct Session::Impl {
 
     /// Prepare and commit one callback while holding the mutation line.
     [[nodiscard]] support::AsyncResult<void> commit_now(
-            std::move_only_function<support::Expected<void>(Transaction&)> change);
+            std::move_only_function<support::Expected<void>(Transaction&)> change, const chord::Context& context);
 
     /// Close Storage after every admitted line job settles.
     void finish_close_if_ready() {
@@ -898,7 +968,7 @@ struct Session::Impl {
     /// then deliver its completion and advance the line from the settlement
     /// callback, wherever that runs.
     void start_line_job(PendingCommit pending) {
-        std::move(commit_now(std::move(pending.change)))
+        std::move(commit_now(std::move(pending.change), pending.context))
                 .start([this, completion = std::move(pending.completion)](
                                std::expected<void, support::Error> outcome) mutable noexcept {
                     std::lock_guard lock(mutation_line);
@@ -2006,6 +2076,7 @@ DocumentWatch::~DocumentWatch() = default;
 const chord::Json& DocumentWatch::value() const noexcept { return impl_->value; }
 
 support::ExpectedVoid DocumentWatch::start(DocumentFrameListener listener) {
+    impl_->sample_cancellation();
     if (impl_->stopped) {
         return std::unexpected(support::make_error(support::ErrorCode::Session, "Watch is stopped"));
     }
@@ -2014,22 +2085,24 @@ support::ExpectedVoid DocumentWatch::start(DocumentFrameListener listener) {
     }
     impl_->started = true;
     impl_->listener = std::move(listener);
-    // The buffered frames are delivered in commit order, one at a time.
-    std::vector<DocumentFrame> pending = std::move(impl_->pending);
+    // The buffered frames are delivered in commit order, one at a time, each
+    // with the commit context it was committed under.
+    std::vector<Impl::BufferedFrame> pending = std::move(impl_->pending);
     impl_->pending.clear();
-    for (DocumentFrame& frame : pending) {
-        impl_->value = frame.value;
-        impl_->listener(frame);
+    for (Impl::BufferedFrame& buffered : pending) {
+        // A listener that stops or cancels this watch ends the batch: the rest
+        // of the buffered frames is discarded.
+        impl_->sample_cancellation();
+        if (impl_->stopped) break;
+        impl_->value = buffered.frame.value;
+        impl_->listener(std::move(buffered.frame), buffered.context);
     }
     return {};
 }
 
 WatchEndReason DocumentWatch::stop() {
-    if (!impl_->stopped) {
-        impl_->stopped = true;
-        impl_->end = WatchEndReason::Stopped;
-        impl_->pending.clear();
-    }
+    impl_->sample_cancellation();
+    if (!impl_->stopped) impl_->end_stopped();
     return impl_->end;
 }
 
@@ -2067,7 +2140,8 @@ SessionEnd Session::closed() const noexcept {
     return SessionEnd{.reason = SessionEndReason::Open, .failed = false, .error_message = std::nullopt};
 }
 
-support::AsyncResult<void> Session::commit(std::move_only_function<support::Expected<void>(Transaction&)> change) {
+support::AsyncResult<void> Session::commit(
+        std::move_only_function<support::Expected<void>(Transaction&)> change, const chord::Context& context) {
     std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(session_failed_error())}};
@@ -2076,7 +2150,7 @@ support::AsyncResult<void> Session::commit(std::move_only_function<support::Expe
         return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(session_closed_error())}};
     }
     return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
-            [session = this, change = std::move(change)](
+            [session = this, change = std::move(change), context](
                     support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
                 std::lock_guard lock(session->impl_->mutation_line);
                 if (session->impl_->failed) {
@@ -2087,13 +2161,13 @@ support::AsyncResult<void> Session::commit(std::move_only_function<support::Expe
                     completion(std::unexpected(session_closed_error()));
                     return;
                 }
-                session->impl_->enqueue_line(
-                        Session::Impl::PendingCommit{.change = std::move(change), .completion = std::move(completion)});
+                session->impl_->enqueue_line(Session::Impl::PendingCommit{
+                        .change = std::move(change), .completion = std::move(completion), .context = context});
             }}};
 }
 
 support::AsyncResult<void> Session::Impl::commit_now(
-        std::move_only_function<support::Expected<void>(Transaction&)> change) {
+        std::move_only_function<support::Expected<void>(Transaction&)> change, const chord::Context& context) {
     auto transaction_impl = std::make_unique<Transaction::Impl>();
     transaction_impl->session = this;
     transaction_impl->storage = storage;
@@ -2220,7 +2294,7 @@ support::AsyncResult<void> Session::Impl::commit_now(
         }
     }
 
-    auto state = std::make_shared<Session::Impl::CommitState>();
+    auto state = std::make_shared<Session::Impl::CommitState>(context);
     state->session = this;
     state->storage = storage;
     state->documents = std::move(transaction.impl_->documents);
@@ -2314,7 +2388,15 @@ support::AsyncResult<void> Session::Impl::commit_now(
             }}};
 }
 
-support::AsyncResult<void> Session::close() {
+support::AsyncResult<void> Session::close(const chord::Context& context) {
+    // The mandatory cleanup is not a waiter (frozen pi
+    // `withoutAbortSignal(context)`): the caller's cancellation rejects the
+    // wait below but never skips the storage close. The work starts before the
+    // wait is installed, so an already-cancelled caller still closes storage.
+    return chord::await_with_context(close_cleanup(), context);
+}
+
+support::AsyncResult<void> Session::close_cleanup() {
     std::lock_guard lock(impl_->mutation_line);
     impl_->closed = true;
     impl_->notify_close();
@@ -2477,7 +2559,7 @@ support::AsyncResult<std::optional<StoredDocument>> Session::document(DocumentId
 }
 
 support::AsyncResult<std::optional<DocumentWatch>> Session::watch_doc(
-        const DocumentDefinition& definition, DocumentAddress address) {
+        const DocumentDefinition& definition, DocumentAddress address, const chord::Context& context) {
     std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(session_failed_error())};
@@ -2485,15 +2567,28 @@ support::AsyncResult<std::optional<DocumentWatch>> Session::watch_doc(
     if (impl_->closed) {
         return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(session_closed_error())};
     }
+    const auto abort_error = [&context] {
+        return chord::context_abort_error(context.abort_reason().value_or(std::string{}));
+    };
+    // A caller cancelled before the acquisition starts stages no observer.
+    if (context.aborted()) {
+        return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(abort_error())};
+    }
     auto loaded = impl_->load_document(definition, address);
     if (!loaded) {
         return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(std::move(loaded.error()))};
+    }
+    // The caller may cancel while the acquisition's committed read is in
+    // flight: the cancelled acquisition rejects and registers no observer and
+    // no write (frozen pi `SessionImpl.watchDoc` acquisition cancellation).
+    if (context.aborted()) {
+        return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(abort_error())};
     }
     if (!(*loaded).has_value()) {
         return support::AsyncResult<std::optional<DocumentWatch>>{std::optional<DocumentWatch>{}};
     }
 
-    auto watch_impl = std::make_shared<DocumentWatch::Impl>();
+    auto watch_impl = std::make_shared<DocumentWatch::Impl>(context);
     watch_impl->value = (*loaded)->value;
     watch_impl->observed_version = (*loaded)->value_version;
 

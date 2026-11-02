@@ -75,6 +75,18 @@ public:
     using NotificationSink = std::move_only_function<void(std::string_view, const support::JsonValue&)>;
     virtual void set_notification_listener(NotificationSink listener) = 0;
 
+    /// One server-to-client request handler (pi `McpClient.setRequestHandler`):
+    /// the handler answers a JSON-RPC request the server sends, on either
+    /// transport. `ping` is installed by default and returns `{}`;
+    /// `roots/list` is installed only when the connection carries roots
+    /// (`HttpServerConfig::roots` / `StdioServerConfig::roots`) and returns
+    /// them. A method with no handler is answered with
+    /// `-32601 "Method not found: <method>"`. The handler's error becomes the
+    /// response's `-32603` JSON-RPC error.
+    using ServerRequestHandler = std::function<support::AsyncResult<support::JsonValue>(
+            const support::JsonValue& params, std::stop_token stop_token)>;
+    virtual void set_request_handler(std::string method, ServerRequestHandler handler) = 0;
+
     /// The capabilities advertised by the validated initialize response.
     [[nodiscard]] virtual const support::JsonValue& server_capabilities() const noexcept = 0;
 

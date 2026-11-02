@@ -67,6 +67,7 @@ include_guard(GLOBAL)
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/PiImportTest.cpp
         tests/coding_agent/ExtensionToolSourceTest.cpp
+        tests/coding_agent/NativeExtensionTest.cpp
         tests/coding_agent/McpHttpSessionTest.cpp
         tests/coding_agent/McpOAuthDiscoveryTest.cpp
         tests/coding_agent/McpOAuthFlowTest.cpp
@@ -117,6 +118,7 @@ include_guard(GLOBAL)
         tests/coding_agent/ProjectionStreamTest.cpp
         tests/coding_agent/SetModelTest.cpp
         tests/coding_agent/SettingsManagerTest.cpp
+        tests/coding_agent/SettingsSchemaTest.cpp
         tests/coding_agent/SkillFormattingTest.cpp
         tests/coding_agent/SkillFrontmatterParserTest.cpp
         tests/coding_agent/SkillIntegrationTest.cpp

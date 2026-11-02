@@ -228,6 +228,10 @@ struct AssemblyPlan {
     /// contribute Agent Tools, loaded and registered alongside the built-ins
     /// before the registry moves into the Agent.
     std::vector<std::unique_ptr<extensions::ExtensionToolSource>> extension_tool_sources;
+    /// Native extension registrations (pi extension factory, native subset):
+    /// their tools load with the Extension Tool Sources and their lifecycle
+    /// hooks bind to the assembled Session.
+    std::vector<std::shared_ptr<extensions::NativeExtension>> native_extensions;
     /// Configured MCP stdio servers (spec #865, ticket #869). Assembly connects
     /// each one and appends the resulting Extension Tool Source before the
     /// sources are loaded.
@@ -308,16 +312,15 @@ struct SettingsSnapshot {
 }
 
 /// Failed creation keeps the primary error and carries any settings load
-/// warnings through the error context field.
+/// warnings through the error context field, in pi's `collectSettingsDiagnostics`
+/// text.
 [[nodiscard]] support::Error with_settings_fallback_context(
     support::Error error,
     const SettingsSnapshot& snapshot) {
     for (const auto& settings_error : snapshot.errors) {
-        std::string warning = std::string{"could not load "} +
-            (settings_error.scope == SettingsScope::Global
-                 ? "global settings"
-                 : "project settings") +
-            ": " + settings_error.message;
+        const auto& path = settings_error.scope == SettingsScope::Global ? snapshot.manager.global_path()
+                                                                         : snapshot.manager.project_path();
+        std::string warning = coding_agent::settings_diagnostic_text(path, settings_error.message);
         if (error.context && !error.context->empty()) {
             error.context = *error.context + "; " + warning;
         } else {
@@ -853,6 +856,7 @@ struct SessionTargetNormalizationOptions {
     plan.requested_model = std::move(request.request_model);
     plan.custom_tools = std::move(request.custom_tools);
     plan.extension_tool_sources = std::move(request.extension_tool_sources);
+    plan.native_extensions = std::move(request.native_extensions);
     plan.mcp_servers = std::move(request.mcp_servers);
     auto tool_selection =
             make_tool_selection(std::move(request.session_facts.tools), std::move(request.session_facts.exclude_tools));
@@ -1252,26 +1256,19 @@ struct PreparedAssemblyTarget final {
         snapshot.errors = snapshot.manager.errors();
     }
 
-    // 2. Settings load errors stay observable as warning diagnostics. Global
-    // errors are known at bootstrap; project-scope errors surface after the
-    // project trust decision below reloads the project scope.
+    // 2. Settings load errors stay observable as warning diagnostics in pi's
+    // `collectSettingsDiagnostics` text (`Invalid settings file <path>:
+    // <message>`). Global errors are known at bootstrap; project-scope errors
+    // surface after the project trust decision below reloads the project scope.
     const auto add_settings_diagnostics = [&]() {
         for (const auto& settings_error : snapshot.errors) {
-            diagnostics.push_back(make_diag(
-                SessionDiagnostic::Severity::Warning,
-                "settings:" +
-                    (settings_error.scope == SettingsScope::Global
-                         ? std::string{"global"}
-                         : std::string{"project"}),
-                "could not load " +
-                    (settings_error.scope == SettingsScope::Global
-                         ? std::string{"global settings"}
-                         : std::string{"project settings"}) +
-                    ": " + settings_error.message,
-                (settings_error.scope == SettingsScope::Global
-                     ? snapshot.manager.global_path()
-                     : snapshot.manager.project_path())
-                    .string()));
+            const auto& path = settings_error.scope == SettingsScope::Global ? snapshot.manager.global_path()
+                                                                             : snapshot.manager.project_path();
+            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Warning,
+                    "settings:" + (settings_error.scope == SettingsScope::Global ? std::string{"global"}
+                                                                                 : std::string{"project"}),
+                    coding_agent::settings_diagnostic_text(path, settings_error.message),
+                    path.string()));
         }
     };
     add_settings_diagnostics();
@@ -1800,12 +1797,17 @@ struct PreparedAssemblyTarget final {
     // Extension Tool Source (spec #865): load every configured source and
     // register its tools before the registry moves into the Agent, so an
     // extension tool joins the ordinary Agent surface (visible to the model
-    // and callable through the same executor path as the built-ins).
-    if (!plan.extension_tool_sources.empty()) {
+    // and callable through the same executor path as the built-ins). Native
+    // extensions (#1112) are Extension Tool Sources themselves: appending them
+    // here reuses the one loader and collision path rather than a second loop.
+    if (!plan.extension_tool_sources.empty() || !plan.native_extensions.empty()) {
         std::vector<extensions::ExtensionToolSource*> sources;
-        sources.reserve(plan.extension_tool_sources.size());
+        sources.reserve(plan.extension_tool_sources.size() + plan.native_extensions.size());
         for (auto& source : plan.extension_tool_sources) {
             sources.push_back(source.get());
+        }
+        for (auto& extension : plan.native_extensions) {
+            sources.push_back(extension.get());
         }
         extensions::ExtensionToolRegistry extension_tools;
         if (auto loaded = extensions::load_extension_tools(extension_tools, sources); !loaded) {
@@ -2086,6 +2088,7 @@ struct PreparedAssemblyTarget final {
     services.default_tool_modifiers = std::move(plan.tool_selection.modifiers);
     services.restore_tools_from_transcript = !plan.tool_selection.allowed.has_value();
     services.mcp_manager = std::move(mcp_manager);
+    services.native_extensions = std::move(plan.native_extensions);
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;

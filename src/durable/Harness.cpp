@@ -893,6 +893,10 @@ struct Harness::Impl {
     /// state on the Session's commit-publication line. A read-only
     /// projection: no thread, timer, or second scheduler.
     ViewMountRegistry observation_mounts;
+    /// The report bridge live agent event streams use for a listener failure.
+    /// Cleared in `shutdown()`, so a stream that outlives the Harness cannot
+    /// call into freed state.
+    std::shared_ptr<ObservationReportSink> observation_report;
 
     struct ExecutionThread {
         std::thread thread;
@@ -1030,6 +1034,8 @@ struct Harness::Impl {
                         .count();
             };
         }
+        observation_report = std::make_shared<ObservationReportSink>();
+        observation_report->report = [this](const support::Error& error) { report(error); };
     }
 
     ~Impl() { shutdown(); }
@@ -1228,6 +1234,17 @@ struct Harness::Impl {
         };
     }
 
+    /// Finish the harness cleanup of a terminal outcome the scheduler writes
+    /// itself (frozen pi `settleSchedulerOutcome`): a faulted or orphaned
+    /// tool task's live slot becomes done without a result entry, which is how
+    /// a tool event stream ends a call that never produced one.
+    support::ExpectedVoid settle_scheduler_cleanup(Transaction& tx, const TaskRecord& task) {
+        if (task.kind != "pi.tool") return {};
+        auto finished = finish_tool_slot(tx, task.id, task.conversation_id, std::nullopt);
+        if (!finished) return std::unexpected(finished.error());
+        return {};
+    }
+
     void settle_orphaned(TaskId tid, std::string reason) {
         (void)await_async_void(session->commit(
                 [this, tid, reason = std::move(reason)](Transaction& tx) mutable -> support::ExpectedVoid {
@@ -1242,6 +1259,8 @@ struct Harness::Impl {
                         };
                         t.ended_at = current_time(clock);
                         t.memos.clear();
+                        auto cleaned = settle_scheduler_cleanup(tx, t);
+                        if (!cleaned) return cleaned;
                         return tx.set_task(t);
                     }
                     return {};
@@ -1262,6 +1281,8 @@ struct Harness::Impl {
                         };
                         t.ended_at = current_time(clock);
                         t.memos.clear();
+                        auto cleaned = settle_scheduler_cleanup(tx, t);
+                        if (!cleaned) return cleaned;
                         return tx.set_task(t);
                     }
                     return {};
@@ -1710,6 +1731,10 @@ struct Harness::Impl {
     }
 
     void shutdown() {
+        if (observation_report != nullptr) {
+            std::lock_guard lock(observation_report->mutex);
+            observation_report->report = {};
+        }
         registry.unsubscribe(registry_sub_id);
         registry_sub_id = 0;
         std::vector<std::stop_source> sources;
@@ -1834,14 +1859,18 @@ struct Harness::Impl {
                     // a second invocation start (issue #1165). Cleanup dirties
                     // the scheduler, so the resume happens on a later pass.
                     std::lock_guard lock(mutex);
-                    if (closed || active_invocations.contains(task.id.value)) continue;
+                    if (closed || active_invocations.contains(task.id.value)) {
+                        continue;
+                    }
                 }
                 bool all_terminal = true;
                 for (const TaskId member_id : task.state.on) {
                     const TaskRecord* member = world.task(member_id);
                     if (member == nullptr || task_live(*member)) all_terminal = false;
                 }
-                if (!all_terminal) continue;
+                if (!all_terminal) {
+                    continue;
+                }
                 (void)await_async_void(session->commit([id = task.id](Transaction& tx) -> support::ExpectedVoid {
                     auto cur = tx.task(id);
                     if (!cur || !cur->has_value()) return {};
@@ -2413,6 +2442,78 @@ support::AsyncResult<ViewWatch> Harness::watch_conversation(
                     if (!box->has_value()) {
                         completion(std::unexpected(support::make_error(
                                 support::ErrorCode::Session, "conversation watch produced no watch")));
+                        return;
+                    }
+                    completion(std::move(box->value()));
+                });
+            }}};
+}
+
+support::AsyncResult<AgentEventStream> Harness::watch_events(ConversationId conversation_id, std::stop_token stop) {
+    return support::AsyncResult<AgentEventStream>{support::AsyncProducer<AgentEventStream, support::Error>{
+            [session = impl_->session.get(),
+                    mounts = &impl_->observation_mounts,
+                    report = impl_->observation_report,
+                    conversation_id,
+                    stop = std::move(stop)](
+                    support::AsyncCompletion<AgentEventStream, support::Error> completion) mutable noexcept {
+                if (stop.stop_requested()) {
+                    // Frozen pi `watchEvents`: a cancellation that arrives
+                    // before attachment rejects the acquisition instead of
+                    // producing a live stream.
+                    completion(std::unexpected(
+                            support::make_error(support::ErrorCode::Cancelled, "Agent event stream was cancelled")));
+                    return;
+                }
+                auto box = std::make_shared<std::optional<AgentEventStream>>();
+                // The acquisition snapshot and the registration admit no
+                // interleaved publication: both happen in this line job.
+                support::AsyncResult<chord::Json> read =
+                        session->read_committed([mounts, report, conversation_id, box, stop](
+                                                        Storage& storage) mutable -> support::Expected<chord::Json> {
+                            if (stop.stop_requested()) {
+                                return std::unexpected(support::make_error(
+                                        support::ErrorCode::Cancelled, "Agent event stream was cancelled"));
+                            }
+                            auto hydrated = hydrate_conversation_view(storage, conversation_id);
+                            if (!hydrated) {
+                                return std::unexpected(std::move(hydrated.error()));
+                            }
+                            auto tasks = storage.scan_tasks(SIZE_MAX);
+                            if (!tasks) {
+                                return std::unexpected(std::move(tasks.error()));
+                            }
+                            // Generations whose held outcome already ended
+                            // their turn, read on the line with the snapshot
+                            // (frozen pi `watchEvents`).
+                            std::vector<TaskId> held;
+                            for (const TaskRecord& task : *tasks) {
+                                if (task.conversation_id.value == conversation_id.value &&
+                                        task.kind == "pi.generation" && task.state.status == "completing") {
+                                    held.push_back(task.id);
+                                }
+                            }
+                            std::ranges::sort(held, {}, [](const TaskId id) { return id.value; });
+                            std::shared_ptr<ViewMount> mount = mounts->conversation_mount(conversation_id, *hydrated);
+                            chord::Json snapshot = agent_event_snapshot(hydrated->value);
+                            chord::Json value = std::move(hydrated->value);
+                            box->emplace(AgentEventStream::attach(std::move(mount),
+                                    conversation_id,
+                                    std::move(snapshot),
+                                    std::move(held),
+                                    report,
+                                    stop));
+                            return value;
+                        });
+                std::move(read).start([box, completion = std::move(completion)](
+                                              support::Expected<chord::Json> result) mutable noexcept {
+                    if (!result) {
+                        completion(std::unexpected(std::move(result.error())));
+                        return;
+                    }
+                    if (!box->has_value()) {
+                        completion(std::unexpected(support::make_error(
+                                support::ErrorCode::Session, "agent event stream produced no stream")));
                         return;
                     }
                     completion(std::move(box->value()));

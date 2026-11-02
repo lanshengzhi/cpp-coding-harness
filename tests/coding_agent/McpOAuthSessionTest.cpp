@@ -55,6 +55,7 @@
 #include <boost/system/error_code.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <charconv>
 #include <chrono>
@@ -74,6 +75,7 @@
 
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/file.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -356,6 +358,12 @@ public:
         return tests::ready_result(std::map<std::string, std::string>{{"Authorization", "Bearer " + token_}});
     }
 
+    [[nodiscard]] support::AsyncResult<bool> recover_unauthorized(std::stop_token, std::string) override {
+        // A static header source has no refreshable credential: the 401 stays
+        // the explicit re-login error (the separation case for recovery).
+        return support::AsyncResult<bool>{false};
+    }
+
     [[nodiscard]] int calls() const noexcept { return calls_; }
     [[nodiscard]] int close_calls() const noexcept { return close_calls_; }
 
@@ -377,7 +385,9 @@ private:
 
 class HttpFixtureServer final {
 public:
-    explicit HttpFixtureServer(std::filesystem::path trace_path = {}, std::string expected_delete_authorization = {}) {
+    explicit HttpFixtureServer(std::filesystem::path trace_path = {},
+            std::string expected_delete_authorization = {},
+            std::string revoked_authorization = {}) {
         int fds[2]{-1, -1};
         REQUIRE(::pipe(fds) == 0);
         const pid_t child = ::fork();
@@ -399,6 +409,11 @@ public:
                 (void)::setenv("PIKE_MCP_EXPECT_DELETE_AUTHORIZATION", expected_delete_authorization.c_str(), 1);
             } else {
                 (void)::unsetenv("PIKE_MCP_EXPECT_DELETE_AUTHORIZATION");
+            }
+            if (!revoked_authorization.empty()) {
+                (void)::setenv("PIKE_MCP_REVOKED_AUTHORIZATION", revoked_authorization.c_str(), 1);
+            } else {
+                (void)::unsetenv("PIKE_MCP_REVOKED_AUTHORIZATION");
             }
             const std::string script = fixture_path("http_server.py");
             const std::string cert = tls_fixture_path("test-server.pem");
@@ -587,7 +602,8 @@ TEST_CASE("a valid stored MCP OAuth credential resolves the bearer token without
     seed_state(*store,
             oauth_state("dummy-access-token",
                     "dummy-refresh-token",
-                    ai::current_timestamp_ms() + std::chrono::hours{24}.count() * 1000));
+                    ai::current_timestamp_ms() +
+                            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{24}).count()));
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
@@ -602,9 +618,11 @@ TEST_CASE("a valid stored MCP OAuth credential resolves the bearer token without
 }
 
 TEST_CASE("a cancelled MCP OAuth refresh stops before the request reaches the MCP server",
-        "[coding_agent][mcp][issue1102][spec]") {
+        "[coding_agent][mcp][issue1102][issue1189][spec]") {
     const auto fixture = read_replay_fixture();
     const auto config = server_config_from_fixture(fixture);
+    const std::string refresh_body =
+            fixture_string(fixture_object(fixture_object(fixture, "refresh_exchange"), "response"), "body");
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
     HttpFixtureServer server{trace};
@@ -618,41 +636,383 @@ TEST_CASE("a cancelled MCP OAuth refresh stops before the request reaches the MC
                             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{24}).count()));
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    http->responses[config.token_url] = {{200, refresh_body}};
     auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
     auto resolver =
             std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
     auto client = connect_http_client(runtime, http_config(server), resolver);
     seed_state(*store, oauth_state("old-access", "stalled-refresh", ai::current_timestamp_ms() + 1000));
-    http->hold_post_until_stopped = true;
+    // The frozen capture's `stall.add("/token")`: the refresh is in flight
+    // when the request is cancelled, and `releaseAll()` lets it answer.
+    auto hold_refresh = std::make_shared<tests::ReleaseGate>();
+    http->hold_post = hold_refresh;
     auto oauth_request_seen = std::make_shared<bool>(false);
     http->on_post = [oauth_request_seen](const auto&) { *oauth_request_seen = true; };
 
     std::stop_source cancel;
     auto result = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
         const auto executor = co_await boost::asio::this_coro::executor;
-        auto settled = std::make_shared<std::optional<support::Expected<support::JsonValue>>>();
+        auto request_settled = std::make_shared<std::optional<support::Expected<support::JsonValue>>>();
         boost::asio::co_spawn(
                 executor,
-                [client, settled, token = cancel.get_token()]() -> boost::asio::awaitable<void> {
-                    settled->emplace(co_await support::detail::await_async_result(client->request("tools/call",
+                [client, request_settled, token = cancel.get_token()]() -> boost::asio::awaitable<void> {
+                    request_settled->emplace(co_await support::detail::await_async_result(client->request("tools/call",
                             tests::tools_call_params("echo", support::JsonValue::object_t{{"text", "never"}}),
                             {.stop_token = token})));
                 },
                 boost::asio::detached);
         co_await tests::wait_for(executor, [&] { return *oauth_request_seen; }, std::chrono::seconds{2});
         cancel.request_stop();
-        co_await tests::wait_for(executor, [&] { return settled->has_value(); }, std::chrono::seconds{2});
-        if (!settled->has_value()) {
+        co_await tests::wait_for(executor, [&] { return request_settled->has_value(); }, std::chrono::seconds{2});
+        if (!request_settled->has_value()) {
             co_return std::unexpected(support::make_error(support::ErrorCode::Timeout, "refresh did not cancel"));
         }
-        co_return std::move(**settled);
+        // The caller settled while the refresh kept running; now let the
+        // token endpoint answer and wait for the shared refresh to persist.
+        hold_refresh->release();
+        auto refresh_settled = co_await support::detail::await_async_result(resolver->settled());
+        if (!refresh_settled) {
+            co_return std::unexpected(std::move(refresh_settled.error()));
+        }
+        co_return std::move(request_settled->value());
     }());
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().code == support::ErrorCode::Cancelled);
     CHECK_FALSE(tests::trace_contains(trace, "recv tools/call"));
     CHECK_FALSE(tests::trace_contains(trace, "notifications/cancelled"));
+    REQUIRE(http->requests.size() == 1);
+    // The refresh is the shared background operation, not the cancelled
+    // request's: its POST is not aborted, and it answers once released.
+    CHECK_FALSE(http->requests.front().stop_token.stop_requested());
+    CHECK(http->post_responses == 1);
+    const auto stored = read_state(*store);
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "dummy-rotated-access-token");
+}
+
+TEST_CASE("a timed-out MCP OAuth request settles at the deadline while the shared refresh completes",
+        "[coding_agent][mcp][issue1189][spec]") {
+    const auto fixture = read_replay_fixture();
+    const auto config = server_config_from_fixture(fixture);
+    const std::string refresh_body =
+            fixture_string(fixture_object(fixture_object(fixture, "refresh_exchange"), "response"), "body");
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store,
+            oauth_state("old-access",
+                    "stalled-refresh",
+                    ai::current_timestamp_ms() +
+                            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{24}).count()));
+
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    http->responses[config.token_url] = {{200, refresh_body}};
+    auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
+    auto resolver =
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+    auto client_config = http_config(server);
+    client_config.request_timeout = std::chrono::milliseconds{250};
+    auto client = connect_http_client(runtime, std::move(client_config), resolver);
+    seed_state(*store, oauth_state("old-access", "stalled-refresh", ai::current_timestamp_ms() + 1000));
+    auto hold_refresh = std::make_shared<tests::ReleaseGate>();
+    http->hold_post = hold_refresh;
+    auto refresh_seen = std::make_shared<bool>(false);
+    http->on_post = [refresh_seen](const auto&) { *refresh_seen = true; };
+
+    auto result = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        auto request_settled = std::make_shared<std::optional<support::Expected<support::JsonValue>>>();
+        boost::asio::co_spawn(
+                executor,
+                [client, request_settled]() -> boost::asio::awaitable<void> {
+                    request_settled->emplace(co_await support::detail::await_async_result(client->request(
+                            "tools/call", tests::tools_call_params("echo", support::JsonValue::object_t{}))));
+                },
+                boost::asio::detached);
+        co_await tests::wait_for(executor, [&] { return *refresh_seen; }, std::chrono::seconds{2});
+        co_await tests::wait_for(executor, [&] { return request_settled->has_value(); }, std::chrono::seconds{2});
+        if (!request_settled->has_value()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Timeout, "request did not time out"));
+        }
+        hold_refresh->release();
+        auto refresh_settled = co_await support::detail::await_async_result(resolver->settled());
+        if (!refresh_settled) {
+            co_return std::unexpected(std::move(refresh_settled.error()));
+        }
+        co_return std::move(request_settled->value());
+    }());
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == support::ErrorCode::Timeout);
+    CHECK_FALSE(tests::trace_contains(trace, "recv tools/call"));
+    CHECK_FALSE(tests::trace_contains(trace, "notifications/cancelled"));
+    REQUIRE(http->requests.size() == 1);
+    CHECK_FALSE(http->requests.front().stop_token.stop_requested());
+    CHECK(http->post_responses == 1);
+    const auto stored = read_state(*store);
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "dummy-rotated-access-token");
+}
+
+TEST_CASE("concurrent MCP OAuth requests share one refresh", "[coding_agent][mcp][issue1189][spec]") {
+    const auto fixture = read_replay_fixture();
+    const auto config = server_config_from_fixture(fixture);
+    const std::string refresh_body =
+            fixture_string(fixture_object(fixture_object(fixture, "refresh_exchange"), "response"), "body");
+    tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store, oauth_state("old-access", "stalled-refresh", ai::current_timestamp_ms() + 1000));
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    http->responses[config.token_url] = {{200, refresh_body}};
+    auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
+    auto resolver =
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+    auto hold_refresh = std::make_shared<tests::ReleaseGate>();
+    http->hold_post = hold_refresh;
+    auto refresh_seen = std::make_shared<bool>(false);
+    http->on_post = [refresh_seen](const auto&) { *refresh_seen = true; };
+
+    auto outcomes = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<bool>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        auto first = std::make_shared<std::optional<support::Expected<std::map<std::string, std::string>>>>();
+        auto second = std::make_shared<std::optional<support::Expected<std::map<std::string, std::string>>>>();
+        boost::asio::co_spawn(
+                executor,
+                [resolver, first]() -> boost::asio::awaitable<void> {
+                    first->emplace(co_await support::detail::await_async_result(resolver->current_headers()));
+                },
+                boost::asio::detached);
+        boost::asio::co_spawn(
+                executor,
+                [resolver, second]() -> boost::asio::awaitable<void> {
+                    second->emplace(co_await support::detail::await_async_result(resolver->current_headers()));
+                },
+                boost::asio::detached);
+        co_await tests::wait_for(executor, [&] { return *refresh_seen; }, std::chrono::seconds{2});
+        // Both requests join the one shared refresh before it answers.
+        co_await tests::wait_for(executor, [&] { return false; }, std::chrono::milliseconds{50});
+        hold_refresh->release();
+        co_await tests::wait_for(
+                executor, [&] { return first->has_value() && second->has_value(); }, std::chrono::seconds{2});
+        if (!first->has_value() || !second->has_value()) {
+            co_return support::Expected<bool>{false};
+        }
+        co_return support::Expected<bool>{first->value().has_value() && second->value().has_value() &&
+                                          first->value()->at("Authorization") == "Bearer dummy-rotated-access-token" &&
+                                          second->value()->at("Authorization") == "Bearer dummy-rotated-access-token"};
+    }());
+    REQUIRE(outcomes.has_value());
+    CHECK(*outcomes);
+    REQUIRE(http->requests.size() == 1);
+    CHECK(http->post_responses == 1);
+}
+
+TEST_CASE("MCP OAuth refresh uses pi's 30-second skew", "[coding_agent][mcp][issue1189][spec]") {
+    const auto fixture = read_replay_fixture();
+    const auto config = server_config_from_fixture(fixture);
+    const std::string refresh_body =
+            fixture_string(fixture_object(fixture_object(fixture, "refresh_exchange"), "response"), "body");
+    tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    http->responses[config.token_url] = {{200, refresh_body}};
+    auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
+    auto resolver =
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+
+    // Two minutes of remaining lifetime is outside pi's 30-second skew (and
+    // inside the five-minute margin this resolver used before #1189).
+    seed_state(*store, oauth_state("long-lived", "refresh-token", ai::current_timestamp_ms() + 120'000));
+    auto untouched = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
+    REQUIRE(untouched.has_value());
+    CHECK(untouched->at("Authorization") == "Bearer long-lived");
+    CHECK(http->requests.empty());
+
+    // Twenty seconds is inside the skew: the same resolver refreshes.
+    seed_state(*store, oauth_state("near-expiry", "refresh-token", ai::current_timestamp_ms() + 20'000));
+    auto refreshed = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
+    REQUIRE(refreshed.has_value());
+    CHECK(refreshed->at("Authorization") == "Bearer dummy-rotated-access-token");
     CHECK(http->requests.size() == 1);
-    CHECK(http->requests.front().stop_token.stop_requested());
+}
+
+TEST_CASE("a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh",
+        "[coding_agent][mcp][issue1189][spec]") {
+    const auto fixture = read_replay_fixture();
+    const auto config = server_config_from_fixture(fixture);
+    const std::string refresh_body =
+            fixture_string(fixture_object(fixture_object(fixture, "refresh_exchange"), "response"), "body");
+    tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store, oauth_state("old-access", "stalled-refresh", ai::current_timestamp_ms() + 1000));
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    http->responses[config.token_url] = {{200, refresh_body}};
+    auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
+    auto resolver =
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+
+    // What the other process's refresh saves before it releases the lock: a
+    // rotated access token whose lifetime is well outside the refresh skew.
+    const std::string rotated_state =
+            R"({"mcp__echo|https://echo.example.com/mcp":{"serverUrl":"https://echo.example.com/mcp",)"
+            R"("clientInformation":{"client_id":"pike-mcp-test-client"},"tokens":{"access_token":"rotated-by-other-process",)"
+            R"("token_type":"Bearer","refresh_token":"stalled-refresh"},"tokensExpireAt":)" +
+            std::to_string(ai::current_timestamp_ms() + 3'600'000) + "}}\n";
+    const auto store_path = workspace.path() / "mcp-auth.json";
+    const auto lock_path = store->refresh_lock_path("echo", "https://echo.example.com/mcp");
+    int ready[2]{-1, -1};
+    int release[2]{-1, -1};
+    REQUIRE(::pipe(ready) == 0);
+    REQUIRE(::pipe(release) == 0);
+    const pid_t child = ::fork();
+    REQUIRE(child >= 0);
+    if (child == 0) {
+        (void)::close(ready[0]);
+        (void)::close(release[1]);
+        const int descriptor = ::open(lock_path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+        if (descriptor < 0 || ::flock(descriptor, LOCK_EX | LOCK_NB) != 0) {
+            ::_exit(2);
+        }
+        const char locked = '1';
+        (void)::write(ready[1], &locked, 1);
+        char unlock = '\0';
+        (void)::read(release[0], &unlock, 1);
+        // Save the rotated grant as the other process's refresh would, then
+        // release the lock for the waiting process to re-read.
+        const int store_descriptor = ::open(store_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        if (store_descriptor < 0 || ::write(store_descriptor, rotated_state.data(), rotated_state.size()) !=
+                                            static_cast<ssize_t>(rotated_state.size())) {
+            ::_exit(3);
+        }
+        (void)::close(store_descriptor);
+        (void)::flock(descriptor, LOCK_UN);
+        (void)::close(descriptor);
+        ::_exit(0);
+    }
+    (void)::close(ready[1]);
+    (void)::close(release[0]);
+    char locked = '\0';
+    REQUIRE(::read(ready[0], &locked, 1) == 1);
+
+    auto outcome = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<bool>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        auto headers = std::make_shared<std::optional<support::Expected<std::map<std::string, std::string>>>>();
+        boost::asio::co_spawn(
+                executor,
+                [resolver, headers]() -> boost::asio::awaitable<void> {
+                    headers->emplace(co_await support::detail::await_async_result(resolver->current_headers()));
+                },
+                boost::asio::detached);
+        co_await tests::wait_for(executor, [&] { return false; }, std::chrono::milliseconds{200});
+        // While the other process holds the lock, this process started no
+        // refresh.
+        const bool waited = http->requests.empty();
+        const char unlock = '1';
+        (void)::write(release[1], &unlock, 1);
+        co_await tests::wait_for(executor, [&] { return headers->has_value(); }, std::chrono::seconds{2});
+        co_return support::Expected<bool>{waited && headers->has_value() && headers->value().has_value() &&
+                                          headers->value()->at("Authorization") == "Bearer rotated-by-other-process"};
+    }());
+    int status = 0;
+    (void)::waitpid(child, &status, 0);
+    (void)::close(ready[0]);
+    (void)::close(release[1]);
+    REQUIRE(outcome.has_value());
+    CHECK(*outcome);
+    CHECK(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+    // The waiting process reused the rotated token instead of refreshing with
+    // the grant the other process already consumed.
+    CHECK(http->requests.empty());
+    CHECK(http->post_responses == 0);
+    const auto stored = read_state(*store);
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "rotated-by-other-process");
+}
+
+TEST_CASE("a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes",
+        "[coding_agent][mcp][issue1189][spec]") {
+    const bool timeout_mode = GENERATE(false, true);
+    const auto fixture = read_replay_fixture();
+    const auto config = server_config_from_fixture(fixture);
+    const std::string refresh_body =
+            fixture_string(fixture_object(fixture_object(fixture, "refresh_exchange"), "response"), "body");
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    // The fixture revokes exactly the seeded token for tools/call; the
+    // initialized connection used it successfully before it was revoked.
+    HttpFixtureServer server{trace, "Bearer old-access", "Bearer old-access"};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store, oauth_state("old-access", "stalled-refresh", ai::current_timestamp_ms() + 120'000));
+
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    http->responses[config.token_url] = {{200, refresh_body}};
+    auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
+    auto resolver =
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+    auto client_config = http_config(server);
+    if (timeout_mode) {
+        client_config.request_timeout = std::chrono::milliseconds{250};
+    }
+    auto client = connect_http_client(runtime, std::move(client_config), resolver);
+    auto hold_refresh = std::make_shared<tests::ReleaseGate>();
+    http->hold_post = hold_refresh;
+    auto refresh_seen = std::make_shared<bool>(false);
+    http->on_post = [refresh_seen](const auto&) { *refresh_seen = true; };
+
+    std::stop_source cancel;
+    auto result = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        auto request_settled = std::make_shared<std::optional<support::Expected<support::JsonValue>>>();
+        boost::asio::co_spawn(
+                executor,
+                [client, request_settled, timeout_mode, token = cancel.get_token()]() -> boost::asio::awaitable<void> {
+                    request_settled->emplace(co_await support::detail::await_async_result(client->request("tools/call",
+                            tests::tools_call_params("echo", support::JsonValue::object_t{{"text", "never"}}),
+                            {.stop_token = timeout_mode ? std::stop_token{} : token})));
+                },
+                boost::asio::detached);
+        // The first tools/call reached the server and was rejected with 401;
+        // its recovery started the shared refresh.
+        co_await tests::wait_for(
+                executor, [&] { return tests::trace_contains(trace, "recv 401 tools/call"); }, std::chrono::seconds{2});
+        co_await tests::wait_for(executor, [&] { return *refresh_seen; }, std::chrono::seconds{2});
+        if (!timeout_mode) {
+            cancel.request_stop();
+        }
+        co_await tests::wait_for(executor, [&] { return request_settled->has_value(); }, std::chrono::seconds{2});
+        if (!request_settled->has_value()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Timeout, "request did not settle"));
+        }
+        hold_refresh->release();
+        auto refresh_settled = co_await support::detail::await_async_result(resolver->settled());
+        if (!refresh_settled) {
+            co_return std::unexpected(std::move(refresh_settled.error()));
+        }
+        co_return std::move(request_settled->value());
+    }());
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == (timeout_mode ? support::ErrorCode::Timeout : support::ErrorCode::Cancelled));
+    // Exactly the one 401 attempt; the aborted/timed-out request is never
+    // re-dispatched with the rotated token.
+    CHECK(tests::trace_line_count(trace, "recv tools/call") == 1);
+    REQUIRE(http->requests.size() == 1);
+    CHECK_FALSE(http->requests.front().stop_token.stop_requested());
+    CHECK(http->post_responses == 1);
+    const auto stored = read_state(*store);
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "dummy-rotated-access-token");
 }
 
 TEST_CASE("a cancelled MCP OAuth discovery stops before any registration or token request",
@@ -786,9 +1146,11 @@ TEST_CASE("a cancelled MCP OAuth client registration stops before any token requ
 }
 
 TEST_CASE("closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token",
-        "[coding_agent][mcp][issue1102][spec]") {
+        "[coding_agent][mcp][issue1102][issue1189][spec]") {
     const auto fixture = read_replay_fixture();
     const auto config = server_config_from_fixture(fixture);
+    const std::string refresh_body =
+            fixture_string(fixture_object(fixture_object(fixture, "refresh_exchange"), "response"), "body");
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
     HttpFixtureServer server{trace, "Bearer existing-access"};
@@ -802,12 +1164,14 @@ TEST_CASE("closing an MCP HTTP client during a stalled OAuth refresh deletes the
                             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{24}).count()));
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    http->responses[config.token_url] = {{200, refresh_body}};
     auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
     auto resolver =
             std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
     auto client = connect_http_client(runtime, http_config(server), resolver);
     seed_state(*store, oauth_state("existing-access", "stalled-refresh", ai::current_timestamp_ms() + 1000));
-    http->hold_post_until_stopped = true;
+    auto hold_refresh = std::make_shared<tests::ReleaseGate>();
+    http->hold_post = hold_refresh;
     auto oauth_request_seen = std::make_shared<bool>(false);
     http->on_post = [oauth_request_seen](const auto&) { *oauth_request_seen = true; };
 
@@ -823,19 +1187,39 @@ TEST_CASE("closing an MCP HTTP client during a stalled OAuth refresh deletes the
                 },
                 boost::asio::detached);
         co_await tests::wait_for(executor, [&] { return *oauth_request_seen; }, std::chrono::seconds{2});
+        const auto close_started = std::chrono::steady_clock::now();
         client->close();
+        const auto close_elapsed = std::chrono::steady_clock::now() - close_started;
+        // pi's client close aborts the transport and reuses the last token for
+        // the DELETE; it never waits for the stalled refresh (#1189).
+        bool close_was_prompt = http->post_responses == 0;
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+        (void)close_elapsed;
+#else
+        close_was_prompt = close_was_prompt && close_elapsed < std::chrono::milliseconds{250};
+#endif
         co_await tests::wait_for(
                 executor,
                 [&] { return *request_settled && tests::trace_contains(trace, "recv DELETE"); },
                 std::chrono::seconds{2});
+        // The refresh is still stalled after close returned; let it answer and
+        // wait for the rotated grant to be persisted.
+        hold_refresh->release();
+        auto refresh_settled = co_await support::detail::await_async_result(resolver->settled());
         co_return support::Expected<bool>{
-                *request_settled &&
+                close_was_prompt && refresh_settled.has_value() && *request_settled &&
                 tests::trace_contains(trace, "recv DELETE authorization_present=true authorization_matches=true") &&
-                http->requests.size() == 1 && http->requests.front().stop_token.stop_requested()};
+                http->requests.size() == 1 && !http->requests.front().stop_token.stop_requested()};
     }());
     CHECK(outcome);
     CHECK(tests::trace_contains(trace, "recv DELETE authorization_present=true authorization_matches=true"));
     CHECK_FALSE(tests::trace_contains(trace, "recv tools/call"));
+    REQUIRE(http->requests.size() == 1);
+    CHECK(http->post_responses == 1);
+    const auto stored = read_state(*store);
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "dummy-rotated-access-token");
 }
 
 TEST_CASE("a rotated MCP OAuth refresh is persisted before the request continues",

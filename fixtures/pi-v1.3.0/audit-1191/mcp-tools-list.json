@@ -1,0 +1,235 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1191",
+  "family": "audit-1191",
+  "capturedAt": "2026-11-02T06:07:38.029Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/client.ts:McpClient.listTools,listAll,listPage,validateListPage,MAX_LIST_PAGES",
+    "packages/coding-agent/src/extensions/mcp/tools.ts:createMcpToolName,MAX_TOOL_NAME_LENGTH",
+    "packages/coding-agent/src/extensions/mcp/index.ts:registerTools",
+    "packages/mcp/test/client.test.ts:paginates tools and preserves protocol tool definitions",
+    "packages/coding-agent/test/mcp-extension.test.ts:creates provider-safe tool names"
+  ],
+  "scenarios": [
+    {
+      "name": "tools/list follows nextCursor across pages and ends on an empty cursor",
+      "inputs": {
+        "pages": [
+          {
+            "cursor": null,
+            "tools": [
+              "search"
+            ],
+            "nextCursor": "page-2"
+          },
+          {
+            "cursor": "page-2",
+            "tools": [
+              "read"
+            ],
+            "nextCursor": ""
+          }
+        ],
+        "transport": "loopback HTTP"
+      },
+      "expected": {
+        "tools": [
+          "search",
+          "read"
+        ],
+        "cursors": [
+          null,
+          "page-2"
+        ],
+        "pageRequests": 2,
+        "terminalCursor": ""
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "tool listings are compared by name and cursor sequence"
+      ]
+    },
+    {
+      "name": "a null nextCursor ends tools/list without another request",
+      "inputs": {
+        "pages": [
+          {
+            "cursor": null,
+            "tools": [
+              "only"
+            ],
+            "nextCursor": null
+          }
+        ],
+        "transport": "loopback HTTP"
+      },
+      "expected": {
+        "tools": [
+          "only"
+        ],
+        "pageRequests": 1,
+        "nextCursor": null
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "tool listings are compared by name and cursor sequence"
+      ]
+    },
+    {
+      "name": "an empty nextCursor ends tools/list without another request",
+      "inputs": {
+        "pages": [
+          {
+            "cursor": null,
+            "tools": [
+              "only"
+            ],
+            "nextCursor": ""
+          }
+        ],
+        "transport": "loopback HTTP"
+      },
+      "expected": {
+        "tools": [
+          "only"
+        ],
+        "pageRequests": 1,
+        "nextCursor": ""
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "tool listings are compared by name and cursor sequence"
+      ]
+    },
+    {
+      "name": "a repeated nextCursor is an explicit duplicate-cursor error",
+      "inputs": {
+        "pages": "every page returns nextCursor loop",
+        "transport": "loopback HTTP"
+      },
+      "expected": {
+        "error": {
+          "name": "Error",
+          "message": "MCP tools/list returned duplicate cursor: loop"
+        },
+        "pageRequests": 2,
+        "repeatedCursor": "loop"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "tool listings are compared by name and cursor sequence"
+      ]
+    },
+    {
+      "name": "tools/list stops after pi's 1000-page bound",
+      "inputs": {
+        "pages": "each page returns a new page-<n> cursor",
+        "maxPages": 1000,
+        "transport": "loopback HTTP"
+      },
+      "expected": {
+        "error": {
+          "name": "Error",
+          "message": "MCP tools/list exceeded 1000 pages"
+        },
+        "pageRequests": 1000,
+        "maxPages": 1000
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "tool listings are compared by name and cursor sequence"
+      ]
+    },
+    {
+      "name": "application tool names sanitize punctuation, bound at 64 and hash collisions from the raw pair",
+      "inputs": {
+        "cases": [
+          "punctuation outside [A-Za-z0-9_] becomes _",
+          "a 64-character sanitized name stays plain",
+          "a longer sanitized name is cut to 64 with an 8-hex sha256 suffix",
+          "a taken plain name takes the raw-pair hash suffix",
+          "distinct short names stay unchanged"
+        ]
+      },
+      "expected": {
+        "short": "mcp__my_server__get_item_v2",
+        "exactBound": "mcp__s__tttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+        "exactBoundLength": 64,
+        "overBound": "mcp__s__uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu_b20828cc",
+        "overBoundLength": 64,
+        "long": "mcp__server__xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_9fc39f5e",
+        "longHashSuffix": "9fc39f5e",
+        "takenPlain": "mcp__s__a_b",
+        "secondWhenTaken": "mcp__s__a_b_ed3867d6",
+        "secondWhenTakenHasSuffix": true,
+        "distinct": [
+          "mcp__filesystem__read_file",
+          "mcp__filesystem__write_file"
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "tool listings are compared by name and cursor sequence"
+      ]
+    },
+    {
+      "name": "application tool names hash every colliding sanitized name order-independently",
+      "inputs": {
+        "tools": [
+          "a-b",
+          "a_b"
+        ],
+        "plainSanitized": "mcp__srv__a_b",
+        "listOrders": [
+          "a-b then a_b",
+          "a_b then a-b"
+        ]
+      },
+      "expected": {
+        "forward": [
+          {
+            "label": "srv/a-b",
+            "name": "mcp__srv__a_b_3d325570"
+          },
+          {
+            "label": "srv/a_b",
+            "name": "mcp__srv__a_b_5c15ffbd"
+          }
+        ],
+        "reverse": [
+          {
+            "label": "srv/a_b",
+            "name": "mcp__srv__a_b_5c15ffbd"
+          },
+          {
+            "label": "srv/a-b",
+            "name": "mcp__srv__a_b_3d325570"
+          }
+        ],
+        "plainName": "mcp__srv__a_b",
+        "sameAssignmentByRaw": true
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "tool listings are compared by name and cursor sequence"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,193 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1191",
+  "family": "audit-1191",
+  "capturedAt": "2026-11-02T06:07:38.029Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/client.ts:McpClient.requestInternal,cancelPending,armTimeout,handleResponse",
+    "packages/mcp/src/protocol/jsonrpc.ts:McpAbortError,McpTimeoutError",
+    "packages/mcp/src/transports/stdio.ts:StdioTransport.send",
+    "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.send",
+    "packages/mcp/test/client.test.ts:cancels aborted and timed-out requests",
+    "packages/mcp/test/client.test.ts:does not send notifications/cancelled for a timed-out initialize"
+  ],
+  "scenarios": [
+    {
+      "name": "stdio: aborting an in-flight call notifies the server and leaves the child usable",
+      "inputs": {
+        "transport": "stdio child",
+        "tool": "hang",
+        "abortReason": "stop",
+        "reuseTool": "echo"
+      },
+      "expected": {
+        "outcome": {
+          "name": "AbortError",
+          "message": "MCP request aborted"
+        },
+        "requestId": 2,
+        "cancellationCount": 1,
+        "cancellationRequestId": 2,
+        "cancellationReason": "stop",
+        "sameChildPid": true,
+        "reusableResultText": "echo:after",
+        "transport": "stdio"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "the caller's abort reason is the literal token passed to AbortController.abort"
+      ]
+    },
+    {
+      "name": "HTTP: aborting an in-flight call posts notifications/cancelled and reuses the session",
+      "inputs": {
+        "transport": "loopback HTTP",
+        "tool": "hang",
+        "abortReason": "stop",
+        "reuseTool": "echo"
+      },
+      "expected": {
+        "outcome": {
+          "name": "AbortError",
+          "message": "MCP request aborted"
+        },
+        "requestId": 2,
+        "cancellationCount": 1,
+        "cancellationRequestId": 2,
+        "cancellationReason": "stop",
+        "reusableResultText": "echo:after",
+        "reusableSessionHeader": "session-1",
+        "sessionId": "session-1",
+        "transport": "http"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "the caller's abort reason is the literal token passed to AbortController.abort"
+      ]
+    },
+    {
+      "name": "stdio: a timed-out request fails with pi's timeout error and reason",
+      "inputs": {
+        "transport": "stdio child",
+        "tool": "hang",
+        "timeoutMs": 80
+      },
+      "expected": {
+        "outcome": {
+          "name": "McpTimeoutError",
+          "message": "MCP request timed out after 80ms",
+          "timeoutMs": 80
+        },
+        "timeoutMs": 80,
+        "cancellationReason": "Request timed out",
+        "cancellationRequestId": 2,
+        "transport": "stdio"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "the caller's abort reason is the literal token passed to AbortController.abort"
+      ]
+    },
+    {
+      "name": "HTTP: a timed-out request fails with pi's timeout error and reason",
+      "inputs": {
+        "transport": "loopback HTTP",
+        "tool": "hang",
+        "timeoutMs": 80
+      },
+      "expected": {
+        "outcome": {
+          "name": "McpTimeoutError",
+          "message": "MCP request timed out after 80ms",
+          "timeoutMs": 80
+        },
+        "timeoutMs": 80,
+        "cancellationReason": "Request timed out",
+        "cancellationRequestId": 2,
+        "transport": "http"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "the caller's abort reason is the literal token passed to AbortController.abort"
+      ]
+    },
+    {
+      "name": "an already-aborted request is never sent and emits no notifications/cancelled",
+      "inputs": {
+        "transport": "loopback HTTP",
+        "signal": "already aborted before request"
+      },
+      "expected": {
+        "outcome": {
+          "name": "AbortError",
+          "message": "MCP request aborted"
+        },
+        "toolCallPosts": 0,
+        "cancellationPosts": 0,
+        "transport": "http"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "the caller's abort reason is the literal token passed to AbortController.abort"
+      ]
+    },
+    {
+      "name": "a failed HTTP request does not emit notifications/cancelled",
+      "inputs": {
+        "transport": "loopback HTTP",
+        "responseStatus": 500
+      },
+      "expected": {
+        "outcome": {
+          "name": "McpHttpError",
+          "message": "MCP HTTP request failed with status 500: server failed",
+          "status": 500
+        },
+        "cancellationPosts": 0,
+        "transport": "http"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "the caller's abort reason is the literal token passed to AbortController.abort"
+      ]
+    },
+    {
+      "name": "a failed stdio request does not emit notifications/cancelled",
+      "inputs": {
+        "transport": "stdio child",
+        "response": "JSON-RPC error -32000",
+        "abortAfterSettle": true
+      },
+      "expected": {
+        "outcome": {
+          "name": "McpError",
+          "message": "tool failed",
+          "code": -32000
+        },
+        "cancellationCount": 0,
+        "transport": "stdio"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "the caller's abort reason is the literal token passed to AbortController.abort"
+      ]
+    }
+  ]
+}

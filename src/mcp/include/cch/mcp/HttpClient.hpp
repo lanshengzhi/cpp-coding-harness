@@ -64,7 +64,8 @@ public:
     [[nodiscard]] static support::AsyncResult<std::shared_ptr<HttpClient>> connect(HttpServerConfig config,
             std::shared_ptr<support::StreamTransport> transport = nullptr,
             std::shared_ptr<RequestAuthSource> request_auth = nullptr,
-            HttpGetStreamOptions get_stream_options = {});
+            HttpGetStreamOptions get_stream_options = {},
+            std::stop_token stop_token = {});
 
     /// One server-to-client notification received on the GET stream (pi
     /// `TransportEvents`'s `message`).
@@ -76,17 +77,6 @@ public:
     /// HTTP error. `close()` reports nothing.
     using ErrorListener = std::function<void(const support::Error& error)>;
     virtual void set_error_listener(ErrorListener listener) = 0;
-
-    /// One server-to-client request handler (pi `setRequestHandler`): the
-    /// handler answers a JSON-RPC request the server sends on the GET stream.
-    /// `ping` is installed by default and returns `{}`; a method with no
-    /// handler is answered with `-32601 "Method not found: <method>"`.
-    /// `stop_token` is requested when the server sends
-    /// `notifications/cancelled` for the in-flight request. The handler's
-    /// error becomes the response's `-32603` JSON-RPC error.
-    using ServerRequestHandler = std::function<support::AsyncResult<support::JsonValue>(
-            const support::JsonValue& params, std::stop_token stop_token)>;
-    virtual void set_request_handler(std::string method, ServerRequestHandler handler) = 0;
 };
 
 } // namespace cch::mcp

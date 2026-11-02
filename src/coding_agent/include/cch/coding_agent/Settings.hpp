@@ -2,12 +2,14 @@
 
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -175,6 +177,58 @@ struct UserSettings {
 
 /// One `settings.json` scope (pi `SettingsScope`).
 enum class SettingsScope { Global, Project };
+
+/// The value shape one supported `settings.json` field carries, named after the
+/// typed value the runtime consumes (pi `SettingsSchema` supported subset).
+enum class SettingsValueKind {
+    String,
+    Boolean,
+    NonNegativeInteger,
+    StringArray,
+    Object,
+    ThinkingLevel,
+    ProjectTrust,
+    CodemodeMode,
+    TuiMode,
+    FullscreenExitOutput,
+    FullscreenScrollbar,
+    WheelScrollLines,
+    OutputPad,
+};
+
+/// One supported `settings.json` field. `key` is the wire path, with `.`
+/// separating nested members (`compaction.reserveTokens`). Every entry names a
+/// field a runtime consumer in this build reads: a key with no consumer is not
+/// published here, so the schema cannot promise behavior the build drops.
+struct SettingsSchemaField {
+    std::string_view key{};
+    SettingsValueKind kind{SettingsValueKind::String};
+};
+
+/// One rejected field in pi `SettingsSchema` vocabulary: `path` is pi's JSON
+/// pointer `instancePath` (`/compaction/reserveTokens`, `/enabledModels/0`) and
+/// `message` is pi's TypeBox text (`must be >= 0`, `must be boolean`,
+/// `must match a schema in anyOf`).
+struct SettingsSchemaViolation {
+    std::string path{};
+    std::string message{};
+};
+
+/// Every `settings.json` field this build consumes, in `UserSettings`
+/// declaration order (pi `SettingsSchema` supported subset). Unknown top-level
+/// keys are accepted like pi's `additionalProperties: true` and preserved by
+/// surgical writes.
+[[nodiscard]] std::span<const SettingsSchemaField> settings_schema_fields();
+
+/// Validate one `settings.json` document against `settings_schema_fields`
+/// (pi `SettingsSchema.Check`): a present supported field must carry the shape
+/// its consumer reads; an unknown top-level key or unknown nested member is
+/// accepted. Returns one violation per rejected field.
+[[nodiscard]] std::vector<SettingsSchemaViolation> validate_settings_schema(const support::JsonValue& document);
+
+/// pi `collectSettingsDiagnostics` message for one scope load failure:
+/// `Invalid settings file <path>: <message>`.
+[[nodiscard]] std::string settings_diagnostic_text(const std::filesystem::path& path, std::string_view message);
 
 /// A scope whose load failed and why. A scope whose load failed suppresses
 /// writes to that scope and resolves as empty so the other scope keeps working

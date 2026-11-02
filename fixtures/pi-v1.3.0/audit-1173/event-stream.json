@@ -1,0 +1,1838 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1173",
+  "family": "audit-1173",
+  "capturedAt": "2026-11-02T00:34:36.205Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/events.ts:watchEvents,AgentEvent",
+    "packages/durable/src/session/observation.ts:CommittedWatch",
+    "packages/durable/src/harness/view.ts:ConversationViews",
+    "packages/durable/src/harness/harness.ts:ConversationImpl.id,ConversationImpl.abort",
+    "packages/durable/src/harness/generation.ts:GenerationTask",
+    "packages/durable/src/harness/tool.ts:ToolTask,ToolExecutionApi.output",
+    "packages/durable/src/harness/live.ts:LiveDoc,addCompactionStatus",
+    "packages/durable/test/harness-events.test.ts:event stream"
+  ],
+  "scenarios": [
+    {
+      "name": "a model/tool round reports message, tool, usage and settlement lifecycle in committed order",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "turn": [
+          "go",
+          "print tool then done"
+        ],
+        "tool": "print",
+        "observation": "batches + flattened events"
+      },
+      "expected": {
+        "snapshot": {
+          "type": "snapshot",
+          "entries": 0,
+          "runInputs": 0,
+          "generation": null,
+          "tools": [],
+          "nestedTools": 0,
+          "compactions": 0,
+          "inbox": 0,
+          "agentKeys": [
+            "model"
+          ],
+          "usageKeys": [
+            "models",
+            "tools"
+          ]
+        },
+        "batches": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_update"
+          ],
+          [
+            "tool_execution_update"
+          ],
+          [
+            "tool_execution_update"
+          ],
+          [
+            "tool_execution_end",
+            "message_start",
+            "message_end"
+          ],
+          [
+            "turn_end",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "events": [
+          {
+            "type": "message_start",
+            "role": "user",
+            "text": "go"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.user"
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "placed"
+            }
+          },
+          {
+            "type": "run_start",
+            "inputsCount": 1
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "system",
+            "sections": []
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.system"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          },
+          {
+            "type": "tool_execution_start",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "args": {
+              "n": 1
+            }
+          },
+          {
+            "type": "tool_execution_update",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "output": {
+              "set": "one\n"
+            }
+          },
+          {
+            "type": "tool_execution_update",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "details": {
+              "step": 1
+            }
+          },
+          {
+            "type": "tool_execution_update",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "output": {
+              "append": "two\n"
+            },
+            "details": {
+              "step": 2
+            }
+          },
+          {
+            "type": "tool_execution_end",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "message_start",
+            "role": "toolResult",
+            "contentLength": 1
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": "done"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "run_end",
+            "inputsCount": 1
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "done"
+            }
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          }
+        ],
+        "counts": {
+          "run_start": 1,
+          "run_end": 1,
+          "turn_start": 2,
+          "turn_end": 2,
+          "submission": 2,
+          "usage_changed": 2,
+          "entry_appended": 0
+        },
+        "toolStart": {
+          "type": "tool_execution_start",
+          "toolCallId": "c1",
+          "toolName": "print",
+          "hasTaskId": true,
+          "args": {
+            "n": 1
+          }
+        },
+        "toolEnd": {
+          "type": "tool_execution_end",
+          "toolCallId": "c1",
+          "toolName": "print",
+          "hasTaskId": true,
+          "entryKind": "pi.tool-result"
+        },
+        "afterToolEnd": [
+          "message_start",
+          "message_end"
+        ],
+        "collapsedEvents": [
+          {
+            "type": "message_start",
+            "role": "user",
+            "text": "go"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.user"
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "placed"
+            }
+          },
+          {
+            "type": "run_start",
+            "inputsCount": 1
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "system",
+            "sections": []
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.system"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          },
+          {
+            "type": "tool_execution_start",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "args": {
+              "n": 1
+            }
+          },
+          {
+            "type": "tool_execution_update",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "outputText": "one\ntwo\n",
+            "details": {
+              "step": 2
+            }
+          },
+          {
+            "type": "tool_execution_end",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "message_start",
+            "role": "toolResult",
+            "contentLength": 1
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": "done"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "run_end",
+            "inputsCount": 1
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "done"
+            }
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          }
+        ],
+        "linkage": {
+          "placedSubmissionIsRunInput": true,
+          "runEndInputsMatchRunStart": true,
+          "settledSubmissionIsRunInput": true,
+          "toolEndEntryIsResultMessage": true
+        },
+        "settled": {
+          "status": "done"
+        },
+        "entryKinds": [
+          "pi.user",
+          "pi.system",
+          "pi.assistant",
+          "pi.tool-result",
+          "pi.assistant"
+        ],
+        "stop": {
+          "reason": "stopped"
+        }
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "a tool held by a gate keeps its slot running and a later subscriber sees committed state only",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "tool": "print (gated after one output chunk)",
+        "subscribers": "before submit and during the hold"
+      },
+      "expected": {
+        "heldSnapshot": {
+          "type": "snapshot",
+          "entries": 3,
+          "runInputs": 1,
+          "generation": null,
+          "tools": [
+            {
+              "callId": "c1",
+              "name": "print",
+              "status": "running"
+            }
+          ],
+          "nestedTools": 0,
+          "compactions": 0,
+          "inbox": 0,
+          "agentKeys": [
+            "model"
+          ],
+          "usageKeys": [
+            "models",
+            "tools"
+          ]
+        },
+        "heldTasks": [
+          {
+            "kind": "pi.generation",
+            "state": "waiting"
+          },
+          {
+            "kind": "pi.tool",
+            "state": "running"
+          }
+        ],
+        "heldBatches": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_update"
+          ]
+        ],
+        "heldBatchesCollapsed": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_update"
+          ]
+        ],
+        "lateDuringHold": [],
+        "afterRelease": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_update"
+          ],
+          [
+            "tool_execution_update"
+          ],
+          [
+            "tool_execution_end",
+            "message_start",
+            "message_end"
+          ],
+          [
+            "turn_end",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "afterReleaseCollapsed": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_update"
+          ],
+          [
+            "tool_execution_end",
+            "message_start",
+            "message_end"
+          ],
+          [
+            "turn_end",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "settled": {
+          "status": "done"
+        },
+        "lateEnd": {
+          "reason": "stopped"
+        }
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "a tool held at completing by live owned work keeps its turn open until that work settles",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "tool": "spawn (creates one blocked owned task and returns)",
+        "release": "install the child definition"
+      },
+      "expected": {
+        "beforeRelease": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_end",
+            "message_start",
+            "message_end"
+          ]
+        ],
+        "heldTasks": [
+          {
+            "kind": "pi.generation",
+            "state": "waiting"
+          },
+          {
+            "kind": "pi.tool",
+            "state": "completing"
+          },
+          {
+            "kind": "audit.hold-child",
+            "state": "blocked"
+          }
+        ],
+        "settled": {
+          "status": "done"
+        },
+        "afterRelease": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_end",
+            "message_start",
+            "message_end"
+          ],
+          [
+            "turn_end",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "afterTasks": [],
+        "turnEndedWhileHeld": false,
+        "turnEnds": 2,
+        "turnStarts": 2,
+        "events": [
+          {
+            "type": "message_start",
+            "role": "user",
+            "text": "go"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.user"
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "placed"
+            }
+          },
+          {
+            "type": "run_start",
+            "inputsCount": 1
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "system",
+            "sections": []
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.system"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          },
+          {
+            "type": "tool_execution_start",
+            "toolCallId": "c1",
+            "toolName": "spawn",
+            "hasTaskId": true,
+            "args": {}
+          },
+          {
+            "type": "tool_execution_end",
+            "toolCallId": "c1",
+            "toolName": "spawn",
+            "hasTaskId": true,
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "message_start",
+            "role": "toolResult",
+            "contentLength": 0
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": "done"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "run_end",
+            "inputsCount": 1
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "done"
+            }
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          }
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "cancelling a run during its tool settles the input unanswered and ends the tool with a result",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "tool": "print (gated)",
+        "abort": "Conversation.abort during the hold"
+      },
+      "expected": {
+        "cancelledBatches": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_update"
+          ],
+          [
+            "tool_execution_end",
+            "message_start",
+            "message_end"
+          ],
+          [
+            "turn_end",
+            "run_end",
+            "submission"
+          ]
+        ],
+        "events": [
+          {
+            "type": "message_start",
+            "role": "user",
+            "text": "go"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.user"
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "placed"
+            }
+          },
+          {
+            "type": "run_start",
+            "inputsCount": 1
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "system",
+            "sections": []
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.system"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          },
+          {
+            "type": "tool_execution_start",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "args": {
+              "n": 1
+            }
+          },
+          {
+            "type": "tool_execution_update",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "output": {
+              "set": "one\n"
+            }
+          },
+          {
+            "type": "tool_execution_end",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "message_start",
+            "role": "toolResult",
+            "contentLength": 2
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "run_end",
+            "inputsCount": 1
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "unanswered"
+            }
+          }
+        ],
+        "collapsedEvents": [
+          {
+            "type": "message_start",
+            "role": "user",
+            "text": "go"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.user"
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "placed"
+            }
+          },
+          {
+            "type": "run_start",
+            "inputsCount": 1
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "system",
+            "sections": []
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.system"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          },
+          {
+            "type": "tool_execution_start",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "args": {
+              "n": 1
+            }
+          },
+          {
+            "type": "tool_execution_update",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "outputText": "one\n"
+          },
+          {
+            "type": "tool_execution_end",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "message_start",
+            "role": "toolResult",
+            "contentLength": 2
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "run_end",
+            "inputsCount": 1
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "unanswered"
+            }
+          }
+        ],
+        "toolEnd": {
+          "type": "tool_execution_end",
+          "toolCallId": "c1",
+          "toolName": "print",
+          "hasTaskId": true,
+          "entryKind": "pi.tool-result"
+        },
+        "toolEndBeforeSettlement": true,
+        "settled": {
+          "status": "unanswered",
+          "reason": "aborted"
+        },
+        "abortedTasks": [],
+        "secondSettled": {
+          "status": "done"
+        },
+        "afterSecond": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_update"
+          ],
+          [
+            "tool_execution_end",
+            "message_start",
+            "message_end"
+          ],
+          [
+            "turn_end",
+            "run_end",
+            "submission"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "entryKinds": [
+          "pi.user",
+          "pi.system",
+          "pi.assistant",
+          "pi.tool-result",
+          "pi.user",
+          "pi.assistant"
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "a retryable provider error reports retry start and end around the recovered answer",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "responses": [
+          "rate limit exceeded",
+          "recovered"
+        ],
+        "retry": {
+          "maxRetries": 1,
+          "baseDelayMs": 1
+        }
+      },
+      "expected": {
+        "batches": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "auto_retry_start",
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "auto_retry_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "events": [
+          {
+            "type": "message_start",
+            "role": "user",
+            "text": "go"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.user"
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "placed"
+            }
+          },
+          {
+            "type": "run_start",
+            "inputsCount": 1
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "auto_retry_start",
+            "errorMessage": "rate limit exceeded",
+            "attempt": 1
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          },
+          {
+            "type": "auto_retry_end",
+            "attempt": 1
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": "recovered"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "run_end",
+            "inputsCount": 1
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "done"
+            }
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          }
+        ],
+        "settled": {
+          "status": "done"
+        },
+        "retryStartBeforeRetryEnd": true
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "a terminal provider error settles the input unanswered and ends the turn without a remaining task",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "responses": [
+          "provider error"
+        ]
+      },
+      "expected": {
+        "failedBatches": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "events": [
+          {
+            "type": "message_start",
+            "role": "user",
+            "text": "go"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.user"
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "placed"
+            }
+          },
+          {
+            "type": "run_start",
+            "inputsCount": 1
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "run_end",
+            "inputsCount": 1
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "unanswered"
+            }
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          }
+        ],
+        "settled": {
+          "status": "unanswered",
+          "reason": "model_error"
+        },
+        "afterTasks": [],
+        "secondSettled": {
+          "status": "done"
+        },
+        "afterSecond": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "a tool that throws settles an error result on the stream and the round continues",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "tool": "print throws Error(boom)"
+      },
+      "expected": {
+        "batches": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "usage_changed"
+          ],
+          [
+            "tool_execution_start"
+          ],
+          [
+            "tool_execution_end",
+            "message_start",
+            "message_end"
+          ],
+          [
+            "turn_end",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "events": [
+          {
+            "type": "message_start",
+            "role": "user",
+            "text": "go"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.user"
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "placed"
+            }
+          },
+          {
+            "type": "run_start",
+            "inputsCount": 1
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "system",
+            "sections": []
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.system"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": ""
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          },
+          {
+            "type": "tool_execution_start",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "args": {
+              "n": 1
+            }
+          },
+          {
+            "type": "tool_execution_end",
+            "toolCallId": "c1",
+            "toolName": "print",
+            "hasTaskId": true,
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "message_start",
+            "role": "toolResult",
+            "contentLength": 1
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.tool-result"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "turn_start"
+          },
+          {
+            "type": "message_start",
+            "role": "assistant",
+            "text": "done"
+          },
+          {
+            "type": "message_end",
+            "entryKind": "pi.assistant"
+          },
+          {
+            "type": "turn_end"
+          },
+          {
+            "type": "run_end",
+            "inputsCount": 1
+          },
+          {
+            "type": "submission",
+            "submission": {
+              "type": "input",
+              "status": "done"
+            }
+          },
+          {
+            "type": "usage_changed",
+            "hasUsage": true
+          }
+        ],
+        "settled": {
+          "status": "done"
+        },
+        "toolEnd": {
+          "type": "tool_execution_end",
+          "toolCallId": "c1",
+          "toolName": "print",
+          "hasTaskId": true,
+          "entryKind": "pi.tool-result"
+        },
+        "result": {
+          "toolCallId": "c1",
+          "toolName": "print",
+          "isError": true,
+          "contentTypes": [
+            "text"
+          ],
+          "text": "<harness>\n[error] boom\n</harness>"
+        },
+        "entryKinds": [
+          "pi.user",
+          "pi.system",
+          "pi.assistant",
+          "pi.tool-result",
+          "pi.assistant"
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "stopping a started stream ends its deliveries and leaves persistent work running",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "tool": "print (gated)",
+        "stop": "during the hold",
+        "second": "stop an unstarted stream"
+      },
+      "expected": {
+        "deliveredBeforeStop": 5,
+        "deliveredAfterStop": 5,
+        "end": {
+          "reason": "stopped"
+        },
+        "cancelledReason": "stopped",
+        "settled": {
+          "status": "done"
+        },
+        "entryKinds": [
+          "pi.user",
+          "pi.system",
+          "pi.assistant",
+          "pi.tool-result",
+          "pi.assistant"
+        ],
+        "restartRejected": true,
+        "unstartedEnd": {
+          "reason": "stopped"
+        },
+        "unstartedStartRejected": true,
+        "unstartedBatches": 0,
+        "stopGain": 0
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "an unstarted stream buffers committed batches and replays them when it starts",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "attach": "before submit",
+        "start": "after the run settles",
+        "second": "attach after completion"
+      },
+      "expected": {
+        "attached": {
+          "type": "snapshot",
+          "entries": 0,
+          "runInputs": 0,
+          "generation": null,
+          "tools": [],
+          "nestedTools": 0,
+          "compactions": 0,
+          "inbox": 0,
+          "agentKeys": [
+            "model"
+          ],
+          "usageKeys": [
+            "models",
+            "tools"
+          ]
+        },
+        "settled": {
+          "status": "done"
+        },
+        "delayedBatches": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "afterStart": {
+          "type": "snapshot",
+          "entries": 0,
+          "runInputs": 0,
+          "generation": null,
+          "tools": [],
+          "nestedTools": 0,
+          "compactions": 0,
+          "inbox": 0,
+          "agentKeys": [
+            "model"
+          ],
+          "usageKeys": [
+            "models",
+            "tools"
+          ]
+        },
+        "lateSnapshot": {
+          "type": "snapshot",
+          "entries": 2,
+          "runInputs": 0,
+          "generation": null,
+          "tools": [],
+          "nestedTools": 0,
+          "compactions": 0,
+          "inbox": 0,
+          "agentKeys": [
+            "model"
+          ],
+          "usageKeys": [
+            "models",
+            "tools"
+          ]
+        },
+        "lateDelivered": []
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "more than one hundred undelivered batches collapse into one snapshot replacement",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "commits": 101,
+        "shortCommits": 3
+      },
+      "expected": {
+        "delivered": [
+          [
+            "snapshot"
+          ]
+        ],
+        "replacement": {
+          "type": "snapshot",
+          "entries": 101,
+          "lastText": "note 100"
+        },
+        "shortDelivered": [
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ],
+          [
+            "message_start",
+            "message_end"
+          ]
+        ],
+        "shortEntries": [
+          "short 0",
+          "short 1",
+          "short 2"
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "closing the Harness ends a live event stream with session_closed",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "tool": "print (gated)",
+        "close": "Harness.close during the hold"
+      },
+      "expected": {
+        "end": {
+          "reason": "session_closed"
+        },
+        "beforeClose": 5,
+        "afterClose": 5,
+        "stopAfterClose": "{\"reason\":\"session_closed\"}"
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "a listener failure ends its stream and leaves the run and other subscribers running",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "listener": "throws on the first batch",
+        "second": "another subscriber after the failure"
+      },
+      "expected": {
+        "attempts": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ]
+        ],
+        "end": {
+          "reason": "listener_error"
+        },
+        "endError": "Error: listener exploded",
+        "settled": {
+          "status": "done"
+        },
+        "entryKinds": [
+          "pi.user",
+          "pi.assistant"
+        ],
+        "restartRejected": true,
+        "secondBatches": [
+          [
+            "message_start",
+            "message_end",
+            "submission",
+            "run_start",
+            "turn_start"
+          ],
+          [
+            "message_start",
+            "message_end",
+            "turn_end",
+            "run_end",
+            "submission",
+            "usage_changed"
+          ]
+        ],
+        "secondSettled": {
+          "status": "done"
+        },
+        "secondEnd": {
+          "reason": "stopped"
+        },
+        "secondAttempts": 2
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    },
+    {
+      "name": "an aborted attachment context cancels its stream and never the run",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "attach": "before submit",
+        "abort": "after the first batch",
+        "second": "attach with an aborted context"
+      },
+      "expected": {
+        "end": {
+          "reason": "cancelled"
+        },
+        "endError": "",
+        "atAbort": 2,
+        "afterRun": 2,
+        "settled": {
+          "status": "done"
+        },
+        "entryKinds": [
+          "pi.user",
+          "pi.assistant"
+        ],
+        "attachError": "Error: pre-aborted"
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order",
+        "a tool task's ID is compared through its presence and its relation to the slot it names, never printed",
+        "a watch end is compared through its reason"
+      ]
+    }
+  ]
+}

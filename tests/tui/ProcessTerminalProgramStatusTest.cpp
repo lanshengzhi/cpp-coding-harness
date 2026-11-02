@@ -12,6 +12,7 @@
 
 #include "support/EnvVarGuard.hpp"
 #include "support/IoContextRunner.hpp"
+#include "support/PiTuiEvidence.hpp"
 #include "support/PseudoTerminal.hpp"
 
 #include <cch/tui/ProcessTerminal.hpp>
@@ -24,6 +25,8 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+
+#include <map>
 
 #include <cerrno>
 #include <chrono>
@@ -66,10 +69,53 @@ cch::tests::IoContextRunner& test_io() {
     return false;
 }
 
-constexpr std::string_view kStartupQuery = "\x1b[>7u\x1b[?u\x1b]7501;?\x1b\\\x1b[c";
-constexpr std::string_view kOverrideQuery = "\x1b[>7u\x1b[?u\x1b[c";
-constexpr std::string_view kClear = "\x1b]7501;state=clear\x1b\\";
-constexpr std::string_view kWorking = "\x1b]7501;state=working:app=pi\x1b\\";
+/// One frozen detection scenario. Every expected byte string is read from the registered
+/// audit-1050 artifact, so an edited observation fails the comparison instead of only
+/// invalidating the receipt digest that pins the artifact.
+struct DetectionScenario {
+    std::string query_write;
+    std::vector<std::string> status_writes;
+    std::vector<std::string> stop_writes;
+};
+
+[[nodiscard]] const DetectionScenario& detection_scenario(std::string_view name) {
+    static const auto bundle = [] {
+        auto read = cch::tests::read_pi_v130_audit_evidence("audit-1050", "program-status-detection.json");
+        REQUIRE(read);
+        std::map<std::string, DetectionScenario> scenarios;
+        for (const auto& scenario : read->at("scenarios").get_array()) {
+            const auto& expected = scenario.at("expected");
+            DetectionScenario parsed{
+                    .query_write = expected.at("queryWrite").get_string(),
+                    .status_writes = {},
+                    .stop_writes = {},
+            };
+            for (const auto& write : expected.at("programStatusWrites").get_array())
+                parsed.status_writes.push_back(write.get_string());
+            for (const auto& write : expected.at("stopWrites").get_array())
+                parsed.stop_writes.push_back(write.get_string());
+            scenarios.emplace(scenario.at("name").get_string(), std::move(parsed));
+        }
+        return scenarios;
+    }();
+    const auto found = bundle.find(std::string{name});
+    REQUIRE(found != bundle.end());
+    return found->second;
+}
+
+[[nodiscard]] std::string_view startup_query() {
+    return detection_scenario("default-reply-before-device-attributes").query_write;
+}
+
+[[nodiscard]] std::string_view override_query() { return detection_scenario("override-enabled").query_write; }
+
+[[nodiscard]] std::string_view clear_status_write() {
+    return detection_scenario("default-reply-before-device-attributes").stop_writes.at(0);
+}
+
+[[nodiscard]] std::string_view working_status_write() {
+    return detection_scenario("default-reply-before-device-attributes").status_writes.at(0);
+}
 
 [[nodiscard]] cch::tui::ProgramStatus working_status() {
     return cch::tui::ProgramStatus{
@@ -121,7 +167,7 @@ struct TerminalProbe {
 } // namespace
 
 TEST_CASE("Process Terminal reports the latest status once the terminal answers before DA",
-        "[tui][terminal][program-status][issue1123][spec]") {
+        "[tui][terminal][program-status][issue1123][issue1182][spec]") {
     cch::tests::EnvVarGuard override_guard{"PI_PROGRAM_STATUS"};
     override_guard.unset();
     TerminalProbe probe;
@@ -130,7 +176,7 @@ TEST_CASE("Process Terminal reports the latest status once the terminal answers 
 
     // Frozen query order: Kitty query, OSC 7501 query, DA sentinel.
     std::string output = probe.read();
-    REQUIRE(probe.wait_for(kStartupQuery, output));
+    REQUIRE(probe.wait_for(startup_query(), output));
 
     // Before support is confirmed nothing is reported.
     REQUIRE(probe.terminal->set_program_status(working_status()));
@@ -140,7 +186,7 @@ TEST_CASE("Process Terminal reports the latest status once the terminal answers 
     // typed input) and the latest status is reported once.
     probe.write("\x1b]7501;?\x1b\\");
     output.clear();
-    REQUIRE(probe.wait_for(kWorking, output));
+    REQUIRE(probe.wait_for(working_status_write(), output));
     CHECK(probe.forwarded_input.empty());
 
     // Later reports are written immediately, including the opened blocked kind.
@@ -157,24 +203,25 @@ TEST_CASE("Process Terminal reports the latest status once the terminal answers 
     CHECK(output.find("\x1b]7501;state=blocked:app=pi:kind=permission:msg=QWxsb3c/\x1b\\") != std::string::npos);
 
     // stop() removes the reported status before the ordinary mode restores, so
-    // an exited TUI leaves no stale dashboard state. (The relative order of the
-    // pre-existing modifyOtherKeys/Kitty restores is not re-pinned here.)
+    // an exited TUI leaves no stale dashboard state. (#1182 records the one
+    // frozen stop-write divergence: C++ omits `ESC[>4;0m` when modifyOtherKeys
+    // was never active, so the full frozen stop sequence is not yet claimed.)
     REQUIRE(probe.terminal->stop());
     const auto stop_output = probe.read();
-    const auto clear_position = stop_output.find(kClear);
+    const auto clear_position = stop_output.find(clear_status_write());
     REQUIRE(clear_position != std::string::npos);
     CHECK(stop_output.find("\x1b[?2004l") > clear_position);
 }
 
 TEST_CASE("Process Terminal leaves the status unsupported when DA answers before the reply",
-        "[tui][terminal][program-status][issue1123][spec]") {
+        "[tui][terminal][program-status][issue1123][issue1182][spec]") {
     cch::tests::EnvVarGuard override_guard{"PI_PROGRAM_STATUS"};
     override_guard.unset();
     TerminalProbe probe;
     REQUIRE(probe.open());
     REQUIRE(probe.start());
     std::string startup;
-    REQUIRE(probe.wait_for(kStartupQuery, startup));
+    REQUIRE(probe.wait_for(startup_query(), startup));
 
     REQUIRE(probe.terminal->set_program_status(working_status()));
     // The DA sentinel answers the query without a program-status reply: the
@@ -193,7 +240,7 @@ TEST_CASE("Process Terminal leaves the status unsupported when DA answers before
     CHECK(forwarded_bytes(probe) == "\x1b[?62;4;52c");
 
     REQUIRE(probe.terminal->stop());
-    CHECK(probe.read().find(kClear) == std::string::npos);
+    CHECK(probe.read().find(clear_status_write()) == std::string::npos);
 }
 
 TEST_CASE("Process Terminal clears the reported status on the final alternate restore stop",
@@ -203,48 +250,48 @@ TEST_CASE("Process Terminal clears the reported status on the final alternate re
     REQUIRE(probe.open());
     REQUIRE(probe.start());
     std::string output = probe.read();
-    REQUIRE(probe.wait_for(kOverrideQuery, output));
+    REQUIRE(probe.wait_for(override_query(), output));
     REQUIRE(probe.terminal->set_program_status(working_status()));
     output.clear();
-    REQUIRE(probe.wait_for(kWorking, output));
+    REQUIRE(probe.wait_for(working_status_write(), output));
 
     // The atomic alternate-restore exit branch must remove the reported status
     // too; the ordinary stop case above cannot discriminate this path.
     REQUIRE(probe.terminal->set_alternate_screen(true));
     REQUIRE(probe.terminal->stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true}));
     const auto stop_output = probe.read();
-    CHECK(stop_output.find(kClear) != std::string::npos);
+    CHECK(stop_output.find(clear_status_write()) != std::string::npos);
     CHECK(stop_output.find("\x1b[?1049l") != std::string::npos);
 }
 
 TEST_CASE("Process Terminal skips the query and reports immediately with PI_PROGRAM_STATUS=1",
-        "[tui][terminal][program-status][issue1123][spec][env]") {
+        "[tui][terminal][program-status][issue1123][issue1182][spec][env]") {
     cch::tests::EnvVarGuard override_guard{"PI_PROGRAM_STATUS", std::optional<std::string>{"1"}};
     TerminalProbe probe;
     REQUIRE(probe.open());
     REQUIRE(probe.start());
 
     std::string output = probe.read();
-    REQUIRE(probe.wait_for(kOverrideQuery, output));
+    REQUIRE(probe.wait_for(override_query(), output));
     CHECK(output.find("7501;?") == std::string::npos);
 
     REQUIRE(probe.terminal->set_program_status(working_status()));
     output.clear();
-    REQUIRE(probe.wait_for(kWorking, output));
+    REQUIRE(probe.wait_for(working_status_write(), output));
 
     REQUIRE(probe.terminal->stop());
-    CHECK(probe.read().find(kClear) != std::string::npos);
+    CHECK(probe.read().find(clear_status_write()) != std::string::npos);
 }
 
 TEST_CASE("Process Terminal skips the query and reports nothing with PI_PROGRAM_STATUS=0",
-        "[tui][terminal][program-status][issue1123][spec][env]") {
+        "[tui][terminal][program-status][issue1123][issue1182][spec][env]") {
     cch::tests::EnvVarGuard override_guard{"PI_PROGRAM_STATUS", std::optional<std::string>{"0"}};
     TerminalProbe probe;
     REQUIRE(probe.open());
     REQUIRE(probe.start());
 
     std::string output = probe.read();
-    REQUIRE(probe.wait_for(kOverrideQuery, output));
+    REQUIRE(probe.wait_for(override_query(), output));
     CHECK(output.find("7501;?") == std::string::npos);
 
     REQUIRE(probe.terminal->set_program_status(working_status()));
@@ -252,7 +299,7 @@ TEST_CASE("Process Terminal skips the query and reports nothing with PI_PROGRAM_
     CHECK(probe.read().find("7501;state=") == std::string::npos);
 
     REQUIRE(probe.terminal->stop());
-    CHECK(probe.read().find(kClear) == std::string::npos);
+    CHECK(probe.read().find(clear_status_write()) == std::string::npos);
 }
 
 TEST_CASE("Process Terminal keeps the latest status across a restart and re-reports it",
@@ -263,18 +310,18 @@ TEST_CASE("Process Terminal keeps the latest status across a restart and re-repo
     REQUIRE(probe.open());
     REQUIRE(probe.start());
     std::string output;
-    REQUIRE(probe.wait_for(kStartupQuery, output));
+    REQUIRE(probe.wait_for(startup_query(), output));
     REQUIRE(probe.terminal->set_program_status(working_status()));
     probe.write("\x1b]7501;?\x1b\\");
     output.clear();
-    REQUIRE(probe.wait_for(kWorking, output));
+    REQUIRE(probe.wait_for(working_status_write(), output));
 
     REQUIRE(probe.terminal->stop());
-    CHECK(probe.read().find(kClear) != std::string::npos);
+    CHECK(probe.read().find(clear_status_write()) != std::string::npos);
 
     REQUIRE(probe.start());
     output.clear();
-    REQUIRE(probe.wait_for(kStartupQuery, output));
+    REQUIRE(probe.wait_for(startup_query(), output));
     // Stopped: a report is stored without bytes until the restarted terminal
     // confirms support again.
     REQUIRE(probe.terminal->set_program_status(cch::tui::ProgramStatus{

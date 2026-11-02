@@ -5,6 +5,7 @@
 #include <cch/support/Error.hpp>
 
 #include "support/AsyncResultBridge.hpp"
+#include "support/ReleaseGate.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -99,6 +100,9 @@ public:
                     if (on_post) {
                         on_post(requests.back());
                     }
+                    if (hold_post) {
+                        co_await hold_post->wait();
+                    }
                     if (hold_post_until_stopped) {
                         auto executor = co_await boost::asio::this_coro::executor;
                         auto timer = std::make_shared<boost::asio::steady_timer>(executor, std::chrono::hours{24});
@@ -142,6 +146,7 @@ public:
                         co_return std::unexpected(
                                 support::make_error(support::ErrorCode::Cancelled, "fake client cancelled"));
                     }
+                    ++post_responses;
                     co_return cch::mcp::OAuthHttpResponse{
                             .status_code = scripted.status,
                             .body = std::move(scripted.body),
@@ -158,6 +163,13 @@ public:
     std::chrono::milliseconds respond_delay{0};
     bool hold_post_until_stopped{false};
     bool hold_get_until_stopped{false};
+    /// Hold every POST until release (the frozen capture's `releaseAll()`),
+    /// independent of the request stop token; a cancelled waiter leaves the
+    /// refresh running (#1189).
+    std::shared_ptr<tests::ReleaseGate> hold_post;
+    /// Scripted POST responses actually produced (a held request has not
+    /// responded yet), so a test can observe the refresh still in flight.
+    int post_responses{0};
     std::function<void(const Request&)> on_post{};
     std::function<void(const GetRequest&)> on_get{};
 };

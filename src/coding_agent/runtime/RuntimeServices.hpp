@@ -5,6 +5,7 @@
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/coding_agent/environment/FileSystem.hpp>
 #include <cch/coding_agent/tools/ToolFactories.hpp>
+#include "coding_agent/extensions/NativeExtension.hpp"
 #include "coding_agent/extensions/codemode/CodemodeCatalogState.hpp"
 #include "coding_agent/extensions/codemode/CodemodeExecution.hpp"
 #include "coding_agent/runtime/AsyncUserShell.hpp"
@@ -100,6 +101,11 @@ struct RuntimeServices {
     /// Null only when assembly ran without the MCP manager (never in
     /// production assembly).
     std::shared_ptr<McpSessionManager> mcp_manager;
+    /// Native extension registrations (pi extension factories, native subset):
+    /// their tools already joined `tools` above; the Session binds their
+    /// session actions and dispatches `before_agent_start` before every run.
+    /// Empty unless the embedding host registered compiled-in extensions.
+    std::vector<std::shared_ptr<extensions::NativeExtension>> native_extensions;
 };
 
 } // namespace cch::coding_agent::runtime

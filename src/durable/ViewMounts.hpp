@@ -4,6 +4,7 @@
 #include <cch/durable/Storage.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -38,6 +39,11 @@ struct HydratedConversationView {
 [[nodiscard]] support::Expected<HydratedConversationView> hydrate_conversation_view(
         Storage& storage, ConversationId conversation_id);
 
+/// Build the frozen `snapshot` event of one hydrated conversation view
+/// (frozen pi `snapshotOf`): the committed entries, live run and generation
+/// state, tool slots, inbox, agent and usage at that revision.
+[[nodiscard]] chord::Json agent_event_snapshot(const chord::Json& view);
+
 /// Decode one hydrated task-graph JSON into its structured form.
 [[nodiscard]] support::Expected<TaskGraph> decode_task_graph(const chord::Json& json);
 
@@ -58,6 +64,19 @@ struct ViewMount {
     /// mounts documents.
     std::map<std::string, MountedDocument> docs{};
     std::vector<std::weak_ptr<ViewWatch::Impl>> watchers{};
+    /// Agent event streams observing this conversation view. They see every
+    /// publication, including one whose view operations are empty, because a
+    /// task or submission change still produces lifecycle events (frozen pi
+    /// `ConversationViews` `publication` observers).
+    std::vector<std::weak_ptr<AgentEventStream::Impl>> event_streams{};
+};
+
+/// Report bridge for observation failures (a listener that reports an error).
+/// The Harness clears the report operation before it is destroyed, so a stream
+/// that outlives it cannot call into freed state.
+struct ObservationReportSink {
+    std::mutex mutex;
+    std::move_only_function<void(const support::Error&)> report;
 };
 
 /// Advance the task-graph mount from one committed publication (frozen pi
@@ -65,7 +84,9 @@ struct ViewMount {
 void advance_task_graph(ViewMount& mount, const CommitPublication& publication);
 
 /// Advance one conversation view mount from one committed publication
-/// (frozen pi `view.ts#advance`).
+/// (frozen pi `view.ts#advance`). Every publication is also handed to the
+/// mount's agent event streams, with the view operations it produced (possibly
+/// none, frozen pi `ViewObserver.publication`).
 void advance_conversation_view(
         ViewMount& mount, ConversationId conversation_id, const CommitPublication& publication);
 

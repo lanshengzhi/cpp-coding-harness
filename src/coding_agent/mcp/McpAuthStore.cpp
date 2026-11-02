@@ -9,13 +9,26 @@
 #include "coding_agent/mcp/McpAuthStore.hpp"
 
 #include "coding_agent/PrettyJson.hpp"
+#include "support/AsyncResultBridge.hpp"
+
 #include <cch/mcp/Auth.hpp>
 #include <cch/mcp/OAuthState.hpp>
+#include <cch/mcp/Pkce.hpp>
 
 #include "support/Json.hpp"
 
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
+
+#include <cerrno>
+#include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -23,12 +36,21 @@
 #include <system_error>
 #include <utility>
 
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+
 namespace cch::coding_agent::mcp {
 namespace {
 
 using cch::mcp::OAuthClientInformation;
 using cch::mcp::OAuthState;
 using cch::mcp::OAuthTokens;
+
+/// pi `REFRESH_LOCK_WAIT_MS` / `REFRESH_LOCK_RETRY_MS`: how long a process
+/// waits for another process's refresh and how often it retries.
+inline constexpr auto kRefreshLockWait = std::chrono::seconds{25};
+inline constexpr auto kRefreshLockRetry = std::chrono::milliseconds{100};
 
 using JsonObject = support::JsonValue::object_t;
 
@@ -242,6 +264,71 @@ std::filesystem::path McpAuthStore::default_path(const std::filesystem::path& ag
 
 std::string McpAuthStore::store_key(std::string_view name, std::string_view server_url) {
     return cch::mcp::mcp_namespace(name) + "|" + std::string{server_url};
+}
+
+McpAuthRefreshLock::McpAuthRefreshLock(std::filesystem::path path, int descriptor)
+    : path_(std::move(path)), descriptor_(descriptor) {}
+
+McpAuthRefreshLock::~McpAuthRefreshLock() {
+    if (descriptor_ < 0) {
+        return;
+    }
+    (void)::flock(descriptor_, LOCK_UN);
+    (void)::close(descriptor_);
+}
+
+std::filesystem::path McpAuthStore::refresh_lock_path(std::string_view name, std::string_view server_url) const {
+    const std::string key = store_key(name, server_url);
+    const auto digest = cch::mcp::sha256_digest(key);
+    std::string suffix;
+    if (digest) {
+        static constexpr char kHex[] = "0123456789abcdef";
+        suffix.reserve(16);
+        for (std::size_t index = 0; index < 8; ++index) {
+            const auto byte = static_cast<unsigned char>((*digest)[index]);
+            suffix.push_back(kHex[byte >> 4]);
+            suffix.push_back(kHex[byte & 0x0f]);
+        }
+    }
+    // A digest failure is an invariant breach (OpenSSL); the empty suffix keeps
+    // the path deterministic instead of silently locking a different file.
+    return file_.parent_path() / ("mcp-auth-refresh-" + suffix);
+}
+
+support::AsyncResult<std::shared_ptr<McpAuthRefreshLock>> McpAuthStore::refresh_lock(
+        std::string_view name, std::string_view server_url) const {
+    const std::filesystem::path path = refresh_lock_path(name, server_url);
+    return support::detail::make_async_result(
+            [path]() -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpAuthRefreshLock>>> {
+                auto executor = co_await boost::asio::this_coro::executor;
+                const auto deadline = std::chrono::steady_clock::now() + kRefreshLockWait;
+                for (;;) {
+                    const int descriptor = ::open(path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+                    if (descriptor < 0) {
+                        co_return std::unexpected(store_error(
+                                "could not open the MCP OAuth refresh lock " + path.string(), std::strerror(errno)));
+                    }
+                    if (::flock(descriptor, LOCK_EX | LOCK_NB) == 0) {
+                        co_return std::shared_ptr<McpAuthRefreshLock>{
+                                std::make_shared<McpAuthRefreshLock>(path, descriptor)};
+                    }
+                    const int lock_error = errno;
+                    (void)::close(descriptor);
+                    if (lock_error != EWOULDBLOCK && lock_error != EAGAIN && lock_error != EINTR) {
+                        co_return std::unexpected(
+                                store_error("could not lock the MCP OAuth refresh lock " + path.string(),
+                                        std::strerror(lock_error)));
+                    }
+                    if (std::chrono::steady_clock::now() >= deadline) {
+                        co_return std::unexpected(support::make_error(support::ErrorCode::Timeout,
+                                "timed out waiting for the MCP OAuth refresh lock",
+                                path.string()));
+                    }
+                    boost::asio::steady_timer timer(executor, kRefreshLockRetry);
+                    boost::system::error_code wait_error;
+                    co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+                }
+            });
 }
 
 McpAuthStore::McpAuthStore(std::filesystem::path file) : file_(std::move(file)) {}

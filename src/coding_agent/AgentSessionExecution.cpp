@@ -34,6 +34,7 @@
 #include <span>
 #include <stop_token>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -134,6 +135,73 @@ inline constexpr std::string_view kOverflowRecoveryFailedMessage =
         "Context overflow recovery failed after one compact-and-retry attempt. "
         "Try reducing context or switching to a larger-context model.";
 
+/// The session action handle a bound native extension retains (pi `pi` API
+/// object). It holds only a weak reference: a session that closed or was
+/// destroyed rejects the action instead of reaching freed state.
+class ExtensionSessionBinding final : public extensions::ExtensionSession {
+public:
+    explicit ExtensionSessionBinding(std::weak_ptr<AgentSession::Impl> impl) : impl_(std::move(impl)) {}
+
+    [[nodiscard]] bool is_idle() const override {
+        const auto impl = impl_.lock();
+        return impl ? impl->is_extension_idle() : true;
+    }
+
+    [[nodiscard]] support::AsyncResult<void> send_message(
+            ai::CustomMessage message, extensions::ExtensionSendMessageOptions options) override {
+        const auto impl = impl_.lock();
+        if (!impl) {
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"))};
+        }
+        return impl->send_extension_message(std::move(message), options);
+    }
+
+private:
+    std::weak_ptr<AgentSession::Impl> impl_;
+};
+
+/// pi `BeforeAgentStartEvent` for one run trigger. A custom trigger is
+/// timestamped here, once, before the handlers observe it.
+[[nodiscard]] extensions::BeforeAgentStartEvent make_before_agent_start_event(
+        AgentSession::Impl::RunTrigger& trigger, std::string system_prompt) {
+    extensions::BeforeAgentStartEvent event;
+    event.system_prompt = std::move(system_prompt);
+    std::visit(
+            [&event](auto& value) {
+                using Value = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<Value, AgentSession::Impl::UserRunTrigger>) {
+                    event.message_type = extensions::BeforeAgentStartEvent::MessageType::User;
+                    event.prompt = value.prompt;
+                    event.images = value.images;
+                } else {
+                    value.timestamp = ai::current_timestamp_ms();
+                    event.message_type = extensions::BeforeAgentStartEvent::MessageType::Custom;
+                    event.message = value;
+                }
+            },
+            trigger);
+    return event;
+}
+
+/// The run's starting input in pi `_prepareRun` order: a user message the
+/// Agent receives separately, or the custom trigger as the first starting
+/// message. Handler messages are appended by the caller.
+[[nodiscard]] AgentSession::Impl::RunStartingMessages make_starting_messages(AgentSession::Impl::RunTrigger trigger) {
+    AgentSession::Impl::RunStartingMessages starting;
+    std::visit(
+            [&starting](auto& value) {
+                using Value = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<Value, AgentSession::Impl::UserRunTrigger>) {
+                    starting.user_message = detail::make_user_message(std::move(value.prompt), std::move(value.images));
+                } else {
+                    starting.messages.emplace_back(ai::MessageVariant{std::move(value)});
+                }
+            },
+            trigger);
+    return starting;
+}
+
 } // namespace
 
 void detail::record_session_observer_diagnostic(
@@ -157,8 +225,13 @@ ai::UserMessage detail::make_admitted_user_message(std::string text,
         const std::vector<PromptTemplate>& templates,
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates) {
-    auto expanded = prompt::expand_prompt_input(std::move(text), skills, templates, expand_prompt_templates);
-    auto message = ai::user_text_message(std::move(expanded));
+    return detail::make_user_message(
+            prompt::expand_prompt_input(std::move(text), skills, templates, expand_prompt_templates),
+            std::move(images));
+}
+
+ai::UserMessage detail::make_user_message(std::string text, std::vector<ai::ImageContent> images) {
+    auto message = ai::user_text_message(std::move(text));
     auto& blocks = std::get<std::vector<ai::Content>>(message.content);
     blocks.reserve(blocks.size() + images.size());
     for (auto& image : images) {
@@ -191,8 +264,9 @@ ai::ModelStreamFactory AgentSession::Impl::make_stream_factory() {
 
 AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     : services_(std::move(assembly.services)), session_(std::move(assembly.session)),
-      skills_(std::move(assembly.skills)), templates_(std::move(assembly.templates)),
-      config_(std::move(assembly.config)), session_path_(std::move(assembly.session_path)) {
+      native_extensions_(std::move(services_.native_extensions)), skills_(std::move(assembly.skills)),
+      templates_(std::move(assembly.templates)), config_(std::move(assembly.config)),
+      session_path_(std::move(assembly.session_path)) {
     // The Session Event Commitment channel exists only for persistent
     // sessions with a Runtime mailbox; in-memory sessions commit the same
     // message kinds straight into the store's live tree (pi's non-persisting
@@ -390,6 +464,25 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
                         -> boost::asio::awaitable<support::Expected<std::optional<agent::AgentLoopTurnUpdate>>> {
                     co_return co_await compact_before_next_assistant_response(std::move(turn));
                 });
+    };
+    // pi `_runSystemPromptOptions.forceSystemPrompt`: a before_agent_start
+    // handler's replacement is projected onto every request of its run, not
+    // persisted into the transcript (pi `_installAgentForcedPromptProjection`).
+    // The request policy runs after the pending messages are appended, so the
+    // projection copies the request's current messages and replaces only the
+    // prompt. The hook is stored inside the Agent this Impl owns, so the
+    // captured `this` cannot outlive its target.
+    options.prepare_request = [this](agent::PrepareRequestContext context)
+            -> support::AsyncResult<std::optional<agent::AgentRequestUpdate>> {
+        if (!run_forced_system_prompt_) {
+            return support::AsyncResult<std::optional<agent::AgentRequestUpdate>>{
+                    std::optional<agent::AgentRequestUpdate>{}};
+        }
+        return support::AsyncResult<std::optional<agent::AgentRequestUpdate>>{std::optional<agent::AgentRequestUpdate>{
+                agent::AgentRequestUpdate{.context = agent::AgentLoopContextReplacement{
+                                                  .system_prompt = *run_forced_system_prompt_,
+                                                  .messages = std::move(context.context.messages),
+                                          }}}};
     };
 
     // Resumed history is transferred exactly once into the authoritative Agent
@@ -646,6 +739,61 @@ support::ExpectedVoid AgentSession::Impl::reject_if_user_bash_busy() const {
 
 boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
         std::string prompt, std::vector<ai::ImageContent> images, bool expand_prompt_templates) {
+    RunTrigger trigger = UserRunTrigger{
+            .prompt = prompt::expand_prompt_input(std::move(prompt), skills_, templates_, expand_prompt_templates),
+            .images = std::move(images),
+    };
+    co_return co_await execute_run(std::move(trigger));
+}
+
+support::ExpectedVoid AgentSession::Impl::bind_native_extensions() {
+    if (native_extensions_.empty()) {
+        return {};
+    }
+    auto binding = std::make_unique<ExtensionSessionBinding>(weak_from_this());
+    if (auto bound = native_extensions_.bind(*binding); !bound) {
+        return bound;
+    }
+    extension_session_ = std::move(binding);
+    return {};
+}
+
+support::AsyncResult<void> AgentSession::Impl::send_extension_message(
+        ai::CustomMessage message, extensions::ExtensionSendMessageOptions options) {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return support::AsyncResult<void>{std::unexpected(rejected.error())};
+    }
+    if (!agent_) {
+        return support::AsyncResult<void>{
+                std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"))};
+    }
+    message.timestamp = ai::current_timestamp_ms();
+    // pi `sendCustomMessage` while streaming: the message joins the active run
+    // through the Agent-owned input queue (`deliverAs`, steer by default).
+    if (prompt_active_) {
+        if (options.delivery == extensions::ExtensionMessageDelivery::FollowUp) {
+            agent_->follow_up(ai::MessageVariant{std::move(message)});
+        } else {
+            agent_->steer(ai::MessageVariant{std::move(message)});
+        }
+        update_projection();
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    }
+    if (compaction_active_ || reload_active_) {
+        return support::AsyncResult<void>{std::unexpected(
+                support::make_error(support::ErrorCode::Busy, "session is busy (compaction or reload in flight)"))};
+    }
+    // pi `sendCustomMessage` while idle with `triggerTurn: true`: append the
+    // custom message as the run's starting message and start a run. The
+    // returned operation settles with that run.
+    const auto self = shared_from_this();
+    return support::detail::make_async_result(
+            [self, message = std::move(message)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await self->execute_run(RunTrigger{std::move(message)});
+            });
+}
+
+boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::execute_run(RunTrigger trigger) {
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
@@ -653,7 +801,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
         co_return std::unexpected(rejected.error());
     }
     // ADR 0040: a recorded persistence failure is session-scoped sticky
-    // state; live state is never rolled back and later prompts are rejected
+    // state; live state is never rolled back and later runs are rejected
     // with the typed failure.
     if (persistence_) {
         if (auto failure = persistence_->failure()) {
@@ -674,73 +822,36 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
     prompt_settled_signal_.emplace(co_await boost::asio::this_coro::executor);
     prompt_settled_signal_->expires_at(std::chrono::steady_clock::time_point::max());
 
-    support::ExpectedVoid result;
-    ai::UserMessage user_message = detail::make_admitted_user_message(
-            std::move(prompt), skills_, templates_, std::move(images), expand_prompt_templates);
+    const auto result = co_await run_trigger_work(std::move(trigger), *active_stop_source_);
 
-        // pi AgentSession.prompt pre-send compaction check (catches
-        // aborted responses and unhandled error terminals from the
-        // previous run): the last assistant message may still push context
-        // over the threshold. The user's new prompt below is the
-        // continuation, so no retry is performed here (pi: "do not call
-        // agent.continue() here").
-        const auto last_assistant = last_assistant_message_from(agent_->state().messages);
-        if (last_assistant) {
-            const auto preflight_outcome =
-                    co_await check_auto_compaction(*last_assistant, /*skip_aborted_check=*/false);
-            (void)preflight_outcome;
-        }
-        // pi resets the overflow-recovery attempt when a new user message
-        // starts; the pre-prompt check above still observes the previous
-        // attempt's state.
-        overflow_recovery_attempted_ = false;
-        // pi `before_agent_start` + `turn_start` (audit-1104): the first
-        // prompt waits, bounded (pi `startupWaitMs`), for direct-exposure
-        // MCP servers to finish connecting; every turn picks up servers
-        // signed in through another process since their `needs-auth`
-        // snapshot. Both are no-ops once the background connects landed.
-        // Await only when there is work: consuming an already-settled
-        // AsyncResult still yields to the executor, and that yield lands
-        // between prompt admission and the run's first turn, where queued
-        // input folds into the initial input instead of steering (#1104).
-        if (services_.mcp_manager) {
-            if (services_.mcp_manager->startup_wait_pending()) {
-                (void)co_await support::detail::await_async_result(
-                        services_.mcp_manager->wait_for_direct_servers(std::chrono::seconds{10}));
-            } else {
-                services_.mcp_manager->note_startup_checked();
-            }
-            if (services_.mcp_manager->sign_in_pickup_pending()) {
-                (void)co_await support::detail::await_async_result(services_.mcp_manager->on_turn_start());
-            }
-        }
-        result = co_await run_agent_loop(std::move(user_message), *active_stop_source_);
-
-        active_stop_source_.reset();
-        // The whole run (including steering and follow-up continuations) has
-        // settled: commit every Bash that completed mid-run exactly once, in
-        // completion order, before close finalization releases the store. This is
-        // also the flush point that guarantees a later idle Prompt builds provider
-        // context only after every completed Bash committed.
-        flush_pending_user_bash();
-        prompt_active_ = false;
-        settle_run_projection(result);
-        // Publish the settled run state (ADR 0052): the Agent flips its running
-        // flag after the final event delivery, so the Projection Stream learns
-        // the settled value — drained queues included — through the degenerate
-        // whole-snapshot patch published here.
-        update_projection();
-        if (prompt_settled_signal_) {
-            (void)prompt_settled_signal_->cancel();
-            // Release the host-executor timer with the run. cancel() completes
-            // every queued waiter (wait_for_idle/compact); their posted
-            // completions do not touch the timer afterwards. Resetting here keeps
-            // the Asio object inside the live host loop's lifetime: the host
-            // io_context (e.g. prompt_blocking's per-call loop) may be destroyed
-            // before the session, and a timer destructed after its context reads
-            // a freed service registry (ASan, issue #473).
-            prompt_settled_signal_.reset();
-        }
+    // The forced prompt is loop-local (pi `_runSystemPromptOptions` cleared in
+    // the run's finally): the next run starts from the structural prompt again.
+    run_forced_system_prompt_.reset();
+    active_stop_source_.reset();
+    // The whole run (including steering and follow-up continuations) has
+    // settled: commit every Bash that completed mid-run exactly once, in
+    // completion order, before close finalization releases the store. This is
+    // also the flush point that guarantees a later idle Prompt builds provider
+    // context only after every completed Bash committed.
+    flush_pending_user_bash();
+    prompt_active_ = false;
+    settle_run_projection(result);
+    // Publish the settled run state (ADR 0052): the Agent flips its running
+    // flag after the final event delivery, so the Projection Stream learns
+    // the settled value — drained queues included — through the degenerate
+    // whole-snapshot patch published here.
+    update_projection();
+    if (prompt_settled_signal_) {
+        (void)prompt_settled_signal_->cancel();
+        // Release the host-executor timer with the run. cancel() completes
+        // every queued waiter (wait_for_idle/compact); their posted
+        // completions do not touch the timer afterwards. Resetting here keeps
+        // the Asio object inside the live host loop's lifetime: the host
+        // io_context (e.g. prompt_blocking's per-call loop) may be destroyed
+        // before the session, and a timer destructed after its context reads
+        // a freed service registry (ASan, issue #473).
+        prompt_settled_signal_.reset();
+    }
     if (lifecycle_ == Lifecycle::Closing) {
         // The prompt awaitable is the existing observation seam for active
         // close: owned environment cleanup finishes before it settles. An
@@ -753,8 +864,75 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
     co_return result;
 }
 
+boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_trigger_work(
+        RunTrigger trigger, std::stop_source stop_source) {
+    if (!agent_) {
+        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session Agent is unavailable"));
+    }
+
+    // pi AgentSession.prompt pre-send compaction check (catches aborted
+    // responses and unhandled error terminals from the previous run): the last
+    // assistant message may still push context over the threshold. The new
+    // starting message below is the continuation, so no retry is performed
+    // here (pi: "do not call agent.continue() here").
+    const auto last_assistant = last_assistant_message_from(agent_->state().messages);
+    if (last_assistant) {
+        const auto preflight_outcome = co_await check_auto_compaction(*last_assistant, /*skip_aborted_check=*/false);
+        (void)preflight_outcome;
+    }
+    // pi resets the overflow-recovery attempt when a new user message starts;
+    // the pre-prompt check above still observes the previous attempt's state.
+    overflow_recovery_attempted_ = false;
+    // pi `before_agent_start` + `turn_start` (audit-1104): the first prompt
+    // waits, bounded (pi `startupWaitMs`), for direct-exposure MCP servers to
+    // finish connecting; every turn picks up servers signed in through another
+    // process since their `needs-auth` snapshot. Both are no-ops once the
+    // background connects landed. Await only when there is work: consuming an
+    // already-settled AsyncResult still yields to the executor, and that yield
+    // lands between prompt admission and the run's first turn, where queued
+    // input folds into the initial input instead of steering (#1104).
+    if (services_.mcp_manager) {
+        if (services_.mcp_manager->startup_wait_pending()) {
+            (void)co_await support::detail::await_async_result(
+                    services_.mcp_manager->wait_for_direct_servers(std::chrono::seconds{10}));
+        } else {
+            services_.mcp_manager->note_startup_checked();
+        }
+        if (services_.mcp_manager->sign_in_pickup_pending()) {
+            (void)co_await support::detail::await_async_result(services_.mcp_manager->on_turn_start());
+        }
+    }
+
+    // pi `_prepareRun` -> `emitBeforeAgentStart`: every native extension
+    // handler runs in registration order while the session counts as busy
+    // (`isIdle() === false`), before the run's starting messages exist. Its
+    // returned messages follow the starting message; its system-prompt
+    // replacement is projected onto every request of this run.
+    std::vector<ai::MessageVariant> handler_messages;
+    if (!native_extensions_.empty()) {
+        auto event = make_before_agent_start_event(
+                trigger, prompt::renderSystemPromptSections(build_system_prompt_sections()));
+        auto outcome = co_await support::detail::await_async_result(native_extensions_.before_agent_start(
+                std::move(event), extensions::ExtensionContext{.is_idle = is_extension_idle()}));
+        if (!outcome) {
+            co_return std::unexpected(std::move(outcome.error()));
+        }
+        run_forced_system_prompt_ = std::move(outcome->system_prompt);
+        for (auto& message : outcome->messages) {
+            message.timestamp = ai::current_timestamp_ms();
+            handler_messages.emplace_back(std::move(message));
+        }
+    }
+
+    RunStartingMessages starting = make_starting_messages(std::move(trigger));
+    for (auto& message : handler_messages) {
+        starting.messages.push_back(std::move(message));
+    }
+    co_return co_await run_agent_loop(std::move(starting), std::move(stop_source));
+}
+
 boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop(
-        ai::UserMessage prompt, std::stop_source stop_source) {
+        RunStartingMessages starting_messages, std::stop_source stop_source) {
     if (!agent_) {
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session Agent is unavailable"));
     }
@@ -801,8 +979,12 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_agent_loop
     }
 
     std::optional<support::ExpectedVoid> result;
-    result = co_await support::detail::await_async_result(agent::detail::AgentPromptAccess::prompt(
-            *agent_, std::move(prompt), std::move(prompt_prefix), make_retry_observing_sink(), stop_source));
+    result = co_await support::detail::await_async_result(agent::detail::AgentPromptAccess::prompt(*agent_,
+            std::move(starting_messages.user_message),
+            std::move(prompt_prefix),
+            std::move(starting_messages.messages),
+            make_retry_observing_sink(),
+            stop_source));
     if (!result) {
         co_return co_await commitment->conclude(std::move(result));
     }

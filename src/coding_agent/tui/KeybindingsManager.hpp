@@ -37,6 +37,12 @@ struct KeybindingsManagerResult {
     std::shared_ptr<const cch::tui::KeybindingRegistry> registry{};
     std::shared_ptr<const std::vector<HotkeyHelpRow>> help{};
     std::vector<KeybindingDiagnostic> diagnostics{};
+    /// pi `KeybindingsManager.getUserBindings`: every valid user entry after
+    /// pi's read-time legacy-name migration, in pi's order (known catalog
+    /// entries first, then the remaining ids sorted). Unknown ids stay here and
+    /// are never installed in `registry`; a value pi's schema rejects is
+    /// dropped. `/reload` replaces this map wholesale.
+    std::vector<cch::tui::KeybindingOverride> user_bindings{};
 };
 
 /// The app layer adopts pi's full 42-action `AppKeybindings` table plus the
