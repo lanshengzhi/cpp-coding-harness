@@ -295,6 +295,15 @@ constexpr std::string_view kContextCancellationArtifact = "fixtures/pi-v1.3.0/au
             .result;
 }
 
+/// One delivered frame as the frozen `audit-1057` watch scenarios observe it:
+/// its value, whether the commit context carried an abort signal, and the
+/// commit context's typed value under the scenario's key.
+struct ObservedFrame {
+    chord::Json value;
+    bool abort_signal_present{false};
+    std::optional<std::string> context_value;
+};
+
 /// The frozen `{name, message}` fields of one captured abort error.
 struct FrozenAbortError {
     std::string name;
@@ -338,11 +347,6 @@ TEST_CASE("cancelling a watch ends delivery without aborting a completed callbac
     REQUIRE(acquired.value().has_value());
     auto& watch = *acquired.value();
 
-    struct ObservedFrame {
-        chord::Json value;
-        bool abort_signal_present{false};
-        std::optional<std::string> context_value;
-    };
     std::vector<ObservedFrame> frames;
     REQUIRE(watch.start([&frames, &commit_key](DocumentFrame frame, chord::Context context) {
         frames.push_back(ObservedFrame{.value = std::move(frame.value),
@@ -594,11 +598,6 @@ TEST_CASE("C++ Session cancellation and close with a Context",
     REQUIRE(acquired.value().has_value());
     auto& watch = *acquired.value();
 
-    struct ObservedFrame {
-        chord::Json value;
-        bool abort_signal_present{false};
-        std::optional<std::string> context_value;
-    };
     std::vector<ObservedFrame> frames;
     REQUIRE(watch.start([&frames, &commit_key](DocumentFrame frame, chord::Context context) {
         frames.push_back(ObservedFrame{.value = std::move(frame.value),
@@ -638,4 +637,59 @@ TEST_CASE("C++ Session cancellation and close with a Context",
     CHECK(closing.error().code == support::ErrorCode::Cancelled);
     CHECK(storage.close_calls() == 1);
     CHECK(session->closed().reason == SessionEndReason::Closed);
+}
+
+// Discriminating case for the watch row's "a watch stop must not abort or join
+// a running callback" half: a listener that stops or cancels its own watch
+// while buffered frames are being delivered ends the batch. The callback that
+// asked for the stop runs to completion, and the queued frames are discarded
+// without reaching the listener.
+TEST_CASE("stopping or cancelling a watch during a callback discards the queued frames",
+        "[durable][session][watch][cancellation][issue1184][discriminating]") {
+    MemoryStorage storage;
+    auto session = Session::create(storage);
+    const auto definition = context_document("1057.watch-self-stop");
+    REQUIRE(set_document_value(*session, definition, 1.0, chord::background_context()).has_value());
+
+    // Two frames are committed before either watch starts, so each delivery
+    // batch holds a frame the callback can discard.
+    auto stopped_scope = chord::with_cancel(chord::background_context());
+    auto stopped_watch = consume(session->watch_doc(definition, DocumentAddress{}, stopped_scope.context()));
+    REQUIRE(stopped_watch.has_value());
+    REQUIRE(stopped_watch.value().has_value());
+
+    auto cancelled_scope = chord::with_cancel(chord::background_context());
+    auto cancelled_watch = consume(session->watch_doc(definition, DocumentAddress{}, cancelled_scope.context()));
+    REQUIRE(cancelled_watch.has_value());
+    REQUIRE(cancelled_watch.value().has_value());
+
+    REQUIRE(set_document_value(*session, definition, 2.0, chord::background_context()).has_value());
+    REQUIRE(set_document_value(*session, definition, 3.0, chord::background_context()).has_value());
+
+    // The first callback stops its own watch; the second cancels its own
+    // acquisition context.
+    std::vector<ObservedFrame> stopped_frames;
+    bool stopped_callback_completed = false;
+    REQUIRE(stopped_watch.value().value().start([&](DocumentFrame frame, chord::Context) {
+        stopped_frames.push_back(ObservedFrame{.value = std::move(frame.value)});
+        stopped_watch.value().value().stop();
+        stopped_callback_completed = true;
+    }));
+
+    std::vector<ObservedFrame> cancelled_frames;
+    bool cancelled_callback_completed = false;
+    REQUIRE(cancelled_watch.value().value().start([&](DocumentFrame frame, chord::Context) {
+        cancelled_frames.push_back(ObservedFrame{.value = std::move(frame.value)});
+        cancelled_scope.cancel("stop watching");
+        cancelled_callback_completed = true;
+    }));
+
+    // The running callback completed and delivered exactly its own frame; the
+    // queued frame was discarded rather than delivered after the stop.
+    CHECK(stopped_callback_completed);
+    CHECK(stopped_frames.size() == 1);
+    CHECK(cancelled_callback_completed);
+    CHECK(cancelled_frames.size() == 1);
+    CHECK(stopped_watch.value().value().stop() == WatchEndReason::Stopped);
+    CHECK(cancelled_watch.value().value().stop() == WatchEndReason::Cancelled);
 }

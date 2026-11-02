@@ -64,11 +64,6 @@ template <typename T> [[nodiscard]] ContextKey<T> create_context_key(std::string
 /// root; deriving a context never mutates its parent.
 class Context {
 public:
-    /// An absent context: no root, no values and no cancellation. The ordinary
-    /// empty root is `background_context()`; this exists so a stored or
-    /// buffered context can be default-initialized, and it behaves like an
-    /// empty root everywhere (`to_string()` reports `[Context]`).
-    Context() = default;
     Context(const Context&) = default;
     Context(Context&&) noexcept = default;
     Context& operator=(const Context&) = default;
