@@ -566,14 +566,14 @@
      "^(issue1090|issue1101|issue1104)$",
      "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml"
+     "docs/research/pi-v1.3.0/deliveries/1158-final-1090.xml"
     ],
-    "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
-    "recordedAt": "2026-11-02T08:57:19Z",
+    "testedRevision": "1f6a0b75369787b4b599750cc6e02f2e7190cedf",
+    "recordedAt": "2026-11-02T15:01:59Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml",
-     "sha256": "e7d0d8670971150dbfff24f696f65613a6b7429b349e0df999f561b593771946"
+     "path": "docs/research/pi-v1.3.0/deliveries/1158-final-1090.xml",
+     "sha256": "4b1d6b7f8e5ded9680f398868fe7f77a10a143435084d36f98d3a93b12fd1068"
     }
    },
    "inputs": [
@@ -631,7 +631,7 @@
     },
     {
      "path": "src/durable/include/cch/durable/Environment.hpp",
-     "sha256": "330f4143c285b6aa7d157fee0207567b37f3e4bed5f61f6af9170bd6b2c824d1"
+     "sha256": "e2399dc05e75d9bdf8eec297a72b4b4a196f2b04d05cc00424c006e1df1dbcc5"
     },
     {
      "path": "src/durable/include/cch/durable/Images.hpp",
@@ -991,6 +991,56 @@
      "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
      "fixtures/pi-v1.3.0/baselines.json"
     ]
+   },
+   "revalidation1158": {
+    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery’s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
+    "changedInputs": [
+     "src/durable/include/cch/durable/Environment.hpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml"
+     ],
+     "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
+     "recordedAt": "2026-11-02T08:57:19Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml",
+      "sha256": "e7d0d8670971150dbfff24f696f65613a6b7429b349e0df999f561b593771946"
+     }
+    }
+   },
+   "revalidation1158header": {
+    "reason": "The positioned-read interface comment was narrowed to its actual offset domain and per-call path identity. No declarations or executable behavior changed; the same selection was rebuilt and rerun.",
+    "changedInputs": [
+     "src/durable/include/cch/durable/Environment.hpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1158-postmerge-1090.xml"
+     ],
+     "testedRevision": "b9b7c1fb272104860b7b6b653247e2cdf5ae413a",
+     "recordedAt": "2026-11-02T14:52:45Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1158-postmerge-1090.xml",
+      "sha256": "269e651c22b9a5f20af94d1eec34aa4c8809c45285bdf4b8e2630781b9caf7ea"
+     }
+    }
    }
   },
   {
@@ -4468,14 +4518,14 @@
      "issue1184",
      "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml"
+     "docs/research/pi-v1.3.0/deliveries/1158-postmerge-1184.xml"
     ],
-    "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
-    "recordedAt": "2026-11-02T08:57:19Z",
+    "testedRevision": "b9b7c1fb272104860b7b6b653247e2cdf5ae413a",
+    "recordedAt": "2026-11-02T14:52:45Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
-     "sha256": "0d5ad2f41ea2c7cb4d24af35e99b5efb3e15c0dd3a436ed86fb0d3b4d40e164c"
+     "path": "docs/research/pi-v1.3.0/deliveries/1158-postmerge-1184.xml",
+     "sha256": "40e9fa5e1d6268597c6f28a3951a2f587de98c0c5b3e297e2ca599ff91352369"
     }
    },
    "rows": [
@@ -4644,7 +4694,7 @@
     },
     {
      "path": "tests/durable/HarnessWorkflowTest.cpp",
-     "sha256": "a0f8a9e1c3f7c939678835cfd8d62cc13bba7d9868ad257874d41616f64c71ab"
+     "sha256": "a1cc5045b7f47e3ddb485ce9d73aea37f76872a69f6d922a7cf044e61afe6f74"
     },
     {
      "path": "tests/durable/Outcome.hpp",
@@ -4674,7 +4724,32 @@
      "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
      "sha256": "0d5ad2f41ea2c7cb4d24af35e99b5efb3e15c0dd3a436ed86fb0d3b4d40e164c"
     }
-   ]
+   ],
+   "revalidation1158": {
+    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery’s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
+    "changedInputs": [
+     "tests/durable/HarnessWorkflowTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1184",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml"
+     ],
+     "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
+     "recordedAt": "2026-11-02T08:57:19Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
+      "sha256": "0d5ad2f41ea2c7cb4d24af35e99b5efb3e15c0dd3a436ed86fb0d3b4d40e164c"
+     }
+    }
+   }
   },
   {
    "id": "1186-chord-typed-json",

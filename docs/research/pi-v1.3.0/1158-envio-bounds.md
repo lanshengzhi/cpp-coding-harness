@@ -230,8 +230,10 @@ The 1090/1101/1104 receipt selection passed 36/36 and the 1184 selection passed
 neither prior artifact. Consolidation build and check passed, as did all 42
 `ConsolidationAuditTest.py` cases. Candidate `audit-1158` passed its manifest
 check; registry verification covered 56 registered bundles, 116 artifacts and
-654 scenarios. Registration remains with the serial merger. No unfiltered CTest
-suite was run, at the user's request.
+654 scenarios. The serial architecture selection passed 43/43. An earlier run
+concurrent with a build was interrupted after `PARITY-6002` reported changing
+Ninja dependency evidence; it did not complete. Registration remains with the
+serial merger. No unfiltered CTest suite was run, at the user's request.
 
 ## Capability status
 
