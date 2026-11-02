@@ -1,0 +1,71 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1191",
+  "family": "audit-1191",
+  "capturedAt": "2026-11-02T06:07:38.029Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/transports/stdio.ts:StdioTransport.handleStderr,DEFAULT_MAX_STDERR_BYTES",
+    "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.connectOnce,connectFailed,STDERR_TAIL_CHARS",
+    "packages/mcp/test/stdio.test.ts:connects to a newline-delimited MCP server and captures stderr"
+  ],
+  "scenarios": [
+    {
+      "name": "stdio: the transport ring keeps the last 64 KiB of a larger stderr stream",
+      "inputs": {
+        "transport": "stdio child",
+        "stderrBytes": 80000,
+        "ringBytes": 65536
+      },
+      "expected": {
+        "connectOutcome": {
+          "name": "McpConnectionClosedError",
+          "message": "MCP connection closed"
+        },
+        "payloadBytes": 80000,
+        "ringBytes": 65536,
+        "ringKeepsTail": true,
+        "ringDroppedHead": true
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "the synthetic stderr payload is generated deterministically from its declared byte count"
+      ]
+    },
+    {
+      "name": "stdio: a failed connect appends pi's bounded 2000-character stderr tail",
+      "inputs": {
+        "transport": "stdio child through McpServerConnection",
+        "stderrBytes": 80000,
+        "tailCharacters": 2000
+      },
+      "expected": {
+        "state": "failed",
+        "error": {
+          "name": "Error",
+          "message": "MCP server \"audit-1191-stderr\" failed to connect: MCP connection closed\nssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss-AUDIT1191-END"
+        },
+        "failurePrefix": true,
+        "tailCharacters": 2000,
+        "tailMatchesLast2000": true,
+        "tailIncludesRingHead": false,
+        "errorIncludesWholeRing": false
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "the synthetic stderr payload is generated deterministically from its declared byte count"
+      ]
+    }
+  ]
+}

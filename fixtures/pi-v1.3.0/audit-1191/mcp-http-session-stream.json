@@ -1,0 +1,206 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1191",
+  "family": "audit-1191",
+  "capturedAt": "2026-11-02T06:07:38.029Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.start,setProtocolVersion,send,captureSession,buildHeaders,openSseStream,runGetStream,consumeSse,close",
+    "packages/mcp/src/client.ts:McpClient.handleMessage,handleRequest,handleCancelled,handleNotification",
+    "packages/mcp/test/streamable-http.test.ts:handles JSON and SSE responses with session and protocol headers",
+    "packages/mcp/test/streamable-http.test.ts:opens the GET stream after initialization and sends Last-Event-ID only when resuming",
+    "packages/mcp/test/streamable-http.test.ts:reconnects the GET stream after it drops",
+    "packages/mcp/test/client.test.ts:answers roots/list and dispatches notifications"
+  ],
+  "scenarios": [
+    {
+      "name": "HTTP: session headers carry through and a 405 GET is feature-absent",
+      "inputs": {
+        "transport": "loopback HTTP",
+        "getStatus": 405,
+        "close": "DELETE with session id"
+      },
+      "expected": {
+        "sessionId": "session-1",
+        "tools": [
+          "echo"
+        ],
+        "listSessionHeader": "session-1",
+        "listProtocolHeader": "2025-06-18",
+        "getAccept": "text/event-stream",
+        "getSessionHeader": "session-1",
+        "getCount": 1,
+        "getAfterInitialized": true,
+        "errors": [],
+        "deleteSessionHeader": "session-1",
+        "latestProtocolVersion": "2025-11-25"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+      ]
+    },
+    {
+      "name": "HTTP: a server retry hint overrides the client reconnect delay and resumes with Last-Event-ID",
+      "inputs": {
+        "retryField": 20,
+        "clientBackoffMs": 500,
+        "firstGet": "priming id 1 then end",
+        "secondGet": "resume with Last-Event-ID and hold open"
+      },
+      "expected": {
+        "retryField": "20",
+        "retryNumeric": 20,
+        "reconnectGapMs": 21,
+        "reconnected": true,
+        "secondLastEventId": "1",
+        "errors": []
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+      ]
+    },
+    {
+      "name": "HTTP: an out-of-range retry hint reconnects without throwing or hanging",
+      "inputs": {
+        "retryField": "99999999999999999999999999",
+        "clientBackoffMs": 20,
+        "firstGet": "priming id 1 then end",
+        "secondGet": "resume with Last-Event-ID and hold open"
+      },
+      "expected": {
+        "retryField": "99999999999999999999999999",
+        "retryNumeric": 1e+26,
+        "reconnectGapMs": 3,
+        "reconnected": true,
+        "secondLastEventId": "1",
+        "errors": [],
+        "runtimeClamped": true
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+      ]
+    },
+    {
+      "name": "HTTP: an event on the server-to-client GET stream reaches the notification listener",
+      "inputs": {
+        "transport": "loopback HTTP GET SSE",
+        "event": "notifications/message"
+      },
+      "expected": {
+        "events": [
+          {
+            "level": "info",
+            "data": "hello"
+          }
+        ],
+        "getCount": 1
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+      ]
+    },
+    {
+      "name": "HTTP: the client answers ping and roots/list requests delivered on the GET stream",
+      "inputs": {
+        "transport": "loopback HTTP GET SSE",
+        "serverRequests": [
+          {
+            "id": 7,
+            "method": "ping"
+          },
+          {
+            "id": 8,
+            "method": "roots/list"
+          }
+        ],
+        "configuredRoots": [
+          {
+            "uri": "file:///workspace",
+            "name": "workspace"
+          }
+        ]
+      },
+      "expected": {
+        "pingResponse": {},
+        "rootsResponse": {
+          "roots": [
+            {
+              "uri": "file:///workspace",
+              "name": "workspace"
+            }
+          ]
+        },
+        "configuredRoots": [
+          {
+            "uri": "file:///workspace",
+            "name": "workspace"
+          }
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+      ]
+    },
+    {
+      "name": "HTTP: notifications/cancelled aborts an in-flight server request handler",
+      "inputs": {
+        "transport": "loopback HTTP GET SSE",
+        "serverRequest": {
+          "id": 9,
+          "method": "test/wait"
+        },
+        "cancellationDelayMs": 80
+      },
+      "expected": {
+        "handlerAborted": true,
+        "responseError": {
+          "code": -32603,
+          "message": "MCP request aborted"
+        },
+        "responseHasResult": false
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+      ]
+    },
+    {
+      "name": "HTTP: close aborts the GET stream without a dropped-stream error",
+      "inputs": {
+        "transport": "loopback HTTP GET SSE",
+        "close": "client.close() sends DELETE"
+      },
+      "expected": {
+        "getCount": 1,
+        "getClosed": true,
+        "deleteSessionHeader": "session-1",
+        "errors": []
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+      ]
+    }
+  ]
+}

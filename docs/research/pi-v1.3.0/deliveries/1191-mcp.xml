@@ -1,0 +1,3358 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="304"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="15"
+	timestamp="2026-11-02T15:42:28"
+	>
+	<testcase name="cch_mcp call_tool preserves actual wire object order for structuredContent" classname="cch_mcp call_tool preserves actual wire object order for structuredContent" time="0.603282" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1101;mcp;owner;spec"/>
+		</properties>
+		<system-out>Filters: "cch_mcp call_tool preserves actual wire object order for structuredContent"
+Randomness seeded to: 654803842
+===============================================================================
+All tests passed (61 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cch_mcp stdio client initializes, lists, calls and closes against a local fixture" classname="cch_mcp stdio client initializes, lists, calls and closes against a local fixture" time="0.152479" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1065;mcp;owner"/>
+		</properties>
+		<system-out>Filters: "cch_mcp stdio client initializes\, lists\, calls and closes against a local fixture"
+Randomness seeded to: 3692893553
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cch_mcp stdio client preserves every JSON structuredContent type from tools/call" classname="cch_mcp stdio client preserves every JSON structuredContent type from tools/call" time="0.130218" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1101;mcp;owner;spec"/>
+		</properties>
+		<system-out>Filters: "cch_mcp stdio client preserves every JSON structuredContent type from tools/call"
+Randomness seeded to: 996124826
+===============================================================================
+All tests passed (55 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cch_mcp stdio client reports a crashing fixture as a transport failure" classname="cch_mcp stdio client reports a crashing fixture as a transport failure" time="0.0616117" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1065;mcp;owner"/>
+		</properties>
+		<system-out>Filters: "cch_mcp stdio client reports a crashing fixture as a transport failure"
+Randomness seeded to: 3896563038
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cch_mcp stdio client resolves a caller-cancelled held request as Cancelled" classname="cch_mcp stdio client resolves a caller-cancelled held request as Cancelled" time="0.258097" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1065;mcp;owner"/>
+		</properties>
+		<system-out>Filters: "cch_mcp stdio client resolves a caller-cancelled held request as Cancelled"
+Randomness seeded to: 1240941068
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cch_mcp streamable HTTP client initializes, lists, calls and closes against a local fixture" classname="cch_mcp streamable HTTP client initializes, lists, calls and closes against a local fixture" time="0.940591" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1065;mcp;owner"/>
+		</properties>
+		<system-out>Filters: "cch_mcp streamable HTTP client initializes\, lists\, calls and closes against a local fixture"
+Randomness seeded to: 3038785689
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="HTTPS transport rejects an untrusted certificate" classname="HTTPS transport rejects an untrusted certificate" time="1.56106" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "HTTPS transport rejects an untrusted certificate"
+Randomness seeded to: 472957358
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: HTTP 405 is feature-absent, not a failure" classname="MCP GET stream: HTTP 405 is feature-absent, not a failure" time="0.0930959" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: HTTP 405 is feature-absent\, not a failure"
+Randomness seeded to: 3140422938
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: a received event resets the reconnect attempt counter" classname="MCP GET stream: a received event resets the reconnect attempt counter" time="0.0524014" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: a received event resets the reconnect attempt counter"
+Randomness seeded to: 2758897543
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: a server retry field overrides the reconnect delay" classname="MCP GET stream: a server retry field overrides the reconnect delay" time="0.089165" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: a server retry field overrides the reconnect delay"
+Randomness seeded to: 695395887
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: an out-of-range server retry field is ignored, never throws" classname="MCP GET stream: an out-of-range server retry field is ignored, never throws" time="0.0780588" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: an out-of-range server retry field is ignored\, never throws"
+Randomness seeded to: 34563970
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: an unknown server request is answered -32601" classname="MCP GET stream: an unknown server request is answered -32601" time="0.0696248" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: an unknown server request is answered -32601"
+Randomness seeded to: 2827826248
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: close() aborts the stream without the dropped error" classname="MCP GET stream: close() aborts the stream without the dropped error" time="0.0933219" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: close() aborts the stream without the dropped error"
+Randomness seeded to: 3846216450
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: exhausted retries report the dropped-stream error" classname="MCP GET stream: exhausted retries report the dropped-stream error" time="0.065191" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: exhausted retries report the dropped-stream error"
+Randomness seeded to: 2459648789
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: notifications/cancelled aborts the in-flight handler" classname="MCP GET stream: notifications/cancelled aborts the in-flight handler" time="0.114099" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: notifications/cancelled aborts the in-flight handler"
+Randomness seeded to: 2648934545
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: server notifications reach the connection listener" classname="MCP GET stream: server notifications reach the connection listener" time="0.108851" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: server notifications reach the connection listener"
+Randomness seeded to: 997021028
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: server ping is answered with an empty result" classname="MCP GET stream: server ping is answered with an empty result" time="0.10416" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: server ping is answered with an empty result"
+Randomness seeded to: 1250976541
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP GET stream: server request roots/list is answered with file://&lt;cwd&gt;" classname="MCP GET stream: server request roots/list is answered with file://&lt;cwd&gt;" time="0.0621396" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;mcp"/>
+		</properties>
+		<system-out>Filters: "MCP GET stream: server request roots/list is answered with file://&lt;cwd&gt;"
+Randomness seeded to: 368232867
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP OAuth login reuses the login surface and persists into mcp-auth.json" classname="MCP OAuth login reuses the login surface and persists into mcp-auth.json" time="0.070064" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue875;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "MCP OAuth login reuses the login surface and persists into mcp-auth.json"
+Randomness seeded to: 3337599494
+===============================================================================
+All tests passed (37 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP OAuth refresh uses pi&apos;s 30-second skew" classname="MCP OAuth refresh uses pi&apos;s 30-second skew" time="0.056572" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "MCP OAuth refresh uses pi's 30-second skew"
+Randomness seeded to: 1332616859
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP structured results match every original frozen audit obligation through real public callers" classname="MCP structured results match every original frozen audit obligation through real public callers" time="0.273712" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "MCP structured results match every original frozen audit obligation through real public callers"
+Randomness seeded to: 1019420309
+===============================================================================
+All tests passed (94 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SEP-837 application_type is native for loopback and custom-scheme redirect URIs" classname="SEP-837 application_type is native for loopback and custom-scheme redirect URIs" time="0.0410393" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "SEP-837 application_type is native for loopback and custom-scheme redirect URIs"
+Randomness seeded to: 3731897672
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="WWW-Authenticate parsing reads only bearer and dpop challenges" classname="WWW-Authenticate parsing reads only bearer and dpop challenges" time="0.0298531" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "WWW-Authenticate parsing reads only bearer and dpop challenges"
+Randomness seeded to: 3352866496
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a 401 from the MCP server is an explicit re-login error" classname="a 401 from the MCP server is an explicit re-login error" time="0.406432" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue875;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a 401 from the MCP server is an explicit re-login error"
+Randomness seeded to: 4059097892
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a Client ID Metadata Document needs a public-client-capable server" classname="a Client ID Metadata Document needs a public-client-capable server" time="0.0401702" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a Client ID Metadata Document needs a public-client-capable server"
+Randomness seeded to: 2233247669
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a browser callback wait cancelled by the sign-in stop token stops sign-in" classname="a browser callback wait cancelled by the sign-in stop token stops sign-in" time="0.0548369" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a browser callback wait cancelled by the sign-in stop token stops sign-in"
+Randomness seeded to: 3354456012
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cancelled MCP OAuth client registration stops before any token request" classname="a cancelled MCP OAuth client registration stops before any token request" time="0.319029" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cancelled MCP OAuth client registration stops before any token request"
+Randomness seeded to: 2612422849
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cancelled MCP OAuth discovery stops before any registration or token request" classname="a cancelled MCP OAuth discovery stops before any registration or token request" time="0.303716" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cancelled MCP OAuth discovery stops before any registration or token request"
+Randomness seeded to: 457065725
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cancelled MCP OAuth refresh stops before the request reaches the MCP server" classname="a cancelled MCP OAuth refresh stops before the request reaches the MCP server" time="0.325113" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cancelled MCP OAuth refresh stops before the request reaches the MCP server"
+Randomness seeded to: 3280214370
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cancelled in-flight MCP call notifies the server, fails the call, and leaves the connection usable" classname="a cancelled in-flight MCP call notifies the server, fails the call, and leaves the connection usable" time="0.13608" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue872;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cancelled in-flight MCP call notifies the server\, fails the call\, and leaves the connection usable"
+Randomness seeded to: 3782920626
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes" classname="a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes" time="1.36332" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes"
+Randomness seeded to: 415043265
+===============================================================================
+All tests passed (66 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a codemode-exposure MCP tool is reachable from a codemode script even though it is undeclared" classname="a codemode-exposure MCP tool is reachable from a codemode script even though it is undeclared" time="5.15245" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a codemode-exposure MCP tool is reachable from a codemode script even though it is undeclared"
+Randomness seeded to: 1481211941
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a codemode-exposure resource-bearing server keeps the resource tools undeclared but reachable from scripts" classname="a codemode-exposure resource-bearing server keeps the resource tools undeclared but reachable from scripts" time="4.41329" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a codemode-exposure resource-bearing server keeps the resource tools undeclared but reachable from scripts"
+Randomness seeded to: 2599513248
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a codemode-exposure server activates the codemode tool from the config before any connect" classname="a codemode-exposure server activates the codemode tool from the config before any connect" time="0.0330146" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a codemode-exposure server activates the codemode tool from the config before any connect"
+Randomness seeded to: 1037195546
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a codemode-exposure server registers its tools undeclared, activates codemode, and renders the mcp_servers section" classname="a codemode-exposure server registers its tools undeclared, activates codemode, and renders the mcp_servers section" time="0.165389" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a codemode-exposure server registers its tools undeclared\, activates codemode\, and renders the mcp_servers section"
+Randomness seeded to: 3743094937
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a configured authorization server metadata URL is used instead of discovery" classname="a configured authorization server metadata URL is used instead of discovery" time="0.0330585" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a configured authorization server metadata URL is used instead of discovery"
+Randomness seeded to: 1159881456
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a configured oauth scope is requested instead of the server&apos;s default" classname="a configured oauth scope is requested instead of the server&apos;s default" time="0.0389051" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a configured oauth scope is requested instead of the server's default"
+Randomness seeded to: 1207072946
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a connected MCP server&apos;s contributed tools carry their exposure and namespace" classname="a connected MCP server&apos;s contributed tools carry their exposure and namespace" time="0.127103" status="run">
+		<properties>
+			<property name="cmake_labels" value="catalog;codemode;coding_agent;issue1118;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a connected MCP server's contributed tools carry their exposure and namespace"
+Randomness seeded to: 420194044
+===============================================================================
+All tests passed (36 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a connected MCP tool&apos;s Agent-visible definition carries the output schema" classname="a connected MCP tool&apos;s Agent-visible definition carries the output schema" time="0.234089" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a connected MCP tool's Agent-visible definition carries the output schema"
+Randomness seeded to: 3780699444
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a cursor without a server is pi&apos;s explicit error" classname="a cursor without a server is pi&apos;s explicit error" time="0.0635675" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a cursor without a server is pi's explicit error"
+Randomness seeded to: 1695157370
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a dead refresh token invalidates the tokens and re-authorizes instead of looping" classname="a dead refresh token invalidates the tokens and re-authorizes instead of looping" time="0.0444418" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a dead refresh token invalidates the tokens and re-authorizes instead of looping"
+Randomness seeded to: 1187984558
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a dead stdio server reports the call error and reconnects on the next call" classname="a dead stdio server reports the call error and reconnects on the next call" time="0.22691" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue876;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a dead stdio server reports the call error and reconnects on the next call"
+Randomness seeded to: 2271467592
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a deferred-exposure server activates nothing and warns once that neither discovery tool is active" classname="a deferred-exposure server activates nothing and warns once that neither discovery tool is active" time="0.0728315" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a deferred-exposure server activates nothing and warns once that neither discovery tool is active"
+Randomness seeded to: 3934709103
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a direct-exposure server declares its tools and the resource tools read the scripted server&apos;s resources" classname="a direct-exposure server declares its tools and the resource tools read the scripted server&apos;s resources" time="0.323204" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a direct-exposure server declares its tools and the resource tools read the scripted server's resources"
+Randomness seeded to: 871295372
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a disabled server stays disabled across a manager rebuild via the mcp.json round-trip" classname="a disabled server stays disabled across a manager rebuild via the mcp.json round-trip" time="0.0417753" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a disabled server stays disabled across a manager rebuild via the mcp.json round-trip"
+Randomness seeded to: 4275214342
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a factory error is recorded as the server message, never a veto on start" classname="a factory error is recorded as the server message, never a veto on start" time="0.0767359" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a factory error is recorded as the server message\, never a veto on start"
+Randomness seeded to: 2896676588
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a failed MCP HTTP call does not emit notifications/cancelled" classname="a failed MCP HTTP call does not emit notifications/cancelled" time="0.389366" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a failed MCP HTTP call does not emit notifications/cancelled"
+Randomness seeded to: 1974267267
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a failing MCP tool call is isolated and does not end the Agent Turn" classname="a failing MCP tool call is isolated and does not end the Agent Turn" time="0.255183" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue869;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a failing MCP tool call is isolated and does not end the Agent Turn"
+Randomness seeded to: 3680631764
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a healthy server reports connected and registers its tools" classname="a healthy server reports connected and registers its tools" time="0.0433401" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a healthy server reports connected and registers its tools"
+Randomness seeded to: 1981040189
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a hidden-exposure server registers its tools undeclared and renders no mcp_servers section" classname="a hidden-exposure server registers its tools undeclared and renders no mcp_servers section" time="0.1544" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a hidden-exposure server registers its tools undeclared and renders no mcp_servers section"
+Randomness seeded to: 1814211201
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a hung MCP server fails the call with an explicit timeout, never a silent hang" classname="a hung MCP server fails the call with an explicit timeout, never a silent hang" time="2.17396" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue872;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a hung MCP server fails the call with an explicit timeout\, never a silent hang"
+Randomness seeded to: 348541368
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a legacy bare-URL key is taken over on the first load" classname="a legacy bare-URL key is taken over on the first load" time="0.0357452" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a legacy bare-URL key is taken over on the first load"
+Randomness seeded to: 3398739112
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a listed resource with no name defaults it from the uri" classname="a listed resource with no name defaults it from the uri" time="0.0414391" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a listed resource with no name defaults it from the uri"
+Randomness seeded to: 557682641
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a malformed mcp-auth.json is an explicit error, never silently replaced" classname="a malformed mcp-auth.json is an explicit error, never silently replaced" time="0.05547" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a malformed mcp-auth.json is an explicit error\, never silently replaced"
+Randomness seeded to: 4264841919
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a malformed mcp.json entry is an explicit error and the valid entries still load" classname="a malformed mcp.json entry is an explicit error and the valid entries still load" time="0.0353451" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue876;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a malformed mcp.json entry is an explicit error and the valid entries still load"
+Randomness seeded to: 2592344632
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a malformed server frame is a recoverable transport error" classname="a malformed server frame is a recoverable transport error" time="0.141756" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue869;mcp;protocol"/>
+		</properties>
+		<system-out>Filters: "a malformed server frame is a recoverable transport error"
+Randomness seeded to: 3382426377
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a missing MCP OAuth credential is an explicit re-login error, never an unauthenticated request" classname="a missing MCP OAuth credential is an explicit re-login error, never an unauthenticated request" time="0.0325685" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue875;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a missing MCP OAuth credential is an explicit re-login error\, never an unauthenticated request"
+Randomness seeded to: 3119773222
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a network failure in protected resource discovery is not swallowed" classname="a network failure in protected resource discovery is not swallowed" time="0.0303174" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a network failure in protected resource discovery is not swallowed"
+Randomness seeded to: 3659724340
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a no-match tool_search leaves the offered set unchanged" classname="a no-match tool_search leaves the offered set unchanged" time="0.247567" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1095;mcp;spec;tool_search"/>
+		</properties>
+		<system-out>Filters: "a no-match tool_search leaves the offered set unchanged"
+Randomness seeded to: 2254687930
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a pasted redirect URL completes the MCP OAuth sign-in" classname="a pasted redirect URL completes the MCP OAuth sign-in" time="0.0858233" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a pasted redirect URL completes the MCP OAuth sign-in"
+Randomness seeded to: 1012395178
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a pasted redirect URL for another redirect URI does not complete the sign-in" classname="a pasted redirect URL for another redirect URI does not complete the sign-in" time="0.0610845" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a pasted redirect URL for another redirect URI does not complete the sign-in"
+Randomness seeded to: 344229747
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a persisted MCP server survives restart and reports the running state" classname="a persisted MCP server survives restart and reports the running state" time="0.267192" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue876;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a persisted MCP server survives restart and reports the running state"
+Randomness seeded to: 240044615
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a persisted server whose command now fails surfaces failed state and the session still starts" classname="a persisted server whose command now fails surfaces failed state and the session still starts" time="0.220981" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue876;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a persisted server whose command now fails surfaces failed state and the session still starts"
+Randomness seeded to: 53663311
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a project entry overrides only the enabled flag of a global server" classname="a project entry overrides only the enabled flag of a global server" time="0.0479792" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue876;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a project entry overrides only the enabled flag of a global server"
+Randomness seeded to: 3134705027
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a project mcp.json is read only while the project is trusted" classname="a project mcp.json is read only while the project is trusted" time="0.0329625" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue876;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a project mcp.json is read only while the project is trusted"
+Randomness seeded to: 1083037754
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a project override merges only the pi override keys" classname="a project override merges only the pi override keys" time="0.0359778" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a project override merges only the pi override keys"
+Randomness seeded to: 337109655
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a protected resource document that is not JSON is an explicit failure" classname="a protected resource document that is not JSON is an explicit failure" time="0.0586309" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a protected resource document that is not JSON is an explicit failure"
+Randomness seeded to: 2609226728
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a redirect chain beyond the fetch ceiling fails explicitly" classname="a redirect chain beyond the fetch ceiling fails explicitly" time="0.294242" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;protocol"/>
+		</properties>
+		<system-out>Filters: "a redirect chain beyond the fetch ceiling fails explicitly"
+Randomness seeded to: 1987385186
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a redirect to a non-HTTP(S) Location is a network error" classname="a redirect to a non-HTTP(S) Location is a network error" time="0.230942" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;protocol"/>
+		</properties>
+		<system-out>Filters: "a redirect to a non-HTTP(S) Location is a network error"
+Randomness seeded to: 3929112496
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a redirect without a Location surfaces the status explicitly" classname="a redirect without a Location surfaces the status explicitly" time="0.247465" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;protocol"/>
+		</properties>
+		<system-out>Filters: "a redirect without a Location surfaces the status explicitly"
+Randomness seeded to: 290340361
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a request already cancelled before it is sent does not emit notifications/cancelled" classname="a request already cancelled before it is sent does not emit notifications/cancelled" time="0.355228" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a request already cancelled before it is sent does not emit notifications/cancelled"
+Randomness seeded to: 2741393826
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a root-path server does not retry a missed protected resource document" classname="a root-path server does not retry a missed protected resource document" time="0.0352358" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a root-path server does not retry a missed protected resource document"
+Randomness seeded to: 929790847
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a rotated MCP OAuth refresh is persisted before the request continues" classname="a rotated MCP OAuth refresh is persisted before the request continues" time="0.0823628" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue875;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a rotated MCP OAuth refresh is persisted before the request continues"
+Randomness seeded to: 1757732595
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a same-origin redirect is followed and keeps the request auth header" classname="a same-origin redirect is followed and keeps the request auth header" time="0.215795" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a same-origin redirect is followed and keeps the request auth header"
+Randomness seeded to: 763593803
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a server disabled in mcp.json is stopped, its tools are absent, and a notice names it" classname="a server disabled in mcp.json is stopped, its tools are absent, and a notice names it" time="0.0678342" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue876;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a server disabled in mcp.json is stopped\, its tools are absent\, and a notice names it"
+Randomness seeded to: 144523717
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a server that dies mid-session does not end the session and reconnects" classname="a server that dies mid-session does not end the session and reconnects" time="0.308516" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue876;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a server that dies mid-session does not end the session and reconnects"
+Randomness seeded to: 3359215133
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a server that does not support the authorization code grant or PKCE S256 is rejected" classname="a server that does not support the authorization code grant or PKCE S256 is rejected" time="0.0609942" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a server that does not support the authorization code grant or PKCE S256 is rejected"
+Randomness seeded to: 4027852503
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a server that keeps streaming after acknowledging cancellation still surfaces the cancelled error" classname="a server that keeps streaming after acknowledging cancellation still surfaces the cancelled error" time="0.132913" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue872;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a server that keeps streaming after acknowledging cancellation still surfaces the cancelled error"
+Randomness seeded to: 2949440073
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a server whose tools/list fails after connect reports failed with the stderr tail" classname="a server whose tools/list fails after connect reports failed with the stderr tail" time="0.0303415" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a server whose tools/list fails after connect reports failed with the stderr tail"
+Randomness seeded to: 922073665
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a server-specific Client ID Metadata Document signs in on its callback path" classname="a server-specific Client ID Metadata Document signs in on its callback path" time="0.110021" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a server-specific Client ID Metadata Document signs in on its callback path"
+Randomness seeded to: 3864413090
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a server_error refresh is quiet and falls through to authorization" classname="a server_error refresh is quiet and falls through to authorization" time="0.0405839" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a server_error refresh is quiet and falls through to authorization"
+Randomness seeded to: 1004010582
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a stored refresh token is rotated and the rotated values are persisted" classname="a stored refresh token is rotated and the rotated values are persisted" time="0.0353799" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a stored refresh token is rotated and the rotated values are persisted"
+Randomness seeded to: 3302853433
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a stored unexpired token is sent without any OAuth request" classname="a stored unexpired token is sent without any OAuth request" time="0.0613142" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a stored unexpired token is sent without any OAuth request"
+Randomness seeded to: 888086828
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a taken tool name takes the sha256 suffix from the bundle collision example" classname="a taken tool name takes the sha256 suffix from the bundle collision example" time="0.0695726" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a taken tool name takes the sha256 suffix from the bundle collision example"
+Randomness seeded to: 728816693
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a timed-out MCP HTTP call tells the server with the pi timeout reason" classname="a timed-out MCP HTTP call tells the server with the pi timeout reason" time="0.885614" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a timed-out MCP HTTP call tells the server with the pi timeout reason"
+Randomness seeded to: 2360507775
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a timed-out MCP OAuth request settles at the deadline while the shared refresh completes" classname="a timed-out MCP OAuth request settles at the deadline while the shared refresh completes" time="0.57001" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a timed-out MCP OAuth request settles at the deadline while the shared refresh completes"
+Randomness seeded to: 3477381995
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh" classname="a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh" time="0.346812" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh"
+Randomness seeded to: 2184612008
+===============================================================================
+All tests passed (30 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a tool name over pi&apos;s 64-char bound takes the sha256 suffix from the bundle example" classname="a tool name over pi&apos;s 64-char bound takes the sha256 suffix from the bundle example" time="0.056192" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a tool name over pi's 64-char bound takes the sha256 suffix from the bundle example"
+Randomness seeded to: 29918726
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a tool-level MCP error result is reported as an error but the Turn continues" classname="a tool-level MCP error result is reported as an error but the Turn continues" time="0.174518" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue869;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a tool-level MCP error result is reported as an error but the Turn continues"
+Randomness seeded to: 3868071961
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a valid stored MCP OAuth credential resolves the bearer token without a token request" classname="a valid stored MCP OAuth credential resolves the bearer token without a token request" time="0.0330553" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue875;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a valid stored MCP OAuth credential resolves the bearer token without a token request"
+Randomness seeded to: 86073921
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a withdrawn tool re-registers as hidden while the kept tool keeps its exposure" classname="a withdrawn tool re-registers as hidden while the kept tool keeps its exposure" time="0.039892" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "a withdrawn tool re-registers as hidden while the kept tool keeps its exposure"
+Randomness seeded to: 2578345243
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="aborting an Agent Turn cancels an in-flight MCP call and the session stays usable" classname="aborting an Agent Turn cancels an in-flight MCP call and the session stays usable" time="0.211627" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue872;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "aborting an Agent Turn cancels an in-flight MCP call and the session stays usable"
+Randomness seeded to: 1755393927
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="adding a server creates the file and reports replacement" classname="adding a server creates the file and reports replacement" time="0.0344012" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "adding a server creates the file and reports replacement"
+Randomness seeded to: 4161412433
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="agent session binds late MCP tools and replaces their callable schemas after an idle notification" classname="agent session binds late MCP tools and replaces their callable schemas after an idle notification" time="10.5043" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1105;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "agent session binds late MCP tools and replaces their callable schemas after an idle notification"
+Randomness seeded to: 3975050985
+===============================================================================
+All tests passed (61 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="agent session close discards a pending MCP tool refresh without reopening the transport" classname="agent session close discards a pending MCP tool refresh without reopening the transport" time="0.301845" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1105;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "agent session close discards a pending MCP tool refresh without reopening the transport"
+Randomness seeded to: 506004012
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="agent session creation returns while a gated MCP server connects and the manager stays manageable" classname="agent session creation returns while a gated MCP server connects and the manager stays manageable" time="0.123114" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "agent session creation returns while a gated MCP server connects and the manager stays manageable"
+Randomness seeded to: 2975706653
+===============================================================================
+All tests passed (38 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="agent session lists MCP resources only on demand and can call tools after a resource failure" classname="agent session lists MCP resources only on demand and can call tools after a resource failure" time="0.266878" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1105;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "agent session lists MCP resources only on demand and can call tools after a resource failure"
+Randomness seeded to: 3454239352
+===============================================================================
+All tests passed (38 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an HTTP 200 with a non-MCP body is not success" classname="an HTTP 200 with a non-MCP body is not success" time="0.45325" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue873;mcp;protocol"/>
+		</properties>
+		<system-out>Filters: "an HTTP 200 with a non-MCP body is not success"
+Randomness seeded to: 1220069407
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP JSON-RPC error is reported as the tool error" classname="an MCP HTTP JSON-RPC error is reported as the tool error" time="0.466881" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue873;mcp;protocol"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP JSON-RPC error is reported as the tool error"
+Randomness seeded to: 659461371
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP URL must be http or https" classname="an MCP HTTP URL must be http or https" time="0.044183" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;issue873;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP URL must be http or https"
+Randomness seeded to: 279091234
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP call errors explicitly after the server dies between tools/list and tools/call" classname="an MCP HTTP call errors explicitly after the server dies between tools/list and tools/call" time="0.35705" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue872;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP call errors explicitly after the server dies between tools/list and tools/call"
+Randomness seeded to: 3988757983
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP server error status surfaces as an explicit error" classname="an MCP HTTP server error status surfaces as an explicit error" time="0.376353" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue873;mcp;protocol"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP server error status surfaces as an explicit error"
+Randomness seeded to: 3008680754
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP server tool is discoverable and callable in the Agent Session" classname="an MCP HTTP server tool is discoverable and callable in the Agent Session" time="0.874189" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue873;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP server tool is discoverable and callable in the Agent Session"
+Randomness seeded to: 2354420314
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP tool answered over an SSE stream is called like any other" classname="an MCP HTTP tool answered over an SSE stream is called like any other" time="0.934007" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue873;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP tool answered over an SSE stream is called like any other"
+Randomness seeded to: 3641272906
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP tool is visible to the session only when its server is registered at assembly" classname="an MCP HTTP tool is visible to the session only when its server is registered at assembly" time="1.02477" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue873;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP tool is visible to the session only when its server is registered at assembly"
+Randomness seeded to: 2932185025
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP HTTP tools/call preserves actual wire structuredContent order" classname="an MCP HTTP tools/call preserves actual wire structuredContent order" time="0.968433" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;issue873;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP HTTP tools/call preserves actual wire structuredContent order"
+Randomness seeded to: 192665560
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP OAuth credential is stored in mcp-auth.json under mcp__&lt;server&gt;|&lt;url&gt;" classname="an MCP OAuth credential is stored in mcp-auth.json under mcp__&lt;server&gt;|&lt;url&gt;" time="0.0445344" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue875;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP OAuth credential is stored in mcp-auth.json under mcp__&lt;server&gt;|&lt;url&gt;"
+Randomness seeded to: 715554542
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP call errors explicitly when the server dies between tools/list and tools/call" classname="an MCP call errors explicitly when the server dies between tools/list and tools/call" time="0.103565" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue872;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP call errors explicitly when the server dies between tools/list and tools/call"
+Randomness seeded to: 2917250819
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP process failure includes a bounded stderr tail" classname="an MCP process failure includes a bounded stderr tail" time="0.0784977" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue911;mcp"/>
+		</properties>
+		<system-out>Filters: "an MCP process failure includes a bounded stderr tail"
+Randomness seeded to: 3197574162
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP server tool is discoverable and callable in the Agent Session" classname="an MCP server tool is discoverable and callable in the Agent Session" time="0.179266" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue869;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP server tool is discoverable and callable in the Agent Session"
+Randomness seeded to: 1225489665
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tool is visible to the session only when its server is registered at assembly" classname="an MCP tool is visible to the session only when its server is registered at assembly" time="0.216359" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue869;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tool is visible to the session only when its server is registered at assembly"
+Randomness seeded to: 2295768530
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tool renders through the existing fallback renderer, not a new seam" classname="an MCP tool renders through the existing fallback renderer, not a new seam" time="0.0487657" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue869;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tool renders through the existing fallback renderer\, not a new seam"
+Randomness seeded to: 3524177911
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call distinguishes missing structuredContent from JSON null" classname="an MCP tools/call distinguishes missing structuredContent from JSON null" time="0.196295" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call distinguishes missing structuredContent from JSON null"
+Randomness seeded to: 3109970537
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call falls back for empty content and adds pi&apos;s isError text" classname="an MCP tools/call falls back for empty content and adds pi&apos;s isError text" time="0.0958119" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call falls back for empty content and adds pi's isError text"
+Randomness seeded to: 1742104667
+===============================================================================
+All tests passed (42 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call keeps non-empty content separate from structuredContent" classname="an MCP tools/call keeps non-empty content separate from structuredContent" time="0.128219" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call keeps non-empty content separate from structuredContent"
+Randomness seeded to: 110993117
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call object structuredContent survives conversion with content absent" classname="an MCP tools/call object structuredContent survives conversion with content absent" time="0.177813" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call object structuredContent survives conversion with content absent"
+Randomness seeded to: 1090073949
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects" classname="an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects" time="0.144093" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call preserves actual wire order for reverse\, nested and integer-key objects"
+Randomness seeded to: 2312804767
+===============================================================================
+All tests passed (37 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call preserves every primitive and array structuredContent when content is absent" classname="an MCP tools/call preserves every primitive and array structuredContent when content is absent" time="0.156493" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call preserves every primitive and array structuredContent when content is absent"
+Randomness seeded to: 4078582300
+===============================================================================
+All tests passed (70 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call rejects wrong content and malformed results at the public caller" classname="an MCP tools/call rejects wrong content and malformed results at the public caller" time="0.132122" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call rejects wrong content and malformed results at the public caller"
+Randomness seeded to: 518695460
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call renders every JSON number shape exactly as JSON.stringify" classname="an MCP tools/call renders every JSON number shape exactly as JSON.stringify" time="0.186053" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call renders every JSON number shape exactly as JSON.stringify"
+Randomness seeded to: 3311359615
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an MCP tools/call renders structuredContent numbers exactly as JSON.stringify" classname="an MCP tools/call renders structuredContent numbers exactly as JSON.stringify" time="0.130607" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an MCP tools/call renders structuredContent numbers exactly as JSON.stringify"
+Randomness seeded to: 2891129426
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an active codemode tool also silences the deferred-exposure warning" classname="an active codemode tool also silences the deferred-exposure warning" time="0.0698901" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an active codemode tool also silences the deferred-exposure warning"
+Randomness seeded to: 3178778167
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an already-active codemode tool is not activated twice" classname="an already-active codemode tool is not activated twice" time="0.0670044" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an already-active codemode tool is not activated twice"
+Randomness seeded to: 1463504628
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an auth.json mcp__&lt;server&gt; record migrates into mcp-auth.json" classname="an auth.json mcp__&lt;server&gt; record migrates into mcp-auth.json" time="0.0603191" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an auth.json mcp__&lt;server&gt; record migrates into mcp-auth.json"
+Randomness seeded to: 732203957
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an authorization code from another issuer never reaches the token endpoint" classname="an authorization code from another issuer never reaches the token endpoint" time="0.0605914" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an authorization code from another issuer never reaches the token endpoint"
+Randomness seeded to: 4211614144
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an enable persists across a manager rebuild too" classname="an enable persists across a manager rebuild too" time="0.0620986" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an enable persists across a manager rebuild too"
+Randomness seeded to: 2139878831
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an expiring token is refreshed through the flow and persisted" classname="an expiring token is refreshed through the flow and persisted" time="0.0566245" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an expiring token is refreshed through the flow and persisted"
+Randomness seeded to: 554868976
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an exposure change re-registers the server&apos;s tools at the new exposure" classname="an exposure change re-registers the server&apos;s tools at the new exposure" time="0.0404215" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an exposure change re-registers the server's tools at the new exposure"
+Randomness seeded to: 3878997117
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an exposure change to codemode activates codemode without waiting for a connect" classname="an exposure change to codemode activates codemode without waiting for a connect" time="0.0435431" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an exposure change to codemode activates codemode without waiting for a connect"
+Randomness seeded to: 3214051729
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an invalid_client during a code exchange also drops the PKCE verifier" classname="an invalid_client during a code exchange also drops the PKCE verifier" time="0.0475572" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an invalid_client during a code exchange also drops the PKCE verifier"
+Randomness seeded to: 1244196624
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an invalid_grant refresh is an explicit re-login error with no retry loop" classname="an invalid_grant refresh is an explicit re-login error with no retry loop" time="0.0606636" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue875;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an invalid_grant refresh is an explicit re-login error with no retry loop"
+Randomness seeded to: 2032225804
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an mcp.json rewrite leaves no temporary file behind" classname="an mcp.json rewrite leaves no temporary file behind" time="0.0291186" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an mcp.json rewrite leaves no temporary file behind"
+Randomness seeded to: 771715183
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an mcp.json rewrite preserves indentation and unrelated content" classname="an mcp.json rewrite preserves indentation and unrelated content" time="0.0659932" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an mcp.json rewrite preserves indentation and unrelated content"
+Randomness seeded to: 1009080898
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an mcp.json rewrite preserves key insertion order" classname="an mcp.json rewrite preserves key insertion order" time="0.0319399" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an mcp.json rewrite preserves key insertion order"
+Randomness seeded to: 4165291924
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an oauth-configured server with no client id discovers, registers, and asks for authorization" classname="an oauth-configured server with no client id discovers, registers, and asks for authorization" time="0.0784268" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an oauth-configured server with no client id discovers\, registers\, and asks for authorization"
+Randomness seeded to: 320872418
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an override naming a field outside the pi override keys is rejected" classname="an override naming a field outside the pi override keys is rejected" time="0.0281617" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an override naming a field outside the pi override keys is rejected"
+Randomness seeded to: 1875308859
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an unknown server names every server the resource tools reach" classname="an unknown server names every server the resource tools reach" time="0.0526062" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an unknown server names every server the resource tools reach"
+Randomness seeded to: 3352027763
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an unreachable MCP server fails Session Assembly explicitly, never silently" classname="an unreachable MCP server fails Session Assembly explicitly, never silently" time="0.0823219" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue869;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "an unreachable MCP server fails Session Assembly explicitly\, never silently"
+Randomness seeded to: 4187259910
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="auth is only allowed in the global mcp.json" classname="auth is only allowed in the global mcp.json" time="0.0275275" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "auth is only allowed in the global mcp.json"
+Randomness seeded to: 2831466378
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="authorization server discovery follows pi&apos;s URL order" classname="authorization server discovery follows pi&apos;s URL order" time="0.0465891" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "authorization server discovery follows pi's URL order"
+Randomness seeded to: 2086503202
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="authorization server discovery tries every candidate URL in order" classname="authorization server discovery tries every candidate URL in order" time="0.0498877" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "authorization server discovery tries every candidate URL in order"
+Randomness seeded to: 3704092987
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="authorization server metadata naming another issuer stops before any token request" classname="authorization server metadata naming another issuer stops before any token request" time="0.0341422" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "authorization server metadata naming another issuer stops before any token request"
+Randomness seeded to: 104291134
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="authorization server metadata with a mismatched issuer is rejected" classname="authorization server metadata with a mismatched issuer is rejected" time="0.0918188" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "authorization server metadata with a mismatched issuer is rejected"
+Randomness seeded to: 164438172
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="autoEnableCodemode false keeps codemode inactive and records pi&apos;s verbatim warning on the manager" classname="autoEnableCodemode false keeps codemode inactive and records pi&apos;s verbatim warning on the manager" time="0.195251" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "autoEnableCodemode false keeps codemode inactive and records pi's verbatim warning on the manager"
+Randomness seeded to: 3602860960
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="autoEnableCodemode false leaves codemode inactive and reports pi&apos;s verbatim warning" classname="autoEnableCodemode false leaves codemode inactive and reports pi&apos;s verbatim warning" time="0.0383885" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "autoEnableCodemode false leaves codemode inactive and reports pi's verbatim warning"
+Randomness seeded to: 2189053840
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="autoEnableCodemode is read from the global file and overridden by the project" classname="autoEnableCodemode is read from the global file and overridden by the project" time="0.0304084" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "autoEnableCodemode is read from the global file and overridden by the project"
+Randomness seeded to: 141051250
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cancelling an in-flight MCP HTTP call surfaces the cancellation error and keeps the connection usable" classname="cancelling an in-flight MCP HTTP call surfaces the cancellation error and keeps the connection usable" time="0.480414" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue872;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "cancelling an in-flight MCP HTTP call surfaces the cancellation error and keeps the connection usable"
+Randomness seeded to: 230990351
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cancelling an in-flight MCP HTTP call tells the server with notifications/cancelled" classname="cancelling an in-flight MCP HTTP call tells the server with notifications/cancelled" time="0.422592" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "cancelling an in-flight MCP HTTP call tells the server with notifications/cancelled"
+Randomness seeded to: 966214788
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cimd mode identifies through the metadata document without registering" classname="cimd mode identifies through the metadata document without registering" time="0.0393035" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "cimd mode identifies through the metadata document without registering"
+Randomness seeded to: 1366709595
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="close during a pending connect returns promptly and drops the late connection" classname="close during a pending connect returns promptly and drops the late connection" time="0.0446158" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "close during a pending connect returns promptly and drops the late connection"
+Randomness seeded to: 3326926477
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token" classname="closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token" time="0.396206" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1102;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token"
+Randomness seeded to: 924982247
+===============================================================================
+All tests passed (33 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="closing while a real initialize is pending returns with pi&apos;s closed error" classname="closing while a real initialize is pending returns with pi&apos;s closed error" time="0.153277" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "closing while a real initialize is pending returns with pi's closed error"
+Randomness seeded to: 3567194587
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="colliding tool names are assigned order-independently, every colliding tool hashed" classname="colliding tool names are assigned order-independently, every colliding tool hashed" time="0.0619749" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "colliding tool names are assigned order-independently\, every colliding tool hashed"
+Randomness seeded to: 127818885
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="concurrent MCP OAuth requests share one refresh" classname="concurrent MCP OAuth requests share one refresh" time="0.119193" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1189;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "concurrent MCP OAuth requests share one refresh"
+Randomness seeded to: 3720951812
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="connecting an MCP HTTP server lists its tools with the pi naming and schema" classname="connecting an MCP HTTP server lists its tools with the pi naming and schema" time="0.790431" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue873;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "connecting an MCP HTTP server lists its tools with the pi naming and schema"
+Randomness seeded to: 2697457820
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="connecting an MCP stdio server lists its tools with the pi naming and schema" classname="connecting an MCP stdio server lists its tools with the pi naming and schema" time="0.209306" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue869;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "connecting an MCP stdio server lists its tools with the pi naming and schema"
+Randomness seeded to: 3776248607
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="converted MCP tools declare pi&apos;s CallToolResult output schema" classname="converted MCP tools declare pi&apos;s CallToolResult output schema" time="0.0630998" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "converted MCP tools declare pi's CallToolResult output schema"
+Randomness seeded to: 580182501
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cross-origin redirect is followed without Authorization and is rejected" classname="cross-origin redirect is followed without Authorization and is rejected" time="0.472738" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "cross-origin redirect is followed without Authorization and is rejected"
+Randomness seeded to: 3106249511
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="direct and hidden exposures need no discovery tool and warn nothing" classname="direct and hidden exposures need no discovery tool and warn nothing" time="0.0341081" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "direct and hidden exposures need no discovery tool and warn nothing"
+Randomness seeded to: 2473783696
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="disabling a server hides every tool it registered" classname="disabling a server hides every tool it registered" time="0.0721807" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "disabling a server hides every tool it registered"
+Randomness seeded to: 3318398894
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="disabling a server while its connect is in flight drops the late connection" classname="disabling a server while its connect is in flight drops the late connection" time="0.0337248" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "disabling a server while its connect is in flight drops the late connection"
+Randomness seeded to: 3837400638
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="discoverOAuthServerInfo takes the first advertised authorization server" classname="discoverOAuthServerInfo takes the first advertised authorization server" time="0.0325592" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "discoverOAuthServerInfo takes the first advertised authorization server"
+Randomness seeded to: 2279721313
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="distinct tool names under the bound are assigned unchanged" classname="distinct tool names under the bound are assigned unchanged" time="0.0256964" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "distinct tool names under the bound are assigned unchanged"
+Randomness seeded to: 316342840
+===============================================================================
+All tests passed (1 assertion in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="enabling a still-connecting server does not launch a second connect" classname="enabling a still-connecting server does not launch a second connect" time="0.0798518" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "enabling a still-connecting server does not launch a second connect"
+Randomness seeded to: 2229607189
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="forked sessions persist independent deferred MCP loadouts across reopen" classname="forked sessions persist independent deferred MCP loadouts across reopen" time="0.64108" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1095;mcp;session_fork;spec;tool_search"/>
+		</properties>
+		<system-out>Filters: "forked sessions persist independent deferred MCP loadouts across reopen"
+Randomness seeded to: 2048709181
+===============================================================================
+All tests passed (75 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="getMcpToolExposure matches the pi-v1.0.4 exact-beats-pattern rule" classname="getMcpToolExposure matches the pi-v1.0.4 exact-beats-pattern rule" time="0.0353433" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "getMcpToolExposure matches the pi-v1.0.4 exact-beats-pattern rule"
+Randomness seeded to: 4114459605
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="initialize requests the bundle&apos;s LATEST protocol version and advertises roots" classname="initialize requests the bundle&apos;s LATEST protocol version and advertises roots" time="0.0256237" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "initialize requests the bundle's LATEST protocol version and advertises roots"
+Randomness seeded to: 442942591
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="initialize validation accepts every version the bundle supports" classname="initialize validation accepts every version the bundle supports" time="0.046368" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "initialize validation accepts every version the bundle supports"
+Randomness seeded to: 1102067644
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="initialize validation rejects an unsupported negotiated version with pi&apos;s message" classname="initialize validation rejects an unsupported negotiated version with pi&apos;s message" time="0.0449011" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "initialize validation rejects an unsupported negotiated version with pi's message"
+Randomness seeded to: 3065631941
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="initialize validation requires pi&apos;s serverInfo identity shape" classname="initialize validation requires pi&apos;s serverInfo identity shape" time="0.0399001" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "initialize validation requires pi's serverInfo identity shape"
+Randomness seeded to: 2573419206
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="invalid_client invalidates the registration and registers again" classname="invalid_client invalidates the registration and registers again" time="0.0537" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "invalid_client invalidates the registration and registers again"
+Randomness seeded to: 3533632024
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="list_mcp_resource_templates uses `resourceTemplates` and defaults a missing name" classname="list_mcp_resource_templates uses `resourceTemplates` and defaults a missing name" time="0.0360543" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "list_mcp_resource_templates uses `resourceTemplates` and defaults a missing name"
+Randomness seeded to: 2757957775
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="list_mcp_resources with a server lists one page and returns its cursor" classname="list_mcp_resources with a server lists one page and returns its cursor" time="0.0626899" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "list_mcp_resources with a server lists one page and returns its cursor"
+Randomness seeded to: 2813811243
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="list_mcp_resources without a server lists every page of every server and collects failures" classname="list_mcp_resources without a server lists every page of every server and collects failures" time="0.0552368" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "list_mcp_resources without a server lists every page of every server and collects failures"
+Randomness seeded to: 1032854318
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp_servers section caps a description at 250 characters with an ellipsis" classname="mcp_servers section caps a description at 250 characters with an ellipsis" time="0.0510037" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "mcp_servers section caps a description at 250 characters with an ellipsis"
+Randomness seeded to: 3270871285
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp_servers section counts a server as codemode when any toolExposure says so" classname="mcp_servers section counts a server as codemode when any toolExposure says so" time="0.0400506" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "mcp_servers section counts a server as codemode when any toolExposure says so"
+Randomness seeded to: 3760986465
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp_servers section drops the codemode clause when only deferred servers remain" classname="mcp_servers section drops the codemode clause when only deferred servers remain" time="0.0249565" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "mcp_servers section drops the codemode clause when only deferred servers remain"
+Randomness seeded to: 2203450421
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp_servers section falls back to the connection instructions" classname="mcp_servers section falls back to the connection instructions" time="0.0407612" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "mcp_servers section falls back to the connection instructions"
+Randomness seeded to: 3871307428
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp_servers section is absent when no server has indirect tools" classname="mcp_servers section is absent when no server has indirect tools" time="0.071534" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "mcp_servers section is absent when no server has indirect tools"
+Randomness seeded to: 2325408684
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp_servers section lists only indirect-exposure enabled servers" classname="mcp_servers section lists only indirect-exposure enabled servers" time="0.0316672" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "mcp_servers section lists only indirect-exposure enabled servers"
+Randomness seeded to: 2890736490
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp_servers section namespaces hyphens and summarizes the first description line" classname="mcp_servers section namespaces hyphens and summarizes the first description line" time="0.0350985" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "mcp_servers section namespaces hyphens and summarizes the first description line"
+Randomness seeded to: 1028155671
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp_servers section stays under the cap and counts the omitted servers" classname="mcp_servers section stays under the cap and counts the omitted servers" time="0.0335297" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "mcp_servers section stays under the cap and counts the omitted servers"
+Randomness seeded to: 84955338
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="migration does not overwrite an existing stored state" classname="migration does not overwrite an existing stored state" time="0.0320182" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "migration does not overwrite an existing stored state"
+Randomness seeded to: 888496819
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="no stored credential fails the request closed and caches the registered client" classname="no stored credential fails the request closed and caches the registered client" time="0.0417646" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "no stored credential fails the request closed and caches the registered client"
+Randomness seeded to: 1405721539
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged" classname="on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged" time="0.0500761" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged"
+Randomness seeded to: 1997435470
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="on_turn_start reconnects a server signed in through another process" classname="on_turn_start reconnects a server signed in through another process" time="0.0339753" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "on_turn_start reconnects a server signed in through another process"
+Randomness seeded to: 2672813020
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="progress_update_text formats pi progress messages verbatim" classname="progress_update_text formats pi progress messages verbatim" time="0.0252126" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "progress_update_text formats pi progress messages verbatim"
+Randomness seeded to: 2382899076
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="protected resource discovery retries the bare origin after a path-suffixed miss" classname="protected resource discovery retries the bare origin after a path-suffixed miss" time="0.0271692" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "protected resource discovery retries the bare origin after a path-suffixed miss"
+Randomness seeded to: 1116334592
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="protected resource metadata rejects a missing resource URL" classname="protected resource metadata rejects a missing resource URL" time="0.0379398" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "protected resource metadata rejects a missing resource URL"
+Randomness seeded to: 3362192152
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="read_mcp_resource requires server and uri" classname="read_mcp_resource requires server and uri" time="0.0742168" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "read_mcp_resource requires server and uri"
+Randomness seeded to: 2788257629
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="read_mcp_resource returns the contents shape with `_meta` stripped" classname="read_mcp_resource returns the contents shape with `_meta` stripped" time="0.070518" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "read_mcp_resource returns the contents shape with `_meta` stripped"
+Randomness seeded to: 612568562
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="reconnect of a disabled server reports pi&apos;s message" classname="reconnect of a disabled server reports pi&apos;s message" time="0.0598256" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "reconnect of a disabled server reports pi's message"
+Randomness seeded to: 2031714274
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="reconnect restores a failed server and registers its tools" classname="reconnect restores a failed server and registers its tools" time="0.0447338" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "reconnect restores a failed server and registers its tools"
+Randomness seeded to: 1191230716
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="registered tools carry their input schema and execute tools/call on the live connection" classname="registered tools carry their input schema and execute tools/call on the live connection" time="0.0361932" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "registered tools carry their input schema and execute tools/call on the live connection"
+Randomness seeded to: 2269655158
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="relative redirect references resolve against the current URL" classname="relative redirect references resolve against the current URL" time="0.624175" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "relative redirect references resolve against the current URL"
+Randomness seeded to: 3363564212
+===============================================================================
+All tests passed (27 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="remove deletes the namespaced or legacy key" classname="remove deletes the namespaced or legacy key" time="0.0257561" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "remove deletes the namespaced or legacy key"
+Randomness seeded to: 2839451576
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="removing a server reports whether the file defined it" classname="removing a server reports whether the file defined it" time="0.0377792" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "removing a server reports whether the file defined it"
+Randomness seeded to: 2886547497
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="reopened sessions load the next-ranked deferred tool and never re-announce an already loaded one" classname="reopened sessions load the next-ranked deferred tool and never re-announce an already loaded one" time="0.484048" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1095;mcp;session_resume;spec;tool_search"/>
+		</properties>
+		<system-out>Filters: "reopened sessions load the next-ranked deferred tool and never re-announce an already loaded one"
+Randomness seeded to: 3962407457
+===============================================================================
+All tests passed (63 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="repeated tool_search calls in one run load each ranked match once and keep them declared" classname="repeated tool_search calls in one run load each ranked match once and keep them declared" time="0.241073" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1095;mcp;spec;tool_search"/>
+		</properties>
+		<system-out>Filters: "repeated tool_search calls in one run load each ranked match once and keep them declared"
+Randomness seeded to: 3644371752
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="request with on_progress injects _meta.progressToken and progress_token_of extracts it" classname="request with on_progress injects _meta.progressToken and progress_token_of extracts it" time="0.0361135" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "request with on_progress injects _meta.progressToken and progress_token_of extracts it"
+Randomness seeded to: 2686611547
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="sign-in completes for one server while another is still connecting" classname="sign-in completes for one server while another is still connecting" time="0.0679469" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "sign-in completes for one server while another is still connecting"
+Randomness seeded to: 3020134618
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="sign-in of a non-OAuth server reports pi&apos;s message" classname="sign-in of a non-OAuth server reports pi&apos;s message" time="0.0636227" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "sign-in of a non-OAuth server reports pi's message"
+Randomness seeded to: 2093753357
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="sign-in runs the flow and reconnects" classname="sign-in runs the flow and reconnects" time="0.0399866" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "sign-in runs the flow and reconnects"
+Randomness seeded to: 2684080488
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="sign-out removes credentials and signs the connection out" classname="sign-out removes credentials and signs the connection out" time="0.0394131" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "sign-out removes credentials and signs the connection out"
+Randomness seeded to: 967198559
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="start returns while a gated server is still connecting" classname="start returns while a gated server is still connecting" time="0.0292649" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "start returns while a gated server is still connecting"
+Randomness seeded to: 4053867426
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="streamable HTTP transport connects over plain http" classname="streamable HTTP transport connects over plain http" time="0.289011" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1103;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "streamable HTTP transport connects over plain http"
+Randomness seeded to: 2395879975
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the MCP HTTP transport attaches a credential only when the server needs one" classname="the MCP HTTP transport attaches a credential only when the server needs one" time="0.680644" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue875;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the MCP HTTP transport attaches a credential only when the server needs one"
+Randomness seeded to: 959763012
+===============================================================================
+All tests passed (36 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the OAuth resource parameter must match the MCP server" classname="the OAuth resource parameter must match the MCP server" time="0.0363154" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the OAuth resource parameter must match the MCP server"
+Randomness seeded to: 1180293973
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the authorization code exchange stores the tokens with the granted scope" classname="the authorization code exchange stores the tokens with the granted scope" time="0.0419561" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the authorization code exchange stores the tokens with the granted scope"
+Randomness seeded to: 4281123195
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the browser callback completes the MCP OAuth sign-in" classname="the browser callback completes the MCP OAuth sign-in" time="0.0432975" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the browser callback completes the MCP OAuth sign-in"
+Randomness seeded to: 895206286
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the committed mcp.json fixture loads into the pi mcpServers shape" classname="the committed mcp.json fixture loads into the pi mcpServers shape" time="0.0579396" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue876;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the committed mcp.json fixture loads into the pi mcpServers shape"
+Randomness seeded to: 1149073446
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the connected-time snapshot re-lists when asked, so a `list_changed` re-list sees new resources" classname="the connected-time snapshot re-lists when asked, so a `list_changed` re-list sees new resources" time="0.0390557" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the connected-time snapshot re-lists when asked\, so a `list_changed` re-list sees new resources"
+Randomness seeded to: 2581471359
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the frozen review artifact matches every actual fixture observation" classname="the frozen review artifact matches every actual fixture observation" time="0.173685" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1101;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the frozen review artifact matches every actual fixture observation"
+Randomness seeded to: 1739190974
+===============================================================================
+All tests passed (218 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the mcp-auth.json key format and file shape match the pi-v1.0.4 bundle" classname="the mcp-auth.json key format and file shape match the pi-v1.0.4 bundle" time="0.03239" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the mcp-auth.json key format and file shape match the pi-v1.0.4 bundle"
+Randomness seeded to: 1131318995
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the mcp.json oauth block matches the pi-v1.0.4 validation rules" classname="the mcp.json oauth block matches the pi-v1.0.4 validation rules" time="0.0390886" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the mcp.json oauth block matches the pi-v1.0.4 validation rules"
+Randomness seeded to: 3208694738
+===============================================================================
+All tests passed (47 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the notification router maps the two list_changed notifications to the connection listeners" classname="the notification router maps the two list_changed notifications to the connection listeners" time="0.0236497" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the notification router maps the two list_changed notifications to the connection listeners"
+Randomness seeded to: 1857918624
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the prompt builder omits an empty mcp_servers section" classname="the prompt builder omits an empty mcp_servers section" time="0.0406311" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the prompt builder omits an empty mcp_servers section"
+Randomness seeded to: 150138539
+===============================================================================
+All tests passed (1 assertion in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the prompt builder renders the mcp_servers section after cwd" classname="the prompt builder renders the mcp_servers section after cwd" time="0.0352159" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the prompt builder renders the mcp_servers section after cwd"
+Randomness seeded to: 2191093848
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the real stdio fixture lists, templates, and reads over `resources/*`" classname="the real stdio fixture lists, templates, and reads over `resources/*`" time="0.294141" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the real stdio fixture lists\, templates\, and reads over `resources/*`"
+Randomness seeded to: 1150986277
+===============================================================================
+All tests passed (31 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the resource tools take the widest non-hidden exposure of resource-bearing servers" classname="the resource tools take the widest non-hidden exposure of resource-bearing servers" time="0.0475662" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the resource tools take the widest non-hidden exposure of resource-bearing servers"
+Randomness seeded to: 640635724
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the three resource tools carry pi&apos;s verbatim descriptions, parameters, and output schemas" classname="the three resource tools carry pi&apos;s verbatim descriptions, parameters, and output schemas" time="0.0558542" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "the three resource tools carry pi's verbatim descriptions\, parameters\, and output schemas"
+Randomness seeded to: 4122834131
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tokens reads a legacy key without taking it over" classname="tokens reads a legacy key without taking it over" time="0.0228318" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "tokens reads a legacy key without taking it over"
+Randomness seeded to: 10271367
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tool names within pi&apos;s length bound keep the sanitized form" classname="tool names within pi&apos;s length bound keep the sanitized form" time="0.0351084" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "tool names within pi's length bound keep the sanitized form"
+Randomness seeded to: 665656679
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tool_search ranks a deferred MCP tool, activates only the match, and the next request executes it" classname="tool_search ranks a deferred MCP tool, activates only the match, and the next request executes it" time="0.28084" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1095;mcp;spec;tool_search"/>
+		</properties>
+		<system-out>Filters: "tool_search ranks a deferred MCP tool\, activates only the match\, and the next request executes it"
+Randomness seeded to: 2946717539
+===============================================================================
+All tests passed (27 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tools/list pagination follows a nextCursor across pages" classname="tools/list pagination follows a nextCursor across pages" time="0.0484962" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "tools/list pagination follows a nextCursor across pages"
+Randomness seeded to: 3087571795
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tools/list rejects a duplicate cursor with pi&apos;s message" classname="tools/list rejects a duplicate cursor with pi&apos;s message" time="0.0295955" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "tools/list rejects a duplicate cursor with pi's message"
+Randomness seeded to: 428487279
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tools/list rejects a non-string cursor with pi&apos;s invalid-cursor error" classname="tools/list rejects a non-string cursor with pi&apos;s invalid-cursor error" time="0.0339585" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "tools/list rejects a non-string cursor with pi's invalid-cursor error"
+Randomness seeded to: 2855849029
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tools/list stops after pi&apos;s 1000-page bound" classname="tools/list stops after pi&apos;s 1000-page bound" time="0.128871" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "tools/list stops after pi's 1000-page bound"
+Randomness seeded to: 2858624431
+===============================================================================
+All tests passed (1002 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="tools/list treats a null or empty nextCursor as the end of pagination" classname="tools/list treats a null or empty nextCursor as the end of pagination" time="0.0266571" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "tools/list treats a null or empty nextCursor as the end of pagination"
+Randomness seeded to: 2317745547
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="truncate_middle_mcp truncates text longer than 20 KiB and records spill" classname="truncate_middle_mcp truncates text longer than 20 KiB and records spill" time="0.0371627" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue904;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "truncate_middle_mcp truncates text longer than 20 KiB and records spill"
+Randomness seeded to: 3358712172
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="update with override adds a missing entry as an override" classname="update with override adds a missing entry as an override" time="0.0269136" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "update with override adds a missing entry as an override"
+Randomness seeded to: 3256781048
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="updating a plain entry writes a non-default value and deletes the default" classname="updating a plain entry writes a non-default value and deletes the default" time="0.0470699" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "updating a plain entry writes a non-default value and deletes the default"
+Randomness seeded to: 856116433
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="updating an override entry keeps default values" classname="updating an override entry keeps default values" time="0.0389412" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "updating an override entry keeps default values"
+Randomness seeded to: 2735534328
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="validateMcpServerConfig matches the pi-v1.0.4 exposure cases" classname="validateMcpServerConfig matches the pi-v1.0.4 exposure cases" time="0.0664619" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "validateMcpServerConfig matches the pi-v1.0.4 exposure cases"
+Randomness seeded to: 4115522274
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="validateMcpServerConfig matches the pi-v1.0.4 server entry examples" classname="validateMcpServerConfig matches the pi-v1.0.4 server entry examples" time="0.0701634" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "validateMcpServerConfig matches the pi-v1.0.4 server entry examples"
+Randomness seeded to: 1435102091
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="wait_for_direct_servers waits only for direct exposure, bounded and latched" classname="wait_for_direct_servers waits only for direct exposure, bounded and latched" time="0.108245" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "wait_for_direct_servers waits only for direct exposure\, bounded and latched"
+Randomness seeded to: 294691872
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="wait_for_pending_connects blocks until the gated connect lands" classname="wait_for_pending_connects blocks until the gated connect lands" time="0.0356474" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec"/>
+		</properties>
+		<system-out>Filters: "wait_for_pending_connects blocks until the gated connect lands"
+Randomness seeded to: 1842116732
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp login of a non-OAuth server and the empty pick report pi&apos;s eligibility line" classname="/mcp login of a non-OAuth server and the empty pick report pi&apos;s eligibility line" time="0.0243414" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp login of a non-OAuth server and the empty pick report pi's eligibility line"
+Randomness seeded to: 873238352
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp login signs in through the redirect screen with pi&apos;s outcome lines" classname="/mcp login signs in through the redirect screen with pi&apos;s outcome lines" time="0.0319802" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp login signs in through the redirect screen with pi's outcome lines"
+Randomness seeded to: 2546398532
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp login with several needs-auth servers lists them with pi&apos;s run-login line" classname="/mcp login with several needs-auth servers lists them with pi&apos;s run-login line" time="0.0510884" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp login with several needs-auth servers lists them with pi's run-login line"
+Randomness seeded to: 2677313316
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp logout reports pi&apos;s stored-credentials lines" classname="/mcp logout reports pi&apos;s stored-credentials lines" time="0.030586" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp logout reports pi's stored-credentials lines"
+Randomness seeded to: 3474989682
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp navigates into a server menu and runs pi&apos;s reconnect action" classname="/mcp navigates into a server menu and runs pi&apos;s reconnect action" time="0.0414821" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp navigates into a server menu and runs pi's reconnect action"
+Randomness seeded to: 2715072059
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp opens the servers menu and Escape closes it" classname="/mcp opens the servers menu and Escape closes it" time="0.201077" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;e2e;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp opens the servers menu and Escape closes it"
+Randomness seeded to: 1419040528
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp opens the servers menu panel and escape closes it" classname="/mcp opens the servers menu panel and escape closes it" time="0.0603233" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp opens the servers menu panel and escape closes it"
+Randomness seeded to: 198841097
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp panel stays live while a server connect is pending and subcommands await the settle" classname="/mcp panel stays live while a server connect is pending and subcommands await the settle" time="0.193809" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue1104;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp panel stays live while a server connect is pending and subcommands await the settle"
+Randomness seeded to: 3516942383
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp reconnect of a named server without a connection reports pi&apos;s notice" classname="/mcp reconnect of a named server without a connection reports pi&apos;s notice" time="0.0275297" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp reconnect of a named server without a connection reports pi's notice"
+Randomness seeded to: 721845069
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp reconnect reports pi&apos;s line and pi&apos;s pick errors" classname="/mcp reconnect reports pi&apos;s line and pi&apos;s pick errors" time="0.0234268" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp reconnect reports pi's line and pi's pick errors"
+Randomness seeded to: 1404510402
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp reconnect reports the connected tool state without eager resource discovery" classname="/mcp reconnect reports the connected tool state without eager resource discovery" time="0.282987" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;e2e;issue1105;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp reconnect reports the connected tool state without eager resource discovery"
+Randomness seeded to: 1224150427
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp reconnect with no name picks the single enabled server" classname="/mcp reconnect with no name picks the single enabled server" time="0.0231945" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp reconnect with no name picks the single enabled server"
+Randomness seeded to: 1863251098
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp reports pi&apos;s usage warning for an unknown action" classname="/mcp reports pi&apos;s usage warning for an unknown action" time="0.194892" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;e2e;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp reports pi's usage warning for an unknown action"
+Randomness seeded to: 1686214358
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp with an unknown action or extra argument shows pi&apos;s usage warning" classname="/mcp with an unknown action or extra argument shows pi&apos;s usage warning" time="0.0313958" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp with an unknown action or extra argument shows pi's usage warning"
+Randomness seeded to: 1997311515
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="/mcp without a manager prints pi&apos;s non-TUI status report" classname="/mcp without a manager prints pi&apos;s non-TUI status report" time="0.0242696" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "/mcp without a manager prints pi's non-TUI status report"
+Randomness seeded to: 3196977749
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="MCP boot warning is surfaced when codemode auto-enable is disabled" classname="MCP boot warning is surfaced when codemode auto-enable is disabled" time="0.285871" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;e2e;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "MCP boot warning is surfaced when codemode auto-enable is disabled"
+Randomness seeded to: 747838120
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerPresenter exposes the tools and exposure sub-menus" classname="McpManagerPresenter exposes the tools and exposure sub-menus" time="0.0436343" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerPresenter exposes the tools and exposure sub-menus"
+Randomness seeded to: 1396223715
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerPresenter maps manager state onto the panel&apos;s server view" classname="McpManagerPresenter maps manager state onto the panel&apos;s server view" time="0.0248825" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerPresenter maps manager state onto the panel's server view"
+Randomness seeded to: 1165527056
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerPresenter reports pi&apos;s reconnect message for a disabled server" classname="McpManagerPresenter reports pi&apos;s reconnect message for a disabled server" time="0.0213494" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerPresenter reports pi's reconnect message for a disabled server"
+Randomness seeded to: 2654624133
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerPresenter runs the enable action against the manager" classname="McpManagerPresenter runs the enable action against the manager" time="0.0223421" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerPresenter runs the enable action against the manager"
+Randomness seeded to: 665654869
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView command completions offer actions then eligible server names" classname="McpManagerView command completions offer actions then eligible server names" time="0.018223" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView command completions offer actions then eligible server names"
+Randomness seeded to: 3982378299
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView describeState renders pi&apos;s verbatim state descriptions" classname="McpManagerView describeState renders pi&apos;s verbatim state descriptions" time="0.0205434" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView describeState renders pi's verbatim state descriptions"
+Randomness seeded to: 1733750889
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView disabled server offers only Enable and its project variant" classname="McpManagerView disabled server offers only Enable and its project variant" time="0.0319676" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView disabled server offers only Enable and its project variant"
+Randomness seeded to: 1795729616
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView empty menu shows the empty message and only the cancel hint" classname="McpManagerView empty menu shows the empty message and only the cancel hint" time="0.0393197" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView empty menu shows the empty message and only the cancel hint"
+Randomness seeded to: 2724392093
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView empty server list names the configuration files" classname="McpManagerView empty server list names the configuration files" time="0.0295027" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView empty server list names the configuration files"
+Randomness seeded to: 982284030
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView exposure chooser marks the current exposure and lists pi&apos;s descriptions" classname="McpManagerView exposure chooser marks the current exposure and lists pi&apos;s descriptions" time="0.0225273" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView exposure chooser marks the current exposure and lists pi's descriptions"
+Randomness seeded to: 3508472842
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView frames the servers menu with the accent title and dim footer" classname="McpManagerView frames the servers menu with the accent title and dim footer" time="0.0395819" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView frames the servers menu with the accent title and dim footer"
+Randomness seeded to: 3136818406
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView needs-auth server offers Sign in, Reconnect and Exposure" classname="McpManagerView needs-auth server offers Sign in, Reconnect and Exposure" time="0.0225486" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView needs-auth server offers Sign in\, Reconnect and Exposure"
+Randomness seeded to: 3729135668
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView plain status prints pi&apos;s formatStatus lines" classname="McpManagerView plain status prints pi&apos;s formatStatus lines" time="0.0221629" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView plain status prints pi's formatStatus lines"
+Randomness seeded to: 3441811527
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView server action vocabulary round-trips and rejects non-actions" classname="McpManagerView server action vocabulary round-trips and rejects non-actions" time="0.0299777" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView server action vocabulary round-trips and rejects non-actions"
+Randomness seeded to: 2717004274
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView server menu lists pi&apos;s actions with the save-location text" classname="McpManagerView server menu lists pi&apos;s actions with the save-location text" time="0.0245792" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView server menu lists pi's actions with the save-location text"
+Randomness seeded to: 520274002
+===============================================================================
+All tests passed (36 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView server row renders state, exposure and source" classname="McpManagerView server row renders state, exposure and source" time="0.0346802" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView server row renders state\, exposure and source"
+Randomness seeded to: 2950314598
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView session-registered server reports its save location" classname="McpManagerView session-registered server reports its save location" time="0.027514" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView session-registered server reports its save location"
+Randomness seeded to: 3777307942
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView sign-in screen shows the URL, the paste prompt and submit/cancel hints" classname="McpManagerView sign-in screen shows the URL, the paste prompt and submit/cancel hints" time="0.0393512" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView sign-in screen shows the URL\, the paste prompt and submit/cancel hints"
+Randomness seeded to: 1553953585
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView sorts the server list by attention rank" classname="McpManagerView sorts the server list by attention rank" time="0.0181109" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView sorts the server list by attention rank"
+Randomness seeded to: 3051230021
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView status screen shows the title and message without a footer" classname="McpManagerView status screen shows the title and message without a footer" time="0.0218599" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView status screen shows the title and message without a footer"
+Randomness seeded to: 1566911509
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView tools list marks a tool whose toolExposure overrides the server&apos;s" classname="McpManagerView tools list marks a tool whose toolExposure overrides the server&apos;s" time="0.0208727" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView tools list marks a tool whose toolExposure overrides the server's"
+Randomness seeded to: 2719467325
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView tools list renders the server&apos;s tools and its empty message" classname="McpManagerView tools list renders the server&apos;s tools and its empty message" time="0.0222294" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView tools list renders the server's tools and its empty message"
+Randomness seeded to: 2231207059
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView usage matches pi&apos;s /mcp usage line" classname="McpManagerView usage matches pi&apos;s /mcp usage line" time="0.0169015" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView usage matches pi's /mcp usage line"
+Randomness seeded to: 3308516641
+===============================================================================
+All tests passed (1 assertion in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="McpManagerView window caps at twelve visible rows" classname="McpManagerView window caps at twelve visible rows" time="0.0329197" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "McpManagerView window caps at twelve visible rows"
+Randomness seeded to: 842541416
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the discovery warning reaches the notification channel and the snapshot follows changes" classname="the discovery warning reaches the notification channel and the snapshot follows changes" time="0.0346724" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "the discovery warning reaches the notification channel and the snapshot follows changes"
+Randomness seeded to: 565242524
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the open panel re-presents on a manager change" classname="the open panel re-presents on a manager change" time="0.0307139" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;issue884;mcp;spec;tui"/>
+		</properties>
+		<system-out>Filters: "the open panel re-presents on a manager change"
+Randomness seeded to: 4241837135
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp add -- writes a stdio server with env, args, and cwd" classname="mcp add -- writes a stdio server with env, args, and cwd" time="0.0217763" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp add -- writes a stdio server with env\, args\, and cwd"
+Randomness seeded to: 4102966237
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp add rejects options that do not match the transport" classname="mcp add rejects options that do not match the transport" time="0.0141203" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp add rejects options that do not match the transport"
+Randomness seeded to: 1797051590
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp add reports an unknown option and the help hint" classname="mcp add reports an unknown option and the help hint" time="0.0206703" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp add reports an unknown option and the help hint"
+Randomness seeded to: 2260773251
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp add requires exactly one of --url or a command" classname="mcp add requires exactly one of --url or a command" time="0.0127843" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp add requires exactly one of --url or a command"
+Randomness seeded to: 3512162367
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp add validates the exposure spelling" classname="mcp add validates the exposure spelling" time="0.022159" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp add validates the exposure spelling"
+Randomness seeded to: 42007043
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp add writes a streamable HTTP server to the global mcp.json" classname="mcp add writes a streamable HTTP server to the global mcp.json" time="0.0127713" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp add writes a streamable HTTP server to the global mcp.json"
+Randomness seeded to: 4191667107
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp list --json emits the server report shape" classname="mcp list --json emits the server report shape" time="0.0207675" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp list --json emits the server report shape"
+Randomness seeded to: 511171903
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp list connects a configured stdio server through the production probe" classname="mcp list connects a configured stdio server through the production probe" time="0.103258" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp list connects a configured stdio server through the production probe"
+Randomness seeded to: 1127132263
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp list exits 1 when a configured stdio server fails to connect through the production probe" classname="mcp list exits 1 when a configured stdio server fails to connect through the production probe" time="0.0213399" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue1066;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp list exits 1 when a configured stdio server fails to connect through the production probe"
+Randomness seeded to: 1796636437
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp list exits 1 when an enabled server is not connected" classname="mcp list exits 1 when an enabled server is not connected" time="0.0131934" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp list exits 1 when an enabled server is not connected"
+Randomness seeded to: 2832152875
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp list prints pi&apos;s empty-configuration line" classname="mcp list prints pi&apos;s empty-configuration line" time="0.0265185" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp list prints pi's empty-configuration line"
+Randomness seeded to: 2116136416
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp list reports a connected server and exits 0" classname="mcp list reports a connected server and exits 0" time="0.0257992" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp list reports a connected server and exits 0"
+Randomness seeded to: 445447513
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp login drives the OAuth flow and reports the reconnect" classname="mcp login drives the OAuth flow and reports the reconnect" time="0.0112369" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp login drives the OAuth flow and reports the reconnect"
+Randomness seeded to: 736784261
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp login rejects a non-positive timeout" classname="mcp login rejects a non-positive timeout" time="0.0162108" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp login rejects a non-positive timeout"
+Randomness seeded to: 3679866037
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp login reports a cancelled sign-in with pi&apos;s timeout bound" classname="mcp login reports a cancelled sign-in with pi&apos;s timeout bound" time="0.0235742" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp login reports a cancelled sign-in with pi's timeout bound"
+Randomness seeded to: 3049363010
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp login reports a failed sign-in" classname="mcp login reports a failed sign-in" time="0.0126345" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp login reports a failed sign-in"
+Randomness seeded to: 1256127418
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp login reports an OAuth server with no oauth configuration" classname="mcp login reports an OAuth server with no oauth configuration" time="0.0169992" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp login reports an OAuth server with no oauth configuration"
+Randomness seeded to: 211577186
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp login reports an already signed-in server" classname="mcp login reports an already signed-in server" time="0.0186882" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp login reports an already signed-in server"
+Randomness seeded to: 2224230111
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp login reports an unknown server and the configured names" classname="mcp login reports an unknown server and the configured names" time="0.0148968" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp login reports an unknown server and the configured names"
+Randomness seeded to: 2905701744
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp logout deletes stored credentials or reports none" classname="mcp logout deletes stored credentials or reports none" time="0.0120033" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp logout deletes stored credentials or reports none"
+Randomness seeded to: 1644117587
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp logout rejects a server that does not use OAuth" classname="mcp logout rejects a server that does not use OAuth" time="0.0229985" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp logout rejects a server that does not use OAuth"
+Randomness seeded to: 3086966205
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp prints help for the bare, help, and --help forms" classname="mcp prints help for the bare, help, and --help forms" time="0.0131649" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp prints help for the bare\, help\, and --help forms"
+Randomness seeded to: 318742062
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp remove deletes the entry and reports the scope" classname="mcp remove deletes the entry and reports the scope" time="0.0182783" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp remove deletes the entry and reports the scope"
+Randomness seeded to: 3802500539
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mcp reports an unknown command" classname="mcp reports an unknown command" time="0.0175978" status="run">
+		<properties>
+			<property name="cmake_labels" value="cli;issue884;mcp"/>
+		</properties>
+		<system-out>Filters: "mcp reports an unknown command"
+Randomness seeded to: 481057800
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="cch_mcp_codemode_bundle" classname="cch_mcp_codemode_bundle" time="1.32706" status="run">
+		<properties>
+			<property name="cmake_labels" value="ai;codemode;issue883;mcp;spec"/>
+		</properties>
+		<system-out>ok: check_committed_bundle_verifies
+ok: check_registry_records_capture
+ok: check_bundle_shape
+ok: check_captured_surfaces
+ok: check_capture_is_baseline_selected
+ok: check_selection_and_mutations
+ok: real fixture tree unchanged (53 files fingerprinted)
+pi-v1.0.4 mcp/codemode bundle: PASS
+</system-out>
+	</testcase>
+</testsuite>
