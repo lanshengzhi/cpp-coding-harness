@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "5dbe09bc386211ddcfcd660100c85971f40f36bb3fc7214be7c367cba9dcb523"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -539,6 +539,13 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1187m": {
+        "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -612,7 +619,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
+          "sha256": "11aa32a1002d67333765c04c102f9477b2fb750dbaef51ceb9270c5041435d44"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -977,6 +984,13 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1187m": {
+        "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1121,7 +1135,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
+          "sha256": "11aa32a1002d67333765c04c102f9477b2fb750dbaef51ceb9270c5041435d44"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1537,6 +1551,13 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1187m": {
+        "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1796,11 +1817,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
+          "sha256": "11aa32a1002d67333765c04c102f9477b2fb750dbaef51ceb9270c5041435d44"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "5dbe09bc386211ddcfcd660100c85971f40f36bb3fc7214be7c367cba9dcb523"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2219,6 +2240,13 @@
         "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1187m": {
+        "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
         ]
       }
     },
@@ -3401,7 +3429,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "5dbe09bc386211ddcfcd660100c85971f40f36bb3fc7214be7c367cba9dcb523"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3409,7 +3437,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
+          "sha256": "11aa32a1002d67333765c04c102f9477b2fb750dbaef51ceb9270c5041435d44"
         }
       ],
       "validation": {
@@ -3810,6 +3838,13 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1187m": {
+        "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -3874,7 +3909,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
+          "sha256": "11aa32a1002d67333765c04c102f9477b2fb750dbaef51ceb9270c5041435d44"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -3882,7 +3917,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "5dbe09bc386211ddcfcd660100c85971f40f36bb3fc7214be7c367cba9dcb523"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -4155,6 +4190,13 @@
         "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1187m": {
+        "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
         ]
       }
     },
@@ -4831,11 +4873,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "0791957df1c773e92aafbd7996186e9a4ed0fdab43d6c6059266e7a632008235"
+          "sha256": "11aa32a1002d67333765c04c102f9477b2fb750dbaef51ceb9270c5041435d44"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "5dbe09bc386211ddcfcd660100c85971f40f36bb3fc7214be7c367cba9dcb523"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4875,6 +4917,13 @@
         "reason": "#1188 re-paired the coarse cch_durable:Chord:state scenario in the 1054 source ledger to the registered audit-1057 replicated-state hydration/delivery/dispose scenario. That ledger is a pinned input of this receipt; the rows this receipt claims keep their comparison scenarios and routing digest, so only the input digest is refreshed and this receipt makes no new verification claim.",
         "changedInputs": [
           "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json"
+        ]
+      },
+      "revalidation1187m": {
+        "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
         ]
       }
     },
@@ -5070,7 +5119,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+          "sha256": "5dbe09bc386211ddcfcd660100c85971f40f36bb3fc7214be7c367cba9dcb523"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5093,7 +5142,14 @@
           "sha256": "d9a3e8e2f41516945070dc526d49d6fea8b288ddfe70f132161f65dd0a9bfb03"
         }
       ],
-      "routingSha256": "e7975ba65c4a7efab08925838d63c3855cfdedc42ecd43dc4d07a08dfefd7517"
+      "routingSha256": "e7975ba65c4a7efab08925838d63c3855cfdedc42ecd43dc4d07a08dfefd7517",
+      "revalidation1187m": {
+        "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
+      }
     },
     {
       "id": "1187-chord-progress-pacing",
