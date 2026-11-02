@@ -1,6 +1,7 @@
 #include <cch/chord/Output.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -214,6 +215,14 @@ BoundedOutput OutputBuffer::snapshot() {
             .dropped_bytes = total_bytes_ - kept.bytes,
             .dropped_lines = total_newlines_ + (ends_with_newline_ ? 0 : 1) - kept_lines,
     };
+}
+
+ProgressTime progress_pause(std::size_t bytes, std::chrono::milliseconds min_interval) {
+    // pi: `bytes * 1000 / PROGRESS_BYTES_PER_SECOND` milliseconds. The ratio
+    // 1000/102400 reduces to 5/512, so the quotient is exact for every byte
+    // count that fits in a size_t.
+    const ProgressTime by_rate{static_cast<double>(bytes) * 5.0 / 512.0};
+    return std::max(ProgressTime{min_interval}, by_rate);
 }
 
 } // namespace cch::chord
