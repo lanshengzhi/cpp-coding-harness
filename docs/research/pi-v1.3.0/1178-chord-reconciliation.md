@@ -162,7 +162,9 @@ audit deliberately left pacing unverified rather than normalizing timing away.
 caller `AttachedReplicatedState::subscribe` plus the durable `DocumentWatch`. Rows:
 `state:delivery-order`, `Chord:state`. Blocker: five of six scenarios pass; the remaining
 `a watch acquired before start buffers frames and serializes callbacks` observes an awaited listener
-(`maxConcurrentCallbacks`), which neither delivered listener seam can hold.
+(`maxConcurrentCallbacks`), which neither delivered listener seam can hold. **Delivered** by
+[#1188](1188-chord-observer-serialization.md): the Chord serialized-domain contract expresses the
+awaited-listener observation, and the coarse 1054 row was re-paired to its registered detail scenario.
 
 **B6 — durable-owned rows** (routed to
 [#1180](https://github.com/lanshengzhi/cpp-coding-harness/issues/1180#issuecomment-6551377403)). Rows:
@@ -209,6 +211,20 @@ Chord progress cases. The shared selection was rerun on the #1187 merged tree in
 `deliveries/1178-revalidation-1187.xml` (88 selected, 88 passed, including every case this record
 claims) and the record carries a `revalidation1187` entry with the refreshed digests. No claimed row,
 scenario or routing digest changed, and the original `deliveries/1178-chord.xml` stays committed.
+
+[#1188](1188-chord-observer-serialization.md) later added one case to
+`tests/chord/ReplicatedStateTest.cpp` — the awaited-listener comparison for the last blocked B5
+scenario — while re-pairing the coarse 1054 `Chord:state` row to its registered audit-1057 detail
+scenario. One input this receipt pins therefore changed, and the selection now has 85 cases. The
+shared selection was rerun on the same tree into `deliveries/1178-revalidation-1188.xml` (85
+selected, 85 passed, including every case this record claims) and the record carries a
+`revalidation1188` entry with the refreshed digest. No claimed row, scenario or routing digest
+changed, and the original `deliveries/1178-chord.xml` stays committed. B5 is closed by that record.
+
+After both changes merged, the shared selection was rerun on the merged tree into
+`deliveries/1178-revalidation-1187-1188.xml` (89 selected, 89 passed, including every case this
+record claims); the record's top-level validation points at that combined artifact and both
+revalidation entries retain their own previous-validation chains.
 
 The receipt pins the exact JUnit bytes, so the selected count, the case names and the scenario
 mapping cannot drift silently.
