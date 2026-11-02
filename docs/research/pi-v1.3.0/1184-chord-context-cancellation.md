@@ -173,8 +173,8 @@ Measured on this ticket's implementation commit `4e9ad3fbf` and, after the
 | `ctest --preset vcpkg -L '^(issue1090\|issue1101\|issue1104)$'` | 36/36 passed |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` | ledger rebuilt; 54 delivery-backed rows (4 from this record, 5 from the merged #1185 packet) |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check` | PASS |
-| `python3 tests/evidence/ConsolidationAuditTest.py` | PASS |
-| `python3 scripts/evidence/audit_evidence.py verify --baseline pi-v1.3.0` | PASS |
+| `python3 tests/evidence/ConsolidationAuditTest.py` | 42 tests, all passed |
+| `python3 scripts/evidence/audit_evidence.py verify --baseline pi-v1.3.0` | 54 bundles, 114 artifacts and 648 scenarios verified at `71023aec…` |
 | `TERM_PROGRAM=herdr ctest --preset vcpkg -j1` | three unfiltered runs: 4,226 selected / 4,223 passed / 3 failed, then 4,226 / 4,225 / 1, then (merged tree) 4,232 / 4,231 / 1 (details below) |
 | `scripts/format-check.sh b2fa10bb9` | clean |
 
