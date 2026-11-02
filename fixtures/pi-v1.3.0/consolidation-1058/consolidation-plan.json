@@ -2789,6 +2789,36 @@
         "cch_coding_agent:settings-runtime"
       ],
       "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1190",
+      "artifact": "server-requests.json",
+      "scenario": "a stdio server ping is answered with an empty result and roots/list returns the connection's configured roots",
+      "reason": "Captured by #1190 from the clean pi-v1.3.0 checkout through the public MCP Owner; the consolidate row routes no audit lane into this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-roots-list"
+      ],
+      "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1190",
+      "artifact": "server-requests.json",
+      "scenario": "a streamable HTTP server ping is answered with an empty result and roots/list returns the connection's configured roots",
+      "reason": "Captured by #1190 from the clean pi-v1.3.0 checkout through the public MCP Owner; the consolidate row routes no audit lane into this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-roots-list"
+      ],
+      "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1190",
+      "artifact": "server-requests.json",
+      "scenario": "a server request with no matching handler is answered -32601 before the connection closes",
+      "reason": "Captured by #1190 from the clean pi-v1.3.0 checkout through the public MCP Owner; the consolidate row routes no audit lane into this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-roots-list"
+      ],
+      "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
     }
   ],
   "groups": [

@@ -5,8 +5,11 @@
 // (`mcp.json` exposure, description and persistence) stays in the application
 // owner and owns the surrounding entry, not this transport value.
 
+#include <cch/mcp/Protocol.hpp>
+
 #include <chrono>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -27,6 +30,13 @@ struct StdioServerConfig {
     /// a timeout (pi `DEFAULT_REQUEST_TIMEOUT_MS`). A value of zero or less
     /// disables the deadline.
     std::chrono::milliseconds request_timeout{std::chrono::milliseconds{30000}};
+    /// pi `McpClientOptions.roots`: the roots this connection answers a
+    /// server's `roots/list` with. Engaged (even empty) advertises the client
+    /// `roots` capability and installs the handler; a disengaged value
+    /// installs no handler, so the server's request is answered `-32601`.
+    /// The roots ride the connection; the client never derives one from the
+    /// process working directory.
+    std::optional<std::vector<Root>> roots;
 };
 
 } // namespace cch::mcp

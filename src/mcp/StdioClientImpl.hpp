@@ -80,6 +80,12 @@ public:
 
     void set_notification_listener(NotificationSink listener) override;
 
+    /// pi `McpClient.setRequestHandler`: replace the handler for one
+    /// server-to-client method. The default set (`ping`, and `roots/list`
+    /// when the connection carries roots) is installed from the constructor;
+    /// a method with no handler is answered `-32601`.
+    void set_request_handler(std::string method, ServerRequestHandler handler) override;
+
     [[nodiscard]] bool closed() const noexcept { return closed_; }
     [[nodiscard]] const std::string& server_name() const noexcept override { return config_.name; }
     /// pi `initialize` result `instructions`, when the server sent them: the
@@ -117,6 +123,11 @@ private:
     /// idle read before writing the next request, so reads never overlap.
     void start_pump();
     bool dispatch_notification(const support::JsonValue& message);
+    /// Serve one server-to-client message read from stdout: a request goes to
+    /// its handler (or `-32601`) and its response is written before the read
+    /// loop continues; a notification goes to the listener. Returns whether
+    /// the message was one of those, so the response match can run next.
+    [[nodiscard]] boost::asio::awaitable<bool> dispatch_incoming(const support::JsonValue& message);
     [[nodiscard]] boost::asio::awaitable<void> pump();
     [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> write_frame(std::string_view frame);
     /// Read frames until the response for `id` arrives. Malformed/invalid
@@ -184,6 +195,7 @@ private:
     /// and the next read restarts the deadline (pi `armTimeout` re-arm).
     ProgressCallback progress_handler_;
     NotificationSink notification_listener_;
+    std::map<std::string, ServerRequestHandler> request_handlers_;
     bool idle_reading_{false};
     bool pumping_{false};
     bool closed_{false};

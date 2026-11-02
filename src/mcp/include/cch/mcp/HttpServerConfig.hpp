@@ -5,11 +5,14 @@
 // `packages/mcp/src/transports/streamable-http.ts`). Application configuration
 // (`mcp.json` entries, OAuth blocks, exposure) stays in the application owner.
 
+#include <cch/mcp/Protocol.hpp>
 #include <cch/support/Error.hpp>
 
 #include <chrono>
 #include <map>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace cch::mcp {
 
@@ -29,6 +32,13 @@ struct HttpServerConfig {
     /// with a timeout, and a cancellable request tells the server with
     /// `notifications/cancelled` reason `Request timed out` (pi `cancelPending`).
     std::chrono::milliseconds request_timeout{std::chrono::milliseconds{30000}};
+    /// pi `McpClientOptions.roots`: the roots this connection answers a
+    /// server's `roots/list` with. Engaged (even empty) advertises the client
+    /// `roots` capability and installs the handler; a disengaged value
+    /// installs no handler, so the server's request is answered `-32601`.
+    /// The roots ride the connection; the client never derives one from the
+    /// process working directory.
+    std::optional<std::vector<Root>> roots;
 };
 
 /// Registration-time URL gate (pi `validateMcpServerConfig`): the URL must be

@@ -25,7 +25,6 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/BoostBeastStreamTransport.hpp"
 
-#include <filesystem>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -503,29 +502,11 @@ HttpClientImpl::HttpClientImpl(boost::asio::any_io_executor executor,
         HttpGetStreamOptions get_stream_options)
     : executor_(std::move(executor)), config_(std::move(config)), transport_(std::move(transport)),
       request_auth_(std::move(request_auth)), get_stream_options_(std::move(get_stream_options)) {
-    // pi `client.ts` installs `ping` by default; every other server request is
-    // answered `-32601` until a handler is registered.
-    request_handlers_["ping"] = [](const support::JsonValue&,
-                                        std::stop_token) -> support::AsyncResult<support::JsonValue> {
-        return support::AsyncResult<support::JsonValue>{
-                support::Expected<support::JsonValue>{support::JsonValue{support::JsonValue::object_t{}}}};
-    };
-    // pi `roots/list`: answer server-to-client roots requests with file://<cwd> root.
-    request_handlers_["roots/list"] = [](const support::JsonValue&,
-                                              std::stop_token) -> support::AsyncResult<support::JsonValue> {
-        const auto cwd = std::filesystem::current_path();
-        const std::string uri = "file://" + cwd.string();
-        const std::string name = cwd.filename().string();
-        support::JsonValue::object_t root_item{
-                {"uri", uri},
-                {"name", name.empty() ? uri : name},
-        };
-        support::JsonValue::object_t result{
-                {"roots", support::JsonValue{support::JsonValue::array_t{support::JsonValue{std::move(root_item)}}}},
-        };
-        return support::AsyncResult<support::JsonValue>{
-                support::Expected<support::JsonValue>{support::JsonValue{std::move(result)}}};
-    };
+    // pi `client.ts` installs `ping` by default and `roots/list` only when the
+    // connection carries roots; every other server request is answered
+    // `-32601`. The same defaults are installed for the stdio transport, so
+    // one handler set defines the client's server-request surface.
+    detail::install_default_request_handlers(request_handlers_, config_.roots);
 }
 
 boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpClientImpl::connect_impl(
@@ -560,8 +541,9 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpC
     };
     support::Expected<support::JsonValue> initialized{std::unexpected(support::Error{})};
     for (std::size_t attempt = 0; attempt <= 2; ++attempt) {
-        initialized = co_await support::detail::await_async_result(
-                client->request("initialize", detail::initialize_params(), {.stop_token = stop_token}));
+        initialized = co_await support::detail::await_async_result(client->request("initialize",
+                detail::initialize_params(client->config_.roots.has_value()),
+                {.stop_token = stop_token}));
         if (initialized) {
             break;
         }
@@ -1112,16 +1094,7 @@ boost::asio::awaitable<void> HttpClientImpl::serve_server_request(
         support::JsonValue id, std::string method, support::JsonValue params) {
     const auto handler = request_handlers_.find(method);
     if (handler == request_handlers_.end()) {
-        support::JsonValue response{support::JsonValue::object_t{
-                {"jsonrpc", "2.0"},
-                {"id", std::move(id)},
-                {"error",
-                        support::JsonValue::object_t{
-                                {"code", static_cast<double>(-32601)},
-                                {"message", "Method not found: " + method},
-                        }},
-        }};
-        post_message(std::move(response));
+        post_message(detail::error_response(std::move(id), -32601, "Method not found: " + method));
         co_return;
     }
     const ServerRequestHandler serve = handler->second;
@@ -1132,23 +1105,11 @@ boost::asio::awaitable<void> HttpClientImpl::serve_server_request(
             co_await support::detail::await_async_result(serve(params, source.get_token()));
     incoming_handlers_.erase(key);
     if (outcome) {
-        post_message(support::JsonValue{support::JsonValue::object_t{
-                {"jsonrpc", "2.0"},
-                {"id", std::move(id)},
-                {"result", std::move(*outcome)},
-        }});
+        post_message(detail::result_response(std::move(id), std::move(*outcome)));
         co_return;
     }
     const std::string message = source.get_token().stop_requested() ? "MCP request aborted" : outcome.error().message;
-    post_message(support::JsonValue{support::JsonValue::object_t{
-            {"jsonrpc", "2.0"},
-            {"id", std::move(id)},
-            {"error",
-                    support::JsonValue::object_t{
-                            {"code", static_cast<double>(-32603)},
-                            {"message", std::move(message)},
-                    }},
-    }});
+    post_message(detail::error_response(std::move(id), -32603, message));
 }
 
 void HttpClientImpl::handle_stream_message(const support::JsonValue& message) {

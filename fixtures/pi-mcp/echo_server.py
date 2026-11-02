@@ -33,6 +33,13 @@ the client propagated cancellation. When `PIKE_MCP_TRACE` names a file, the
 server appends one flushed line per observed event (`recv <method> ...`,
 `hang-start id=<n>`, `stream id=<n>`, `cancelled requestId=<n>`), which the
 tests poll to assert ordering.
+
+When `PIKE_MCP_SERVER_REQUESTS=roots`, the server issues the same three
+server-to-client requests after `notifications/initialized` that the
+`audit-1190` capture records: `ping` (id 101), `roots/list` (id 102), and an
+unhandled `sampling/createMessage` (id 103). Each client response is appended
+verbatim to `PIKE_MCP_ROOTS_TRACE` so a test can compare the client's answers
+with the frozen pi-v1.3.0 observation.
 """
 
 import json
@@ -41,6 +48,9 @@ import sys
 import time
 
 TRACE = os.environ.get("PIKE_MCP_TRACE")
+SERVER_REQUESTS = os.environ.get("PIKE_MCP_SERVER_REQUESTS")
+ROOTS_TRACE = os.environ.get("PIKE_MCP_ROOTS_TRACE")
+SERVER_REQUEST_IDS = {"ping": 101, "roots/list": 102, "sampling/createMessage": 103}
 
 TOOLS = [
     {
@@ -129,6 +139,29 @@ def trace(line):
     with open(TRACE, "a", encoding="utf-8") as handle:
         handle.write(line + "\n")
         handle.flush()
+
+
+def record_server_response(message):
+    """Append one client response to a server-to-client request verbatim."""
+    if not ROOTS_TRACE:
+        return
+    with open(ROOTS_TRACE, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(message, separators=(",", ":"), sort_keys=True) + "\n")
+        handle.flush()
+
+
+def send_server_requests():
+    """The audit-1190 server-request exchange: ping, roots/list, unknown method."""
+    if SERVER_REQUESTS != "roots":
+        return
+    send({"jsonrpc": "2.0", "id": SERVER_REQUEST_IDS["ping"], "method": "ping"})
+    send({"jsonrpc": "2.0", "id": SERVER_REQUEST_IDS["roots/list"], "method": "roots/list"})
+    send({
+        "jsonrpc": "2.0",
+        "id": SERVER_REQUEST_IDS["sampling/createMessage"],
+        "method": "sampling/createMessage",
+        "params": {"messages": []},
+    })
 
 
 def send(message):
@@ -267,12 +300,19 @@ def main():
 
         method = message.get("method")
         rid = message.get("id")
+        if method is None and "id" in message and ("result" in message or "error" in message):
+            # A response to one of this server's own requests (pi
+            # `transport.send` of a response message); it is not a request.
+            record_server_response(message)
+            continue
         trace("recv " + str(method) + " id=" + str(rid))
         if rid is None:
             # `notifications/initialized`, `notifications/cancelled`, and other
             # notifications: no response, but cancellation is still observed.
             if method == "notifications/cancelled":
                 handle_cancelled(message.get("params") or {})
+            elif method == "notifications/initialized":
+                send_server_requests()
             continue
 
         if method == "initialize":

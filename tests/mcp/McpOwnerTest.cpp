@@ -13,6 +13,7 @@
 #include "support/Json.hpp"
 #include "support/JsonCompare.hpp"
 #include "support/McpTestKit.hpp"
+#include "support/TempWorkspace.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <cch/mcp/HttpClient.hpp>
@@ -32,6 +33,9 @@
 #include <charconv>
 #include <cerrno>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -161,12 +165,21 @@ template <typename T, typename E>
     return result.at("content").get_array().front().at("text").get_string();
 }
 
-/// One real TLS MCP server on an ephemeral loopback port, mirroring the
+/// One real MCP server on an ephemeral loopback port, mirroring the
 /// application shard's fixture so the owner shard does not link application
-/// test support either.
+/// test support either. HTTPS is the default; `tls=false` listens in plain
+/// HTTP (the frozen client accepts both schemes). `server_requests` enables
+/// the audit-1190 exchange after initialization and records every response in
+/// `roots_trace`.
+struct HttpFixtureOptions {
+    bool tls{true};
+    bool server_requests{false};
+    std::optional<std::filesystem::path> roots_trace;
+};
+
 class HttpFixtureServer final {
 public:
-    HttpFixtureServer() {
+    explicit HttpFixtureServer(HttpFixtureOptions options = {}) {
         int raw_fds[2]{-1, -1};
         REQUIRE(::pipe(raw_fds) == 0);
         support::UniqueFd read_fd(raw_fds[0]);
@@ -184,7 +197,17 @@ public:
                 (void)::dup2(devnull.get(), STDERR_FILENO);
                 (void)devnull.close();
             }
+            if (options.server_requests) {
+                (void)::setenv("PIKE_MCP_SERVER_REQUESTS", "roots", 1);
+            }
+            if (options.roots_trace) {
+                (void)::setenv("PIKE_MCP_ROOTS_TRACE", options.roots_trace->c_str(), 1);
+            }
             const std::string script = fixture_path("http_server.py");
+            if (!options.tls) {
+                ::execlp("python3", "python3", script.c_str(), static_cast<char*>(nullptr));
+                ::_exit(127);
+            }
             const std::string cert = tls_fixture_path("test-server.pem");
             const std::string key = tls_fixture_path("test-server-key.pem");
             ::execlp("python3",
@@ -219,7 +242,7 @@ public:
             terminate_child();
         }
         REQUIRE(parsed.ec == std::errc{});
-        url_ = "https://127.0.0.1:" + std::to_string(port) + "/mcp";
+        url_ = std::string{options.tls ? "https://" : "http://"} + "127.0.0.1:" + std::to_string(port) + "/mcp";
     }
 
     HttpFixtureServer(const HttpFixtureServer&) = delete;
@@ -253,6 +276,85 @@ private:
     config.name = "echo";
     config.url = server.url();
     return config;
+}
+
+/// The connection-carried roots of the frozen capture
+/// (`audit-1190/server-requests.json`): the client answers `roots/list` with
+/// these, never with a root derived from the process working directory.
+[[nodiscard]] std::vector<mcp::Root> configured_roots() {
+    return {mcp::Root{.uri = "file:///workspace", .name = "workspace"}};
+}
+
+/// The `expected` object of one scenario in the frozen audit-1190 artifact.
+/// Loaded before a test starts any process, so a missing artifact fails
+/// without a live harness.
+[[nodiscard]] support::JsonValue frozen_scenario_expected(std::string_view scenario_name) {
+    const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/audit-1190/server-requests.json";
+    auto artifact = support::read_json(tests::read_text_if_present(path));
+    REQUIRE(artifact.has_value());
+    const auto scenarios = artifact->get_object().find("scenarios");
+    REQUIRE(scenarios != artifact->get_object().end());
+    const auto* entries = scenarios->second.get_if<support::JsonValue::array_t>();
+    REQUIRE(entries != nullptr);
+    for (const auto& entry : *entries) {
+        const auto* object = entry.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto name = object->find("name");
+        const auto expected = object->find("expected");
+        REQUIRE(name != object->end());
+        REQUIRE(expected != object->end());
+        if (name->second.holds<std::string>() && name->second.get_string() == scenario_name) {
+            return expected->second;
+        }
+    }
+    FAIL("frozen audit-1190 scenario is missing: " << scenario_name);
+    return support::JsonValue{};
+}
+
+/// Every response line the fixture recorded, in order.
+[[nodiscard]] std::vector<support::JsonValue> read_recorded_responses(const std::filesystem::path& path) {
+    std::ifstream input(path);
+    std::vector<support::JsonValue> messages;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        if (auto parsed = support::read_json(line)) {
+            messages.push_back(std::move(*parsed));
+        }
+    }
+    return messages;
+}
+
+/// The recorded client response with this JSON-RPC id, when the fixture saw it.
+[[nodiscard]] std::optional<support::JsonValue> recorded_response(
+        const std::vector<support::JsonValue>& responses, int id) {
+    for (const auto& response : responses) {
+        const auto* object = response.get_if<support::JsonValue::object_t>();
+        if (object == nullptr) {
+            continue;
+        }
+        const auto found = object->find("id");
+        if (found != object->end() && found->second.holds<double>() &&
+                static_cast<int>(found->second.get_number()) == id) {
+            return response;
+        }
+    }
+    return std::nullopt;
+}
+
+/// Drive the loop until `predicate` holds or `budget` elapses; the caller
+/// asserts the property afterwards, so a timeout is a test failure, not a
+/// hang.
+[[nodiscard]] bool pump_until(
+        boost::asio::io_context& io, const std::function<bool()>& predicate, std::chrono::milliseconds budget) {
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+    while (!predicate() && std::chrono::steady_clock::now() < deadline) {
+        io.restart();
+        io.run_for(5ms);
+    }
+    return predicate();
 }
 
 } // namespace
@@ -481,4 +583,127 @@ TEST_CASE("cch_mcp streamable HTTP client initializes, lists, calls and closes a
     CHECK(first_text_content(*call) == "http owner seam");
 
     (*client)->close();
+}
+
+TEST_CASE("cch_mcp stdio client answers a fixture server's ping and roots from the connection",
+        "[mcp][owner][frozen][issue1190]") {
+    const auto expected = frozen_scenario_expected("a stdio server ping is answered with an empty result and "
+                                                   "roots/list returns the connection's configured roots");
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "roots.jsonl";
+    auto config = echo_server_config();
+    config.roots = configured_roots();
+    config.env.emplace("PIKE_MCP_SERVER_REQUESTS", "roots");
+    config.env.emplace("PIKE_MCP_ROOTS_TRACE", trace.string());
+
+    boost::asio::io_context io;
+    auto client = run(io, mcp::StdioClient::connect(std::move(config)));
+    REQUIRE(client.has_value());
+    const bool recorded = pump_until(io, [&] { return read_recorded_responses(trace).size() >= 3; }, 10s);
+    (*client)->close();
+    const auto responses = read_recorded_responses(trace);
+
+    // Release-then-assert (CODING_STANDARDS.md §11.10): the client is closed
+    // before any discriminating assertion can abort this frame.
+    REQUIRE(recorded);
+    REQUIRE(responses.size() == 3);
+    const auto ping = recorded_response(responses, 101);
+    const auto roots = recorded_response(responses, 102);
+    REQUIRE(ping.has_value());
+    REQUIRE(roots.has_value());
+    const auto ping_mismatch = tests::json_mismatch(expected.get_object().at("ping"), *ping);
+    const auto roots_mismatch = tests::json_mismatch(expected.get_object().at("rootsList"), *roots);
+    CHECK_FALSE(ping_mismatch.has_value());
+    CHECK_FALSE(roots_mismatch.has_value());
+    if (ping_mismatch) {
+        INFO(*ping_mismatch);
+    }
+    if (roots_mismatch) {
+        INFO(*roots_mismatch);
+    }
+}
+
+TEST_CASE("cch_mcp streamable HTTP client answers a fixture server's ping and roots from the connection",
+        "[mcp][owner][frozen][issue1190]") {
+    const auto expected = frozen_scenario_expected("a streamable HTTP server ping is answered with an empty result and "
+                                                   "roots/list returns the connection's configured roots");
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "roots.jsonl";
+    HttpFixtureServer server(HttpFixtureOptions{.tls = false, .server_requests = true, .roots_trace = trace});
+    auto config = http_config(server);
+    config.roots = configured_roots();
+
+    boost::asio::io_context io;
+    auto client = run(io, mcp::HttpClient::connect(std::move(config)));
+    REQUIRE(client.has_value());
+    const bool recorded = pump_until(io, [&] { return read_recorded_responses(trace).size() >= 3; }, 10s);
+    (*client)->close();
+    const auto responses = read_recorded_responses(trace);
+
+    // Release-then-assert (CODING_STANDARDS.md §11.10): the client is closed
+    // before any discriminating assertion can abort this frame.
+    REQUIRE(recorded);
+    REQUIRE(responses.size() == 3);
+    const auto ping = recorded_response(responses, 101);
+    const auto roots = recorded_response(responses, 102);
+    REQUIRE(ping.has_value());
+    REQUIRE(roots.has_value());
+    const auto ping_mismatch = tests::json_mismatch(expected.get_object().at("ping"), *ping);
+    const auto roots_mismatch = tests::json_mismatch(expected.get_object().at("rootsList"), *roots);
+    CHECK_FALSE(ping_mismatch.has_value());
+    CHECK_FALSE(roots_mismatch.has_value());
+    if (ping_mismatch) {
+        INFO(*ping_mismatch);
+    }
+    if (roots_mismatch) {
+        INFO(*roots_mismatch);
+    }
+}
+
+TEST_CASE("cch_mcp clients answer a fixture server's unhandled request -32601 on both transports",
+        "[mcp][owner][frozen][issue1190]") {
+    const auto expected = frozen_scenario_expected(
+            "a server request with no matching handler is answered -32601 before the connection closes");
+    tests::TempWorkspace workspace;
+    boost::asio::io_context io;
+
+    const auto stdio_trace = workspace.path() / "stdio-roots.jsonl";
+    auto stdio_config = echo_server_config();
+    stdio_config.roots = configured_roots();
+    stdio_config.env.emplace("PIKE_MCP_SERVER_REQUESTS", "roots");
+    stdio_config.env.emplace("PIKE_MCP_ROOTS_TRACE", stdio_trace.string());
+    auto stdio = run(io, mcp::StdioClient::connect(std::move(stdio_config)));
+    REQUIRE(stdio.has_value());
+    const bool stdio_recorded = pump_until(io, [&] { return read_recorded_responses(stdio_trace).size() >= 3; }, 10s);
+    (*stdio)->close();
+    const auto stdio_responses = read_recorded_responses(stdio_trace);
+
+    const auto http_trace = workspace.path() / "http-roots.jsonl";
+    HttpFixtureServer server(HttpFixtureOptions{.tls = false, .server_requests = true, .roots_trace = http_trace});
+    auto http_config_value = http_config(server);
+    http_config_value.roots = configured_roots();
+    auto http = run(io, mcp::HttpClient::connect(std::move(http_config_value)));
+    REQUIRE(http.has_value());
+    const bool http_recorded = pump_until(io, [&] { return read_recorded_responses(http_trace).size() >= 3; }, 10s);
+    (*http)->close();
+    const auto http_responses = read_recorded_responses(http_trace);
+
+    // Release-then-assert (CODING_STANDARDS.md §11.10): both clients are
+    // closed before any discriminating assertion can abort this frame.
+    REQUIRE(stdio_recorded);
+    REQUIRE(http_recorded);
+    const auto stdio_error = recorded_response(stdio_responses, 103);
+    const auto http_error = recorded_response(http_responses, 103);
+    REQUIRE(stdio_error.has_value());
+    REQUIRE(http_error.has_value());
+    const auto stdio_mismatch = tests::json_mismatch(expected.get_object().at("stdio"), *stdio_error);
+    const auto http_mismatch = tests::json_mismatch(expected.get_object().at("streamableHttp"), *http_error);
+    CHECK_FALSE(stdio_mismatch.has_value());
+    CHECK_FALSE(http_mismatch.has_value());
+    if (stdio_mismatch) {
+        INFO(*stdio_mismatch);
+    }
+    if (http_mismatch) {
+        INFO(*http_mismatch);
+    }
 }

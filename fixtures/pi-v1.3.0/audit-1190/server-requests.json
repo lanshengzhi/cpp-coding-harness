@@ -1,0 +1,134 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1190",
+  "family": "audit-1190",
+  "capturedAt": "2026-11-02T06:15:21.444Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/client.ts:McpClient constructor,connect,handleRequest",
+    "packages/mcp/src/transports/stdio.ts:StdioTransport",
+    "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport,openGetStream",
+    "packages/mcp/test/client.test.ts:answers roots/list and dispatches notifications"
+  ],
+  "scenarios": [
+    {
+      "name": "a stdio server ping is answered with an empty result and roots/list returns the connection's configured roots",
+      "inputs": {
+        "transport": "stdio",
+        "roots": [
+          {
+            "uri": "file:///workspace",
+            "name": "workspace"
+          }
+        ],
+        "serverRequests": [
+          "ping",
+          "roots/list"
+        ]
+      },
+      "expected": {
+        "ping": {
+          "id": 101,
+          "jsonrpc": "2.0",
+          "result": {}
+        },
+        "rootsList": {
+          "id": 102,
+          "jsonrpc": "2.0",
+          "result": {
+            "roots": [
+              {
+                "name": "workspace",
+                "uri": "file:///workspace"
+              }
+            ]
+          }
+        }
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "responses are recorded verbatim from the fixture trace"
+      ]
+    },
+    {
+      "name": "a streamable HTTP server ping is answered with an empty result and roots/list returns the connection's configured roots",
+      "inputs": {
+        "transport": "streamable-http",
+        "roots": [
+          {
+            "uri": "file:///workspace",
+            "name": "workspace"
+          }
+        ],
+        "serverRequests": [
+          "ping",
+          "roots/list"
+        ]
+      },
+      "expected": {
+        "ping": {
+          "id": 101,
+          "jsonrpc": "2.0",
+          "result": {}
+        },
+        "rootsList": {
+          "id": 102,
+          "jsonrpc": "2.0",
+          "result": {
+            "roots": [
+              {
+                "name": "workspace",
+                "uri": "file:///workspace"
+              }
+            ]
+          }
+        }
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "responses are recorded verbatim from the fixture trace"
+      ]
+    },
+    {
+      "name": "a server request with no matching handler is answered -32601 before the connection closes",
+      "inputs": {
+        "transports": [
+          "stdio",
+          "streamable-http"
+        ],
+        "method": "sampling/createMessage"
+      },
+      "expected": {
+        "stdio": {
+          "error": {
+            "code": -32601,
+            "message": "Method not found: sampling/createMessage"
+          },
+          "id": 103,
+          "jsonrpc": "2.0"
+        },
+        "streamableHttp": {
+          "error": {
+            "code": -32601,
+            "message": "Method not found: sampling/createMessage"
+          },
+          "id": 103,
+          "jsonrpc": "2.0"
+        }
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "responses are recorded verbatim from the fixture trace"
+      ]
+    }
+  ]
+}
