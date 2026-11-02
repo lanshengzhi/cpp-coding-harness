@@ -2712,6 +2712,83 @@
         "cch_durable:event-stream"
       ],
       "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "a malformed global settings file yields one warning naming the file path",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "a malformed project settings file reports its own path only while the project is trusted",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the same settings file diagnostic from two managers deduplicates to one message",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the settings schema rejects an invalid thinking level and a negative compaction reserve naming the key",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the settings schema names the offending path and pi message for each rejected shape",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "a schema-rejected thinking level loads without a diagnostic and the runtime keeps the raw value",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the compaction consumer rejects negative and fractional token settings naming the field",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
     }
   ],
   "groups": [

@@ -220,6 +220,10 @@
         "audit-1173": {
           "manifest": "audit-1173/manifest.json",
           "manifestSha256": "30a30462610264604b7e967c8820bc480fb248075c56cfdaf03ef365fd502f6d"
+        },
+        "audit-1115": {
+          "manifest": "audit-1115/manifest.json",
+          "manifestSha256": "537b857f29b6a1f7a4af17b9f7beaa290005eb7c6da64416753a37aafd56c576"
         }
       }
     }

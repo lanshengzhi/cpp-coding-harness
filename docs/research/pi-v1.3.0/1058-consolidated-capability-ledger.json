@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
+            "sha256": "f066c9a77ea1344a20e2a0ca5221abd8ec23dc50d4cdda262e46c387ed2f50ea"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -483,6 +483,13 @@
               "sha256": "0125241de337ccec92ae882729c9a775a51bf2baff51c942746651aa334c86fa"
             }
           }
+        },
+        "revalidation1115m": {
+          "reason": "Serial-merger step registered audit-1115 and classified its 7 settings-diagnostic scenarios as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1115m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -556,7 +563,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
+            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -869,6 +876,13 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1115m": {
+          "reason": "Serial-merger step registered audit-1115 and classified its 7 settings-diagnostic scenarios as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1115m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -1013,7 +1027,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
+            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1369,6 +1383,13 @@
               "sha256": "0125241de337ccec92ae882729c9a775a51bf2baff51c942746651aa334c86fa"
             }
           }
+        },
+        "revalidation1115m": {
+          "reason": "Serial-merger step registered audit-1115 and classified its 7 settings-diagnostic scenarios as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1115m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -1628,11 +1649,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
+            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
+            "sha256": "f066c9a77ea1344a20e2a0ca5221abd8ec23dc50d4cdda262e46c387ed2f50ea"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1983,6 +2004,13 @@
               "sha256": "c15778830d47b8a9b3bfc7c62e766a35d69875875cb996095a309c402d6dc259"
             }
           }
+        },
+        "revalidation1115m": {
+          "reason": "Serial-merger step registered audit-1115 and classified its 7 settings-diagnostic scenarios as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1115m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -3068,7 +3096,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
+            "sha256": "f066c9a77ea1344a20e2a0ca5221abd8ec23dc50d4cdda262e46c387ed2f50ea"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3076,7 +3104,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
+            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
           }
         ],
         "validation": {
@@ -3382,6 +3410,13 @@
               "sha256": "492bf8ca42fa02e92b277f703355c8f95976453311a5c3c8ddb45b93259bfa9e"
             }
           }
+        },
+        "revalidation1115m": {
+          "reason": "Serial-merger step registered audit-1115 and classified its 7 settings-diagnostic scenarios as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1115m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       }
     ]
@@ -3724,7 +3759,7 @@
     ],
     "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 607,
+      "scenarios": 614,
       "scenarioNamed": 362,
       "artifactCovered": 56,
       "orphaned": [
@@ -3916,7 +3951,14 @@
         "audit-1173/event-stream.json:more than one hundred undelivered batches collapse into one snapshot replacement",
         "audit-1173/event-stream.json:closing the Harness ends a live event stream with session_closed",
         "audit-1173/event-stream.json:a listener failure ends its stream and leaves the run and other subscribers running",
-        "audit-1173/event-stream.json:an aborted attachment context cancels its stream and never the run"
+        "audit-1173/event-stream.json:an aborted attachment context cancels its stream and never the run",
+        "audit-1115/settings-diagnostics.json:a malformed global settings file yields one warning naming the file path",
+        "audit-1115/settings-diagnostics.json:a malformed project settings file reports its own path only while the project is trusted",
+        "audit-1115/settings-diagnostics.json:the same settings file diagnostic from two managers deduplicates to one message",
+        "audit-1115/settings-diagnostics.json:the settings schema rejects an invalid thinking level and a negative compaction reserve naming the key",
+        "audit-1115/settings-diagnostics.json:the settings schema names the offending path and pi message for each rejected shape",
+        "audit-1115/settings-diagnostics.json:a schema-rejected thinking level loads without a diagnostic and the runtime keeps the raw value",
+        "audit-1115/settings-diagnostics.json:the compaction consumer rejects negative and fractional token settings naming the field"
       ],
       "uncovered": []
     }
@@ -7999,6 +8041,83 @@
         "cch_durable:event-stream"
       ],
       "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "a malformed global settings file yields one warning naming the file path",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "a malformed project settings file reports its own path only while the project is trusted",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the same settings file diagnostic from two managers deduplicates to one message",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the settings schema rejects an invalid thinking level and a negative compaction reserve naming the key",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the settings schema names the offending path and pi message for each rejected shape",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "a schema-rejected thinking level loads without a diagnostic and the runtime keeps the raw value",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1115",
+      "artifact": "settings-diagnostics.json",
+      "scenario": "the compaction consumer rejects negative and fractional token settings naming the field",
+      "reason": "Captured by #1115 through the public Session/coding_agent settings surface after #1049; no existing audit lane routes it.",
+      "rows": [
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:settings-runtime"
+      ],
+      "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
     }
   ],
   "correctionsIndex": [
