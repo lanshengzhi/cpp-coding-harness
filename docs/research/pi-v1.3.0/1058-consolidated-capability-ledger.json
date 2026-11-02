@@ -585,7 +585,7 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml"
           ],
-          "testedRevision": "4e9ad3fbf23a67f0f48abbec51b39ce488bfadfe",
+          "testedRevision": "2e62fa140f7af423eb3f8a4a9de714718a80f287",
           "recordedAt": "2026-11-02T08:57:19Z",
           "selected": 36,
           "junit": {
@@ -2253,7 +2253,7 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml"
           ],
-          "testedRevision": "4e9ad3fbf23a67f0f48abbec51b39ce488bfadfe",
+          "testedRevision": "2e62fa140f7af423eb3f8a4a9de714718a80f287",
           "recordedAt": "2026-11-02T08:57:19Z",
           "selected": 79,
           "junit": {
@@ -4347,7 +4347,7 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml"
           ],
-          "testedRevision": "4e9ad3fbf23a67f0f48abbec51b39ce488bfadfe",
+          "testedRevision": "2e62fa140f7af423eb3f8a4a9de714718a80f287",
           "recordedAt": "2026-11-02T08:57:19Z",
           "selected": 9,
           "junit": {
