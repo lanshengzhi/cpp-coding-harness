@@ -205,20 +205,24 @@ terminate-plus-release comparison.
 
 ## Validation
 
-Measured on checkout base `3f791c298a9628e283135862c46fd7af2b8fbc24` plus the selected working-tree
-inputs pinned in the delivery record:
+Measured on merge commit `320df81d26427a6a57f99a71e8d3b0bb0208b108` (base
+`3f791c298a9628e283135862c46fd7af2b8fbc24` merged with `origin/main`
+`2953743b5`, including the #1158 registration and #1182 TUI receipts) plus the selected
+working-tree inputs pinned in the delivery record. The merge preserved both sides' delivery
+records; only the pinned shared inputs (`baselines.json` and the consolidation plan) were
+refreshed and the exact selections were rerun.
 
 | Command | Result |
 | --- | --- |
 | `cmake --build --preset vcpkg --target cch_tests_codemode` | built; build-phase Parity Architecture Gate PASS |
 | `cmake --build --preset vcpkg --target cch_tests_coding_agent` | built; build-phase Parity Architecture Gate PASS |
 | `ctest --preset vcpkg -N -R '<52 exact codemode case names>'` | 52 selected |
-| `ctest --preset vcpkg -R '<52 exact codemode case names>' --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1179-codemode.xml` | 52 passed, 0 failed, 0 skipped |
-| `ctest --preset vcpkg -L '^(issue1090|issue1101|issue1104)$' --output-junit docs/research/pi-v1.3.0/deliveries/1090-revalidation-1179.xml` | 36 passed, 0 failed, 0 skipped (the #1090 receipt was revalidated because the 1056 ledger is one of its pinned inputs) |
+| `ctest --preset vcpkg -R '<52 exact codemode case names>' --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1179-codemode-revalidation-main.xml` | 52 passed, 0 failed, 0 skipped on the merged tree |
+| `ctest --preset vcpkg -L '^(issue1090\|issue1101\|issue1104)$' --output-junit docs/research/pi-v1.3.0/deliveries/1090-revalidation-1179m.xml` | 36 passed, 0 failed, 0 skipped (the #1090 receipt revalidated because the 1056 ledger is one of its pinned inputs) |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` | ledger rebuilt with 39 new delivery-backed rows |
-| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check` | PASS — 1,464 rows, 100 delivery-backed rows, 651 scenarios, 0 uncovered |
+| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check` | PASS — 1,464 rows, 107 delivery-backed rows, 658 scenarios, 234 explicit orphans, 0 uncovered |
 | `python3 tests/evidence/ConsolidationAuditTest.py` | 42 tests, all passed |
-| `python3 scripts/evidence/audit_evidence.py verify --baseline pi-v1.3.0` | 56 bundles, 116 artifacts and 654 scenarios verified at the full frozen revision |
+| `python3 scripts/evidence/audit_evidence.py verify --baseline pi-v1.3.0` | 57 bundles, 118 artifacts and 661 scenarios verified at the full frozen revision |
 | `ctest --preset vcpkg -L architecture` | 43 passed, 0 failed, 0 skipped |
 | `scripts/format-check.sh origin/main` | clean |
 
@@ -241,12 +245,23 @@ The 10 remaining rows keep their recorded implementation and verification status
 `auditStatus` history and their named remaining work: three are implemented but source-only
 (B2), three are implemented with a recorded boundary (B1/B4/B5), two are partial (B1/B4) and two
 are missing (B1/B3). Membership is unchanged: 49 supported `cch_codemode` rows (plus two excluded)
-before and after. The whole ledger moves from 61 to 100 delivery-backed rows; this is a
-reconciliation count, not an estimate of completion.
+before and after. The whole ledger moves from 61 to 107 delivery-backed rows after the merge
+(main's #1158/#1182 receipts add seven); this is a reconciliation count, not an estimate of
+completion.
 
 No blanket promotion occurred: every delivered row maps all of its recorded comparison scenarios
 and has a passing discriminating case. The excluded `models.*` provider execution and Cloudflare
 Durable Object rows keep their existing boundaries and are not part of the 49-row count.
+
+### Follow-up status and dependencies
+
+| Batch | Issue | State | Native graph | Dependency |
+| --- | --- | --- | --- | --- |
+| B1 public tool table + close | [#1192](https://github.com/lanshengzhi/cpp-coding-harness/issues/1192) | open, `ready-for-agent` | sub-issue of #1183 | none before implementation; shares the close state with B3's Inline entry |
+| B2 source-only captures | [#1193](https://github.com/lanshengzhi/cpp-coding-harness/issues/1193) | open, `ready-for-agent` | sub-issue of #1183 | none; independent captures from `71023aec…` |
+| B3 portable no-Node entry | [#1194](https://github.com/lanshengzhi/cpp-coding-harness/issues/1194) | open, `ready-for-agent` | sub-issue of #1183 | #1192 if the portable entry exports the shared Inline/close surface |
+| B4 discovery absence + host timezone | [#1195](https://github.com/lanshengzhi/cpp-coding-harness/issues/1195) | open, `ready-for-agent` | sub-issue of #1183 | owning divergence decision (ADR or explicit product choice) |
+| B5 worker lifetime hook + actual exit | [#1196](https://github.com/lanshengzhi/cpp-coding-harness/issues/1196) | open, `ready-for-agent` | sub-issue of #1183 | none; requires a public failure seam or an explicit divergence |
 
 ## Remaining boundary
 
