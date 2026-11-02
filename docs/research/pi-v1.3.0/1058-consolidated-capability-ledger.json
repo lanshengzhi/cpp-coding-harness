@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
+            "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -556,6 +556,13 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1191m": {
+          "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -583,7 +590,7 @@
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml",
-            "sha256": "8d31b11728c6b5a14977d7c0642d79f8d7e665f5b71ab2e3aedc481d27a69ee2"
+            "sha256": "695299d760a57d88aeb7eb053d5c9c562bbc2b3be7974a78b67218dffd484489"
           }
         },
         "inputs": [
@@ -629,7 +636,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -957,8 +964,15 @@
             "fixtures/pi-v1.3.0/baselines.json"
           ]
         },
+        "revalidation1191m": {
+          "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
+        },
         "revalidation1184": {
-          "reason": "#1184 states the delivered Chord context wait and the durable Session's context-cancelling commit/watch/close semantics in the architecture record, which is a pinned input of this record. The delivered image rows, scenarios and routing digest are unchanged; the recorded durable-image selection was rerun on the #1184 tree into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
+          "reason": "#1184 states the delivered Chord context wait and the durable Session's context-cancelling commit/watch/close semantics in the architecture record, which is a pinned input of this record. The delivered image rows, scenarios and routing digest are unchanged; the recorded durable-image selection was rerun on the merged #1184 tree into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
           "changedInputs": [
             "docs/agents/architecture.md"
           ],
@@ -1125,7 +1139,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1528,6 +1542,13 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1191m": {
+          "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -1787,11 +1808,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
+            "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2198,6 +2219,13 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1191m": {
+          "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -2227,10 +2255,10 @@
           ],
           "testedRevision": "4e9ad3fbf23a67f0f48abbec51b39ce488bfadfe",
           "recordedAt": "2026-11-02T08:57:19Z",
-          "selected": 73,
+          "selected": 79,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml",
-            "sha256": "0269c24b4a9ea3aaed4444319df2e3767a92ac7aa7584d5d0c19104ea2c3bad9"
+            "sha256": "84ad63cd4d1e742552a9c5d05e9405a8cfd1ae6256d9744a4270076c7a09467f"
           }
         },
         "rows": [
@@ -2778,7 +2806,7 @@
           },
           {
             "path": "src/chord/Delta.cpp",
-            "sha256": "8f99ccf1bebc645eee26c10b07ed8c9f4ea64dcdb1c72fa43e98ffd21cb01705"
+            "sha256": "28192bf6d308de9c907da1af04d0809f7003b1f2961a2ff61f5ace019ca2425b"
           },
           {
             "path": "src/chord/DeltaInternal.hpp",
@@ -2810,7 +2838,7 @@
           },
           {
             "path": "src/chord/include/cch/chord/Delta.hpp",
-            "sha256": "2841496851cde80b117d454d3165bf7de6879e837f467c1c16d37c1127877363"
+            "sha256": "57ac34ffd820f82bfecc45850ddfdda904e7259e279ba81266bb0032d7980d5c"
           },
           {
             "path": "src/chord/include/cch/chord/Json.hpp",
@@ -2854,7 +2882,7 @@
           },
           {
             "path": "tests/chord/DeltaTest.cpp",
-            "sha256": "d8a2f8169dee839214c15802dbf4811aa1656bdcbacace2090027ec32c15119a"
+            "sha256": "1f6169bf069455b9f6f3b76a742ce49c50c1240926584c2b672f1628747136c9"
           },
           {
             "path": "tests/chord/OutputTest.cpp",
@@ -2929,8 +2957,16 @@
             "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
           }
         ],
+        "revalidation1185": {
+          "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp — three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
+          "changedInputs": [
+            "src/chord/Delta.cpp",
+            "src/chord/include/cch/chord/Delta.hpp",
+            "tests/chord/DeltaTest.cpp"
+          ]
+        },
         "revalidation1184": {
-          "reason": "#1184 adds the Chord waiter-only context wait, its frozen-abort error spelling and its comparison and discriminating cases to this record's pinned Chord production and test sources. The delivered rows, scenarios and routing digest are unchanged; the exact `-L chord` selection was rebuilt and rerun on the #1184 tree into a fresh JUnit artifact (73 cases, including the three new Chord cases), and this change makes no new verification claim about those rows.",
+          "reason": "#1184 adds the Chord waiter-only context wait, its frozen-abort error spelling and its comparison and discriminating cases to this record's pinned Chord production and test sources. The delivered rows, scenarios and routing digest are unchanged; the shared `-L chord` selection was rebuilt and rerun on the merged #1184 tree into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
           "changedInputs": [
             "src/chord/ChordContext.cpp",
             "src/chord/include/cch/chord/ChordContext.hpp",
@@ -2945,14 +2981,14 @@
               "chord",
               "--output-on-failure",
               "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1178-chord.xml"
+              "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1185.xml"
             ],
-            "testedRevision": "a3f9e28af4495a8f5ab96b5c06d04e18f4fe643b",
-            "recordedAt": "2026-11-01T02:20:26Z",
-            "selected": 70,
+            "testedRevision": "60b043a722f137cd89ba64d89c9caa06332c6e58",
+            "recordedAt": "2026-11-02T08:40:13Z",
+            "selected": 76,
             "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1178-chord.xml",
-              "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
+              "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1185.xml",
+              "sha256": "9bfa75c5674ae9981f3f439fe3019a37b14fdec6d69438f168c1b6f1a10c2753"
             }
           }
         }
@@ -3310,7 +3346,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
+            "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3318,7 +3354,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
           }
         ],
         "validation": {
@@ -3706,6 +3742,13 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1191m": {
+          "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -3770,7 +3813,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
+            "sha256": "c14e22343e6148b46d9059a331d6e02ba674b149d551eb3d71fdc89d06eeeccd"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -3778,7 +3821,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
+            "sha256": "ca5340bef3527b9df3563dc3fec1b7be1c5114e605235368d5ab512efbc0ffff"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4039,7 +4082,252 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1191m": {
+          "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
+      },
+      {
+        "id": "1185-chord-delta-ingestion",
+        "ticket": "1185",
+        "implementationCommits": [
+          "86afd3134c9fb04a1f2bd6b4a3c33d69e0d2a4dd",
+          "60b043a722f137cd89ba64d89c9caa06332c6e58"
+        ],
+        "report": "docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1185-chord.xml"
+          ],
+          "testedRevision": "60b043a722f137cd89ba64d89c9caa06332c6e58",
+          "recordedAt": "2026-11-02T08:40:07Z",
+          "selected": 76,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1185-chord.xml",
+            "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_chord:delta:op-validation",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
+                "test": "decoded operation ingestion rejects the frozen malformed shapes before any target access",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "decoded application keeps the preceding mutable write when a later tuple is rejected",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "The frozen applier validates each operation as it reaches it, so a leading set stays applied when a later tuple is rejected. Whole-batch pre-validation would leave the caller at its initial value, and an ingestion seam that accepted an unknown verb or a string splice index would not report those messages at all."
+            }
+          },
+          {
+            "id": "cch_chord:delta:path-validation",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
+                "test": "decoded operation ingestion rejects the frozen malformed shapes before any target access",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "decoded ingestion rejects every reserved segment and never yields a partial batch",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "A path check that special-cased only the frozen __proto__ spelling would accept constructor and prototype, which reach the same JavaScript prototype surface, and an ingest-as-you-go seam that returned the accepted prefix would hand a caller a partially validated batch; the case requires all three reserved segments and whole-batch rejection."
+            }
+          },
+          {
+            "id": "cch_chord:delta:root-replacement",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
+                "test": "mutable application mutates in place while a root replacement returns a new value",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a root replacement keeps the preceding incremental write and adopts a new root",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "An applier that wrote the adopted replacement into the caller's value would make replacementIsNew false, and one that discarded the writes before a replacement would lose the preceding set; the case requires the caller's prior write to survive and the returned root to be a distinct container that shares the replacement payload."
+            }
+          },
+          {
+            "id": "cch_chord:Chord:delta",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1054/session-transactions.json",
+                "scenario": "document watches and states deliver only committed frames",
+                "test": "a committed watch frame's frozen delta vocabulary matches the tracker draft and value",
+                "testSource": "tests/chord/DeltaTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a whole-root replacement is not the delta a committed watch frame delivers",
+              "testSource": "tests/chord/DeltaTest.cpp",
+              "reason": "A delta vocabulary that also accepted a whole-root replacement as the committed frame's shape would pass decoding while not matching the frozen two-set frame; the case requires the committed frame to be a non-base batch and the tracker's prepared replacement of the same value to differ from it."
+            }
+          },
+          {
+            "id": "cch_chord:Chord:draft",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1057/delta-revisions.json",
+                "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
+                "test": "aborting a prepared change revokes escaped draft handles",
+                "testSource": "tests/chord/TrackerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "aborting a prepared change revokes escaped draft handles",
+              "testSource": "tests/chord/TrackerTest.cpp",
+              "reason": "An implementation that refuses prepare but leaves an escaped draft handle usable would apply the escaped write and advance the revision; the case requires the settled overlay error, the aborted-preparation error, and the unchanged committed value and revision."
+            }
+          }
+        ],
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/targets/Chord.cmake",
+            "sha256": "db34ddc2693d5187df2a94f0e38eacb3262796fe2b0d93ab7ef99167aceccf76"
+          },
+          {
+            "path": "cmake/tests/ChordTests.cmake",
+            "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "src/chord/Delta.cpp",
+            "sha256": "28192bf6d308de9c907da1af04d0809f7003b1f2961a2ff61f5ace019ca2425b"
+          },
+          {
+            "path": "src/chord/DeltaInternal.hpp",
+            "sha256": "e10711e4d398c29e109e0fb83a8b7c3ca8b5913d6e164ffb231e989c2f4861db"
+          },
+          {
+            "path": "src/chord/Json.cpp",
+            "sha256": "10a95224acf9ea62a6e024440066dca84ed8a459949a1e96c9f9b780ad85451a"
+          },
+          {
+            "path": "src/chord/Tracker.cpp",
+            "sha256": "e6abb2fabb5b0b88ac8a6381ca256834cdb2ed64ef27e0b11069b282f21ebe5f"
+          },
+          {
+            "path": "src/chord/include/cch/chord/Delta.hpp",
+            "sha256": "57ac34ffd820f82bfecc45850ddfdda904e7259e279ba81266bb0032d7980d5c"
+          },
+          {
+            "path": "src/chord/include/cch/chord/Json.hpp",
+            "sha256": "a0770553e00418ca5add8b9437bc9f0809e19f8fa723e47d2812e235541b9839"
+          },
+          {
+            "path": "src/support/include/cch/support/Error.hpp",
+            "sha256": "195585394d91c60b92f5b5ee85bb81e3961cd9a3e4a293298403f8f1032e558f"
+          },
+          {
+            "path": "src/support/include/cch/support/JsonObject.hpp",
+            "sha256": "bd24f86e03a85fdf402246dd4fbbeb812cec21ccd77ab25f09b6d8bd8bc1680d"
+          },
+          {
+            "path": "src/support/include/cch/support/JsonValue.hpp",
+            "sha256": "93875a958f5e36e0d41feb68de0fbfc66e4d242b525eed7dc74eaf64b048dbee"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/chord/DeltaTest.cpp",
+            "sha256": "1f6169bf069455b9f6f3b76a742ce49c50c1240926584c2b672f1628747136c9"
+          },
+          {
+            "path": "tests/chord/TrackerTest.cpp",
+            "sha256": "caf97023d0a2fc6f06a6195ffeb70012688a3abf4f7b7331de33e95ebfc182ad"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1054/manifest.json",
+            "sha256": "e9039b53cfccdf6caf62e09702377ca45e53e91cedbea4dee6d1b92d18e38a44"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+            "sha256": "47119905f291f9fdeecf6312c46ebd5d81154699b3748e531973ecf0fc43db1f"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
+            "sha256": "d56e0cb0f2a8afbb2045de990390d74e7898d50f7dfad9458cd34a7e23a63e6d"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+            "sha256": "5b5241721f64f50380b2fe7a5c22c528a4d38d7ebfc9035f2c9de3429c335518"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1061/manifest.json",
+            "sha256": "1532caab7462c64e9008195685a55b001f9dc45a8d4d8e86e7603034ddcaf70b"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1061/validation-order.json",
+            "sha256": "0c1065e8f9f1f34c8a8f7ce1b949bf236b0ccd4f418896c203123c2f511f7553"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json",
+            "sha256": "3a986f6ca6df66492b2cae5d63b2ba37bb762e182ec0db33636291ba1ab5e0b1"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.json",
+            "sha256": "5a08743f52e131024bc429023e110ec6ea028f09c4f0a434bf9c5d9f181462ed"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
+            "sha256": "bd883dca682aa04f5a6cd1e205011b8311eb90ab25ee3d4e477d9e8dd6c51bbd"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/deliveries/1185-chord.xml",
+            "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
+          }
+        ],
+        "routingSha256": "e10f486b2f341da5cfff683f179814cc61459d6b807afbce2150711e88c97d05"
       },
       {
         "id": "1184-chord-context-cancellation",
@@ -4064,7 +4352,7 @@
           "selected": 9,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
-            "sha256": "10360dc419a6765ac9e5a95f195dbfa516df6fe0f932f0aeba983d14895a2836"
+            "sha256": "35181e11fe53e3ffc946d2ef9e5743b749728572a64be2850c6c388dcc11ffc4"
           }
         },
         "rows": [
@@ -4261,7 +4549,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
-            "sha256": "10360dc419a6765ac9e5a95f195dbfa516df6fe0f932f0aeba983d14895a2836"
+            "sha256": "35181e11fe53e3ffc946d2ef9e5743b749728572a64be2850c6c388dcc11ffc4"
           }
         ]
       }
@@ -4506,8 +4794,8 @@
         "not-applicable": 2
       },
       "cch_chord": {
-        "implemented": 28,
-        "missing": 28,
+        "implemented": 33,
+        "missing": 23,
         "not-applicable": 5,
         "partial": 4
       },
@@ -4546,22 +4834,22 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1064,
-      "missing": 201,
+      "implemented": 1069,
+      "missing": 196,
       "not-applicable": 18,
       "partial": 181
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1016,
-      "upstream-captured": 371,
-      "verified": 49
+      "unverified": 1015,
+      "upstream-captured": 367,
+      "verified": 54
     },
     "evidenceRoute": {
-      "captured": 420,
+      "captured": 421,
       "artifact-only": 0,
       "related-captured": 23,
-      "declared-comparison": 31,
+      "declared-comparison": 30,
       "cpp-regression-only": 10,
       "unobserved": 52,
       "unobserved-static": 0,
@@ -4570,7 +4858,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1016,
+    "unobservedSupported": 1015,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -4603,9 +4891,9 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1016,
+    "missingObservationRows": 1015,
     "scenarioCoverage": {
-      "scenarios": 617,
+      "scenarios": 645,
       "scenarioNamed": 362,
       "artifactCovered": 56,
       "orphaned": [
@@ -4807,7 +5095,35 @@
         "audit-1115/settings-diagnostics.json:the compaction consumer rejects negative and fractional token settings naming the field",
         "audit-1190/server-requests.json:a stdio server ping is answered with an empty result and roots/list returns the connection's configured roots",
         "audit-1190/server-requests.json:a streamable HTTP server ping is answered with an empty result and roots/list returns the connection's configured roots",
-        "audit-1190/server-requests.json:a server request with no matching handler is answered -32601 before the connection closes"
+        "audit-1190/server-requests.json:a server request with no matching handler is answered -32601 before the connection closes",
+        "audit-1191/mcp-tools-list.json:tools/list follows nextCursor across pages and ends on an empty cursor",
+        "audit-1191/mcp-tools-list.json:a null nextCursor ends tools/list without another request",
+        "audit-1191/mcp-tools-list.json:an empty nextCursor ends tools/list without another request",
+        "audit-1191/mcp-tools-list.json:a repeated nextCursor is an explicit duplicate-cursor error",
+        "audit-1191/mcp-tools-list.json:tools/list stops after pi's 1000-page bound",
+        "audit-1191/mcp-tools-list.json:application tool names sanitize punctuation, bound at 64 and hash collisions from the raw pair",
+        "audit-1191/mcp-tools-list.json:application tool names hash every colliding sanitized name order-independently",
+        "audit-1191/mcp-progress.json:stdio: onProgress injects _meta.progressToken and delivers only matching progress",
+        "audit-1191/mcp-progress.json:HTTP: onProgress injects _meta.progressToken and delivers only matching progress",
+        "audit-1191/mcp-progress.json:stdio: a progress notification re-arms the request deadline",
+        "audit-1191/mcp-progress.json:HTTP: a progress notification re-arms the request deadline",
+        "audit-1191/mcp-progress.json:application progress text uses the message verbatim or Progress <n>[/<total>]",
+        "audit-1191/mcp-request-cancellation.json:stdio: aborting an in-flight call notifies the server and leaves the child usable",
+        "audit-1191/mcp-request-cancellation.json:HTTP: aborting an in-flight call posts notifications/cancelled and reuses the session",
+        "audit-1191/mcp-request-cancellation.json:stdio: a timed-out request fails with pi's timeout error and reason",
+        "audit-1191/mcp-request-cancellation.json:HTTP: a timed-out request fails with pi's timeout error and reason",
+        "audit-1191/mcp-request-cancellation.json:an already-aborted request is never sent and emits no notifications/cancelled",
+        "audit-1191/mcp-request-cancellation.json:a failed HTTP request does not emit notifications/cancelled",
+        "audit-1191/mcp-request-cancellation.json:a failed stdio request does not emit notifications/cancelled",
+        "audit-1191/mcp-http-session-stream.json:HTTP: session headers carry through and a 405 GET is feature-absent",
+        "audit-1191/mcp-http-session-stream.json:HTTP: a server retry hint overrides the client reconnect delay and resumes with Last-Event-ID",
+        "audit-1191/mcp-http-session-stream.json:HTTP: an out-of-range retry hint reconnects without throwing or hanging",
+        "audit-1191/mcp-http-session-stream.json:HTTP: an event on the server-to-client GET stream reaches the notification listener",
+        "audit-1191/mcp-http-session-stream.json:HTTP: the client answers ping and roots/list requests delivered on the GET stream",
+        "audit-1191/mcp-http-session-stream.json:HTTP: notifications/cancelled aborts an in-flight server request handler",
+        "audit-1191/mcp-http-session-stream.json:HTTP: close aborts the GET stream without a dropped-stream error",
+        "audit-1191/mcp-stdio-stderr-tail.json:stdio: the transport ring keeps the last 64 KiB of a larger stderr stream",
+        "audit-1191/mcp-stdio-stderr-tail.json:stdio: a failed connect appends pi's bounded 2000-character stderr tail"
       ],
       "uncovered": []
     }
@@ -8997,6 +9313,286 @@
         "cch_mcp:mcp-roots-list"
       ],
       "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "tools/list follows nextCursor across pages and ends on an empty cursor",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "a null nextCursor ends tools/list without another request",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "an empty nextCursor ends tools/list without another request",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "a repeated nextCursor is an explicit duplicate-cursor error",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "tools/list stops after pi's 1000-page bound",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "application tool names sanitize punctuation, bound at 64 and hash collisions from the raw pair",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-tools-list.json",
+      "scenario": "application tool names hash every colliding sanitized name order-independently",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-tools-list"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "stdio: onProgress injects _meta.progressToken and delivers only matching progress",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "HTTP: onProgress injects _meta.progressToken and delivers only matching progress",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "stdio: a progress notification re-arms the request deadline",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "HTTP: a progress notification re-arms the request deadline",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-progress.json",
+      "scenario": "application progress text uses the message verbatim or Progress <n>[/<total>]",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-progress"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "stdio: aborting an in-flight call notifies the server and leaves the child usable",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "HTTP: aborting an in-flight call posts notifications/cancelled and reuses the session",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "stdio: a timed-out request fails with pi's timeout error and reason",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "HTTP: a timed-out request fails with pi's timeout error and reason",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "an already-aborted request is never sent and emits no notifications/cancelled",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "a failed HTTP request does not emit notifications/cancelled",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-request-cancellation.json",
+      "scenario": "a failed stdio request does not emit notifications/cancelled",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: session headers carry through and a 405 GET is feature-absent",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: a server retry hint overrides the client reconnect delay and resumes with Last-Event-ID",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: an out-of-range retry hint reconnects without throwing or hanging",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: an event on the server-to-client GET stream reaches the notification listener",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: the client answers ping and roots/list requests delivered on the GET stream",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: notifications/cancelled aborts an in-flight server request handler",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-http-session-stream.json",
+      "scenario": "HTTP: close aborts the GET stream without a dropped-stream error",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-http-session-stream"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-stdio-stderr-tail.json",
+      "scenario": "stdio: the transport ring keeps the last 64 KiB of a larger stderr stream",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-stdio-stderr-tail"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1191",
+      "artifact": "mcp-stdio-stderr-tail.json",
+      "scenario": "stdio: a failed connect appends pi's bounded 2000-character stderr tail",
+      "reason": "Captured by #1191 from the clean pi-v1.3.0 checkout through the public MCP Owner (source-only lane, no C++ changes); no audit lane routes to this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-stdio-stderr-tail"
+      ],
+      "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
     }
   ],
   "correctionsIndex": [
@@ -11141,15 +11737,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "cch_durable document storage and watches (planned)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1185",
       "scenario": "document watches and states deliver only committed frames",
       "comparisonScenarios": [
         "document watches and states deliver only committed frames"
@@ -11161,15 +11757,12 @@
         "capturedScenarios": [
           "document watches and states deliver only committed frames"
         ],
-        "result": "The watch carried the exact set ops [['s',['text'],'b'],['s',['revision'],2]] and the JSONL delta stored [['s',['text'],'two']]."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "No C++ Chord delta vocabulary or apply implementation exists.",
-        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11182,7 +11775,29 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1058-draft",
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "document watches and states deliver only committed frames"
+          ],
+          "result": "The watch carried the exact set ops [['s',['text'],'b'],['s',['revision'],2]] and the JSONL delta stored [['s',['text'],'two']]."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "No C++ Chord delta vocabulary or apply implementation exists.",
+          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": ""
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:Chord:draft",
@@ -11194,34 +11809,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "cch_durable document transactions (planned)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
-      "scenario": "C++ transaction draft revocation after callback settlement",
+      "implementation_ticket": "#1185",
+      "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
       "comparisonScenarios": [
-        "C++ transaction draft revocation after callback settlement"
+        "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
       ],
       "evidence": {
-        "route": "declared-comparison",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
-        "result": "Not captured; the session capture observes committed values and ops, not revoked escaped drafts."
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenarioMatch": "direct",
+        "capturedScenarios": [
+          "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
+        ],
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
-      "missingObservation": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
-      "gaps": [
-        "No C++ Draft/tracker exists; owned by #1057.",
-        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
-        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
-      ],
-      "remainingWork": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
-      "notes": "",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11234,7 +11847,30 @@
           "verification": "unverified",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1058-draft",
+        "implementation": "missing",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
+          ],
+          "result": "An escaped draft write after abort throws 'Cannot use a settled overlay'; adopting the prepared change throws 'Prepared change has been aborted'; the committed value and revision stay unchanged."
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [
+          "No C++ Draft/tracker exists; owned by #1057.",
+          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+          "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+        ],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": ""
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:Chord:json",
@@ -12377,15 +13013,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/memory.ts; packages/durable/src/storage/sqlite/storage.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1185",
       "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
       "comparisonScenarios": [
         "unsafe prototype segments and malformed operation tuples are rejected before mutation"
@@ -12397,12 +13033,12 @@
         "capturedScenarios": [
           "unsafe prototype segments and malformed operation tuples are rejected before mutation"
         ],
-        "result": "Unknown verb 'x' throws TypeError; string splice index throws the recorded typed error."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Validate the entire batch before applying any operation; make failure leave the target untouched.",
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -12415,7 +13051,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "unsafe prototype segments and malformed operation tuples are rejected before mutation"
+          ],
+          "result": "Unknown verb 'x' throws TypeError; string splice index throws the recorded typed error."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Validate the entire batch before applying any operation; make failure leave the target untouched."
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:delta:op-vocabulary",
@@ -12559,15 +13214,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/memory.ts; packages/durable/src/storage/sqlite/storage.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1185",
       "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
       "comparisonScenarios": [
         "unsafe prototype segments and malformed operation tuples are rejected before mutation"
@@ -12579,12 +13234,12 @@
         "capturedScenarios": [
           "unsafe prototype segments and malformed operation tuples are rejected before mutation"
         ],
-        "result": "Path ['__proto__','polluted'] throws UnsafePathError 'unsafe path segment: __proto__'."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Represent paths as validated segment vectors; reject `__proto__`, `constructor` and `prototype` before any target access.",
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -12597,7 +13252,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "unsafe prototype segments and malformed operation tuples are rejected before mutation"
+          ],
+          "result": "Path ['__proto__','polluted'] throws UnsafePathError 'unsafe path segment: __proto__'."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Represent paths as validated segment vectors; reject `__proto__`, `constructor` and `prototype` before any target access."
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:delta:prepare-replace",
@@ -12680,15 +13354,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:RETIREMENT_OPERATIONS; packages/durable/src/storage/sqlite/storage.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1185",
       "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
       "comparisonScenarios": [
         "mutable application mutates in place except for a root replacement, which returns a new value"
@@ -12700,12 +13374,12 @@
         "capturedScenarios": [
           "mutable application mutates in place except for a root replacement, which returns a new value"
         ],
-        "result": "isBase([['r',...]]) true; isReplace true; a root replacement returns a distinct value and leaves the old target unchanged."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Classify a root replacement as a base, reset any path/revision decoding state, and never apply it as an incremental delta.",
+      "remainingWork": null,
+      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -12718,7 +13392,26 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "mutable application mutates in place except for a root replacement, which returns a new value"
+          ],
+          "result": "isBase([['r',...]]) true; isReplace true; a root replacement returns a distinct value and leaves the old target unchanged."
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Classify a root replacement as a base, reset any path/revision decoding state, and never apply it as an incremental delta."
+      },
+      "delivery": "1185-chord-delta-ingestion"
     },
     {
       "id": "cch_chord:delta:stale-preparation",

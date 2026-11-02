@@ -1,0 +1,267 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1191",
+  "family": "audit-1191",
+  "capturedAt": "2026-11-02T06:07:38.029Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/client.ts:McpClient.requestInternal,handleProgress,armTimeout",
+    "packages/mcp/src/transports/stdio.ts:StdioTransport",
+    "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport,consumeSseStream",
+    "packages/coding-agent/src/extensions/mcp/tools.ts:createMcpToolDefinition.execute,onProgress",
+    "packages/mcp/test/client.test.ts:renews the timeout on progress"
+  ],
+  "scenarios": [
+    {
+      "name": "stdio: onProgress injects _meta.progressToken and delivers only matching progress",
+      "inputs": {
+        "transport": "stdio child",
+        "tool": "progress",
+        "notifications": [
+          {
+            "delayMs": 10,
+            "progressToken": "request id + 1000",
+            "progress": 0
+          },
+          {
+            "delayMs": 40,
+            "progressToken": "request id",
+            "progress": 1,
+            "total": 2,
+            "message": "halfway"
+          },
+          {
+            "delayMs": 80,
+            "progressToken": "request id",
+            "progress": 2
+          },
+          {
+            "delayMs": 170,
+            "progressToken": "request id",
+            "progress": 99,
+            "afterSettle": true
+          }
+        ]
+      },
+      "expected": {
+        "requestId": 2,
+        "progressTokenInjected": true,
+        "progressToken": 2,
+        "progressCount": 2,
+        "progress": [
+          {
+            "progressToken": 2,
+            "progress": 1,
+            "total": 2,
+            "message": "halfway"
+          },
+          {
+            "progressToken": 2,
+            "progress": 2,
+            "total": null,
+            "message": null
+          }
+        ],
+        "resultText": "done",
+        "wrongTokenIgnored": true,
+        "lateProgressIgnored": true,
+        "transport": "stdio"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "progress tokens are compared to the JSON-RPC request id"
+      ]
+    },
+    {
+      "name": "HTTP: onProgress injects _meta.progressToken and delivers only matching progress",
+      "inputs": {
+        "transport": "loopback HTTP SSE",
+        "tool": "progress",
+        "notifications": [
+          {
+            "delayMs": 10,
+            "progressToken": "request id + 1000",
+            "progress": 0
+          },
+          {
+            "delayMs": 40,
+            "progressToken": "request id",
+            "progress": 1,
+            "total": 2,
+            "message": "halfway"
+          },
+          {
+            "delayMs": 80,
+            "progressToken": "request id",
+            "progress": 2
+          },
+          {
+            "delayMs": 170,
+            "progressToken": "request id",
+            "progress": 99,
+            "afterSettle": true
+          }
+        ]
+      },
+      "expected": {
+        "requestId": 2,
+        "progressTokenInjected": true,
+        "progressToken": 2,
+        "progressCount": 2,
+        "progress": [
+          {
+            "progressToken": 2,
+            "progress": 1,
+            "total": 2,
+            "message": "halfway"
+          },
+          {
+            "progressToken": 2,
+            "progress": 2,
+            "total": null,
+            "message": null
+          }
+        ],
+        "resultText": "done",
+        "wrongTokenIgnored": true,
+        "lateProgressIgnored": true,
+        "transport": "http"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "progress tokens are compared to the JSON-RPC request id"
+      ]
+    },
+    {
+      "name": "stdio: a progress notification re-arms the request deadline",
+      "inputs": {
+        "transport": "stdio child",
+        "timeoutMs": 70,
+        "progressBeforeResultMs": [
+          40,
+          80
+        ],
+        "resultAtMs": 110
+      },
+      "expected": {
+        "timeoutMs": 70,
+        "resolved": true,
+        "elapsedMs": 111,
+        "elapsedBeyondDeadline": true,
+        "progressCount": 2,
+        "resultText": "done",
+        "transport": "stdio"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "progress tokens are compared to the JSON-RPC request id"
+      ]
+    },
+    {
+      "name": "HTTP: a progress notification re-arms the request deadline",
+      "inputs": {
+        "transport": "loopback HTTP SSE",
+        "timeoutMs": 70,
+        "progressBeforeResultMs": [
+          40,
+          80
+        ],
+        "resultAtMs": 110
+      },
+      "expected": {
+        "timeoutMs": 70,
+        "resolved": true,
+        "elapsedMs": 123,
+        "elapsedBeyondDeadline": true,
+        "progressCount": 2,
+        "resultText": "done",
+        "transport": "http"
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "progress tokens are compared to the JSON-RPC request id"
+      ]
+    },
+    {
+      "name": "application progress text uses the message verbatim or Progress <n>[/<total>]",
+      "inputs": {
+        "cases": [
+          {
+            "message": "custom message",
+            "progress": 1,
+            "total": 5
+          },
+          {
+            "progress": 2,
+            "total": 10
+          },
+          {
+            "progress": 3
+          },
+          {
+            "message": "",
+            "progress": 4
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "params": {
+              "message": "custom message",
+              "progress": 1,
+              "total": 5
+            },
+            "texts": [
+              "custom message"
+            ]
+          },
+          {
+            "params": {
+              "progress": 2,
+              "total": 10
+            },
+            "texts": [
+              "Progress 2/10"
+            ]
+          },
+          {
+            "params": {
+              "progress": 3
+            },
+            "texts": [
+              "Progress 3"
+            ]
+          },
+          {
+            "params": {
+              "message": "",
+              "progress": 4
+            },
+            "texts": [
+              ""
+            ]
+          }
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+        "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+        "progress tokens are compared to the JSON-RPC request id"
+      ]
+    }
+  ]
+}

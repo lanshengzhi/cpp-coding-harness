@@ -186,6 +186,14 @@ report commit):
 | `cmake --build --preset vcpkg` then `ctest --preset vcpkg` | 4,104 selected, 4,087 passed, 9 failed, 8 skipped (details below) |
 | `scripts/format-check.sh 0b118e912` | clean |
 
+[#1185](1185-chord-delta-ingestion.md) later changed `src/chord/Delta.cpp`, its header and
+`tests/chord/DeltaTest.cpp` while adding the decoded-operation ingestion seam. Three inputs this
+receipt pins therefore changed, and the selection now has six more cases. The shared selection was
+rerun on the #1185 merged tree into `deliveries/1178-revalidation-1185.xml` (76 selected, 76 passed,
+including every case this record claims) and the record carries a `revalidation1185` entry with the
+refreshed digests. No claimed row, scenario or routing digest changed, and the original
+`deliveries/1178-chord.xml` stays committed.
+
 The receipt pins the exact JUnit bytes, so the selected count, the case names and the scenario
 mapping cannot drift silently.
 

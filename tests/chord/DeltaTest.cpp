@@ -3,7 +3,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <format>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -127,10 +129,10 @@ TEST_CASE("ordered immutable batches produce one final revision without changing
     CHECK(*created == object({{"created", Json{true}}}));
 }
 
-// Frozen evidence: fixtures/pi-v1.3.0/audit-1061/validation-order.json
-// "a root replacement adopted before a failing operation leaves the caller object unchanged".
-TEST_CASE("mutable application exposes the replacement result and batch classifications",
-        "[chord][delta][apply][issue1061][spec]") {
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
+// "mutable application mutates in place except for a root replacement, which returns a new value".
+TEST_CASE("mutable application mutates in place while a root replacement returns a new value",
+        "[chord][delta][apply][replacement][issue1185][spec]") {
     Json target = object({{"items", array({Json{"a"}})}, {"value", Json{0}}});
     const OpBatch ops{
             SetOp{.path = keys({"value"}), .value = Json{1}},
@@ -139,20 +141,255 @@ TEST_CASE("mutable application exposes the replacement result and batch classifi
 
     auto applied = apply(target, ops);
     REQUIRE(applied);
+    // sameTarget: the returned root is the caller's value, which was mutated in place.
+    CHECK(applied->shares_container_with(target));
     CHECK(target == object({{"items", array({Json{"a"}, Json{"b"}})}, {"value", Json{1}}}));
 
-    auto replaced = apply(target, OpBatch{ReplaceOp{.value = object({{"replacement", Json{true}}})}});
+    const Json replacement = object({{"replacement", Json{true}}});
+    auto replaced = apply(target, OpBatch{ReplaceOp{.value = replacement}});
     REQUIRE(replaced);
-    CHECK(target == object({{"replacement", Json{true}}}));
+    // replacementIsNew: the adopted root is a new value and the caller keeps its own.
+    CHECK_FALSE(replaced->shares_container_with(target));
+    CHECK(replaced->shares_container_with(replacement));
+    CHECK(target == object({{"items", array({Json{"a"}, Json{"b"}})}, {"value", Json{1}}}));
+    CHECK(*replaced == replacement);
     CHECK(is_base(OpBatch{ReplaceOp{.value = Json{nullptr}}}));
     CHECK(is_replace(Op{ReplaceOp{.value = Json{nullptr}}}));
     CHECK_FALSE(is_base(OpBatch{}));
-    CHECK_FALSE(is_base(OpBatch{SetOp{.path = keys({"value"}), .value = Json{1}}}));
+    CHECK_FALSE(is_base(ops));
+}
+
+// A root replacement is adopted, never replayed as an incremental delta.
+TEST_CASE("a root replacement keeps the preceding incremental write and adopts a new root",
+        "[chord][delta][apply][replacement][issue1185][spec]") {
+    Json target = object({{"value", Json{1}}});
+    const Json replacement = object({{"replacement", Json{true}}});
+    auto replaced = apply(target,
+            OpBatch{
+                    SetOp{.path = keys({"value"}), .value = Json{2}},
+                    ReplaceOp{.value = replacement},
+            });
+    REQUIRE(replaced);
+    CHECK(target == object({{"value", Json{2}}}));
+    CHECK(*replaced == replacement);
+    CHECK_FALSE(replaced->shares_container_with(target));
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
+// "unsafe prototype segments and malformed operation tuples are rejected before mutation";
+// fixtures/pi-v1.3.0/audit-1061/validation-order.json
+// "the operation validator rejects each representable malformed shape with its recorded message".
+TEST_CASE("decoded operation ingestion rejects the frozen malformed shapes before any target access",
+        "[chord][delta][decode][validation][issue1185][spec]") {
+    auto unsafe = decode_ops(array({array({Json{"s"}, array({Json{"__proto__"}, Json{"polluted"}}), Json{true}})}));
+    REQUIRE_FALSE(unsafe);
+    CHECK(unsafe.error().code == support::ErrorCode::Validation);
+    CHECK(unsafe.error().message == "unsafe path segment: __proto__");
+
+    auto unknown_verb = decode_op(array({Json{"x"}, array({Json{"value"}})}));
+    REQUIRE_FALSE(unknown_verb);
+    CHECK(unknown_verb.error().message == "unknown op verb: x");
+
+    auto string_index = decode_ops(array({array({Json{"p"}, array({}), Json{"0"}, Json{0}, array({Json{"x"}})})}));
+    REQUIRE_FALSE(string_index);
+    CHECK(string_index.error().message == "p index");
+
+    const std::vector<std::pair<Json, std::string>> shapes{
+            {array({Json{"s"}, array({}), Json{1}}), "path is empty"},
+            {array({Json{"d"}, array({})}), "path is empty"},
+            {array({Json{"s"}, array({Json{"a"}})}), "s arity"},
+            {array({Json{"s"}, array({Json{"a"}}), Json{1}, Json{2}}), "s arity"},
+            {array({Json{"t"}, array({Json{"s"}}), Json{-1}}), "t shape"},
+            {array({Json{"p"}, array({Json{"a"}}), Json{0}, Json{-1}, array({})}), "p remove"},
+            {array({Json{"m"}, array({Json{"a"}}), array({Json{0}, Json{0}})}), "m permutation is not a bijection"},
+            {array({Json{"x"}, array({Json{"a"}})}), "unknown op verb: x"},
+    };
+    for (const auto& [shape, message] : shapes) {
+        auto decoded = decode_op(shape);
+        REQUIRE_FALSE(decoded);
+        CHECK(decoded.error().message == message);
+    }
+
+    // The frozen vocabulary is representable: every accepted tuple decodes to its
+    // typed operation.
+    auto accepted = decode_ops(array({
+            array({Json{"s"}, array({Json{"a"}}), Json{1}}),
+            array({Json{"d"}, array({Json{"a"}})}),
+            array({Json{"a"}, array({Json{"a"}}), Json{"x"}}),
+            array({Json{"t"}, array({Json{"a"}}), Json{1}}),
+            array({Json{"p"}, array({}), Json{1}, Json{0}, array({Json{"x"}})}),
+            array({Json{"m"}, array({}), array({Json{0}})}),
+            array({Json{"r"}, object({{"r", Json{true}}})}),
+    }));
+    REQUIRE(accepted);
+    REQUIRE(accepted->size() == 7);
+    const auto* set = operation_at<SetOp>(*accepted, 0);
+    const auto* deletion = operation_at<DeleteOp>(*accepted, 1);
+    const auto* append = operation_at<AppendOp>(*accepted, 2);
+    const auto* truncate = operation_at<TruncateOp>(*accepted, 3);
+    const auto* splice = operation_at<SpliceOp>(*accepted, 4);
+    const auto* move = operation_at<MoveOp>(*accepted, 5);
+    const auto* replace = operation_at<ReplaceOp>(*accepted, 6);
+    REQUIRE(set != nullptr);
+    REQUIRE(deletion != nullptr);
+    REQUIRE(append != nullptr);
+    REQUIRE(truncate != nullptr);
+    REQUIRE(splice != nullptr);
+    REQUIRE(move != nullptr);
+    REQUIRE(replace != nullptr);
+    CHECK(*set == SetOp{.path = keys({"a"}), .value = Json{1}});
+    CHECK(*deletion == DeleteOp{.path = keys({"a"})});
+    CHECK(*append == AppendOp{.path = keys({"a"}), .text = "x"});
+    CHECK(*truncate == TruncateOp{.path = keys({"a"}), .count = 1});
+    CHECK(*splice == SpliceOp{.path = Path{}, .index = 1, .remove = 0, .items = {Json{"x"}}});
+    CHECK(*move == MoveOp{.path = Path{}, .permutation = {0}});
+    CHECK(*replace == ReplaceOp{.value = object({{"r", Json{true}}})});
+}
+
+// A seam that special-cased one reserved key, or that handed a caller the prefix
+// of a rejected batch, would pass the frozen __proto__ case and fail these.
+TEST_CASE("decoded ingestion rejects every reserved segment and never yields a partial batch",
+        "[chord][delta][decode][validation][issue1185][spec]") {
+    for (const char* segment : {"__proto__", "constructor", "prototype"}) {
+        auto decoded = decode_op(array({Json{"s"}, array({Json{segment}, Json{"polluted"}}), Json{true}}));
+        REQUIRE_FALSE(decoded);
+        CHECK(decoded.error().message == std::format("unsafe path segment: {}", segment));
+    }
+
+    auto batch = decode_ops(array({
+            array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+            array({Json{"p"}, array({Json{"items"}}), Json{"0"}, Json{0}, array({Json{"x"}})}),
+    }));
+    REQUIRE_FALSE(batch);
+    CHECK(batch.error().message == "p index");
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1061/validation-order.json
-// records per-operation validation; typed C++ operations cannot represent the
-// malformed-tuple and string-index cases, so checks below cover representable cases.
+// "a later empty path keeps the preceding mutable write and reports the empty path";
+// "a later unsafe path keeps the preceding mutable write and reports the unsafe segment";
+// "a later string splice index keeps the preceding mutable write and reports the splice index";
+// "a later non-bijective permutation keeps the preceding mutable write and reports the permutation";
+// "a root replacement adopted before a failing operation leaves the caller object unchanged".
+TEST_CASE("decoded application keeps the preceding mutable write when a later tuple is rejected",
+        "[chord][delta][decode][validation][ordering][issue1185][spec]") {
+    const Json initial = object({{"value", Json{1}}, {"items", array({Json{"a"}})}});
+
+    Json empty_path = initial;
+    const auto empty_path_failure = apply(empty_path,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"s"}, array({}), Json{3}}),
+            }));
+    REQUIRE_FALSE(empty_path_failure);
+    CHECK(empty_path_failure.error().message == "path is empty");
+    CHECK(empty_path == object({{"value", Json{2}}, {"items", array({Json{"a"}})}}));
+
+    Json unsafe_path = object({{"value", Json{1}}});
+    const auto unsafe_path_failure = apply(unsafe_path,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"s"}, array({Json{"__proto__"}, Json{"polluted"}}), Json{true}}),
+            }));
+    REQUIRE_FALSE(unsafe_path_failure);
+    CHECK(unsafe_path_failure.error().message == "unsafe path segment: __proto__");
+    CHECK(unsafe_path == object({{"value", Json{2}}}));
+
+    Json string_index = initial;
+    const auto string_index_failure = apply(string_index,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"p"}, array({Json{"items"}}), Json{"0"}, Json{0}, array({Json{"x"}})}),
+            }));
+    REQUIRE_FALSE(string_index_failure);
+    CHECK(string_index_failure.error().message == "p index");
+    CHECK(string_index == object({{"value", Json{2}}, {"items", array({Json{"a"}})}}));
+
+    Json unknown_verb = object({{"value", Json{1}}});
+    const auto unknown_verb_failure = apply(unknown_verb,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"x"}, array({Json{"value"}})}),
+            }));
+    REQUIRE_FALSE(unknown_verb_failure);
+    CHECK(unknown_verb_failure.error().message == "unknown op verb: x");
+    CHECK(unknown_verb == object({{"value", Json{2}}}));
+
+    Json permutation = object({{"value", Json{1}}, {"a", array({Json{"x"}, Json{"y"}})}});
+    const auto permutation_failure = apply(permutation,
+            array({
+                    array({Json{"s"}, array({Json{"value"}}), Json{2}}),
+                    array({Json{"m"}, array({Json{"a"}}), array({Json{0}, Json{0}})}),
+            }));
+    REQUIRE_FALSE(permutation_failure);
+    CHECK(permutation_failure.error().message == "m permutation is not a bijection");
+    CHECK(permutation == object({{"value", Json{2}}, {"a", array({Json{"x"}, Json{"y"}})}}));
+
+    // A root replacement adopted before the failing tuple leaves the caller object unchanged.
+    Json replaced = object({{"value", Json{1}}});
+    const auto replaced_failure = apply(replaced,
+            array({
+                    array({Json{"r"}, object({{"other", Json{2}}})}),
+                    array({Json{"s"}, array({}), Json{3}}),
+            }));
+    REQUIRE_FALSE(replaced_failure);
+    CHECK(replaced_failure.error().message == "path is empty");
+    CHECK(replaced == object({{"value", Json{1}}}));
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1054/session-transactions.json
+// "document watches and states deliver only committed frames": the committed
+// watch frame carried exactly this delta vocabulary, and applying it produced the
+// delivered watch value.
+TEST_CASE("a committed watch frame's frozen delta vocabulary matches the tracker draft and value",
+        "[chord][delta][decode][vocabulary][issue1185][spec]") {
+    const Json frozen_ops = array({
+            array({Json{"s"}, array({Json{"text"}}), Json{"b"}}),
+            array({Json{"s"}, array({Json{"revision"}}), Json{2}}),
+    });
+    const Json frozen_value = object({{"text", Json{"b"}}, {"revision", Json{2}}});
+
+    auto decoded = decode_ops(frozen_ops);
+    REQUIRE(decoded);
+    CHECK_FALSE(is_base(*decoded));
+
+    auto tracker = track(object({{"text", Json{"a"}}, {"revision", Json{1}}}));
+    auto change = tracker.begin_change();
+    auto draft = change.draft();
+    REQUIRE(draft.set(keys({"text"}), Json{"b"}));
+    REQUIRE(draft.set(keys({"revision"}), Json{2}));
+    auto prepared = change.prepare();
+    REQUIRE(prepared);
+    CHECK(prepared->ops() == *decoded);
+
+    auto next = apply_immutable(tracker.value(), *decoded);
+    REQUIRE(next);
+    CHECK(*next == frozen_value);
+}
+
+// A root replacement is not the delta a committed watch frame delivers; a seam
+// that replayed the frame as a replacement would produce a base batch instead.
+TEST_CASE("a whole-root replacement is not the delta a committed watch frame delivers",
+        "[chord][delta][decode][vocabulary][issue1185][spec]") {
+    auto tracker = track(object({{"text", Json{"a"}}, {"revision", Json{1}}}));
+    auto prepared = tracker.prepare_replace(object({{"text", Json{"b"}}, {"revision", Json{2}}}));
+    REQUIRE(prepared);
+    REQUIRE(prepared->ops().size() == 1);
+    CHECK(is_base(prepared->ops()));
+    CHECK(is_replace(prepared->ops().front()));
+
+    auto decoded = decode_ops(array({
+            array({Json{"s"}, array({Json{"text"}}), Json{"b"}}),
+            array({Json{"s"}, array({Json{"revision"}}), Json{2}}),
+    }));
+    REQUIRE(decoded);
+    CHECK(prepared->ops() != *decoded);
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1061/validation-order.json
+// records per-operation validation; the typed operations below cover the
+// representable shapes, and "decoded application keeps the preceding mutable
+// write when a later tuple is rejected" covers the malformed-tuple and
+// string-index shapes through the decoded ingestion entry point.
 TEST_CASE("application follows frozen sequential validation and replacement semantics",
         "[chord][delta][validation][issue1061][spec]") {
     Json target = object({{"value", Json{1}}, {"items", array({Json{"a"}})}});

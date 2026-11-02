@@ -6,102 +6,102 @@
 	skipped="0"
 	hostname=""
 	time="0"
-	timestamp="2026-11-02T17:56:10"
+	timestamp="2026-11-02T18:22:02"
 	>
-	<testcase name="a context wait delivers the work result when the caller is not cancelled" classname="a context wait delivers the work result when the caller is not cancelled" time="0.00776456" status="run">
+	<testcase name="a context wait delivers the work result when the caller is not cancelled" classname="a context wait delivers the work result when the caller is not cancelled" time="0.00327569" status="run">
 		<properties>
 			<property name="cmake_labels" value="cancellation;chord;context;discriminating;issue1184"/>
 		</properties>
 		<system-out>Filters: "a context wait delivers the work result when the caller is not cancelled"
-Randomness seeded to: 1553962529
+Randomness seeded to: 3733248691
 ===============================================================================
 All tests passed (6 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="a context wait rejects with the caller abort reason while the underlying work still completes" classname="a context wait rejects with the caller abort reason while the underlying work still completes" time="0.0148586" status="run">
+	<testcase name="a context wait rejects with the caller abort reason while the underlying work still completes" classname="a context wait rejects with the caller abort reason while the underlying work still completes" time="0.00409137" status="run">
 		<properties>
 			<property name="cmake_labels" value="cancellation;chord;context;issue1184;spec"/>
 		</properties>
 		<system-out>Filters: "a context wait rejects with the caller abort reason while the underlying work still completes"
-Randomness seeded to: 3977641481
+Randomness seeded to: 623519804
 ===============================================================================
 All tests passed (9 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an already cancelled context wait still starts and completes the underlying work" classname="an already cancelled context wait still starts and completes the underlying work" time="0.00515535" status="run">
+	<testcase name="an already cancelled context wait still starts and completes the underlying work" classname="an already cancelled context wait still starts and completes the underlying work" time="0.00255973" status="run">
 		<properties>
 			<property name="cmake_labels" value="cancellation;chord;context;discriminating;issue1184"/>
 		</properties>
 		<system-out>Filters: "an already cancelled context wait still starts and completes the underlying work"
-Randomness seeded to: 1769975936
+Randomness seeded to: 3524556223
 ===============================================================================
 All tests passed (8 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="C++ Session cancellation and close with a Context" classname="C++ Session cancellation and close with a Context" time="0.00774207" status="run">
+	<testcase name="C++ Session cancellation and close with a Context" classname="C++ Session cancellation and close with a Context" time="0.00611312" status="run">
 		<properties>
 			<property name="cmake_labels" value="cancellation;composite;context;durable;issue1184;session"/>
 		</properties>
 		<system-out>Filters: "C++ Session cancellation and close with a Context"
-Randomness seeded to: 3078510347
+Randomness seeded to: 1548337712
 ===============================================================================
 All tests passed (22 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="a cancelled watch acquisition registers no observer" classname="a cancelled watch acquisition registers no observer" time="0.00994003" status="run">
+	<testcase name="a cancelled watch acquisition registers no observer" classname="a cancelled watch acquisition registers no observer" time="0.00516079" status="run">
 		<properties>
 			<property name="cmake_labels" value="cancellation;discriminating;durable;issue1184;session;watch"/>
 		</properties>
 		<system-out>Filters: "a cancelled watch acquisition registers no observer"
-Randomness seeded to: 3168973722
+Randomness seeded to: 4158677122
 ===============================================================================
 All tests passed (11 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="an already cancelled close caller still closes storage" classname="an already cancelled close caller still closes storage" time="0.00945803" status="run">
+	<testcase name="an already cancelled close caller still closes storage" classname="an already cancelled close caller still closes storage" time="0.00496183" status="run">
 		<properties>
 			<property name="cmake_labels" value="cancellation;close;discriminating;durable;issue1184;session"/>
 		</properties>
 		<system-out>Filters: "an already cancelled close caller still closes storage"
-Randomness seeded to: 4005972206
+Randomness seeded to: 2923641626
 ===============================================================================
 All tests passed (5 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="cancelling a watch acquisition rejects the wait and leaves no write or partial observer" classname="cancelling a watch acquisition rejects the wait and leaves no write or partial observer" time="0.0203145" status="run">
+	<testcase name="cancelling a watch acquisition rejects the wait and leaves no write or partial observer" classname="cancelling a watch acquisition rejects the wait and leaves no write or partial observer" time="0.00609089" status="run">
 		<properties>
 			<property name="cmake_labels" value="cancellation;durable;issue1184;session;spec;watch"/>
 		</properties>
 		<system-out>Filters: "cancelling a watch acquisition rejects the wait and leaves no write or partial observer"
-Randomness seeded to: 323477612
+Randomness seeded to: 1336542802
 ===============================================================================
 All tests passed (14 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="cancelling a watch ends delivery without aborting a completed callback or later commits" classname="cancelling a watch ends delivery without aborting a completed callback or later commits" time="0.00950048" status="run">
+	<testcase name="cancelling a watch ends delivery without aborting a completed callback or later commits" classname="cancelling a watch ends delivery without aborting a completed callback or later commits" time="0.00646974" status="run">
 		<properties>
 			<property name="cmake_labels" value="cancellation;durable;issue1184;session;spec;watch"/>
 		</properties>
 		<system-out>Filters: "cancelling a watch ends delivery without aborting a completed callback or later commits"
-Randomness seeded to: 339627707
+Randomness seeded to: 2482907744
 ===============================================================================
 All tests passed (36 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="cancelling the close caller rejects close while storage cleanup still completes" classname="cancelling the close caller rejects close while storage cleanup still completes" time="0.0125562" status="run">
+	<testcase name="cancelling the close caller rejects close while storage cleanup still completes" classname="cancelling the close caller rejects close while storage cleanup still completes" time="0.00609577" status="run">
 		<properties>
 			<property name="cmake_labels" value="cancellation;close;durable;issue1184;session;spec"/>
 		</properties>
 		<system-out>Filters: "cancelling the close caller rejects close while storage cleanup still completes"
-Randomness seeded to: 4020898547
+Randomness seeded to: 2190124933
 ===============================================================================
 All tests passed (20 assertions in 1 test case)
 

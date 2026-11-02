@@ -159,23 +159,23 @@ stays unimplemented and unverified rather than being guessed from the C++ side.
 
 ## Validation
 
-Measured on this ticket's comparison commit `4e9ad3fbf` (checkout
-`4e9ad3fbf` plus the receipt and report commit):
+Measured on this ticket's comparison commit `4e9ad3fbf` and re-measured on the
+merged tree before the receipt commit:
 
 | Command | Result |
 | --- | --- |
 | `cmake --build --preset vcpkg` | built; build-phase Parity Architecture Gate PASS |
 | `ctest --preset vcpkg -N -L issue1184` | 9 selected |
 | `ctest --preset vcpkg -L issue1184 --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml` | 9/9 passed, 0 failed, 0 skipped |
-| `ctest --preset vcpkg -N -L chord` | 73 selected (70 delivered + 3 new Chord cases) |
-| `ctest --preset vcpkg -L chord --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml` | 73/73 passed, 0 failed, 0 skipped |
+| `ctest --preset vcpkg -N -L chord` | 79 selected on the merged tree (70 delivered + 3 new Chord cases + 6 from the merged #1185 packet) |
+| `ctest --preset vcpkg -L chord --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml` | 79/79 passed, 0 failed, 0 skipped |
 | `ctest --preset vcpkg -L architecture` | 43/43 passed |
 | `ctest --preset vcpkg -L '^(issue1090\|issue1101\|issue1104)$'` | 36/36 passed |
-| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` | ledger rebuilt; 49 delivery-backed rows (4 from this record) |
+| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` | ledger rebuilt; 54 delivery-backed rows (4 from this record, 5 from the merged #1185 packet) |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check` | PASS |
 | `python3 tests/evidence/ConsolidationAuditTest.py` | PASS |
 | `python3 scripts/evidence/audit_evidence.py verify --baseline pi-v1.3.0` | PASS |
-| `TERM_PROGRAM=herdr ctest --preset vcpkg -j1` | first run 4,226 selected, 4,223 passed, 3 failed; second run 4,226 selected, 4,225 passed, 1 failed (details below) |
+| `TERM_PROGRAM=herdr ctest --preset vcpkg -j1` | three unfiltered runs: 4,226 selected / 4,223 passed / 3 failed, then 4,226 / 4,225 / 1, then (merged tree) 4,232 / 4,231 / 1 (details below) |
 | `scripts/format-check.sh b2fa10bb9` | clean |
 
 Two unfiltered serial runs on this host failed different sets, and none of the
@@ -194,6 +194,11 @@ failures is a case this slice delivers or modifies:
   and deliver in completion order` (owner #1170) failed one completion-order
   assertion under the same load and passed 3/3 in isolation. It is a durable
   concurrency timing case outside this slice.
+- Third run, on the merged tree (including the #1185 and #1191 packets):
+  `bounded parallel cancellation leaves queued tool capabilities unstarted`
+  (owner #497) failed one `duration_ms` timing assertion and passed 3/3 in
+  isolation. It is an agent-package concurrency timing case outside this slice.
+  Both consolidation gate cases passed in this run.
 
 No assertion, timeout or label exclusion was changed to obtain that result, and
 no skipped case supplies acceptance evidence.
@@ -212,8 +217,9 @@ Four rows move from `partial` / `upstream-captured` to `implemented` /
 recorded implementation and verification status and now name their bounded
 follow-up (a frozen capture for the root row; a registered artifact for the
 composite's declared scenario). Membership is unchanged: no row is added,
-removed or re-owned, and no neighboring owner's row is promoted. The ledger
-moves from 34 to 38 delivery-backed rows.
+removed or re-owned, and no neighboring owner's row is promoted. On the merged
+tree the ledger moves from 49 to 54 delivery-backed rows: 4 from this record and
+5 from the #1185 packet merged alongside it.
 
 ## Remaining boundary
 

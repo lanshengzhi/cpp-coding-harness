@@ -1,0 +1,967 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1191",
+  "family": "audit-1191",
+  "capturedAt": "2026-11-02T06:07:38.029Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1191/capture-1191.mts",
+    "sha256": "c0ec52509ca00404cc8e86c96e22d4f6231efc23b90a39e99dd5f87be9af97cc",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1191/capture-1191.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1191/capture-1191.mts",
+        "sha256": "c0ec52509ca00404cc8e86c96e22d4f6231efc23b90a39e99dd5f87be9af97cc"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1191/scenarios.mts",
+        "sha256": "7cbaac5ae02c237ec882f353a5fd7517db1a69f4ed45f886b38e3b05d51994bb"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1191/fixtures.mts",
+        "sha256": "5913cfd72872ac31c38d93d201b1923de74818fd735d8bf3c9c7f912b44cee86"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1191/pi.mts",
+        "sha256": "e93b925a056782a6eef1a98d1a06b5c61ef40c8deba0ba43d107df26d6667637"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1191/stdio-server.mjs",
+        "sha256": "af1d352bf00d70619e533fd4365644204acf2b515041c144a1156ad909bca64c"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "mcp-tools-list.json",
+      "family": "audit-1191",
+      "bytes": 7801,
+      "sha256": "6042420ba015452028bed60847bdca331f613b6929ce45b23f8e294d7eed6d0b",
+      "sourceEndpoints": [
+        "packages/mcp/src/client.ts:McpClient.listTools,listAll,listPage,validateListPage,MAX_LIST_PAGES",
+        "packages/coding-agent/src/extensions/mcp/tools.ts:createMcpToolName,MAX_TOOL_NAME_LENGTH",
+        "packages/coding-agent/src/extensions/mcp/index.ts:registerTools",
+        "packages/mcp/test/client.test.ts:paginates tools and preserves protocol tool definitions",
+        "packages/coding-agent/test/mcp-extension.test.ts:creates provider-safe tool names"
+      ],
+      "scenarios": [
+        {
+          "name": "tools/list follows nextCursor across pages and ends on an empty cursor",
+          "inputs": {
+            "pages": [
+              {
+                "cursor": null,
+                "tools": [
+                  "search"
+                ],
+                "nextCursor": "page-2"
+              },
+              {
+                "cursor": "page-2",
+                "tools": [
+                  "read"
+                ],
+                "nextCursor": ""
+              }
+            ],
+            "transport": "loopback HTTP"
+          },
+          "expected": {
+            "tools": [
+              "search",
+              "read"
+            ],
+            "cursors": [
+              null,
+              "page-2"
+            ],
+            "pageRequests": 2,
+            "terminalCursor": ""
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "tool listings are compared by name and cursor sequence"
+          ]
+        },
+        {
+          "name": "a null nextCursor ends tools/list without another request",
+          "inputs": {
+            "pages": [
+              {
+                "cursor": null,
+                "tools": [
+                  "only"
+                ],
+                "nextCursor": null
+              }
+            ],
+            "transport": "loopback HTTP"
+          },
+          "expected": {
+            "tools": [
+              "only"
+            ],
+            "pageRequests": 1,
+            "nextCursor": null
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "tool listings are compared by name and cursor sequence"
+          ]
+        },
+        {
+          "name": "an empty nextCursor ends tools/list without another request",
+          "inputs": {
+            "pages": [
+              {
+                "cursor": null,
+                "tools": [
+                  "only"
+                ],
+                "nextCursor": ""
+              }
+            ],
+            "transport": "loopback HTTP"
+          },
+          "expected": {
+            "tools": [
+              "only"
+            ],
+            "pageRequests": 1,
+            "nextCursor": ""
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "tool listings are compared by name and cursor sequence"
+          ]
+        },
+        {
+          "name": "a repeated nextCursor is an explicit duplicate-cursor error",
+          "inputs": {
+            "pages": "every page returns nextCursor loop",
+            "transport": "loopback HTTP"
+          },
+          "expected": {
+            "error": {
+              "name": "Error",
+              "message": "MCP tools/list returned duplicate cursor: loop"
+            },
+            "pageRequests": 2,
+            "repeatedCursor": "loop"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "tool listings are compared by name and cursor sequence"
+          ]
+        },
+        {
+          "name": "tools/list stops after pi's 1000-page bound",
+          "inputs": {
+            "pages": "each page returns a new page-<n> cursor",
+            "maxPages": 1000,
+            "transport": "loopback HTTP"
+          },
+          "expected": {
+            "error": {
+              "name": "Error",
+              "message": "MCP tools/list exceeded 1000 pages"
+            },
+            "pageRequests": 1000,
+            "maxPages": 1000
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "tool listings are compared by name and cursor sequence"
+          ]
+        },
+        {
+          "name": "application tool names sanitize punctuation, bound at 64 and hash collisions from the raw pair",
+          "inputs": {
+            "cases": [
+              "punctuation outside [A-Za-z0-9_] becomes _",
+              "a 64-character sanitized name stays plain",
+              "a longer sanitized name is cut to 64 with an 8-hex sha256 suffix",
+              "a taken plain name takes the raw-pair hash suffix",
+              "distinct short names stay unchanged"
+            ]
+          },
+          "expected": {
+            "short": "mcp__my_server__get_item_v2",
+            "exactBound": "mcp__s__tttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+            "exactBoundLength": 64,
+            "overBound": "mcp__s__uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu_b20828cc",
+            "overBoundLength": 64,
+            "long": "mcp__server__xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_9fc39f5e",
+            "longHashSuffix": "9fc39f5e",
+            "takenPlain": "mcp__s__a_b",
+            "secondWhenTaken": "mcp__s__a_b_ed3867d6",
+            "secondWhenTakenHasSuffix": true,
+            "distinct": [
+              "mcp__filesystem__read_file",
+              "mcp__filesystem__write_file"
+            ]
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "tool listings are compared by name and cursor sequence"
+          ]
+        },
+        {
+          "name": "application tool names hash every colliding sanitized name order-independently",
+          "inputs": {
+            "tools": [
+              "a-b",
+              "a_b"
+            ],
+            "plainSanitized": "mcp__srv__a_b",
+            "listOrders": [
+              "a-b then a_b",
+              "a_b then a-b"
+            ]
+          },
+          "expected": {
+            "forward": [
+              {
+                "label": "srv/a-b",
+                "name": "mcp__srv__a_b_3d325570"
+              },
+              {
+                "label": "srv/a_b",
+                "name": "mcp__srv__a_b_5c15ffbd"
+              }
+            ],
+            "reverse": [
+              {
+                "label": "srv/a_b",
+                "name": "mcp__srv__a_b_5c15ffbd"
+              },
+              {
+                "label": "srv/a-b",
+                "name": "mcp__srv__a_b_3d325570"
+              }
+            ],
+            "plainName": "mcp__srv__a_b",
+            "sameAssignmentByRaw": true
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "tool listings are compared by name and cursor sequence"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "mcp-progress.json",
+      "family": "audit-1191",
+      "bytes": 7698,
+      "sha256": "a956ed2440e0c1d0fa3de3415bc03116501ad85d392f7c104782483b899c085f",
+      "sourceEndpoints": [
+        "packages/mcp/src/client.ts:McpClient.requestInternal,handleProgress,armTimeout",
+        "packages/mcp/src/transports/stdio.ts:StdioTransport",
+        "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport,consumeSseStream",
+        "packages/coding-agent/src/extensions/mcp/tools.ts:createMcpToolDefinition.execute,onProgress",
+        "packages/mcp/test/client.test.ts:renews the timeout on progress"
+      ],
+      "scenarios": [
+        {
+          "name": "stdio: onProgress injects _meta.progressToken and delivers only matching progress",
+          "inputs": {
+            "transport": "stdio child",
+            "tool": "progress",
+            "notifications": [
+              {
+                "delayMs": 10,
+                "progressToken": "request id + 1000",
+                "progress": 0
+              },
+              {
+                "delayMs": 40,
+                "progressToken": "request id",
+                "progress": 1,
+                "total": 2,
+                "message": "halfway"
+              },
+              {
+                "delayMs": 80,
+                "progressToken": "request id",
+                "progress": 2
+              },
+              {
+                "delayMs": 170,
+                "progressToken": "request id",
+                "progress": 99,
+                "afterSettle": true
+              }
+            ]
+          },
+          "expected": {
+            "requestId": 2,
+            "progressTokenInjected": true,
+            "progressToken": 2,
+            "progressCount": 2,
+            "progress": [
+              {
+                "progressToken": 2,
+                "progress": 1,
+                "total": 2,
+                "message": "halfway"
+              },
+              {
+                "progressToken": 2,
+                "progress": 2,
+                "total": null,
+                "message": null
+              }
+            ],
+            "resultText": "done",
+            "wrongTokenIgnored": true,
+            "lateProgressIgnored": true,
+            "transport": "stdio"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "progress tokens are compared to the JSON-RPC request id"
+          ]
+        },
+        {
+          "name": "HTTP: onProgress injects _meta.progressToken and delivers only matching progress",
+          "inputs": {
+            "transport": "loopback HTTP SSE",
+            "tool": "progress",
+            "notifications": [
+              {
+                "delayMs": 10,
+                "progressToken": "request id + 1000",
+                "progress": 0
+              },
+              {
+                "delayMs": 40,
+                "progressToken": "request id",
+                "progress": 1,
+                "total": 2,
+                "message": "halfway"
+              },
+              {
+                "delayMs": 80,
+                "progressToken": "request id",
+                "progress": 2
+              },
+              {
+                "delayMs": 170,
+                "progressToken": "request id",
+                "progress": 99,
+                "afterSettle": true
+              }
+            ]
+          },
+          "expected": {
+            "requestId": 2,
+            "progressTokenInjected": true,
+            "progressToken": 2,
+            "progressCount": 2,
+            "progress": [
+              {
+                "progressToken": 2,
+                "progress": 1,
+                "total": 2,
+                "message": "halfway"
+              },
+              {
+                "progressToken": 2,
+                "progress": 2,
+                "total": null,
+                "message": null
+              }
+            ],
+            "resultText": "done",
+            "wrongTokenIgnored": true,
+            "lateProgressIgnored": true,
+            "transport": "http"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "progress tokens are compared to the JSON-RPC request id"
+          ]
+        },
+        {
+          "name": "stdio: a progress notification re-arms the request deadline",
+          "inputs": {
+            "transport": "stdio child",
+            "timeoutMs": 70,
+            "progressBeforeResultMs": [
+              40,
+              80
+            ],
+            "resultAtMs": 110
+          },
+          "expected": {
+            "timeoutMs": 70,
+            "resolved": true,
+            "elapsedMs": 111,
+            "elapsedBeyondDeadline": true,
+            "progressCount": 2,
+            "resultText": "done",
+            "transport": "stdio"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "progress tokens are compared to the JSON-RPC request id"
+          ]
+        },
+        {
+          "name": "HTTP: a progress notification re-arms the request deadline",
+          "inputs": {
+            "transport": "loopback HTTP SSE",
+            "timeoutMs": 70,
+            "progressBeforeResultMs": [
+              40,
+              80
+            ],
+            "resultAtMs": 110
+          },
+          "expected": {
+            "timeoutMs": 70,
+            "resolved": true,
+            "elapsedMs": 123,
+            "elapsedBeyondDeadline": true,
+            "progressCount": 2,
+            "resultText": "done",
+            "transport": "http"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "progress tokens are compared to the JSON-RPC request id"
+          ]
+        },
+        {
+          "name": "application progress text uses the message verbatim or Progress <n>[/<total>]",
+          "inputs": {
+            "cases": [
+              {
+                "message": "custom message",
+                "progress": 1,
+                "total": 5
+              },
+              {
+                "progress": 2,
+                "total": 10
+              },
+              {
+                "progress": 3
+              },
+              {
+                "message": "",
+                "progress": 4
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "params": {
+                  "message": "custom message",
+                  "progress": 1,
+                  "total": 5
+                },
+                "texts": [
+                  "custom message"
+                ]
+              },
+              {
+                "params": {
+                  "progress": 2,
+                  "total": 10
+                },
+                "texts": [
+                  "Progress 2/10"
+                ]
+              },
+              {
+                "params": {
+                  "progress": 3
+                },
+                "texts": [
+                  "Progress 3"
+                ]
+              },
+              {
+                "params": {
+                  "message": "",
+                  "progress": 4
+                },
+                "texts": [
+                  ""
+                ]
+              }
+            ]
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "progress tokens are compared to the JSON-RPC request id"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "mcp-request-cancellation.json",
+      "family": "audit-1191",
+      "bytes": 7201,
+      "sha256": "231294dac8c598d6841754a93a40222c8c2e9830a0ac9394e5ee2bb67e54c472",
+      "sourceEndpoints": [
+        "packages/mcp/src/client.ts:McpClient.requestInternal,cancelPending,armTimeout,handleResponse",
+        "packages/mcp/src/protocol/jsonrpc.ts:McpAbortError,McpTimeoutError",
+        "packages/mcp/src/transports/stdio.ts:StdioTransport.send",
+        "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.send",
+        "packages/mcp/test/client.test.ts:cancels aborted and timed-out requests",
+        "packages/mcp/test/client.test.ts:does not send notifications/cancelled for a timed-out initialize"
+      ],
+      "scenarios": [
+        {
+          "name": "stdio: aborting an in-flight call notifies the server and leaves the child usable",
+          "inputs": {
+            "transport": "stdio child",
+            "tool": "hang",
+            "abortReason": "stop",
+            "reuseTool": "echo"
+          },
+          "expected": {
+            "outcome": {
+              "name": "AbortError",
+              "message": "MCP request aborted"
+            },
+            "requestId": 2,
+            "cancellationCount": 1,
+            "cancellationRequestId": 2,
+            "cancellationReason": "stop",
+            "sameChildPid": true,
+            "reusableResultText": "echo:after",
+            "transport": "stdio"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "the caller's abort reason is the literal token passed to AbortController.abort"
+          ]
+        },
+        {
+          "name": "HTTP: aborting an in-flight call posts notifications/cancelled and reuses the session",
+          "inputs": {
+            "transport": "loopback HTTP",
+            "tool": "hang",
+            "abortReason": "stop",
+            "reuseTool": "echo"
+          },
+          "expected": {
+            "outcome": {
+              "name": "AbortError",
+              "message": "MCP request aborted"
+            },
+            "requestId": 2,
+            "cancellationCount": 1,
+            "cancellationRequestId": 2,
+            "cancellationReason": "stop",
+            "reusableResultText": "echo:after",
+            "reusableSessionHeader": "session-1",
+            "sessionId": "session-1",
+            "transport": "http"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "the caller's abort reason is the literal token passed to AbortController.abort"
+          ]
+        },
+        {
+          "name": "stdio: a timed-out request fails with pi's timeout error and reason",
+          "inputs": {
+            "transport": "stdio child",
+            "tool": "hang",
+            "timeoutMs": 80
+          },
+          "expected": {
+            "outcome": {
+              "name": "McpTimeoutError",
+              "message": "MCP request timed out after 80ms",
+              "timeoutMs": 80
+            },
+            "timeoutMs": 80,
+            "cancellationReason": "Request timed out",
+            "cancellationRequestId": 2,
+            "transport": "stdio"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "the caller's abort reason is the literal token passed to AbortController.abort"
+          ]
+        },
+        {
+          "name": "HTTP: a timed-out request fails with pi's timeout error and reason",
+          "inputs": {
+            "transport": "loopback HTTP",
+            "tool": "hang",
+            "timeoutMs": 80
+          },
+          "expected": {
+            "outcome": {
+              "name": "McpTimeoutError",
+              "message": "MCP request timed out after 80ms",
+              "timeoutMs": 80
+            },
+            "timeoutMs": 80,
+            "cancellationReason": "Request timed out",
+            "cancellationRequestId": 2,
+            "transport": "http"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "the caller's abort reason is the literal token passed to AbortController.abort"
+          ]
+        },
+        {
+          "name": "an already-aborted request is never sent and emits no notifications/cancelled",
+          "inputs": {
+            "transport": "loopback HTTP",
+            "signal": "already aborted before request"
+          },
+          "expected": {
+            "outcome": {
+              "name": "AbortError",
+              "message": "MCP request aborted"
+            },
+            "toolCallPosts": 0,
+            "cancellationPosts": 0,
+            "transport": "http"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "the caller's abort reason is the literal token passed to AbortController.abort"
+          ]
+        },
+        {
+          "name": "a failed HTTP request does not emit notifications/cancelled",
+          "inputs": {
+            "transport": "loopback HTTP",
+            "responseStatus": 500
+          },
+          "expected": {
+            "outcome": {
+              "name": "McpHttpError",
+              "message": "MCP HTTP request failed with status 500: server failed",
+              "status": 500
+            },
+            "cancellationPosts": 0,
+            "transport": "http"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "the caller's abort reason is the literal token passed to AbortController.abort"
+          ]
+        },
+        {
+          "name": "a failed stdio request does not emit notifications/cancelled",
+          "inputs": {
+            "transport": "stdio child",
+            "response": "JSON-RPC error -32000",
+            "abortAfterSettle": true
+          },
+          "expected": {
+            "outcome": {
+              "name": "McpError",
+              "message": "tool failed",
+              "code": -32000
+            },
+            "cancellationCount": 0,
+            "transport": "stdio"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "the caller's abort reason is the literal token passed to AbortController.abort"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "mcp-http-session-stream.json",
+      "family": "audit-1191",
+      "bytes": 7841,
+      "sha256": "dbdeb45401fb4da6cd9abd9a64f16ec21c1a761fa895b6e20a5f305a91008ead",
+      "sourceEndpoints": [
+        "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.start,setProtocolVersion,send,captureSession,buildHeaders,openSseStream,runGetStream,consumeSse,close",
+        "packages/mcp/src/client.ts:McpClient.handleMessage,handleRequest,handleCancelled,handleNotification",
+        "packages/mcp/test/streamable-http.test.ts:handles JSON and SSE responses with session and protocol headers",
+        "packages/mcp/test/streamable-http.test.ts:opens the GET stream after initialization and sends Last-Event-ID only when resuming",
+        "packages/mcp/test/streamable-http.test.ts:reconnects the GET stream after it drops",
+        "packages/mcp/test/client.test.ts:answers roots/list and dispatches notifications"
+      ],
+      "scenarios": [
+        {
+          "name": "HTTP: session headers carry through and a 405 GET is feature-absent",
+          "inputs": {
+            "transport": "loopback HTTP",
+            "getStatus": 405,
+            "close": "DELETE with session id"
+          },
+          "expected": {
+            "sessionId": "session-1",
+            "tools": [
+              "echo"
+            ],
+            "listSessionHeader": "session-1",
+            "listProtocolHeader": "2025-06-18",
+            "getAccept": "text/event-stream",
+            "getSessionHeader": "session-1",
+            "getCount": 1,
+            "getAfterInitialized": true,
+            "errors": [],
+            "deleteSessionHeader": "session-1",
+            "latestProtocolVersion": "2025-11-25"
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+          ]
+        },
+        {
+          "name": "HTTP: a server retry hint overrides the client reconnect delay and resumes with Last-Event-ID",
+          "inputs": {
+            "retryField": 20,
+            "clientBackoffMs": 500,
+            "firstGet": "priming id 1 then end",
+            "secondGet": "resume with Last-Event-ID and hold open"
+          },
+          "expected": {
+            "retryField": "20",
+            "retryNumeric": 20,
+            "reconnectGapMs": 21,
+            "reconnected": true,
+            "secondLastEventId": "1",
+            "errors": []
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+          ]
+        },
+        {
+          "name": "HTTP: an out-of-range retry hint reconnects without throwing or hanging",
+          "inputs": {
+            "retryField": "99999999999999999999999999",
+            "clientBackoffMs": 20,
+            "firstGet": "priming id 1 then end",
+            "secondGet": "resume with Last-Event-ID and hold open"
+          },
+          "expected": {
+            "retryField": "99999999999999999999999999",
+            "retryNumeric": 1e+26,
+            "reconnectGapMs": 3,
+            "reconnected": true,
+            "secondLastEventId": "1",
+            "errors": [],
+            "runtimeClamped": true
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+          ]
+        },
+        {
+          "name": "HTTP: an event on the server-to-client GET stream reaches the notification listener",
+          "inputs": {
+            "transport": "loopback HTTP GET SSE",
+            "event": "notifications/message"
+          },
+          "expected": {
+            "events": [
+              {
+                "level": "info",
+                "data": "hello"
+              }
+            ],
+            "getCount": 1
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+          ]
+        },
+        {
+          "name": "HTTP: the client answers ping and roots/list requests delivered on the GET stream",
+          "inputs": {
+            "transport": "loopback HTTP GET SSE",
+            "serverRequests": [
+              {
+                "id": 7,
+                "method": "ping"
+              },
+              {
+                "id": 8,
+                "method": "roots/list"
+              }
+            ],
+            "configuredRoots": [
+              {
+                "uri": "file:///workspace",
+                "name": "workspace"
+              }
+            ]
+          },
+          "expected": {
+            "pingResponse": {},
+            "rootsResponse": {
+              "roots": [
+                {
+                  "uri": "file:///workspace",
+                  "name": "workspace"
+                }
+              ]
+            },
+            "configuredRoots": [
+              {
+                "uri": "file:///workspace",
+                "name": "workspace"
+              }
+            ]
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+          ]
+        },
+        {
+          "name": "HTTP: notifications/cancelled aborts an in-flight server request handler",
+          "inputs": {
+            "transport": "loopback HTTP GET SSE",
+            "serverRequest": {
+              "id": 9,
+              "method": "test/wait"
+            },
+            "cancellationDelayMs": 80
+          },
+          "expected": {
+            "handlerAborted": true,
+            "responseError": {
+              "code": -32603,
+              "message": "MCP request aborted"
+            },
+            "responseHasResult": false
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+          ]
+        },
+        {
+          "name": "HTTP: close aborts the GET stream without a dropped-stream error",
+          "inputs": {
+            "transport": "loopback HTTP GET SSE",
+            "close": "client.close() sends DELETE"
+          },
+          "expected": {
+            "getCount": 1,
+            "getClosed": true,
+            "deleteSessionHeader": "session-1",
+            "errors": []
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "a server-controlled retry value above the runtime timer range is recorded as the measured bounded reconnect gap"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "mcp-stdio-stderr-tail.json",
+      "family": "audit-1191",
+      "bytes": 4656,
+      "sha256": "056f3703c3f89584d03611321ef0cb08beaebc2e50b23b4a5de3f36953c570db",
+      "sourceEndpoints": [
+        "packages/mcp/src/transports/stdio.ts:StdioTransport.handleStderr,DEFAULT_MAX_STDERR_BYTES",
+        "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.connectOnce,connectFailed,STDERR_TAIL_CHARS",
+        "packages/mcp/test/stdio.test.ts:connects to a newline-delimited MCP server and captures stderr"
+      ],
+      "scenarios": [
+        {
+          "name": "stdio: the transport ring keeps the last 64 KiB of a larger stderr stream",
+          "inputs": {
+            "transport": "stdio child",
+            "stderrBytes": 80000,
+            "ringBytes": 65536
+          },
+          "expected": {
+            "connectOutcome": {
+              "name": "McpConnectionClosedError",
+              "message": "MCP connection closed"
+            },
+            "payloadBytes": 80000,
+            "ringBytes": 65536,
+            "ringKeepsTail": true,
+            "ringDroppedHead": true
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "the synthetic stderr payload is generated deterministically from its declared byte count"
+          ]
+        },
+        {
+          "name": "stdio: a failed connect appends pi's bounded 2000-character stderr tail",
+          "inputs": {
+            "transport": "stdio child through McpServerConnection",
+            "stderrBytes": 80000,
+            "tailCharacters": 2000
+          },
+          "expected": {
+            "state": "failed",
+            "error": {
+              "name": "Error",
+              "message": "MCP server \"audit-1191-stderr\" failed to connect: MCP connection closed\nssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss-AUDIT1191-END"
+            },
+            "failurePrefix": true,
+            "tailCharacters": 2000,
+            "tailMatchesLast2000": true,
+            "tailIncludesRingHead": false,
+            "errorIncludesWholeRing": false
+          },
+          "normalizations": [
+            "ephemeral loopback ports, stdio child pids and temporary directories are omitted or replaced by placeholders",
+            "elapsed times are recorded as measured millisecond values with a bounded assertion, never as an exact schedule",
+            "the synthetic stderr payload is generated deterministically from its declared byte count"
+          ]
+        }
+      ]
+    }
+  ]
+}
