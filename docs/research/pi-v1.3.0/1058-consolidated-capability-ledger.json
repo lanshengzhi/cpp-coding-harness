@@ -565,7 +565,7 @@
           ]
         },
         "revalidation1186m": {
-          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
@@ -1003,7 +1003,7 @@
           }
         },
         "revalidation1186m": {
-          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json"
           ]
@@ -1563,7 +1563,7 @@
           ]
         },
         "revalidation1186m": {
-          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json"
           ]
@@ -2246,7 +2246,7 @@
           ]
         },
         "revalidation1186m": {
-          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json",
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
@@ -3776,7 +3776,7 @@
           ]
         },
         "revalidation1186m": {
-          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
@@ -4123,7 +4123,7 @@
           ]
         },
         "revalidation1186m": {
-          "reason": "#1186 registered the supplemental audit-1057-typed-json family in baselines.json and linked its four frozen scenarios to the cch_chord JSON rows in consolidation-plan.json. Both are pinned inputs of this record; the digests refresh here. The record's rows, scenarios and routing digest are unchanged, and no claimed case moved.",
+          "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/baselines.json",
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
@@ -4623,7 +4623,7 @@
           "selected": 84,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1186-chord.xml",
-            "sha256": "f858b3b97f1c2ef7e580013fb3615e8240fa4e7b51bf66dadcc032f172a00a58"
+            "sha256": "ca26ceb4bbb3f3106e5dabf5f6812afdd478bb33574683f669c956290fb8ce92"
           }
         },
         "rows": [
@@ -4676,7 +4676,7 @@
             "discriminatingCase": {
               "test": "strict JSON rejects non-finite numbers at any depth",
               "testSource": "tests/chord/StrictJsonTest.cpp",
-              "reason": "A validator that checked only the root would accept the nested non-finite value; the case requires the deep rejection with the exact frozen message while the top-level cases also fail."
+              "reason": "A validator that checked only the root would accept the nested non-finite value; the case requires the deep rejection with the delivered message (the frozen text with the initial lowercase normalization) while the top-level cases also fail."
             }
           },
           {
@@ -4773,7 +4773,7 @@
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "c3f079ea423c6f97c22dfbfda465d5ff4f93b397f69da6cb7bedce8d8cfe98ca"
+            "sha256": "1d7b6a88a268f16f314c664ea3f1eb23b63bcf6a2550c40123c880eac3958684"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -4817,21 +4817,21 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1186-chord-typed-json.md",
-            "sha256": "691dfdd8e130e2ecf9d1b72d84ee9e890f826933250f9f5f79fe934fa3234692"
+            "sha256": "1d04f33601b876eb12817c7d8158425be5835581b8a9ce0b7c9b026df7d3259b"
           },
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1186-chord.xml",
-            "sha256": "f858b3b97f1c2ef7e580013fb3615e8240fa4e7b51bf66dadcc032f172a00a58"
+            "sha256": "ca26ceb4bbb3f3106e5dabf5f6812afdd478bb33574683f669c956290fb8ce92"
           }
         ],
         "routingSha256": "c35ce8797d3e36b7d5663d750fe29b749c84c7fb61c4b07bfe9eb722c4d2f7f8",
         "revalidation1186m": {
-          "reason": "Merged origin/main (#1184) into the #1186 branch and reran the shared -L chord selection on the merged tree into deliveries/1186-chord.xml (84 cases, all passing). The receipt rows, scenarios and routing digest are unchanged from the implementation commit; only the merged-tree result is recorded here.",
-          "testedRevision": "4f548771c5f866c86624fb48e7e1977be84f2942",
+          "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
+          "testedRevision": "4ec8104152151e46328459092e9d2e06aa3a726f",
           "selected": 84,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1186-chord.xml",
-            "sha256": "f858b3b97f1c2ef7e580013fb3615e8240fa4e7b51bf66dadcc032f172a00a58"
+            "sha256": "ca26ceb4bbb3f3106e5dabf5f6812afdd478bb33574683f669c956290fb8ce92"
           }
         }
       }

@@ -178,7 +178,7 @@ TEST_CASE("copy strict JSON preserves an own __proto__ data member", "[chord][js
     REQUIRE(copied);
     auto* copied_fields = object_of(*copied);
     REQUIRE(copied_fields != nullptr);
-    CHECK(copied_fields->contains("__proto__"));
+    REQUIRE(copied_fields->contains("__proto__"));
     const auto* safe = copied_fields->at("__proto__").get_if<JsonValue::object_t>();
     REQUIRE(safe != nullptr);
     CHECK(safe->at("safe").get_boolean());
@@ -253,7 +253,7 @@ TEST_CASE("chord JSON admission rejects a non-finite support value at any depth"
     const auto accepted = Json::from_support(JsonValue{JsonValue::object_t{
             {"items", JsonValue{JsonValue::array_t{JsonValue{1.0}, JsonValue{2.0}}}},
     }});
-    REQUIRE(accepted);
+    CHECK(accepted);
 
     const auto rejected = Json::from_support(JsonValue{JsonValue::object_t{
             {"items", JsonValue{JsonValue::array_t{JsonValue{1.0}, JsonValue{std::nan("")}}}},

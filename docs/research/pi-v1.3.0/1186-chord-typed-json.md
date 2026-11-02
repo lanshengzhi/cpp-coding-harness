@@ -89,6 +89,11 @@ inputs. Every claimed row has an empty remaining boundary.
 
 All cases live in `tests/chord/StrictJsonTest.cpp`, inside the pinned `-L chord` selection.
 
+**Normalization.** The frozen diagnostics begin with a capital `Value`; the delivered C++ diagnostics
+begin with lowercase `value` (`src/chord/StrictJson.cpp`). Only that initial letter is normalized; the
+rest of each sentence is compared exactly. This is the same message the #1060 delivery already used,
+and it is recorded here instead of being silently described as byte-identical.
+
 `cch_chord:json:copy-json` compares every representable frozen field. The frozen `copied`,
 `copiedIsDetached` and `sourceAfterNestedPush` fields are compared by mutating the copy in the frozen
 direction and checking the source and sibling copies; `copiedHasOmit` is vacuous because the carrier
@@ -101,7 +106,8 @@ leave `right` and the source at `1`.
 
 `cch_chord:json:strict-validation` compares the one frozen rejection class the carrier can represent
 and adds a deeper frozen observation. A validator that only checked the root would accept
-`{outer:{inner:[1,NaN]}}`; the case requires rejection at depth with the exact frozen message. The
+`{outer:{inner:[1,NaN]}}`; the case requires rejection at depth with the delivered message (the
+frozen text with the initial lowercase normalization). The
 function/undefined/class-instance/sparse-array messages are listed in the capture but cannot be
 constructed as `JsonValue`; the report records that exclusion instead of asserting an invented
 message.
@@ -147,6 +153,17 @@ Two-axis review (Standards and Spec, independent sub-agents) ran on the implemen
 | Spec: the 1054 coarse row still carried its placeholder scenario | Fixed: reviewed re-pair to the captured alias-detachment scenario |
 | Spec: `json:json-representation` has no runtime observation | Reviewed and kept unverified: the row is a compile-time typing obligation and no frozen runtime scenario exists; no expectation was invented. |
 | Spec: the text parser tolerates trailing content | Reviewed and kept out of scope: the typed value admission is not a text parser; strict text admission belongs to the durable boundary (#1180). |
+
+A second two-axis review ran on the merged tree. Its findings and dispositions:
+
+| Finding | Disposition |
+| --- | --- |
+| Standards: `REQUIRE(accepted)` was used for a value that is never dereferenced (§11.3) | Fixed: `CHECK(accepted)` |
+| Standards: `CHECK(contains("__proto__"))` continued into a terminating `at()` on failure (§11.3) | Fixed: `REQUIRE(contains("__proto__"))` |
+| Standards: the shared revalidation reason named both registry and plan inputs on records that pin only one | Fixed: one accurate shared reason; `changedInputs` remains per-record |
+| Standards: the self-revalidation recorded the pre-merge revision | Fixed: the merged-tree revision `4ec8104` |
+| Spec: the report called the C++ diagnostic the exact frozen message although the initial letter differs | Fixed: an explicit initial-lowercase normalization note; the receipt reason now says the delivered message |
+| Standards: two `TEST_CASE` signatures were reported at the 120-column limit | Reviewed: `awk` measures 120 and 119; `clang-format` and `scripts/format-check.sh origin/main` are clean |
 
 ## Validation
 
