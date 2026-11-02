@@ -2582,6 +2582,136 @@
         "cch_durable:builtin-tools"
       ],
       "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a model/tool round reports message, tool, usage and settlement lifecycle in committed order",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool held by a gate keeps its slot running and a later subscriber sees committed state only",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool held at completing by live owned work keeps its turn open until that work settles",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "cancelling a run during its tool settles the input unanswered and ends the tool with a result",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a retryable provider error reports retry start and end around the recovered answer",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a terminal provider error settles the input unanswered and ends the turn without a remaining task",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool that throws settles an error result on the stream and the round continues",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "stopping a started stream ends its deliveries and leaves persistent work running",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "an unstarted stream buffers committed batches and replays them when it starts",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "more than one hundred undelivered batches collapse into one snapshot replacement",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "closing the Harness ends a live event stream with session_closed",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a listener failure ends its stream and leaves the run and other subscribers running",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "an aborted attachment context cancels its stream and never the run",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
     }
   ],
   "groups": [

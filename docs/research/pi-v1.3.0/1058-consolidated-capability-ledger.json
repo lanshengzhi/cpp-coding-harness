@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
+            "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -451,6 +451,13 @@
               "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
             }
           }
+        },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -524,7 +531,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -830,6 +837,13 @@
           "changedInputs": [
             "cmake/tests/DurableTests.cmake"
           ]
+        },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -974,7 +988,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1297,6 +1311,13 @@
               "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
             }
           }
+        },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -1556,11 +1577,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
+            "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1877,6 +1898,13 @@
               "sha256": "8bf5e618ccbfaa5bb87777f8f43525577ff1fab146cd04bc9bbd1a0d21655343"
             }
           }
+        },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -2962,7 +2990,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
+            "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -2970,7 +2998,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
           }
         ],
         "validation": {
@@ -3244,6 +3272,13 @@
               "sha256": "235e56241e1b0e10ccf6b6657a27452a22a81ff75af4ef54afda337e5ce47ae3"
             }
           }
+        },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       }
     ]
@@ -3586,7 +3621,7 @@
     ],
     "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 594,
+      "scenarios": 607,
       "scenarioNamed": 362,
       "artifactCovered": 56,
       "orphaned": [
@@ -3765,7 +3800,20 @@
         "audit-1159/edit-tool.json:an edit that reproduces the original text fails with the frozen no-change message",
         "audit-1159/edit-tool.json:an empty old text fails with the frozen empty-target message",
         "audit-1159/edit-tool.json:two edits that target overlapping text fail with the frozen overlap message",
-        "audit-1159/edit-tool.json:an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message"
+        "audit-1159/edit-tool.json:an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message",
+        "audit-1173/event-stream.json:a model/tool round reports message, tool, usage and settlement lifecycle in committed order",
+        "audit-1173/event-stream.json:a tool held by a gate keeps its slot running and a later subscriber sees committed state only",
+        "audit-1173/event-stream.json:a tool held at completing by live owned work keeps its turn open until that work settles",
+        "audit-1173/event-stream.json:cancelling a run during its tool settles the input unanswered and ends the tool with a result",
+        "audit-1173/event-stream.json:a retryable provider error reports retry start and end around the recovered answer",
+        "audit-1173/event-stream.json:a terminal provider error settles the input unanswered and ends the turn without a remaining task",
+        "audit-1173/event-stream.json:a tool that throws settles an error result on the stream and the round continues",
+        "audit-1173/event-stream.json:stopping a started stream ends its deliveries and leaves persistent work running",
+        "audit-1173/event-stream.json:an unstarted stream buffers committed batches and replays them when it starts",
+        "audit-1173/event-stream.json:more than one hundred undelivered batches collapse into one snapshot replacement",
+        "audit-1173/event-stream.json:closing the Harness ends a live event stream with session_closed",
+        "audit-1173/event-stream.json:a listener failure ends its stream and leaves the run and other subscribers running",
+        "audit-1173/event-stream.json:an aborted attachment context cancels its stream and never the run"
       ],
       "uncovered": []
     }
@@ -7718,6 +7766,136 @@
         "cch_durable:builtin-tools"
       ],
       "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a model/tool round reports message, tool, usage and settlement lifecycle in committed order",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool held by a gate keeps its slot running and a later subscriber sees committed state only",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool held at completing by live owned work keeps its turn open until that work settles",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "cancelling a run during its tool settles the input unanswered and ends the tool with a result",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a retryable provider error reports retry start and end around the recovered answer",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a terminal provider error settles the input unanswered and ends the turn without a remaining task",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool that throws settles an error result on the stream and the round continues",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "stopping a started stream ends its deliveries and leaves persistent work running",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "an unstarted stream buffers committed batches and replays them when it starts",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "more than one hundred undelivered batches collapse into one snapshot replacement",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "closing the Harness ends a live event stream with session_closed",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a listener failure ends its stream and leaves the run and other subscribers running",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "an aborted attachment context cancels its stream and never the run",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
     }
   ],
   "correctionsIndex": [

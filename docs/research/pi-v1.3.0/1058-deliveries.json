@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
+          "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -421,6 +421,13 @@
             "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
           }
         }
+      },
+      "revalidation1173m": {
+        "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -494,7 +501,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+          "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
         },
         {
           "path": "src/durable/CodingTools.cpp",
@@ -800,6 +807,13 @@
         "changedInputs": [
           "cmake/tests/DurableTests.cmake"
         ]
+      },
+      "revalidation1173m": {
+        "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -944,7 +958,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+          "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1267,6 +1281,13 @@
             "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
           }
         }
+      },
+      "revalidation1173m": {
+        "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -1526,11 +1547,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+          "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
+          "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1847,6 +1868,13 @@
             "sha256": "8bf5e618ccbfaa5bb87777f8f43525577ff1fab146cd04bc9bbd1a0d21655343"
           }
         }
+      },
+      "revalidation1173m": {
+        "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     },
     {
@@ -2932,7 +2960,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
+          "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -2940,7 +2968,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/baselines.json",
-          "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+          "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
         }
       ],
       "validation": {
@@ -3214,6 +3242,13 @@
             "sha256": "235e56241e1b0e10ccf6b6657a27452a22a81ff75af4ef54afda337e5ce47ae3"
           }
         }
+      },
+      "revalidation1173m": {
+        "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "fixtures/pi-v1.3.0/baselines.json"
+        ]
       }
     }
   ]
