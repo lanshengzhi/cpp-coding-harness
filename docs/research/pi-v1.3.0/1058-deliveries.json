@@ -46,7 +46,7 @@
         },
         {
           "path": "cmake/tests/CodingAgentTests.cmake",
-          "sha256": "1993bde5f545f7fe0bbbfca2407c9834adcd928fe74d9b912df3027f0226bc19"
+          "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
         },
         {
           "path": "src/mcp/Client.cpp",
@@ -230,14 +230,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml"
+          "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml"
         ],
-        "testedRevision": "8df094e1d6624a3b653c544a3c96b119f5fcf0ed",
-        "recordedAt": "2026-11-01T23:57:39Z",
+        "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
+        "recordedAt": "2026-11-02T04:09:23Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml",
-          "sha256": "0125241de337ccec92ae882729c9a775a51bf2baff51c942746651aa334c86fa"
+          "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
+          "sha256": "c6d6f2482af70388ddec32e417c41cdb119ddcec5e94ee507fe69adc78042244"
         }
       },
       "rows": [
@@ -419,6 +419,31 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
             "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
+          }
+        }
+      },
+      "revalidation1115": {
+        "reason": "#1115 publishes the consumable settings schema surface, aligns the settings load and compaction-token diagnostic text with pi's failure text, keeps unknown keybinding ids in the migrated user map, and states the theme token set against a new frozen capture. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
+        "changedInputs": [
+          "cmake/tests/CodingAgentTests.cmake"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml"
+          ],
+          "testedRevision": "8df094e1d6624a3b653c544a3c96b119f5fcf0ed",
+          "recordedAt": "2026-11-01T23:57:39Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml",
+            "sha256": "0125241de337ccec92ae882729c9a775a51bf2baff51c942746651aa334c86fa"
           }
         }
       }
@@ -834,7 +859,7 @@
         },
         {
           "path": "cmake/tests/CodingAgentTests.cmake",
-          "sha256": "1993bde5f545f7fe0bbbfca2407c9834adcd928fe74d9b912df3027f0226bc19"
+          "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
         },
         {
           "path": "src/coding_agent/AgentSession.cpp",
@@ -862,7 +887,7 @@
         },
         {
           "path": "src/coding_agent/runtime/SessionFactory.cpp",
-          "sha256": "8e5b828f0d523a5a143c98363c9845cf683ab5f80dc1483a95b07e3035285da0"
+          "sha256": "8f6544552c57de85d4a294b52de5ca14a382dcc0fdc200ee309aa03e2cf51b7b"
         },
         {
           "path": "src/coding_agent/runtime/SessionFactory.hpp",
@@ -1026,14 +1051,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml"
+          "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml"
         ],
-        "testedRevision": "8df094e1d6624a3b653c544a3c96b119f5fcf0ed",
-        "recordedAt": "2026-11-01T23:57:39Z",
+        "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
+        "recordedAt": "2026-11-02T04:09:23Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml",
-          "sha256": "0125241de337ccec92ae882729c9a775a51bf2baff51c942746651aa334c86fa"
+          "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
+          "sha256": "c6d6f2482af70388ddec32e417c41cdb119ddcec5e94ee507fe69adc78042244"
         }
       },
       "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -1261,6 +1286,32 @@
             "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
           }
         }
+      },
+      "revalidation1115": {
+        "reason": "#1115 publishes the consumable settings schema surface, aligns the settings load and compaction-token diagnostic text with pi's failure text, keeps unknown keybinding ids in the migrated user map, and states the theme token set against a new frozen capture. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
+        "changedInputs": [
+          "cmake/tests/CodingAgentTests.cmake",
+          "src/coding_agent/runtime/SessionFactory.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml"
+          ],
+          "testedRevision": "8df094e1d6624a3b653c544a3c96b119f5fcf0ed",
+          "recordedAt": "2026-11-01T23:57:39Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml",
+            "sha256": "0125241de337ccec92ae882729c9a775a51bf2baff51c942746651aa334c86fa"
+          }
+        }
       }
     },
     {
@@ -1312,7 +1363,7 @@
         },
         {
           "path": "cmake/tests/CodingAgentTests.cmake",
-          "sha256": "1993bde5f545f7fe0bbbfca2407c9834adcd928fe74d9b912df3027f0226bc19"
+          "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
         },
         {
           "path": "src/codemode/Declarations.cpp",
@@ -1428,7 +1479,7 @@
         },
         {
           "path": "src/coding_agent/runtime/SessionFactory.cpp",
-          "sha256": "8e5b828f0d523a5a143c98363c9845cf683ab5f80dc1483a95b07e3035285da0"
+          "sha256": "8f6544552c57de85d4a294b52de5ca14a382dcc0fdc200ee309aa03e2cf51b7b"
         },
         {
           "path": "tests/Catch2Main.cpp",
@@ -1440,7 +1491,7 @@
         },
         {
           "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-          "sha256": "33fc155116f7483fb4bd252ad1fae2dfb4b994c204c148ccc575504298fd4b06"
+          "sha256": "f923e46e26fda8ed4b4fd674751e98bb1e5ccc3f3e9329775612fe52de60746f"
         },
         {
           "path": "tests/coding_agent/CodemodeParityTest.cpp",
@@ -1548,14 +1599,14 @@
           "issue1118",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1118.xml"
+          "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1118.xml"
         ],
-        "testedRevision": "8df094e1d6624a3b653c544a3c96b119f5fcf0ed",
-        "recordedAt": "2026-11-01T23:57:39Z",
+        "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
+        "recordedAt": "2026-11-02T04:09:23Z",
         "selected": 19,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1118.xml",
-          "sha256": "c15778830d47b8a9b3bfc7c62e766a35d69875875cb996095a309c402d6dc259"
+          "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1118.xml",
+          "sha256": "8ccd1eee06800b3a9b9296631260c0d5da70b8519f6f1553d4426b5678d7c6e4"
         }
       },
       "rows": [
@@ -1839,6 +1890,33 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1118.xml",
             "sha256": "8bf5e618ccbfaa5bb87777f8f43525577ff1fab146cd04bc9bbd1a0d21655343"
+          }
+        }
+      },
+      "revalidation1115": {
+        "reason": "#1115 publishes the consumable settings schema surface, aligns the settings load and compaction-token diagnostic text with pi's failure text, keeps unknown keybinding ids in the migrated user map, and states the theme token set against a new frozen capture. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
+        "changedInputs": [
+          "cmake/tests/CodingAgentTests.cmake",
+          "src/coding_agent/runtime/SessionFactory.cpp",
+          "tests/coding_agent/CodemodeCatalogSessionTest.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1118",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1118.xml"
+          ],
+          "testedRevision": "8df094e1d6624a3b653c544a3c96b119f5fcf0ed",
+          "recordedAt": "2026-11-01T23:57:39Z",
+          "selected": 19,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1118.xml",
+            "sha256": "c15778830d47b8a9b3bfc7c62e766a35d69875875cb996095a309c402d6dc259"
           }
         }
       }
@@ -2622,7 +2700,7 @@
         },
         {
           "path": "cmake/tests/CodingAgentTests.cmake",
-          "sha256": "1993bde5f545f7fe0bbbfca2407c9834adcd928fe74d9b912df3027f0226bc19"
+          "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
         },
         {
           "path": "src/mcp/Client.cpp",
@@ -2946,14 +3024,14 @@
           "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1181.xml"
+          "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1181.xml"
         ],
-        "testedRevision": "8df094e1d6624a3b653c544a3c96b119f5fcf0ed",
-        "recordedAt": "2026-11-01T23:57:39Z",
+        "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
+        "recordedAt": "2026-11-02T04:09:23Z",
         "selected": 16,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1181.xml",
-          "sha256": "492bf8ca42fa02e92b277f703355c8f95976453311a5c3c8ddb45b93259bfa9e"
+          "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1181.xml",
+          "sha256": "dce029f2b7c58a586b16bdef73d0f7e237d60dff21598e5e55c8da373d37a9ef"
         }
       },
       "rows": [
@@ -3206,6 +3284,31 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1181.xml",
             "sha256": "235e56241e1b0e10ccf6b6657a27452a22a81ff75af4ef54afda337e5ce47ae3"
+          }
+        }
+      },
+      "revalidation1115": {
+        "reason": "#1115 publishes the consumable settings schema surface, aligns the settings load and compaction-token diagnostic text with pi's failure text, keeps unknown keybinding ids in the migrated user map, and states the theme token set against a new frozen capture. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
+        "changedInputs": [
+          "cmake/tests/CodingAgentTests.cmake"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-R",
+            "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1181.xml"
+          ],
+          "testedRevision": "8df094e1d6624a3b653c544a3c96b119f5fcf0ed",
+          "recordedAt": "2026-11-01T23:57:39Z",
+          "selected": 16,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1181.xml",
+            "sha256": "492bf8ca42fa02e92b277f703355c8f95976453311a5c3c8ddb45b93259bfa9e"
           }
         }
       }
