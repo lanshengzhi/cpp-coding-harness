@@ -114,31 +114,43 @@ a plugin loader.
 - Architecture, `ctest --preset vcpkg -L architecture -j2`: 43 selected, 43
   passed.
 - Full Validation on the reviewed tree, `TERM_PROGRAM=herdr`,
-  `cmake --build --preset vcpkg` then `ctest --preset vcpkg -j1`: **PENDING**
-  selected, passed, failed, skipped.
+  `cmake --build --preset vcpkg` then `ctest --preset vcpkg -j1`: 4,178
+  selected, 4,166 passed, 1 failed, 11 skipped. The failure is the
+  pre-existing runner-sensitive `a timed-out query resolves partial results
+  and later replies advance state` (`TerminalColorsTest`, issue990), which
+  passed on isolated rerun; an earlier serial run at the same code revision
+  completed with no failures (4,167 passed, 11 skipped). The 11 skips are the
+  nine frozen-pi durable continuation cases, the realtime-clock wrapper and
+  the Native TUI differential capture, none of which this slice touches.
 - Formatting: `scripts/format-check.sh origin/main` clean.
-- Pinned-receipt revalidation: **PENDING** (#1101/#1104 36-case selection,
-  #1118 19-case selection, #1181 16-case selection, each on the committed
-  tree with fresh JUnit artifacts).
-- Consolidation: **PENDING** `consolidate_audits.py build` and `check`.
+- Pinned-receipt revalidation, all on the committed code revision
+  `8df094e1d6624a3b653c544a3c96b119f5fcf0ed` with fresh JUnit artifacts:
+  #1101/#1104 shared selection 36/36 (`1112-revalidation-1090-1101-1104.xml`),
+  #1118 19/19 (`1112-revalidation-1118.xml`), #1181 16/16
+  (`1112-revalidation-1181.xml`). Each record keeps its rows, scenarios and
+  routing digest and gained a `revalidation1112` entry with the refreshed
+  touched-input digests and the previous validation block.
+- Consolidation: `consolidate_audits.py build` wrote 1,464 rows;
+  `check` passed (41 rows backed by pinned comparisons, 594 scenarios, 176
+  explicit orphans, 0 uncovered).
 
 ## Two-axis review
 
 Standards: one P1 and four P2 findings. The P1 (the inline native-extension
-  tool loop duplicated `load_extension_tools`) and the P2 interface finding
-  (`NativeExtension` default bodies instead of pure virtuals) were fixed by
-  making `NativeExtension` an `ExtensionToolSource` with pure `bind` /
-  `before_agent_start` and letting SessionFactory reuse the one loader. The
-  remaining P2s were fixed by one `AgentPromptAccess::prompt` taking the
-  optional user message, a `RunStartingMessages` value instead of the
-  lead/trailing parameter clump, and a `std::variant` run trigger with one
-  event/starting-message helper instead of repeated kind switches. Spec: one
-  P2 asked for an explicit `wrapTool` hook; the bounded tool-wrapping path is
-  the existing `ExtensionToolSource` conversion above, so no second hook was
-  added. One P2 called the busy `send_message` branch scope creep; it is kept
-  because it is pi's `sendCustomMessage` streaming branch and lets an async
-  `before_agent_start` handler queue into the run it is already inside. No
-  implementation bugs were found.
+tool loop duplicated `load_extension_tools`) and the P2 interface finding
+(`NativeExtension` default bodies instead of pure virtuals) were fixed by
+making `NativeExtension` an `ExtensionToolSource` with pure `bind` /
+`before_agent_start` and letting SessionFactory reuse the one loader. The
+remaining P2s were fixed by one `AgentPromptAccess::prompt` taking the
+optional user message, a `RunStartingMessages` value instead of the
+lead/trailing parameter clump, and a `std::variant` run trigger with one
+event/starting-message helper instead of repeated kind switches. Spec: one
+P2 asked for an explicit `wrapTool` hook; the bounded tool-wrapping path is
+the existing `ExtensionToolSource` conversion above, so no second hook was
+added. One P2 called the busy `send_message` branch scope creep; it is kept
+because it is pi's `sendCustomMessage` streaming branch and lets an async
+`before_agent_start` handler queue into the run it is already inside. No
+implementation bugs were found.
 
 ## Capability status
 
