@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1190",
   "family": "audit-1190",
-  "capturedAt": "2026-11-02T06:01:00.898Z",
+  "capturedAt": "2026-11-02T06:15:21.444Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -28,7 +28,7 @@
       },
       {
         "path": "fixtures/pi-mcp/http_server.py",
-        "sha256": "b027357f1ff6e0573eed3d4e8f733d99e4c52932097e6383fa3d2bba854bf17b"
+        "sha256": "cff24b5735395383080f7fd6e924a58024025cc35db983f854fac82104397502"
       }
     ]
   },
@@ -37,7 +37,7 @@
       "path": "server-requests.json",
       "family": "audit-1190",
       "bytes": 3575,
-      "sha256": "f650bdc420642f07d52eeb3801b0ed0e1e469ecccc7021d4e7f2346e5cdec88a",
+      "sha256": "be7977edddbc00b4904c3d6400bc4502a1896ebe7ecbf6814b47488792f5fb00",
       "sourceEndpoints": [
         "packages/mcp/src/client.ts:McpClient constructor,connect,handleRequest",
         "packages/mcp/src/transports/stdio.ts:StdioTransport",

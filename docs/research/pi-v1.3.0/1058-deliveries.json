@@ -50,19 +50,19 @@
         },
         {
           "path": "src/mcp/Client.cpp",
-          "sha256": "ca52a45e0a52a70e7caa8b95c9a517354e75aeaa50e03ef608c9018f28234e72"
+          "sha256": "ea84c5b73ebb374ee686acfb9703542456a666a238623a0a0fa7a06972ecee0a"
         },
         {
           "path": "src/mcp/StdioClient.cpp",
-          "sha256": "166bde34dfb1a3c4c9479e8e6b30b5ba1a07ee476449a91015a1d6b1a9995164"
+          "sha256": "f3dcdc687480dd5a79e742b1d11056caeda56798d640000b44343692cfeb5f94"
         },
         {
           "path": "src/mcp/StdioClientImpl.hpp",
-          "sha256": "194f7ee2a63b486909f7776dd2123cd2e10413853082fcde789cd523d800938f"
+          "sha256": "d8432f3933ecd6d411adb8147b8402928bb36f8c2106b38bca347b7a25deb7f7"
         },
         {
           "path": "src/mcp/HttpClient.cpp",
-          "sha256": "10ab17f0e2c175e51ced3c7f2aeadbf9dc6640f2103a098a10832b256ed2053f"
+          "sha256": "700cb9118963d35e74866649f1eb4d8908e4a5b2447e25a27a769ffc0cb1a728"
         },
         {
           "path": "src/mcp/HttpClientImpl.hpp",
@@ -70,15 +70,15 @@
         },
         {
           "path": "src/mcp/ProtocolInternal.hpp",
-          "sha256": "59bc3bafa9c62aef216d65fcc76020c772fe5f334c1ac32d54d0d057dffb7712"
+          "sha256": "53f78aab93d1f8c174e19e224295aa752c2b3afec3d01cb54b20fcc58cbd3a10"
         },
         {
           "path": "src/mcp/include/cch/mcp/Client.hpp",
-          "sha256": "fdd40dfdf031afd19c4f3ff40626d05b5d8cc9488efa1d3526794b5cc427451d"
+          "sha256": "37dd1a3c47dcec3eaba29a3083f123115b9385f3b0c8a690821ca696b2d2c08d"
         },
         {
           "path": "src/mcp/include/cch/mcp/Protocol.hpp",
-          "sha256": "5122b58ebdeac57f06519d08b5db2e50d81631380098e6c534a1ca910faa1f61"
+          "sha256": "57c453c31b45a85875fdb171d26fb7eb9fbb00ce1f0a3d995915ff27a23289ed"
         },
         {
           "path": "src/mcp/include/cch/mcp/StdioClient.hpp",
@@ -86,15 +86,15 @@
         },
         {
           "path": "src/mcp/include/cch/mcp/StdioServerConfig.hpp",
-          "sha256": "9bcce8bc68ece927a0d20eb7850cb3fe032e8dde790d3de4258b9a57d511e75c"
+          "sha256": "31b59280d66ee1f3c3f85df5931cdb2bec3f5c0c19721bae41076d0d51ed5a6b"
         },
         {
           "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
-          "sha256": "01afbd30a3c4fa73b24fabb9477a56539a6e1fa34e5ff4dd105b9a8a29957428"
+          "sha256": "c7daf0d26e5c96f303119f97b354f6742f62031a5acfd4105226943825ded6c7"
         },
         {
           "path": "src/mcp/include/cch/mcp/HttpServerConfig.hpp",
-          "sha256": "6d8ef1cafe4df55e659f92c0622571c43b9d5ed888dbc4ca90505cb894fb166e"
+          "sha256": "acbe6a5a709fa2ac3cae063e81cb1c0452d18900f73d48adf8748be2f70a2aab"
         },
         {
           "path": "src/coding_agent/mcp/McpExtensionToolSource.cpp",
@@ -158,7 +158,7 @@
         },
         {
           "path": "fixtures/pi-mcp/http_server.py",
-          "sha256": "8118f3b13929692dafc8df49b3901f25d96eeb329657b8eaea56db0cfccb6738"
+          "sha256": "cff24b5735395383080f7fd6e924a58024025cc35db983f854fac82104397502"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1052/structured-content.json",
@@ -190,7 +190,7 @@
         },
         {
           "path": "tests/mcp/McpOwnerTest.cpp",
-          "sha256": "ab452318898a1ec8e4e447910e520e9904ea6d51bce995688cf813d9789d05f2"
+          "sha256": "643b9c2ef5cd326ebef021a624f2c0409a6646c32a9d985ad967b50226ebf9fd"
         },
         {
           "path": "tests/coding_agent/McpHttpSessionTest.cpp",
@@ -230,14 +230,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml"
+          "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1101.xml"
         ],
-        "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
-        "recordedAt": "2026-11-02T05:33:19Z",
+        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "recordedAt": "2026-11-02T06:16:12Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml",
-          "sha256": "42610b900d396ff9aaa33e2e91403b4cfcbfbfa4d02a39f8a017b6362453b2e1"
+          "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1101.xml",
+          "sha256": "304a491c9622566457dab56f377788a776fae025a43539e6a0a3fb5ab7716e48"
         }
       },
       "rows": [
@@ -495,6 +495,29 @@
             "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
             "sha256": "c6d6f2482af70388ddec32e417c41cdb119ddcec5e94ee507fe69adc78042244"
           }
+        }
+      },
+      "revalidation1190": {
+        "reason": "#1190 carried the MCP roots on the connection and installed the same ping/roots/list server-request set for stdio and HTTP, which changed the pinned MCP sources and the pi-mcp fixtures. The record's exact selection was rerun on the merged tree; rows, scenarios and routing are unchanged.",
+        "changedInputs": [
+          "src/mcp/Client.cpp",
+          "src/mcp/StdioClient.cpp",
+          "src/mcp/StdioClientImpl.hpp",
+          "src/mcp/HttpClient.cpp",
+          "src/mcp/ProtocolInternal.hpp",
+          "src/mcp/include/cch/mcp/Client.hpp",
+          "src/mcp/include/cch/mcp/Protocol.hpp",
+          "src/mcp/include/cch/mcp/StdioServerConfig.hpp",
+          "src/mcp/include/cch/mcp/HttpClient.hpp",
+          "src/mcp/include/cch/mcp/HttpServerConfig.hpp",
+          "fixtures/pi-mcp/http_server.py",
+          "tests/mcp/McpOwnerTest.cpp"
+        ],
+        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "selected": 36,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1101.xml",
+          "sha256": "304a491c9622566457dab56f377788a776fae025a43539e6a0a3fb5ab7716e48"
         }
       }
     },
@@ -1676,7 +1699,7 @@
         },
         {
           "path": "fixtures/pi-mcp/echo_server.py",
-          "sha256": "edb1dfec00a1ae6822831d5075abb87c6bcfb8a1c091321c7c74fe539ce58708"
+          "sha256": "2a3b23c50928609fd52d28a56d8e63b521f33095e6a0453f6fc77e5d6def5f1d"
         },
         {
           "path": "fixtures/pi-mcp/resource_isolation_server.py",
@@ -1716,14 +1739,14 @@
           "issue1118",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1118.xml"
+          "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1118.xml"
         ],
-        "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
-        "recordedAt": "2026-11-02T05:33:19Z",
+        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "recordedAt": "2026-11-02T06:16:12Z",
         "selected": 19,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1118.xml",
-          "sha256": "c2a64ae404757231f65bdbf8d9aefe6f91503b3bfa5ab0c2d5b67cb8d2e9e555"
+          "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1118.xml",
+          "sha256": "8cf3b942ec1fea6d4bbbf32522ad0d0d69a1ea92d7c2448feba0306332e9a1c7"
         }
       },
       "rows": [
@@ -2080,6 +2103,18 @@
             "sha256": "8ccd1eee06800b3a9b9296631260c0d5da70b8519f6f1553d4426b5678d7c6e4"
           }
         }
+      },
+      "revalidation1190": {
+        "reason": "#1190 carried the MCP roots on the connection and installed the same ping/roots/list server-request set for stdio and HTTP, which changed the pinned MCP sources and the pi-mcp fixtures. The record's exact selection was rerun on the merged tree; rows, scenarios and routing are unchanged.",
+        "changedInputs": [
+          "fixtures/pi-mcp/echo_server.py"
+        ],
+        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "selected": 19,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1118.xml",
+          "sha256": "8cf3b942ec1fea6d4bbbf32522ad0d0d69a1ea92d7c2448feba0306332e9a1c7"
+        }
       }
     },
     {
@@ -2431,7 +2466,7 @@
           "discriminatingCase": {
             "test": "a multi-byte character is cut only on a character boundary",
             "testSource": "tests/chord/OutputTest.cpp",
-            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"a\u00e9\ud83d\ude00\"; the boundary case separates the byte length from a code-point count."
+            "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
           }
         },
         {
@@ -2865,19 +2900,19 @@
         },
         {
           "path": "src/mcp/Client.cpp",
-          "sha256": "ca52a45e0a52a70e7caa8b95c9a517354e75aeaa50e03ef608c9018f28234e72"
+          "sha256": "ea84c5b73ebb374ee686acfb9703542456a666a238623a0a0fa7a06972ecee0a"
         },
         {
           "path": "src/mcp/StdioClient.cpp",
-          "sha256": "166bde34dfb1a3c4c9479e8e6b30b5ba1a07ee476449a91015a1d6b1a9995164"
+          "sha256": "f3dcdc687480dd5a79e742b1d11056caeda56798d640000b44343692cfeb5f94"
         },
         {
           "path": "src/mcp/StdioClientImpl.hpp",
-          "sha256": "194f7ee2a63b486909f7776dd2123cd2e10413853082fcde789cd523d800938f"
+          "sha256": "d8432f3933ecd6d411adb8147b8402928bb36f8c2106b38bca347b7a25deb7f7"
         },
         {
           "path": "src/mcp/HttpClient.cpp",
-          "sha256": "10ab17f0e2c175e51ced3c7f2aeadbf9dc6640f2103a098a10832b256ed2053f"
+          "sha256": "700cb9118963d35e74866649f1eb4d8908e4a5b2447e25a27a769ffc0cb1a728"
         },
         {
           "path": "src/mcp/HttpClientImpl.hpp",
@@ -2925,7 +2960,7 @@
         },
         {
           "path": "src/mcp/ProtocolInternal.hpp",
-          "sha256": "59bc3bafa9c62aef216d65fcc76020c772fe5f334c1ac32d54d0d057dffb7712"
+          "sha256": "53f78aab93d1f8c174e19e224295aa752c2b3afec3d01cb54b20fcc58cbd3a10"
         },
         {
           "path": "src/mcp/StructuredResultText.hpp",
@@ -2933,19 +2968,19 @@
         },
         {
           "path": "src/mcp/include/cch/mcp/Client.hpp",
-          "sha256": "fdd40dfdf031afd19c4f3ff40626d05b5d8cc9488efa1d3526794b5cc427451d"
+          "sha256": "37dd1a3c47dcec3eaba29a3083f123115b9385f3b0c8a690821ca696b2d2c08d"
         },
         {
           "path": "src/mcp/include/cch/mcp/Protocol.hpp",
-          "sha256": "5122b58ebdeac57f06519d08b5db2e50d81631380098e6c534a1ca910faa1f61"
+          "sha256": "57c453c31b45a85875fdb171d26fb7eb9fbb00ce1f0a3d995915ff27a23289ed"
         },
         {
           "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
-          "sha256": "01afbd30a3c4fa73b24fabb9477a56539a6e1fa34e5ff4dd105b9a8a29957428"
+          "sha256": "c7daf0d26e5c96f303119f97b354f6742f62031a5acfd4105226943825ded6c7"
         },
         {
           "path": "src/mcp/include/cch/mcp/HttpServerConfig.hpp",
-          "sha256": "6d8ef1cafe4df55e659f92c0622571c43b9d5ed888dbc4ca90505cb894fb166e"
+          "sha256": "acbe6a5a709fa2ac3cae063e81cb1c0452d18900f73d48adf8748be2f70a2aab"
         },
         {
           "path": "src/mcp/include/cch/mcp/OAuthDiscovery.hpp",
@@ -2997,7 +3032,7 @@
         },
         {
           "path": "src/mcp/include/cch/mcp/StdioServerConfig.hpp",
-          "sha256": "9bcce8bc68ece927a0d20eb7850cb3fe032e8dde790d3de4258b9a57d511e75c"
+          "sha256": "31b59280d66ee1f3c3f85df5931cdb2bec3f5c0c19721bae41076d0d51ed5a6b"
         },
         {
           "path": "src/coding_agent/mcp/McpOAuthSignIn.cpp",
@@ -3117,7 +3152,7 @@
         },
         {
           "path": "fixtures/pi-mcp/http_server.py",
-          "sha256": "8118f3b13929692dafc8df49b3901f25d96eeb329657b8eaea56db0cfccb6738"
+          "sha256": "cff24b5735395383080f7fd6e924a58024025cc35db983f854fac82104397502"
         },
         {
           "path": "fixtures/pi-mcp/resource_isolation_server.py",
@@ -3125,7 +3160,7 @@
         },
         {
           "path": "fixtures/pi-mcp/echo_server.py",
-          "sha256": "edb1dfec00a1ae6822831d5075abb87c6bcfb8a1c091321c7c74fe539ce58708"
+          "sha256": "2a3b23c50928609fd52d28a56d8e63b521f33095e6a0453f6fc77e5d6def5f1d"
         },
         {
           "path": "fixtures/pi-mcp/oauth/replay.json",
@@ -3185,14 +3220,14 @@
           "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1181.xml"
+          "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1181.xml"
         ],
-        "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
-        "recordedAt": "2026-11-02T05:33:19Z",
+        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "recordedAt": "2026-11-02T06:16:12Z",
         "selected": 16,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1181.xml",
-          "sha256": "7bc920bd00b4f6947870b4d9db07ca9d52999df17411e7e0adab30bfb71aed82"
+          "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1181.xml",
+          "sha256": "94e3791d15e033df6714f6740a2a5cacf3fb374ca600a1cf7c4d0afd32114523"
         }
       },
       "rows": [
@@ -3531,6 +3566,29 @@
             "sha256": "dce029f2b7c58a586b16bdef73d0f7e237d60dff21598e5e55c8da373d37a9ef"
           }
         }
+      },
+      "revalidation1190": {
+        "reason": "#1190 carried the MCP roots on the connection and installed the same ping/roots/list server-request set for stdio and HTTP, which changed the pinned MCP sources and the pi-mcp fixtures. The record's exact selection was rerun on the merged tree; rows, scenarios and routing are unchanged.",
+        "changedInputs": [
+          "src/mcp/Client.cpp",
+          "src/mcp/StdioClient.cpp",
+          "src/mcp/StdioClientImpl.hpp",
+          "src/mcp/HttpClient.cpp",
+          "src/mcp/ProtocolInternal.hpp",
+          "src/mcp/include/cch/mcp/Client.hpp",
+          "src/mcp/include/cch/mcp/Protocol.hpp",
+          "src/mcp/include/cch/mcp/HttpClient.hpp",
+          "src/mcp/include/cch/mcp/HttpServerConfig.hpp",
+          "src/mcp/include/cch/mcp/StdioServerConfig.hpp",
+          "fixtures/pi-mcp/http_server.py",
+          "fixtures/pi-mcp/echo_server.py"
+        ],
+        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "selected": 16,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1181.xml",
+          "sha256": "94e3791d15e033df6714f6740a2a5cacf3fb374ca600a1cf7c4d0afd32114523"
+        }
       }
     },
     {
@@ -3575,7 +3633,7 @@
         },
         {
           "path": "fixtures/pi-mcp/http_server.py",
-          "sha256": "8118f3b13929692dafc8df49b3901f25d96eeb329657b8eaea56db0cfccb6738"
+          "sha256": "cff24b5735395383080f7fd6e924a58024025cc35db983f854fac82104397502"
         },
         {
           "path": "fixtures/pi-mcp/oauth/replay.json",
@@ -3659,7 +3717,7 @@
         },
         {
           "path": "src/mcp/HttpClient.cpp",
-          "sha256": "10ab17f0e2c175e51ced3c7f2aeadbf9dc6640f2103a098a10832b256ed2053f"
+          "sha256": "700cb9118963d35e74866649f1eb4d8908e4a5b2447e25a27a769ffc0cb1a728"
         },
         {
           "path": "src/mcp/HttpClientImpl.hpp",
@@ -3667,15 +3725,15 @@
         },
         {
           "path": "src/mcp/StdioClient.cpp",
-          "sha256": "166bde34dfb1a3c4c9479e8e6b30b5ba1a07ee476449a91015a1d6b1a9995164"
+          "sha256": "f3dcdc687480dd5a79e742b1d11056caeda56798d640000b44343692cfeb5f94"
         },
         {
           "path": "src/mcp/StdioClientImpl.hpp",
-          "sha256": "194f7ee2a63b486909f7776dd2123cd2e10413853082fcde789cd523d800938f"
+          "sha256": "d8432f3933ecd6d411adb8147b8402928bb36f8c2106b38bca347b7a25deb7f7"
         },
         {
           "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
-          "sha256": "01afbd30a3c4fa73b24fabb9477a56539a6e1fa34e5ff4dd105b9a8a29957428"
+          "sha256": "c7daf0d26e5c96f303119f97b354f6742f62031a5acfd4105226943825ded6c7"
         },
         {
           "path": "src/mcp/include/cch/mcp/RequestAuthSource.hpp",
@@ -3743,14 +3801,14 @@
           "^(closing while a real initialize is pending returns with pi's closed error|close during a pending connect returns promptly and drops the late connection|closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token|a cancelled MCP OAuth refresh stops before the request reaches the MCP server|a timed-out MCP OAuth request settles at the deadline while the shared refresh completes|concurrent MCP OAuth requests share one refresh|MCP OAuth refresh uses pi's 30-second skew|a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh|a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1189-close-refresh.xml"
+          "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml"
         ],
-        "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
-        "recordedAt": "2026-11-02T05:51:24Z",
+        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "recordedAt": "2026-11-02T06:16:12Z",
         "selected": 9,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1189-close-refresh.xml",
-          "sha256": "621ea140170231f410afdfe43ccfeab5a205525441f9f84b44c68237b61c6d03"
+          "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml",
+          "sha256": "9c58b0a3c81fd20c7bc7cc92d958126cfc544cad05da49dcde2bb8696536cc3a"
         }
       },
       "rows": [
@@ -3841,7 +3899,23 @@
           }
         }
       ],
-      "routingSha256": "7fc19e917b0d999a8d4188516385cf866475f6ffd56635666cbd3b718e5723f1"
+      "routingSha256": "7fc19e917b0d999a8d4188516385cf866475f6ffd56635666cbd3b718e5723f1",
+      "revalidation1190": {
+        "reason": "#1190 carried the MCP roots on the connection and installed the same ping/roots/list server-request set for stdio and HTTP, which changed the pinned MCP sources and the pi-mcp fixtures. The record's exact selection was rerun on the merged tree; rows, scenarios and routing are unchanged.",
+        "changedInputs": [
+          "fixtures/pi-mcp/http_server.py",
+          "src/mcp/HttpClient.cpp",
+          "src/mcp/StdioClient.cpp",
+          "src/mcp/StdioClientImpl.hpp",
+          "src/mcp/include/cch/mcp/HttpClient.hpp"
+        ],
+        "testedRevision": "50a45c53af89a0344638b666037bba517a05de4d",
+        "selected": 9,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml",
+          "sha256": "9c58b0a3c81fd20c7bc7cc92d958126cfc544cad05da49dcde2bb8696536cc3a"
+        }
+      }
     }
   ]
 }
