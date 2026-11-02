@@ -157,7 +157,7 @@ the `-L mcp` run recorded under `## Validation`.
 | `mcp-http-session-stream` | retry hint and `Last-Event-ID` | `MCP GET stream: a server retry field overrides the reconnect delay` | matched |
 | `mcp-http-session-stream` | out-of-range hint | `MCP GET stream: an out-of-range server retry field is ignored, never throws` | both bounded and reconnect; exact delay differs (see note) |
 | `mcp-http-session-stream` | event delivery | `MCP GET stream: server notifications reach the connection listener` | matched |
-| `mcp-http-session-stream` | ping and roots answers | `MCP GET stream: server ping is answered with an empty result`, `MCP GET stream: server request roots/list is answered with file://<cwd>` | ping matched; roots shape matched, root value differs (B2) |
+| `mcp-http-session-stream` | ping and roots answers | `MCP GET stream: server ping is answered with an empty result`, `MCP GET stream: server request roots/list is answered with the connection's configured roots` | matched; the connection now carries configured roots (#1190) |
 | `mcp-http-session-stream` | cancellation of a server handler | `MCP GET stream: notifications/cancelled aborts the in-flight handler` | matched (`-32603`, `MCP request aborted`) |
 | `mcp-http-session-stream` | close without a dropped-stream error | `MCP GET stream: close() aborts the stream without the dropped error` | matched |
 | `mcp-stdio-stderr-tail` | 64 KiB ring | `StdioTransport.handleStderr`/`kStderrBufferBytes` (source-reviewed); `an MCP process failure includes a bounded stderr tail` | matched |
@@ -181,9 +181,11 @@ the `-L mcp` run recorded under `## Validation`.
    value as outside its integer range and falls back to the 20 ms client backoff. Both are bounded,
    never throw and resume with `Last-Event-ID: 1`; the exact delay is recorded as a normalized
    platform value, not as a pi-level rejection.
-4. **Roots value.** The capture configures `file:///workspace`; the C++ connection composes
-   `file://<cwd>`. The answer shape and the `roots/list` handling match. The exact root selection
-   belongs to `cch_mcp:mcp-roots-list` (B2, #1190), not to this row.
+4. **Roots value.** The capture configures `file:///workspace`. The merged #1190 surface carries
+   roots on the connection instead of deriving `file://<cwd>`, so the captured value is
+   representable and the `roots/list` handling matches. The application's choice of root (its
+   session cwd) and the exact root selection belong to `cch_mcp:mcp-roots-list` (#1190), not to this
+   row.
 
 ### Reviewed seams without a direct C++ case
 
@@ -202,8 +204,8 @@ the `-L mcp` run recorded under `## Validation`.
 
 ## Validation
 
-Measured in this worktree at base revision `b075f866219152078ab024eaf76aaba547d1bd5e` (the
-capture was produced from the frozen checkout at `71023aec…`):
+Measured on the merged tree at `e7c2cbb91` (`origin/main` merged into `1191`); the capture itself
+was produced from the frozen checkout at `71023aec…`:
 
 | Command | Result |
 | --- | --- |
@@ -211,13 +213,15 @@ capture was produced from the frozen checkout at `71023aec…`):
 | `python3 scripts/evidence/audit_evidence.py check --manifest fixtures/pi-v1.3.0/audit-1191/manifest.json` | PASS, candidate record printed |
 | `cmake --preset vcpkg` | configured; build-phase Parity Architecture Gate PASS (12 targets, 66 dependencies, 284 sources, 3,907 includes) |
 | `cmake --build --preset vcpkg` | all targets built |
-| `ctest --preset vcpkg -L mcp --output-junit docs/research/pi-v1.3.0/deliveries/1191-mcp.xml` | 304 selected, 304 passed, 0 failed, 0 skipped |
+| `ctest --preset vcpkg -L mcp --output-junit docs/research/pi-v1.3.0/deliveries/1191-mcp.xml` | 309 selected, 309 passed, 0 failed, 0 skipped |
 | `ctest --preset vcpkg -L architecture --output-junit docs/research/pi-v1.3.0/deliveries/1191-architecture.xml` | 43 selected, 43 passed, 0 failed, 0 skipped |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` | rebuilt; 1,464 rows, no diff against the committed ledger |
-| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check` | PASS — 1,464 rows; 614 scenarios; 196 explicit orphans; 0 uncovered |
+| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check` | PASS — 1,464 rows; 617 scenarios; 199 explicit orphans; 0 uncovered |
+| `python3 tests/evidence/NamedEvidenceTest.py` | 24 tests, 22 passed, 2 skipped (no `PI_CHECKOUT` capture-path run) |
+| `python3 tests/evidence/ConsolidationAuditTest.py` | 42 tests, all passed |
 | `scripts/format-check.sh origin/main` | clean (fixture/docs only; no C++ formatting changes) |
 
-The `-L mcp` count is the full-set build count; the earlier shard-only build reports 232, because
+The `-L mcp` count is the full-set build count on the merged tree; an earlier shard-only build reported 232, because
 `catch_discover_tests` registers only the targets that were built. The full preset was built before
 the label run. The `-L architecture` count is the expected 43 and all pass.
 

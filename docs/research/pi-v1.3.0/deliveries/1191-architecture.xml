@@ -5,285 +5,285 @@
 	disabled="0"
 	skipped="0"
 	hostname=""
-	time="787"
-	timestamp="2026-11-02T15:42:28"
+	time="285"
+	timestamp="2026-11-02T16:07:27"
 	>
-	<testcase name="agent lifecycle advertises only the supported pi event alternatives" classname="agent lifecycle advertises only the supported pi event alternatives" time="0.01155" status="run">
+	<testcase name="agent lifecycle advertises only the supported pi event alternatives" classname="agent lifecycle advertises only the supported pi event alternatives" time="0.00788469" status="run">
 		<properties>
 			<property name="cmake_labels" value="agent;architecture;spec"/>
 		</properties>
 		<system-out>Filters: "agent lifecycle advertises only the supported pi event alternatives"
-Randomness seeded to: 1979086836
+Randomness seeded to: 327401781
 ===============================================================================
 test cases: 1 | 1 passed
 assertions: - none -
 
 </system-out>
 	</testcase>
-	<testcase name="event sink contracts are move-only" classname="event sink contracts are move-only" time="0.0134566" status="run">
+	<testcase name="event sink contracts are move-only" classname="event sink contracts are move-only" time="0.0079894" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;spec;u5"/>
 		</properties>
 		<system-out>Filters: "event sink contracts are move-only"
-Randomness seeded to: 3961845472
+Randomness seeded to: 559651517
 ===============================================================================
 test cases: 1 | 1 passed
 assertions: - none -
 
 </system-out>
 	</testcase>
-	<testcase name="move-only body handlers can own unique buffers" classname="move-only body handlers can own unique buffers" time="0.00879496" status="run">
+	<testcase name="move-only body handlers can own unique buffers" classname="move-only body handlers can own unique buffers" time="0.00839314" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;spec;u5"/>
 		</properties>
 		<system-out>Filters: "move-only body handlers can own unique buffers"
-Randomness seeded to: 3012465760
+Randomness seeded to: 1207812042
 ===============================================================================
 All tests passed (3 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="move-only event sinks can own unique state" classname="move-only event sinks can own unique state" time="0.00957646" status="run">
+	<testcase name="move-only event sinks can own unique state" classname="move-only event sinks can own unique state" time="0.00799911" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;spec;u5"/>
 		</properties>
 		<system-out>Filters: "move-only event sinks can own unique state"
-Randomness seeded to: 2446962851
+Randomness seeded to: 2771329876
 ===============================================================================
 All tests passed (3 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="public contracts remain value and interface oriented" classname="public contracts remain value and interface oriented" time="0.0123559" status="run">
+	<testcase name="public contracts remain value and interface oriented" classname="public contracts remain value and interface oriented" time="0.00799585" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;spec;u1"/>
 		</properties>
 		<system-out>Filters: "public contracts remain value and interface oriented"
-Randomness seeded to: 1705714480
+Randomness seeded to: 1183558398
 ===============================================================================
 All tests passed (2 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="public headers compile from the include contract surface" classname="public headers compile from the include contract surface" time="0.0120439" status="run">
+	<testcase name="public headers compile from the include contract surface" classname="public headers compile from the include contract surface" time="0.00830524" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;spec;u1"/>
 		</properties>
 		<system-out>Filters: "public headers compile from the include contract surface"
-Randomness seeded to: 2142807448
+Randomness seeded to: 492100483
 ===============================================================================
 All tests passed (3 assertions in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="session targets remain one passive variant with optional path results" classname="session targets remain one passive variant with optional path results" time="0.00730189" status="run">
+	<testcase name="session targets remain one passive variant with optional path results" classname="session targets remain one passive variant with optional path results" time="0.00819512" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;sdk;session;spec"/>
 		</properties>
 		<system-out>Filters: "session targets remain one passive variant with optional path results"
-Randomness seeded to: 3783413270
+Randomness seeded to: 2378312083
 ===============================================================================
 All tests passed (1 assertion in 1 test case)
 
 </system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_accept-gcc" classname="cch_supported_build_policy_accept-gcc" time="0.0342141" status="run">
+	<testcase name="cch_supported_build_policy_accept-gcc" classname="cch_supported_build_policy_accept-gcc" time="0.0260504" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_accept-clang" classname="cch_supported_build_policy_accept-clang" time="0.025762" status="run">
+	<testcase name="cch_supported_build_policy_accept-clang" classname="cch_supported_build_policy_accept-clang" time="0.0261982" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-cross-build" classname="cch_supported_build_policy_reject-cross-build" time="0.0346678" status="run">
+	<testcase name="cch_supported_build_policy_reject-cross-build" classname="cch_supported_build_policy_reject-cross-build" time="0.0309587" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-operating-system" classname="cch_supported_build_policy_reject-operating-system" time="0.0288218" status="run">
+	<testcase name="cch_supported_build_policy_reject-operating-system" classname="cch_supported_build_policy_reject-operating-system" time="0.0260163" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-architecture" classname="cch_supported_build_policy_reject-architecture" time="0.0236937" status="run">
+	<testcase name="cch_supported_build_policy_reject-architecture" classname="cch_supported_build_policy_reject-architecture" time="0.0258365" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-libc" classname="cch_supported_build_policy_reject-libc" time="0.0285752" status="run">
+	<testcase name="cch_supported_build_policy_reject-libc" classname="cch_supported_build_policy_reject-libc" time="0.0252371" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-generator" classname="cch_supported_build_policy_reject-generator" time="0.0296303" status="run">
+	<testcase name="cch_supported_build_policy_reject-generator" classname="cch_supported_build_policy_reject-generator" time="0.0260096" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-ninja-version" classname="cch_supported_build_policy_reject-ninja-version" time="0.0305236" status="run">
+	<testcase name="cch_supported_build_policy_reject-ninja-version" classname="cch_supported_build_policy_reject-ninja-version" time="0.0259439" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-unity" classname="cch_supported_build_policy_reject-unity" time="0.0374258" status="run">
+	<testcase name="cch_supported_build_policy_reject-unity" classname="cch_supported_build_policy_reject-unity" time="0.0273459" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-gcc-version" classname="cch_supported_build_policy_reject-gcc-version" time="0.0472304" status="run">
+	<testcase name="cch_supported_build_policy_reject-gcc-version" classname="cch_supported_build_policy_reject-gcc-version" time="0.0278947" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-clang-version" classname="cch_supported_build_policy_reject-clang-version" time="0.0382756" status="run">
+	<testcase name="cch_supported_build_policy_reject-clang-version" classname="cch_supported_build_policy_reject-clang-version" time="0.0268847" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-clang-build-role" classname="cch_supported_build_policy_reject-clang-build-role" time="0.0416643" status="run">
+	<testcase name="cch_supported_build_policy_reject-clang-build-role" classname="cch_supported_build_policy_reject-clang-build-role" time="0.0284014" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-clang-release" classname="cch_supported_build_policy_reject-clang-release" time="0.0314081" status="run">
+	<testcase name="cch_supported_build_policy_reject-clang-release" classname="cch_supported_build_policy_reject-clang-release" time="0.0263846" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_accept-sanitizer-address-undefined" classname="cch_supported_build_policy_accept-sanitizer-address-undefined" time="0.0370501" status="run">
+	<testcase name="cch_supported_build_policy_accept-sanitizer-address-undefined" classname="cch_supported_build_policy_accept-sanitizer-address-undefined" time="0.0260152" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_accept-sanitizer-thread" classname="cch_supported_build_policy_accept-sanitizer-thread" time="0.0294128" status="run">
+	<testcase name="cch_supported_build_policy_accept-sanitizer-thread" classname="cch_supported_build_policy_accept-sanitizer-thread" time="0.0265779" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-unknown-sanitizer" classname="cch_supported_build_policy_reject-unknown-sanitizer" time="0.0319523" status="run">
+	<testcase name="cch_supported_build_policy_reject-unknown-sanitizer" classname="cch_supported_build_policy_reject-unknown-sanitizer" time="0.0262628" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-sanitizer-combination" classname="cch_supported_build_policy_reject-sanitizer-combination" time="0.0325573" status="run">
+	<testcase name="cch_supported_build_policy_reject-sanitizer-combination" classname="cch_supported_build_policy_reject-sanitizer-combination" time="0.0272606" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-duplicate-sanitizer" classname="cch_supported_build_policy_reject-duplicate-sanitizer" time="0.0285405" status="run">
+	<testcase name="cch_supported_build_policy_reject-duplicate-sanitizer" classname="cch_supported_build_policy_reject-duplicate-sanitizer" time="0.0283518" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-dependency-fallback" classname="cch_supported_build_policy_reject-dependency-fallback" time="0.033434" status="run">
+	<testcase name="cch_supported_build_policy_reject-dependency-fallback" classname="cch_supported_build_policy_reject-dependency-fallback" time="0.0684903" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-missing-vcpkg-toolchain" classname="cch_supported_build_policy_reject-missing-vcpkg-toolchain" time="0.0290172" status="run">
+	<testcase name="cch_supported_build_policy_reject-missing-vcpkg-toolchain" classname="cch_supported_build_policy_reject-missing-vcpkg-toolchain" time="0.0246483" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-vcpkg-manifest-install" classname="cch_supported_build_policy_reject-vcpkg-manifest-install" time="0.0312354" status="run">
+	<testcase name="cch_supported_build_policy_reject-vcpkg-manifest-install" classname="cch_supported_build_policy_reject-vcpkg-manifest-install" time="0.0267285" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-vcpkg-host-triplet" classname="cch_supported_build_policy_reject-vcpkg-host-triplet" time="0.0513086" status="run">
+	<testcase name="cch_supported_build_policy_reject-vcpkg-host-triplet" classname="cch_supported_build_policy_reject-vcpkg-host-triplet" time="0.0349634" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_accept-vcpkg-in-tree-overlays" classname="cch_supported_build_policy_accept-vcpkg-in-tree-overlays" time="0.0311725" status="run">
+	<testcase name="cch_supported_build_policy_accept-vcpkg-in-tree-overlays" classname="cch_supported_build_policy_accept-vcpkg-in-tree-overlays" time="0.0259394" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-vcpkg-overlays" classname="cch_supported_build_policy_reject-vcpkg-overlays" time="0.0294212" status="run">
+	<testcase name="cch_supported_build_policy_reject-vcpkg-overlays" classname="cch_supported_build_policy_reject-vcpkg-overlays" time="0.0258704" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-vcpkg-overlay-triplets" classname="cch_supported_build_policy_reject-vcpkg-overlay-triplets" time="0.0408301" status="run">
+	<testcase name="cch_supported_build_policy_reject-vcpkg-overlay-triplets" classname="cch_supported_build_policy_reject-vcpkg-overlay-triplets" time="0.0287714" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_supported_build_policy_reject-vcpkg-chainload-toolchain" classname="cch_supported_build_policy_reject-vcpkg-chainload-toolchain" time="0.0244905" status="run">
+	<testcase name="cch_supported_build_policy_reject-vcpkg-chainload-toolchain" classname="cch_supported_build_policy_reject-vcpkg-chainload-toolchain" time="0.0259307" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue441;spec"/>
 		</properties>
 		<system-out></system-out>
 	</testcase>
-	<testcase name="cch_parity_gate_unit" classname="cch_parity_gate_unit" time="1.066" status="run">
+	<testcase name="cch_parity_gate_unit" classname="cch_parity_gate_unit" time="0.603494" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;issue448;issue449;issue470;issue480;parity-gate;spec"/>
 		</properties>
 		<system-out>.........................................................................................................................
 ----------------------------------------------------------------------
-Ran 121 tests in 0.763s
+Ran 121 tests in 0.457s
 
 OK
 </system-out>
 	</testcase>
-	<testcase name="cch_includes_are_resolved_and_checked_with_role_ownership" classname="cch_includes_are_resolved_and_checked_with_role_ownership" time="0.285312" status="run">
+	<testcase name="cch_includes_are_resolved_and_checked_with_role_ownership" classname="cch_includes_are_resolved_and_checked_with_role_ownership" time="0.206089" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;issue658;parity-gate;spec"/>
 		</properties>
 		<system-out>......
 ----------------------------------------------------------------------
-Ran 6 tests in 0.027s
+Ran 6 tests in 0.019s
 
 OK
 </system-out>
 	</testcase>
-	<testcase name="cch_warning_gate_unit" classname="cch_warning_gate_unit" time="0.340921" status="run">
+	<testcase name="cch_warning_gate_unit" classname="cch_warning_gate_unit" time="0.233798" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;issue499;parity-gate;spec"/>
 		</properties>
 		<system-out>.....
 ----------------------------------------------------------------------
-Ran 5 tests in 0.023s
+Ran 5 tests in 0.013s
 
 OK
 </system-out>
 	</testcase>
-	<testcase name="cch_parity_gate_fixture" classname="cch_parity_gate_fixture" time="16.6696" status="run">
+	<testcase name="cch_parity_gate_fixture" classname="cch_parity_gate_fixture" time="8.42261" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;issue448;issue449;issue470;issue480;parity-gate;spec"/>
 		</properties>
 		<system-out>-- Found Python3: /usr/bin/python3.14 (found suitable version "3.14.9", minimum required is "3.12") found components: Interpreter
 </system-out>
 	</testcase>
-	<testcase name="cch_parity_gate_production_build" classname="cch_parity_gate_production_build" time="5.10803" status="run">
+	<testcase name="cch_parity_gate_production_build" classname="cch_parity_gate_production_build" time="2.55368" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;issue470;issue480;parity-gate;spec"/>
 		</properties>
@@ -291,24 +291,24 @@ OK
 -- Parity Architecture Gate (build phase): PASS (see /home/lansy/.herdr/worktrees/cpp-coding-harness/1191/build/parity-build-gate.json)
 </system-out>
 	</testcase>
-	<testcase name="cch_parity_gate_evidence_atomicity" classname="cch_parity_gate_evidence_atomicity" time="15.6292" status="run">
+	<testcase name="cch_parity_gate_evidence_atomicity" classname="cch_parity_gate_evidence_atomicity" time="7.71811" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;issue734;parity-gate;spec"/>
 		</properties>
-		<system-out>gate evidence atomicity: round 0: 4 writers, 50 complete reads, 0 torn reads, 1584 absent
-gate evidence atomicity: round 1: 4 writers, 120 complete reads, 0 torn reads, 0 absent
-gate evidence atomicity: round 2: 4 writers, 116 complete reads, 0 torn reads, 0 absent
+		<system-out>gate evidence atomicity: round 0: 4 writers, 39 complete reads, 0 torn reads, 861 absent
+gate evidence atomicity: round 1: 4 writers, 128 complete reads, 0 torn reads, 0 absent
+gate evidence atomicity: round 2: 4 writers, 134 complete reads, 0 torn reads, 0 absent
 gate evidence atomicity: PASS (no reader observed a partially written document)
 </system-out>
 	</testcase>
-	<testcase name="cch_owner_interface_standalone" classname="cch_owner_interface_standalone" time="64.263" status="run">
+	<testcase name="cch_owner_interface_standalone" classname="cch_owner_interface_standalone" time="50.3278" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;issue469;parity-gate;spec"/>
 		</properties>
 		<system-out>140 Owner Interface headers compile standalone
 </system-out>
 	</testcase>
-	<testcase name="cch_warning_gate" classname="cch_warning_gate" time="706.461" status="run">
+	<testcase name="cch_warning_gate" classname="cch_warning_gate" time="227.038" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue492;spec"/>
 		</properties>
@@ -316,20 +316,20 @@ gate evidence atomicity: PASS (no reader observed a partially written document)
 warning gate: PASS (zero compiler warnings in the project graph)
 </system-out>
 	</testcase>
-	<testcase name="cch_architecture_compiler_budget_registration" classname="cch_architecture_compiler_budget_registration" time="0.816922" status="run">
+	<testcase name="cch_architecture_compiler_budget_registration" classname="cch_architecture_compiler_budget_registration" time="0.414171" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;build;issue1044;spec"/>
 		</properties>
 		<system-out>compiler budget registration: PASS (host cores 8; both gates --jobs 4, PROCESSORS 4)
 </system-out>
 	</testcase>
-	<testcase name="cch_pike_tui_helper_kill_identity" classname="cch_pike_tui_helper_kill_identity" time="0.398948" status="run">
+	<testcase name="cch_pike_tui_helper_kill_identity" classname="cch_pike_tui_helper_kill_identity" time="0.267709" status="run">
 		<properties>
 			<property name="cmake_labels" value="architecture;harness;issue1044;spec"/>
 		</properties>
 		<system-out>...
 ----------------------------------------------------------------------
-Ran 3 tests in 0.052s
+Ran 3 tests in 0.042s
 
 OK
 </system-out>
