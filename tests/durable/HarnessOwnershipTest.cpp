@@ -17,6 +17,7 @@
 #include <cch/durable/Storage.hpp>
 #include <cch/durable/Task.hpp>
 #include "durable/FrozenExpectation.hpp"
+#include "durable/Gate.hpp"
 #include "durable/Outcome.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -102,34 +103,6 @@ void check_handler_log(const std::vector<std::string>& actual, const std::vector
 /// One gate the test thread releases; a phase races it against the invocation
 /// stop token so an abort mark ends the run phase (frozen pi
 /// `untilAborted(runtime.signal)` raced with a release).
-struct Gate {
-    // `condition_variable_any` carries the stop-token wait overloads.
-    std::mutex mutex;
-    std::condition_variable_any cv;
-    bool open{false};
-
-    void release() {
-        {
-            std::lock_guard lock(mutex);
-            open = true;
-        }
-        cv.notify_all();
-    }
-
-    /// Returns true when released, false when the invocation was stopped.
-    [[nodiscard]] bool wait(const std::stop_token& token) {
-        std::unique_lock lock(mutex);
-        return cv.wait(lock, token, [this] { return open; });
-    }
-
-    /// Bounded variant for waits that have no stop token: a failed assertion
-    /// before the release must not hang the teardown join (§11.10).
-    [[nodiscard]] bool wait_for(std::chrono::seconds budget) {
-        std::unique_lock lock(mutex);
-        return cv.wait_for(lock, budget, [this] { return open; });
-    }
-};
-
 /// Park the current phase until the invocation is stopped. Mirrors the frozen
 /// `await untilAborted(runtime.signal)` phases that never complete normally.
 void park_until_stopped(const std::stop_token& token) {

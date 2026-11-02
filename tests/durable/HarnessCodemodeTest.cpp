@@ -645,7 +645,7 @@ TEST_CASE("Durable codemode catches a nested failure and retains its error row",
     const auto& calls = result.at("details").at("calls").get_array();
     REQUIRE(calls.size() == 2);
     CHECK(calls.at(0).at("status").get_string() == "error");
-    CHECK(calls.at(0).at("error").get_string() == "nested boom");
+    CHECK(calls.at(0).at("error").get_string() == "<harness>\n[error] nested boom\n</harness>");
     CHECK(calls.at(1).at("status").get_string() == "ok");
     REQUIRE(consume(harness->close()).has_value());
 }

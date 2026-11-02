@@ -206,7 +206,8 @@ TEST_CASE("Harness coding tools use the injected environment for file writes", "
         REQUIRE(result != entries->end());
         auto model = entry_model(*result).to_support();
         CHECK(model.at("isError").get_boolean());
-        CHECK(model.at("content").get_array().at(0).at("text").get_string() == "injected write failure");
+        CHECK(model.at("content").get_array().at(0).at("text").get_string() ==
+                "<harness>\n[error] injected write failure\n</harness>");
     } else {
         CHECK(workspace.read("notes.txt") == "omega\n");
         auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1056/environment.json",
@@ -1366,7 +1367,9 @@ TEST_CASE("Harness runs an admitted prompt through a real injected tool and sett
     CHECK(json_equals(transcript(*entries), *expected->member("entries")));
     CHECK(settled.value().entry == entries->front().id);
     CHECK(settled.value().answer == entries->back().id);
-    CHECK(entries->at(3).data.as_object()->contains("byTaskId"));
+    // The call's own tool task produced the result entry, so the entry record
+    // names it (frozen pi `EntryRecord.byTaskId`).
+    REQUIRE(entries->at(3).by_task_id.has_value());
     const auto duration = entries->at(3).data.to_support().at("model").get_array().at(0).at("durationMs");
     CHECK(duration.holds<double>());
     CHECK(duration.get_number() >= 0);
@@ -2261,9 +2264,11 @@ TEST_CASE("Workflow entries persist model messages and byTaskId through JSONL an
         std::ranges::reverse(*entries);
         REQUIRE(entries->size() == 5);
         // pi.user carries the user model message; pi.tool-result carries the
-        // tool result and the owning task id, exactly as frozen pi persists them.
+        // tool result and names the tool task that produced it, exactly as
+        // frozen pi persists them (frozen pi `EntryRecord.byTaskId`).
         CHECK(entries->front().data.as_object()->at("model").as_array()->size() == 1);
-        CHECK(entries->at(3).data.as_object()->contains("byTaskId"));
+        REQUIRE(entries->at(3).kind == "pi.tool-result");
+        CHECK(entries->at(3).by_task_id.has_value());
         REQUIRE(consume(harness->close()).has_value());
         REQUIRE(storage->close().has_value());
 
@@ -2284,7 +2289,7 @@ TEST_CASE("Workflow entries persist model messages and byTaskId through JSONL an
         std::ranges::reverse(*restored);
         REQUIRE(restored->size() == 5);
         CHECK(restored->front().data.as_object()->at("model").as_array()->size() == 1);
-        CHECK(restored->at(3).data.as_object()->contains("byTaskId"));
+        REQUIRE(restored->at(3).kind == "pi.tool-result");
         CHECK(restored->at(3).by_task_id.has_value());
         CHECK(restored->at(3).model.size() == 1);
         const auto* final_model = restored->back().data.as_object()->at("model").as_array()->front().as_object();

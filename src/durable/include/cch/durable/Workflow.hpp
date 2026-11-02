@@ -27,6 +27,9 @@ using ToolExecuteHook = std::move_only_function<support::AsyncResult<std::vector
 
 /// Durable execution context (frozen pi `ToolExecutionApi`). The Harness and
 /// request snapshot keep every borrowed capability alive until execution returns.
+/// What one tool execution gets of its call's durable context. The context is
+/// valid only until the tool's `execute`/`execute_durable` returns; a tool must
+/// not retain it or its callbacks.
 struct ToolExecutionContext {
     TaskRuntime* runtime{nullptr}; // Harness keeps it alive until execution returns
     /// Completed results commit on the Session line even after the task's stop
@@ -42,6 +45,15 @@ struct ToolExecutionContext {
     std::vector<std::string> replay_safe_tools{};
     /// Executes through the same tool hooks as a model-issued call.
     std::move_only_function<support::Expected<ai::ToolResultMessage>(ai::ToolCallContent)> execute_tool{};
+    /// Report running output for this call (frozen `ToolExecutionApi.output`).
+    /// The report commits to the call's live slot on the Session line, so the
+    /// committed view and the agent event stream observe it; a report after the
+    /// call ended is dropped. A rejected report never fails the tool.
+    std::move_only_function<void(std::string_view)> report_output{};
+    /// Replace this call's reported details (frozen
+    /// `ToolExecutionApi.details`). Same commit and failure isolation as
+    /// `report_output`.
+    std::move_only_function<void(chord::Json)> report_details{};
 };
 
 using DurableToolExecuteHook =

@@ -113,29 +113,30 @@ private:
     /// `createCompaction`); blocking (owned by the generation) or background.
     [[nodiscard]] support::Expected<TaskId> create_compaction(
             Transaction& tx, const TaskRecord& task, std::string_view reason, bool background) const;
-    /// Execute one model-issued call inside the generation invocation: run
-    /// the built-in `pi.tool` `beforeTool` hooks, execute with the arguments
-    /// they leave, then let `afterTool` replace the result before it is
-    /// committed (frozen pi `ToolTask.call`).
-    [[nodiscard]] support::Expected<ai::ToolResultMessage> execute_tool(const ai::ToolCallContent& call,
-            const Registry::Snapshot& snapshot,
+    /// Append a tool-calling answer and start its round: one `pi.tool` task
+    /// per offered call, owned by the generation, and the round's live slots
+    /// (frozen pi generation `startToolRound`). A call the request did not
+    /// offer settles here with its error result and a done slot. The
+    /// generation then waits for the round's tasks.
+    [[nodiscard]] support::ExpectedVoid start_tool_round(const TaskRecord& task,
             TaskRuntime& runtime,
-            bool require_offered = true);
-    [[nodiscard]] support::Expected<bool> execute_tool_round(const TaskRecord& task,
             const Registry::Snapshot& snapshot,
+            const ai::AssistantMessage& response);
+    /// Resume a recovered round: mint the missing `pi.tool` tasks of the
+    /// committed unanswered replay-safe calls, or report that none is pending.
+    [[nodiscard]] support::Expected<bool> recover_tool_round(const TaskRecord& task,
             TaskRuntime& runtime,
-            std::vector<ai::MessageVariant>& messages,
-            bool recovery = false);
+            const Registry::Snapshot& snapshot,
+            const std::vector<ai::MessageVariant>& messages);
+    /// Apply the round's controls, the postTools boundary and the handover to a
+    /// successor generation (frozen pi generation `finishToolRound`).
+    [[nodiscard]] support::ExpectedVoid finish_tool_round(const TaskRecord& task, TaskRuntime& runtime);
     /// Both halves of the built-in generation definition, dispatched by the
     /// checkpoint's `phase` (frozen pi generation `prepare`/`request`).
     [[nodiscard]] support::AsyncResult<void> dispatch(const TaskRecord& task, TaskRuntime& runtime);
     /// The abort handler of the built-in generation definition: settle the
     /// run's inputs `unanswered/aborted` (frozen pi generation `abort`).
     [[nodiscard]] support::AsyncResult<void> abort_run(const TaskRecord& task, TaskRuntime& runtime);
-    /// The postTools point of the run loop: place queued writes and selected
-    /// steers, joining them to the run (frozen `finishToolRound`). Returns
-    /// true when a queued reset ended the run at this boundary.
-    [[nodiscard]] support::AsyncResult<bool> apply_post_tools_boundary(const TaskRecord& task, TaskRuntime& runtime);
     /// Run the first `onYield` decision of one final answer and return the
     /// continuation content it asked for (frozen pi `GenerationTask.onYield`).
     /// Ordinary hook errors stay isolated through `report`.
@@ -195,6 +196,37 @@ private:
 /// The built-in `pi.live:v1` conversation document definition (frozen pi
 /// `LiveDoc`).
 [[nodiscard]] DocumentDefinition live_document();
+
+// ── Live tool slots (frozen pi `LiveDoc.tools`) ────────────────────────────
+// One slot per model-issued call of the current round, in call order, so a
+// committed view and the agent event stream see the same presentation the
+// frozen Harness publishes. Writes are staged in the caller's transaction.
+
+/// Mark a tool task's slot running with its resolved call (frozen pi
+/// `ToolTask.call`). A task without a listed slot is ignored.
+[[nodiscard]] support::ExpectedVoid start_tool_slot(
+        Transaction& tx, const TaskRecord& task, const chord::Json& arguments);
+
+/// Finish a tool task's slot: status `done`, the result entry when the task
+/// committed one, and no retained running progress (frozen pi `finishSlot`).
+[[nodiscard]] support::ExpectedVoid finish_tool_slot(
+        Transaction& tx, TaskId task, ConversationId conversation_id, std::optional<EntryId> entry);
+
+/// Append one reported output chunk to a running slot (frozen pi
+/// `ToolExecutionApi.output`).
+[[nodiscard]] support::ExpectedVoid append_tool_slot_output(
+        Transaction& tx, TaskId task, ConversationId conversation_id, std::string_view chunk);
+
+/// Replace a running slot's reported details (frozen pi
+/// `ToolExecutionApi.details`).
+[[nodiscard]] support::ExpectedVoid set_tool_slot_details(
+        Transaction& tx, TaskId task, ConversationId conversation_id, chord::Json details);
+
+/// The output a running slot retained, when it has one. Reading it in the same
+/// transaction that settles an interrupted call keeps the reported output in
+/// the aborted result (frozen pi `ToolTask.abort` -> `fromSlot`).
+[[nodiscard]] support::Expected<std::optional<std::string>> tool_slot_output(
+        Transaction& tx, TaskId task, ConversationId conversation_id);
 
 /// Withdraw every queued input of the conversation: each settles
 /// `unanswered/aborted` and leaves the inbox; queued writes stay for later

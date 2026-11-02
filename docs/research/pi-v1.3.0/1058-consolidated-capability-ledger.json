@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
+            "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -263,7 +263,7 @@
             "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml"
           ],
           "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
-          "recordedAt": "2026-11-02T04:09:23Z",
+          "recordedAt": "2026-11-02T04:10:28Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
@@ -452,6 +452,13 @@
             }
           }
         },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
+        },
         "revalidation1115": {
           "reason": "#1115 publishes the consumable settings schema surface, aligns the settings load and compaction-token diagnostic text with pi's failure text, keeps unknown keybinding ids in the migrated user map, and states the theme token set against a new frozen capture. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
           "changedInputs": [
@@ -496,14 +503,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
+            "docs/research/pi-v1.3.0/deliveries/1173-revalidation-1090-1104.xml"
           ],
-          "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
-          "recordedAt": "2026-11-01T22:03:38Z",
+          "testedRevision": "23f9dd8f7ae7f9d54eecfbc4377e9c6e17bda029",
+          "recordedAt": "2026-11-02T01:40:49Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
-            "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1173-revalidation-1090-1104.xml",
+            "sha256": "b4596d7bf0c1a98b11e50ad0cee2d342319442d4cba62caf0eebfcff2394b8d8"
           }
         },
         "inputs": [
@@ -513,7 +520,7 @@
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "f4fe03f5d75d5be2e84d2af7191950166180ee83f8ba8bc37811b26565539bac"
+            "sha256": "f6840104c20daa76cc8b46d43f7b8c7290d0855941aab09a0a6096da903d5b23"
           },
           {
             "path": "docs/agents/architecture.md",
@@ -549,7 +556,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -849,6 +856,19 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "src/durable/CodingTools.cpp"
           ]
+        },
+        "revalidation1173": {
+          "reason": "#1173 delivers the durable public agent event stream: it adds the `Harness::watch_events` seam, the live tool-slot presentation and the generation tool-round hand-over in the durable sources, the architecture-neutral durable test-shard entry and the audit-1173 frozen-evidence family. That changes a pinned shared input (`cmake/tests/DurableTests.cmake`); the delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them. The exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
+          "changedInputs": [
+            "cmake/tests/DurableTests.cmake"
+          ]
+        },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -993,7 +1013,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1084,7 +1104,7 @@
             "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml"
           ],
           "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
-          "recordedAt": "2026-11-02T04:09:23Z",
+          "recordedAt": "2026-11-02T04:10:28Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
@@ -1316,6 +1336,13 @@
               "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
             }
           }
+        },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         },
         "revalidation1115": {
           "reason": "#1115 publishes the consumable settings schema surface, aligns the settings load and compaction-token diagnostic text with pi's failure text, keeps unknown keybinding ids in the migrated user map, and states the theme token set against a new frozen capture. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
@@ -1601,11 +1628,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
+            "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1632,7 +1659,7 @@
             "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1118.xml"
           ],
           "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
-          "recordedAt": "2026-11-02T04:09:23Z",
+          "recordedAt": "2026-11-02T04:10:28Z",
           "selected": 19,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1118.xml",
@@ -1922,6 +1949,13 @@
               "sha256": "8bf5e618ccbfaa5bb87777f8f43525577ff1fab146cd04bc9bbd1a0d21655343"
             }
           }
+        },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         },
         "revalidation1115": {
           "reason": "#1115 publishes the consumable settings schema surface, aligns the settings load and compaction-token diagnostic text with pi's failure text, keeps unknown keybinding ids in the migrated user map, and states the theme token set against a new frozen capture. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
@@ -3034,7 +3068,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7af14cca393f3125a6bd817b98625e117967708efdc79d0879f895e87411b6f9"
+            "sha256": "d4e5513e162fe2c3abf25244ebc7e4427a77857555736baec1507729cc574728"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3042,7 +3076,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "2f969c365a6ef3d9c02297bcd9da59175470a75acc4d59905b70b813eeeaf7c3"
+            "sha256": "ee70e96ea0c828608ebbbfac38d3f65a68e73c149faf8d030df396181f946f5d"
           }
         ],
         "validation": {
@@ -3057,7 +3091,7 @@
             "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1181.xml"
           ],
           "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
-          "recordedAt": "2026-11-02T04:09:23Z",
+          "recordedAt": "2026-11-02T04:10:28Z",
           "selected": 16,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1181.xml",
@@ -3316,6 +3350,13 @@
               "sha256": "235e56241e1b0e10ccf6b6657a27452a22a81ff75af4ef54afda337e5ce47ae3"
             }
           }
+        },
+        "revalidation1173m": {
+          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         },
         "revalidation1115": {
           "reason": "#1115 publishes the consumable settings schema surface, aligns the settings load and compaction-token diagnostic text with pi's failure text, keeps unknown keybinding ids in the migrated user map, and states the theme token set against a new frozen capture. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
@@ -3683,7 +3724,7 @@
     ],
     "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 594,
+      "scenarios": 607,
       "scenarioNamed": 362,
       "artifactCovered": 56,
       "orphaned": [
@@ -3862,7 +3903,20 @@
         "audit-1159/edit-tool.json:an edit that reproduces the original text fails with the frozen no-change message",
         "audit-1159/edit-tool.json:an empty old text fails with the frozen empty-target message",
         "audit-1159/edit-tool.json:two edits that target overlapping text fail with the frozen overlap message",
-        "audit-1159/edit-tool.json:an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message"
+        "audit-1159/edit-tool.json:an old text that appears twice in a multi-edit call fails with the frozen indexed uniqueness message",
+        "audit-1173/event-stream.json:a model/tool round reports message, tool, usage and settlement lifecycle in committed order",
+        "audit-1173/event-stream.json:a tool held by a gate keeps its slot running and a later subscriber sees committed state only",
+        "audit-1173/event-stream.json:a tool held at completing by live owned work keeps its turn open until that work settles",
+        "audit-1173/event-stream.json:cancelling a run during its tool settles the input unanswered and ends the tool with a result",
+        "audit-1173/event-stream.json:a retryable provider error reports retry start and end around the recovered answer",
+        "audit-1173/event-stream.json:a terminal provider error settles the input unanswered and ends the turn without a remaining task",
+        "audit-1173/event-stream.json:a tool that throws settles an error result on the stream and the round continues",
+        "audit-1173/event-stream.json:stopping a started stream ends its deliveries and leaves persistent work running",
+        "audit-1173/event-stream.json:an unstarted stream buffers committed batches and replays them when it starts",
+        "audit-1173/event-stream.json:more than one hundred undelivered batches collapse into one snapshot replacement",
+        "audit-1173/event-stream.json:closing the Harness ends a live event stream with session_closed",
+        "audit-1173/event-stream.json:a listener failure ends its stream and leaves the run and other subscribers running",
+        "audit-1173/event-stream.json:an aborted attachment context cancels its stream and never the run"
       ],
       "uncovered": []
     }
@@ -7815,6 +7869,136 @@
         "cch_durable:builtin-tools"
       ],
       "disposition": "Compared through the public Harness in tests/durable/EditToolTest.cpp and described by docs/research/pi-v1.3.0/1159-edit-tool-details.md; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a model/tool round reports message, tool, usage and settlement lifecycle in committed order",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool held by a gate keeps its slot running and a later subscriber sees committed state only",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool held at completing by live owned work keeps its turn open until that work settles",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "cancelling a run during its tool settles the input unanswered and ends the tool with a result",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a retryable provider error reports retry start and end around the recovered answer",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a terminal provider error settles the input unanswered and ends the turn without a remaining task",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a tool that throws settles an error result on the stream and the round continues",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "stopping a started stream ends its deliveries and leaves persistent work running",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "an unstarted stream buffers committed batches and replays them when it starts",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "more than one hundred undelivered batches collapse into one snapshot replacement",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "closing the Harness ends a live event stream with session_closed",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "a listener failure ends its stream and leaves the run and other subscribers running",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
+    },
+    {
+      "family": "audit-1173",
+      "artifact": "event-stream.json",
+      "scenario": "an aborted attachment context cancels its stream and never the run",
+      "reason": "Captured by #1173 through the public Harness; the consolidate row routes no audit lanes here before #1180.",
+      "rows": [
+        "cch_durable:event-stream"
+      ],
+      "disposition": "#1173 compares these scenarios on its branch; #1180 owns the whole-row receipt."
     }
   ],
   "correctionsIndex": [

@@ -24,6 +24,7 @@
 #include <condition_variable>
 #include <format>
 #include <limits>
+#include <map>
 #include <mutex>
 #include <set>
 #include <type_traits>
@@ -1271,6 +1272,9 @@ support::Expected<TaskDefinition> WorkflowRuntime::build_definition() {
     builder.phase("prepare", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
     builder.phase("request", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
     builder.phase("retry", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
+    // A tool round resumes here once its tool tasks are terminal (frozen pi
+    // generation `tools`).
+    builder.phase("tools", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
     // The generation's hook surface (frozen pi `GenerationHooks`): a final
     // answer may ask for one continuation that keeps the admitted run.
     builder.hook("onYield");
@@ -1688,80 +1692,6 @@ support::AsyncResult<void> WorkflowRuntime::abort_run(const TaskRecord& task, Ta
     });
 }
 
-support::AsyncResult<bool> WorkflowRuntime::apply_post_tools_boundary(const TaskRecord& task, TaskRuntime& runtime) {
-    auto ended = std::make_shared<bool>(false);
-    auto committed = runtime.commit([task, ended, this](Transaction& tx,
-                                            const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-        const DocumentAddress address{.conversation_id = task.conversation_id};
-        auto inbox = tx.doc(inbox_document(), address);
-        if (!inbox) {
-            return std::unexpected(inbox.error());
-        }
-        auto items = read_inbox_items(*inbox);
-        if (!items) {
-            return std::unexpected(items.error());
-        }
-        auto boundary = prepare_boundary(tx, task.conversation_id, std::move(*inbox), std::move(*items));
-        if (!boundary) {
-            return std::unexpected(boundary.error());
-        }
-        auto live = tx.doc(live_document(), address);
-        if (!live) {
-            return std::unexpected(live.error());
-        }
-        auto applied = apply_boundary(tx, *boundary, BoundaryPoint::PostTools, now());
-        if (!applied) {
-            return std::unexpected(applied.error());
-        }
-        if (applied->reset) {
-            // The queued reset cut the run's context before an answer; the
-            // selected user entries begin the replacement run's context.
-            replay_[task.conversation_id.value].messages.clear();
-            for (const EntryRecord& entry : applied->user_entries) {
-                auto user = input_user(entry);
-                if (!user) return std::unexpected(user.error());
-                replay_[task.conversation_id.value].messages.push_back(std::move(*user));
-            }
-            auto ended_run = end_run(
-                    tx, *live, task.id, SubmissionSettlement{.status = "unanswered", .reason = std::string{"reset"}});
-            if (!ended_run) {
-                return std::unexpected(ended_run.error());
-            }
-            if (!applied->users.empty()) {
-                auto started = start_run(tx, task.conversation_id, *live, applied->users, *generation_);
-                if (!started) {
-                    return std::unexpected(started.error());
-                }
-            }
-            *ended = true;
-            return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{.status = "completed"})};
-        }
-        // The placed users join this run and seed its next request.
-        for (const EntryRecord& entry : applied->user_entries) {
-            auto user = input_user(entry);
-            if (!user) return std::unexpected(user.error());
-            replay_[task.conversation_id.value].messages.push_back(std::move(*user));
-        }
-        auto joined = join_run_inputs(*live, task.id, applied->users);
-        if (!joined) {
-            return std::unexpected(joined.error());
-        }
-        return std::optional<NextTaskState>{};
-    });
-    return support::AsyncResult<bool>{support::AsyncProducer<bool, support::Error>{
-            [committed = std::move(committed), ended](
-                    support::AsyncCompletion<bool, support::Error> done) mutable noexcept {
-                std::move(committed).start(
-                        [ended, done = std::move(done)](support::ExpectedVoid result) mutable noexcept {
-                            if (!result) {
-                                done(std::unexpected(result.error()));
-                                return;
-                            }
-                            done(*ended);
-                        });
-            }}};
-}
-
 support::AsyncResult<void> WorkflowRuntime::dispatch(const TaskRecord& task, TaskRuntime& runtime) {
     const Json* checkpoint = task.state.checkpoint ? &*task.state.checkpoint : nullptr;
     const std::string_view phase = [checkpoint]() -> std::string_view {
@@ -1779,6 +1709,11 @@ support::AsyncResult<void> WorkflowRuntime::dispatch(const TaskRecord& task, Tas
     if (phase == "request") {
         auto requested = request(task, runtime);
         if (!requested) return support::AsyncResult<void>{std::unexpected(requested.error())};
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    }
+    if (phase == "tools") {
+        auto finished = finish_tool_round(task, runtime);
+        if (!finished) return support::AsyncResult<void>{std::unexpected(finished.error())};
         return support::AsyncResult<void>{support::ExpectedVoid{}};
     }
     auto prepared = prepare(task, runtime);
@@ -2189,181 +2124,435 @@ support::Expected<std::optional<Json>> WorkflowRuntime::on_yield(
     return *continuation;
 }
 
-support::Expected<ai::ToolResultMessage> WorkflowRuntime::execute_tool(const ai::ToolCallContent& call,
-        const Registry::Snapshot& snapshot,
-        TaskRuntime& runtime,
-        bool require_offered) {
-    ai::ToolResultMessage result{.tool_call_id = call.id, .tool_name = call.name, .timestamp = now()};
-    auto model_tools = load_model_tools(runtime.conversation_id());
-    if (!model_tools) return std::unexpected(model_tools.error());
-    const auto offered = offered_tool_declarations(snapshot, *model_tools);
-    auto found = std::ranges::find_if(snapshot.tools, [&call](const auto& tool) { return tool->declaration.name == call.name; });
-    const bool is_offered = std::ranges::find(offered, call.name, &ai::Tool::name) != offered.end();
-    if (found == snapshot.tools.end() || (require_offered && !is_offered)) {
-        // A call to a tool the request did not offer settles before the tool
-        // task, with no hook and no duration (frozen pi `startToolRound`).
-        result.is_error = true;
-        result.content = harness_error_content(std::format("Tool {} is not available", call.name));
-        return result;
-    }
-    if (!call.arguments_valid || !call.arguments) {
-        result.is_error = true;
-        result.content = harness_error_content("Invalid tool arguments");
-        return result;
-    }
-    // The call as tool hooks see it keeps the model's arguments; a `beforeTool`
-    // rewrite changes what executes, never the call the later hooks read
-    // (frozen pi `ToolTask` reads the call, the intent carries the rewrite).
-    Json arguments = *Json::from_support(*call.arguments);
-    const Json original = tool_call_json(call, arguments);
-    // beforeTool: the first block wins, every `arguments` decision replaces
-    // the call's arguments, and a throwing handler blocks the call (frozen pi
-    // `ToolTask.call`). A blocked call never executes and skips afterTool.
-    std::optional<std::string> block;
-    for (const auto& hook_reg : snapshot.hooks) {
-        if (block.has_value()) break;
-        if (!hook_reg || std::string_view{hook_reg->task} != kToolTaskKind) continue;
-        const auto handler = hook_reg->handlers.find("beforeTool");
-        if (handler == hook_reg->handlers.end() || !handler->second) continue;
-        if (runtime.stop_token().stop_requested()) {
-            return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Task invocation was aborted"));
-        }
-        auto decided = await_result(handler->second(tool_call_json(call, arguments), runtime));
-        if (!decided) {
-            // A throw blocks with its message; cancellation is not a block
-            // (frozen pi `ToolTask.call`).
-            if (runtime.stop_token().stop_requested()) return std::unexpected(decided.error());
-            block = decided.error().message;
-            continue;
-        }
-        if (const Json* reason = member(*decided, "block"); reason != nullptr && reason->as_string() != nullptr) {
-            block = *reason->as_string();
-        } else if (const Json* rewritten = member(*decided, "arguments");
-                rewritten != nullptr && rewritten->as_object() != nullptr) {
-            arguments = *rewritten;
-        }
-    }
-    if (block.has_value()) {
-        result.is_error = true;
-        result.content = harness_error_content(std::format("Tool call blocked: {}", *block));
-        return result;
-    }
-    const auto started = std::chrono::steady_clock::now();
-    if ((*found)->execute_durable) {
-        ToolExecutionContext context{.runtime = &runtime, .session = &session_, .call_id = call.id};
-        for (const auto& tool : offered)
-            context.offered_tools.push_back(tool.name);
-        for (const auto& tool : snapshot.tools) {
-            if (tool->declaration.name != call.name) context.tools.push_back(tool->declaration);
-            if (tool->deferred) context.deferred_tools.push_back(tool->declaration.name);
-            if (tool->replay_safe) context.replay_safe_tools.push_back(tool->declaration.name);
-        }
-        // execute_durable returns before this request snapshot and runtime leave
-        // scope; nested calls can reach deferred tools through the same hooks
-        // and cancellation without requiring a model-visible declaration.
-        context.execute_tool = [this, &snapshot, &runtime](ai::ToolCallContent nested) {
-            return execute_tool(nested, snapshot, runtime, false);
-        };
-        auto output = (*found)->execute_durable(arguments.to_support(), std::move(context));
-        if (!output) return std::unexpected(output.error());
-        result.content = std::move(output->content);
-        result.details = std::move(output->details);
-        result.nested_calls = std::move(output->nested_calls);
-        result.is_error = output->is_error;
-    } else {
-        auto output = await_result((*found)->execute(arguments.to_support(), runtime.stop_token()));
-        if (!output && output.error().code == support::ErrorCode::Cancelled && runtime.stop_token().stop_requested())
-            return std::unexpected(output.error());
-        result.is_error = !output.has_value();
-        result.content =
-                output ? std::move(*output) : std::vector<ai::Content>{ai::text_content(output.error().message)};
-    }
-    result.duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
-    // afterTool: every replacement becomes the next handler's result and the
-    // committed entry carries the last one (frozen pi `finalResult`); ordinary
-    // handler errors stay isolated.
-    Object final_fields{{"output", content_json(result.content)}, {"isError", result.is_error}};
-    if (result.details) final_fields.emplace("details", *Json::from_support(*result.details));
-    if (result.nested_calls) final_fields.emplace("nestedCalls", *Json::from_support(*result.nested_calls));
-    Json final_result{std::move(final_fields)};
-    auto hooked = await_result(each_kind_hook(snapshot.hooks,
-            kToolTaskKind,
-            "afterTool",
-            runtime,
-            [original, final = &final_result, &runtime](TaskHook& handler) -> support::AsyncResult<void> {
-                auto returned = handler(Json{Object{{"call", original}, {"result", *final}}}, runtime);
-                return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
-                        [returned = std::move(returned), final](
-                                support::AsyncCompletion<void, support::Error> done) mutable noexcept {
-                            std::move(returned).start(
-                                    [final, done = std::move(done)](support::Expected<Json> value) mutable noexcept {
-                                        if (!value) {
-                                            done(std::unexpected(value.error()));
-                                            return;
-                                        }
-                                        if (value->as_object() != nullptr) *final = std::move(*value);
-                                        done(support::ExpectedVoid{});
-                                    });
-                        }}};
-            }));
-    if (!hooked) return std::unexpected(hooked.error());
-    if (const Json* blocks = member(final_result, "output"); blocks != nullptr) {
-        auto decoded = content_from_json(*blocks);
-        if (!decoded) return std::unexpected(decoded.error());
-        result.content = std::move(*decoded);
-    }
-    if (const Json* is_error = member(final_result, "isError");
-            is_error != nullptr && is_error->as_boolean() != nullptr) {
-        result.is_error = *is_error->as_boolean();
-    }
-    result.details = member(final_result, "details") ? std::optional{member(final_result, "details")->to_support()}
-                                                     : std::nullopt;
-    result.nested_calls = member(final_result, "nestedCalls")
-                                  ? std::optional{member(final_result, "nestedCalls")->to_support()}
-                                  : std::nullopt;
-    return result;
+[[nodiscard]] chord::Path child_path(const chord::Path& base, std::string field) {
+    chord::Path path = base;
+    path.push_back(chord::path_key(std::move(field)));
+    return path;
 }
 
-std::vector<std::string> loaded_tool_names(const ai::ToolResultMessage& result) {
-    std::vector<std::string> loaded;
-    if (result.details && result.details->holds<support::JsonValue::object_t>()) {
-        const auto& obj = result.details->get_object();
-        if (const auto it = obj.find("loaded"); it != obj.end() && it->second.holds<support::JsonValue::array_t>()) {
-            for (const auto& item : it->second.get_array()) {
-                if (item.holds<std::string>()) loaded.push_back(item.get_string());
+/// The live tool-slot array of one conversation, when it exists.
+[[nodiscard]] support::Expected<std::optional<chord::Json>> live_tools(chord::Draft& live) {
+    auto tools = live.get(chord::Path{chord::path_key("tools")});
+    if (!tools) return std::unexpected(tools.error());
+    if (!tools->has_value()) return std::optional<chord::Json>{};
+    return std::optional<chord::Json>{std::move(**tools)};
+}
+
+/// The index of tool task `task` in the live tool slots (frozen pi `toolSlot`).
+[[nodiscard]] support::Expected<std::optional<std::size_t>> tool_slot_index(chord::Draft& live, TaskId task) {
+    auto tools = live_tools(live);
+    if (!tools) return std::unexpected(tools.error());
+    if (!tools->has_value()) return std::optional<std::size_t>{};
+    const auto* listed = (*tools)->as_array();
+    if (listed == nullptr) return std::optional<std::size_t>{};
+    for (std::size_t index = 0; index < listed->size(); ++index) {
+        const auto* object = (*listed)[index].as_object();
+        if (object == nullptr) continue;
+        const auto found = object->find("taskId");
+        if (found == object->end() || found->second.as_number() == nullptr) continue;
+        if (static_cast<std::int64_t>(*found->second.as_number()) == task.value) {
+            return std::optional<std::size_t>{index};
+        }
+    }
+    return std::optional<std::size_t>{};
+}
+
+support::ExpectedVoid start_tool_slot(Transaction& tx, const TaskRecord& task, const chord::Json& arguments) {
+    auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+    if (!live) return std::unexpected(live.error());
+    auto index = tool_slot_index(*live, task.id);
+    if (!index) return std::unexpected(index.error());
+    if (!index->has_value()) return {};
+    const chord::Path status_path{chord::path_key("tools"), chord::path_index(**index), chord::path_key("status")};
+    auto status = live->set(status_path, chord::Json(std::string{"running"}));
+    if (!status) return std::unexpected(status.error());
+    // A nested slot shows the arguments it runs with; a model-issued call's
+    // arguments are in its intent checkpoint (frozen pi `ToolTask.call`).
+    if (const auto* nested = member(arguments, "parentCallId"); nested != nullptr) {
+        const chord::Path arguments_path{
+                chord::path_key("tools"), chord::path_index(**index), chord::path_key("arguments")};
+        auto written = live->set(arguments_path, arguments);
+        if (!written) return std::unexpected(written.error());
+    }
+    return {};
+}
+
+support::ExpectedVoid finish_tool_slot(
+        Transaction& tx, TaskId task, ConversationId conversation_id, std::optional<EntryId> entry) {
+    auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = conversation_id});
+    if (!live) return std::unexpected(live.error());
+    auto index = tool_slot_index(*live, task);
+    if (!index) return std::unexpected(index.error());
+    if (!index->has_value()) return {};
+    const chord::Path base{chord::path_key("tools"), chord::path_index(**index)};
+    auto status = live->set(child_path(base, "status"), chord::Json(std::string{"done"}));
+    if (!status) return std::unexpected(status.error());
+    for (const char* field : {"output", "droppedBytes", "droppedLines", "details", "diagnostics"}) {
+        auto erased = live->erase(child_path(base, field));
+        if (!erased) return std::unexpected(erased.error());
+    }
+    auto existing = live->get(child_path(base, "entry"));
+    if (!existing) return std::unexpected(existing.error());
+    if (existing->has_value() != entry.has_value()) {
+        const chord::Path entry_path = child_path(base, "entry");
+        auto written = entry.has_value() ? live->set(entry_path, numeric(entry->value)) : live->erase(entry_path);
+        if (!written) return std::unexpected(written.error());
+    }
+    return {};
+}
+
+support::ExpectedVoid append_tool_slot_output(
+        Transaction& tx, TaskId task, ConversationId conversation_id, std::string_view chunk) {
+    auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = conversation_id});
+    if (!live) return std::unexpected(live.error());
+    auto index = tool_slot_index(*live, task);
+    if (!index) return std::unexpected(index.error());
+    if (!index->has_value()) return {};
+    const chord::Path output_path{chord::path_key("tools"), chord::path_index(**index), chord::path_key("output")};
+    auto existing = live->get(output_path);
+    if (!existing) return std::unexpected(existing.error());
+    if (!existing->has_value() || (*existing)->as_string() == nullptr) {
+        auto created = live->set(output_path, chord::Json(std::string{chunk}));
+        return created.has_value() ? support::ExpectedVoid{} : std::unexpected(created.error());
+    }
+    auto appended = live->append_string(output_path, std::string{chunk});
+    return appended.has_value() ? support::ExpectedVoid{} : std::unexpected(appended.error());
+}
+
+support::Expected<std::optional<std::string>> tool_slot_output(
+        Transaction& tx, TaskId task, ConversationId conversation_id) {
+    auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = conversation_id});
+    if (!live) return std::unexpected(live.error());
+    auto index = tool_slot_index(*live, task);
+    if (!index) return std::unexpected(index.error());
+    if (!index->has_value()) return std::optional<std::string>{};
+    auto output =
+            live->get(chord::Path{chord::path_key("tools"), chord::path_index(**index), chord::path_key("output")});
+    if (!output) return std::unexpected(output.error());
+    if (!output->has_value() || (*output)->as_string() == nullptr) return std::optional<std::string>{};
+    return std::optional<std::string>{*(*output)->as_string()};
+}
+
+support::ExpectedVoid set_tool_slot_details(
+        Transaction& tx, TaskId task, ConversationId conversation_id, chord::Json details) {
+    auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = conversation_id});
+    if (!live) return std::unexpected(live.error());
+    auto index = tool_slot_index(*live, task);
+    if (!index) return std::unexpected(index.error());
+    if (!index->has_value()) return {};
+    const chord::Path details_path{chord::path_key("tools"), chord::path_index(**index), chord::path_key("details")};
+    auto written = live->set(details_path, std::move(details));
+    return written.has_value() ? support::ExpectedVoid{} : std::unexpected(written.error());
+}
+
+/// The tool registration names a request offered (the frozen `offered` set).
+[[nodiscard]] std::vector<std::string> offered_names(const std::vector<ai::Tool>& offered) {
+    std::vector<std::string> names;
+    names.reserve(offered.size());
+    for (const ai::Tool& tool : offered)
+        names.push_back(tool.name);
+    return names;
+}
+
+/// Mint one `pi.tool` task for a model-issued call, owned by its generation
+/// (frozen pi `createToolTask`).
+[[nodiscard]] support::Expected<TaskId> create_model_tool_task(Transaction& tx,
+        const TaskDefinition& definition,
+        const TaskRecord& generation,
+        const EntryId assistant,
+        const ai::ToolCallContent& call,
+        const std::vector<std::string>& offered) {
+    Json::Array offered_names;
+    for (const std::string& name : offered)
+        offered_names.emplace_back(chord::Json(name));
+    Json input{Json::Object{{"kind", Json{std::string{"model"}}},
+            {"assistant", numeric(assistant.value)},
+            {"callId", Json(call.id)},
+            {"offered", Json{std::move(offered_names)}}}};
+    return tx.create_task(definition, std::move(input), TaskOptions{.owner = generation.id});
+}
+
+/// The `addTools` a finished tool task's receipt names (frozen pi
+/// `ToolControl.addTools`, C++ `details.loaded`).
+[[nodiscard]] std::vector<std::string> tool_outcome_added(const TaskRecord& record) {
+    std::vector<std::string> added;
+    if (!record.state.outcome.has_value() || !record.state.outcome->result.has_value()) return added;
+    const Json* listed = member(*record.state.outcome->result, "addTools");
+    if (listed == nullptr || listed->as_array() == nullptr) return added;
+    for (const Json& item : *listed->as_array()) {
+        if (item.as_string() != nullptr) added.push_back(*item.as_string());
+    }
+    return added;
+}
+
+support::ExpectedVoid WorkflowRuntime::start_tool_round(const TaskRecord& task,
+        TaskRuntime& runtime,
+        const Registry::Snapshot& snapshot,
+        const ai::AssistantMessage& response) {
+    auto model_tools = load_model_tools(task.conversation_id);
+    if (!model_tools) return std::unexpected(model_tools.error());
+    const std::vector<ai::Tool> offered = offered_tool_declarations(snapshot, *model_tools);
+    const std::vector<std::string> names = offered_names(offered);
+    const TaskDefinition* definition = runtime.task_definition(kToolTaskKind);
+    if (definition == nullptr) {
+        return std::unexpected(validation("The nested tool task is not registered"));
+    }
+    auto committed =
+            await_result(runtime.commit([this, task, response, definition, names](Transaction& tx,
+                                                const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                if (!live) return std::unexpected(live.error());
+                auto entry = append_assistant(tx, task.conversation_id, response);
+                if (!entry) return std::unexpected(entry.error());
+                // The tool-calling answer clears the generation state in the commit
+                // that records it and publishes the round's slots (frozen pi
+                // generation `startToolRound`).
+                auto cleared = live->erase(live_generation_path());
+                if (!cleared) return std::unexpected(cleared.error());
+                Json::Array slots;
+                std::vector<TaskId> tools;
+                for (const ai::AssistantContent& content : response.content) {
+                    const auto* call = std::get_if<ai::ToolCallContent>(&content);
+                    if (call == nullptr) continue;
+                    if (std::ranges::find(names, call->name) == names.end()) {
+                        // A call to a tool the request did not offer settles before
+                        // any tool task, with no hook and no task (frozen pi
+                        // `startToolRound`).
+                        ai::ToolResultMessage unavailable{.tool_call_id = call->id,
+                                .tool_name = call->name,
+                                .content = harness_error_content(std::format("Tool {} is not available", call->name)),
+                                .is_error = true,
+                                .timestamp = now()};
+                        Json message = tool_result_json(unavailable);
+                        auto appended = tx.append_entry(
+                                task.conversation_id, "pi.tool-result", entry_data(message), std::nullopt, {message});
+                        if (!appended) return std::unexpected(appended.error());
+                        slots.emplace_back(Json{Object{{"callId", Json(call->id)},
+                                {"name", Json(call->name)},
+                                {"status", Json{std::string{"done"}}},
+                                {"entry", numeric(appended->id.value)}}});
+                        continue;
+                    }
+                    auto created = create_model_tool_task(tx, *definition, task, entry->id, *call, names);
+                    if (!created) return std::unexpected(created.error());
+                    slots.emplace_back(Json{Object{{"callId", Json(call->id)},
+                            {"name", Json(call->name)},
+                            {"status", Json{std::string{"pending"}}},
+                            {"taskId", numeric(created->value)}}});
+                    tools.push_back(*created);
+                }
+                auto written = live->set(chord::Path{chord::path_key("tools")}, Json{std::move(slots)});
+                if (!written) return std::unexpected(written.error());
+                Json::Array tool_ids;
+                for (const TaskId id : tools)
+                    tool_ids.emplace_back(numeric(id.value));
+                Json checkpoint{Object{{"phase", Json{std::string{"tools"}}},
+                        {"assistant", numeric(entry->id.value)},
+                        {"tools", Json{std::move(tool_ids)}}}};
+                if (tools.empty()) {
+                    // Every call settled without a task: run the boundary and hand the
+                    // run to a successor immediately.
+                    return std::optional<NextTaskState>{NextTaskState::running(std::move(checkpoint))};
+                }
+                return std::optional<NextTaskState>{
+                        NextTaskState::waiting(std::move(checkpoint), std::move(tools), JoinPolicy::AllSettled)};
+            }));
+    if (!committed) return std::unexpected(committed.error());
+    return {};
+}
+
+/// The assistant entry that issued `call_id`, when it is still visible.
+[[nodiscard]] std::optional<EntryId> assistant_entry_of(
+        Storage& storage, const ConversationId conversation_id, const std::string& call_id) {
+    auto entries = storage.scan_entries(conversation_id, SIZE_MAX);
+    if (!entries) return std::nullopt;
+    for (const EntryRecord& entry : *entries) {
+        if (entry.kind != "pi.assistant" || entry.model.empty()) continue;
+        const Json& message = entry.model.front();
+        if (const Json* content = member(message, "content"); content != nullptr && content->as_array() != nullptr) {
+            for (const Json& block : *content->as_array()) {
+                if (const Json* id = member(block, "id");
+                        id != nullptr && id->as_string() != nullptr && *id->as_string() == call_id) {
+                    const Json* type = member(block, "type");
+                    if (type != nullptr && type->as_string() != nullptr && *type->as_string() == "toolCall") {
+                        return entry.id;
+                    }
+                }
             }
         }
     }
-    return loaded;
+    return std::nullopt;
 }
 
-support::Expected<bool> WorkflowRuntime::execute_tool_round(const TaskRecord& task,
-        const Registry::Snapshot& snapshot,
+support::Expected<bool> WorkflowRuntime::recover_tool_round(const TaskRecord& task,
         TaskRuntime& runtime,
-        std::vector<ai::MessageVariant>& messages,
-        bool recovery) {
-    for (const auto& call : pending_tool_calls(messages, recovery ? &snapshot.tools : nullptr)) {
-        auto result = execute_tool(call, snapshot, runtime);
-        if (!result) return std::unexpected(result.error());
-        auto loaded = loaded_tool_names(*result);
-        auto saved = await_result(runtime.commit(
-                [id = task.conversation_id, tid = task.id, result = *result, loaded = std::move(loaded)](
-                        Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                    if (!loaded.empty()) {
-                        auto added = add_model_tools(tx, id, loaded);
-                        if (!added) return std::unexpected(added.error());
-                    }
-                    auto message = tool_result_json(result);
-                    auto entry = tx.append_entry(
-                            id, "pi.tool-result", entry_data(message, tid), std::nullopt, {message}, tid);
-                    if (!entry) return std::unexpected(entry.error());
-                    return std::nullopt;
-                }));
-        if (!saved) return std::unexpected(validation("Tool result commit failed: " + saved.error().message));
-        messages.push_back(std::move(*result));
+        const Registry::Snapshot& snapshot,
+        const std::vector<ai::MessageVariant>& messages) {
+    const std::vector<ai::ToolCallContent> pending = pending_tool_calls(messages, &snapshot.tools);
+    if (pending.empty()) return false;
+    auto model_tools = load_model_tools(task.conversation_id);
+    if (!model_tools) return std::unexpected(model_tools.error());
+    const std::vector<std::string> names = offered_names(offered_tool_declarations(snapshot, *model_tools));
+    const TaskDefinition* definition = runtime.task_definition(kToolTaskKind);
+    if (definition == nullptr) return std::unexpected(validation("The nested tool task is not registered"));
+
+    // Reuse a live task for a call that already has one; a terminal task never
+    // covers a missing result.
+    std::map<std::string, TaskId> existing;
+    auto tasks = storage_.scan_tasks(SIZE_MAX);
+    if (!tasks) return std::unexpected(tasks.error());
+    for (const TaskRecord& record : *tasks) {
+        if (record.kind != kToolTaskKind || record.state.status == "terminal") continue;
+        if (const Json* kind = member(record.input, "kind");
+                kind == nullptr || kind->as_string() == nullptr || *kind->as_string() != "model") {
+            continue;
+        }
+        if (const Json* call_id = member(record.input, "callId");
+                call_id != nullptr && call_id->as_string() != nullptr) {
+            existing.emplace(*call_id->as_string(), record.id);
+        }
     }
-    if (runtime.stop_token().stop_requested()) return false;
-    return await_result(apply_post_tools_boundary(task, runtime));
+
+    struct Plan {
+        std::vector<TaskId> tools;
+        bool created{false};
+    };
+    auto plan = std::make_shared<Plan>();
+    auto committed =
+            await_result(runtime.commit([this, task, definition, names, pending, existing, plan](Transaction& tx,
+                                                const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                if (!live) return std::unexpected(live.error());
+                Json::Array slots;
+                std::vector<TaskId> tools;
+                std::optional<std::int64_t> assistant_id;
+                for (const ai::ToolCallContent& call : pending) {
+                    if (std::ranges::find(names, call.name) == names.end()) continue;
+                    TaskId id{};
+                    if (const auto found = existing.find(call.id); found != existing.end()) {
+                        id = found->second;
+                    } else {
+                        if (!assistant_id.has_value()) {
+                            const auto entry = assistant_entry_of(storage_, task.conversation_id, call.id);
+                            if (!entry.has_value()) continue;
+                            assistant_id = entry->value;
+                        }
+                        auto created = create_model_tool_task(
+                                tx, *definition, task, EntryId{.value = *assistant_id}, call, names);
+                        if (!created) return std::unexpected(created.error());
+                        id = *created;
+                        plan->created = true;
+                    }
+                    slots.emplace_back(Json{Object{{"callId", Json(call.id)},
+                            {"name", Json(call.name)},
+                            {"status", Json{std::string{"pending"}}},
+                            {"taskId", numeric(id.value)}}});
+                    tools.push_back(id);
+                }
+                if (tools.empty()) {
+                    plan->tools.clear();
+                    return std::optional<NextTaskState>{};
+                }
+                auto written = live->set(chord::Path{chord::path_key("tools")}, Json{std::move(slots)});
+                if (!written) return std::unexpected(written.error());
+                Json::Array tool_ids;
+                for (const TaskId id : tools)
+                    tool_ids.emplace_back(numeric(id.value));
+                Json checkpoint{Object{{"phase", Json{std::string{"tools"}}},
+                        {"assistant", numeric(*assistant_id)},
+                        {"tools", Json{std::move(tool_ids)}}}};
+                plan->tools = tools;
+                return std::optional<NextTaskState>{
+                        NextTaskState::waiting(std::move(checkpoint), std::move(tools), JoinPolicy::AllSettled)};
+            }));
+    if (!committed) return std::unexpected(committed.error());
+    return !plan->tools.empty();
+}
+
+support::ExpectedVoid WorkflowRuntime::finish_tool_round(const TaskRecord& task, TaskRuntime& runtime) {
+    const Json* checkpoint = task.state.checkpoint ? &*task.state.checkpoint : nullptr;
+    const Json* assistant_value = checkpoint != nullptr ? member(*checkpoint, "assistant") : nullptr;
+    if (assistant_value == nullptr) return std::unexpected(validation("A tool round needs its assistant entry"));
+    auto assistant = as_integer(*assistant_value);
+    if (!assistant) return std::unexpected(assistant.error());
+    std::vector<TaskId> tools;
+    if (const Json* listed = checkpoint != nullptr ? member(*checkpoint, "tools") : nullptr;
+            listed != nullptr && listed->as_array() != nullptr) {
+        for (const Json& item : *listed->as_array()) {
+            auto id = as_integer(item);
+            if (!id) return std::unexpected(id.error());
+            tools.push_back(TaskId{.value = *id});
+        }
+    }
+    auto committed =
+            await_result(runtime.commit([this, task, assistant = *assistant, tools](Transaction& tx,
+                                                const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                // Apply the controls a finished call asked for (frozen pi
+                // `finishToolRound`): C++ tool results name loaded tools only.
+                std::vector<std::string> added;
+                for (const TaskId id : tools) {
+                    auto record = tx.task(id);
+                    if (!record) return std::unexpected(record.error());
+                    if (!record->has_value()) continue;
+                    for (const std::string& name : tool_outcome_added(**record))
+                        added.push_back(name);
+                }
+                if (!added.empty()) {
+                    auto applied_tools = add_model_tools(tx, task.conversation_id, added);
+                    if (!applied_tools) return std::unexpected(applied_tools.error());
+                }
+                auto inbox = tx.doc(inbox_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                if (!inbox) return std::unexpected(inbox.error());
+                auto items = read_inbox_items(*inbox);
+                if (!items) return std::unexpected(items.error());
+                auto boundary = prepare_boundary(tx, task.conversation_id, std::move(*inbox), std::move(*items));
+                if (!boundary) return std::unexpected(boundary.error());
+                auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                if (!live) return std::unexpected(live.error());
+                auto applied = apply_boundary(tx, *boundary, BoundaryPoint::PostTools, now());
+                if (!applied) return std::unexpected(applied.error());
+                // The round's presentation belongs to the ending generation.
+                auto cleared_tools = live->erase(chord::Path{chord::path_key("tools")});
+                if (!cleared_tools) return std::unexpected(cleared_tools.error());
+                auto cleared_nested = live->erase(chord::Path{chord::path_key("nestedTools")});
+                if (!cleared_nested) return std::unexpected(cleared_nested.error());
+                if (applied->reset) {
+                    // A queued reset cut the run's context before an answer.
+                    replay_[task.conversation_id.value].messages.clear();
+                    for (const EntryRecord& entry : applied->user_entries) {
+                        auto user = input_user(entry);
+                        if (!user) return std::unexpected(user.error());
+                        replay_[task.conversation_id.value].messages.push_back(std::move(*user));
+                    }
+                    auto ended = end_run(tx,
+                            *live,
+                            task.id,
+                            SubmissionSettlement{.status = "unanswered", .reason = std::string{"reset"}});
+                    if (!ended) return std::unexpected(ended.error());
+                    if (!applied->users.empty()) {
+                        auto started = start_run(tx, task.conversation_id, *live, applied->users, *generation_);
+                        if (!started) return std::unexpected(started.error());
+                    }
+                    return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{
+                            .status = "completed", .result = Json{Object{{"entryId", numeric(assistant)}}}})};
+                }
+                // The placed users join this run and seed its next request.
+                for (const EntryRecord& entry : applied->user_entries) {
+                    auto user = input_user(entry);
+                    if (!user) return std::unexpected(user.error());
+                    replay_[task.conversation_id.value].messages.push_back(std::move(*user));
+                }
+                auto joined = join_run_inputs(*live, task.id, applied->users);
+                if (!joined) return std::unexpected(joined.error());
+                // The run passes to a successor generation, whose preparation owns the
+                // next request (frozen pi generation `finishToolRound`).
+                auto handed = hand_over(tx, task.conversation_id, *live, *generation_);
+                if (!handed) return std::unexpected(handed.error());
+                return std::optional<NextTaskState>{NextTaskState::terminal(
+                        TaskOutcome{.status = "completed", .result = Json{Object{{"entryId", numeric(assistant)}}}})};
+            }));
+    if (!committed) return std::unexpected(committed.error());
+    return {};
 }
 
 support::ExpectedVoid WorkflowRuntime::prepare(const TaskRecord& task, TaskRuntime& runtime) {
@@ -2632,12 +2821,11 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                 if (auto parsed = message_from_json(message)) committed_messages.push_back(std::move(*parsed));
             }
         }
-        if (!pending_tool_calls(committed_messages, &snapshot.tools).empty()) {
-            auto ended = execute_tool_round(task, snapshot, runtime, committed_messages, true);
-            if (!ended) return std::unexpected(ended.error());
-            if (*ended) return {};
-            continue;
-        }
+        // A recovered request may find committed calls without results: mint
+        // their tool tasks (or join live ones) and wait for the round.
+        auto recovered = recover_tool_round(task, runtime, snapshot, committed_messages);
+        if (!recovered) return std::unexpected(recovered.error());
+        if (*recovered) return {};
         auto model_tools = load_model_tools(task.conversation_id);
         if (!model_tools) return std::unexpected(model_tools.error());
         auto plan = plan_prompt(snapshot, replay.shown_tools, replay.shown_sections, *model_tools, view, now());
@@ -2719,26 +2907,12 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
         const bool failed = response->stop_reason == ai::AssistantStopReason::Error;
         const bool aborted = response->stop_reason == ai::AssistantStopReason::Aborted;
         if (tools) {
-            auto committed = await_result(
-                    runtime.commit([id = task.conversation_id, response = *response](Transaction& tx,
-                                           const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                        auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = id});
-                        if (!live) return std::unexpected(live.error());
-                        auto entry = append_assistant(tx, id, response);
-                        if (!entry) return std::unexpected(entry.error());
-                        // The tool-calling answer clears the generation state
-                        // in the same commit that records it (frozen pi
-                        // generation `startToolRound`).
-                        auto cleared = live->erase(live_generation_path());
-                        if (!cleared) return std::unexpected(cleared.error());
-                        return std::nullopt;
-                    }));
-            if (!committed) return committed;
-            replay.messages.push_back(*response);
-            auto ended_here = execute_tool_round(task, snapshot, runtime, replay.messages);
-            if (!ended_here) return std::unexpected(ended_here.error());
-            if (*ended_here) return {};
-            continue;
+            // The tool-calling answer and its round are committed together;
+            // the generation then waits for the round's tool tasks (frozen pi
+            // generation `startToolRound`).
+            auto started = start_tool_round(task, runtime, snapshot, *response);
+            if (!started) return std::unexpected(started.error());
+            return {};
         }
         // Overflow recovery: a context-overflow terminal error compacts the
         // committed context first and retries with the attempt and its
