@@ -2758,11 +2758,11 @@
       "consumer": "cch_durable records and documents (planned)",
       "boundary": null,
       "implementation_ticket": "#1058-draft",
-      "scenario": "C++ JSON value ownership across a durable store",
+      "scenario": "copyJson copies strict JSON without retaining aliases",
       "evidence": {
-        "artifact": null,
-        "scenario": "C++ JSON value ownership across a durable store",
-        "result": "Not captured directly; committed snapshot identity/immutability is asserted by frozen tests, not this capture."
+        "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
+        "scenario": "copyJson copies strict JSON without retaining aliases",
+        "result": "The copied tree is detached: mutating the copy leaves the shared source and the sibling copy unchanged."
       },
       "gaps": [
         "Current Pike JSON support is pi-neutral support code; the durable-required copy/ownership contract is audited with #1057.",
