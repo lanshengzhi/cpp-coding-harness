@@ -79,16 +79,29 @@ frozen fields as literals, like the other Chord comparisons in
 | Row | Discriminating case | Why the comparison alone cannot separate it |
 | --- | --- | --- |
 | `context:await-with-context` | `an already cancelled context wait still starts and completes the underlying work` (`tests/chord/ChordContextTest.cpp`) | The frozen wait is cancelled while the work is pending, so a waiter that dropped or never started its producer still passes. The case cancels the caller before the wait is installed and requires the work to start anyway and to complete afterwards. |
-| `context:watch-cancellation` | `C++ Session cancellation and close with a Context` (`tests/durable/SessionWatchTest.cpp`) | The frozen commit context has no abort signal, so it cannot separate a masked commit context from the raw one. The composite commits under an already-cancelled context and still requires the delivered frame to keep the commit's typed value with no abort signal, then requires a later commit not to reach the cancelled watch. |
+| `context:watch-cancellation` | `stopping or cancelling a watch during a callback discards the queued frames` and `C++ Session cancellation and close with a Context` (`tests/durable/SessionWatchTest.cpp`) | Two properties the frozen scenario alone cannot separate. A listener that stops or cancels its own watch while buffered frames are delivered must end the batch, discard the queued frames and still run that callback to completion — an implementation that drains the batch without re-sampling stop/cancellation delivers the queued frame and fails. A signalling commit context must reach the observer without its abort signal, which the frozen input cannot separate because its commit context has none. |
 | `context:close-cancellation` | `an already cancelled close caller still closes storage` (`tests/durable/SessionWatchTest.cpp`) | The frozen caller is cancelled while cleanup is already running, so an implementation that checks the caller before starting cleanup still passes. The case cancels the caller before `close()` is invoked and requires both the rejection and the started-and-completed storage close. |
 | `context:acquire-cancellation` | `a cancelled watch acquisition registers no observer` (`tests/durable/SessionWatchTest.cpp`) | The frozen caller only observes the rejected wait. The case starts the acquisition itself and cancels it inside its committed read, so an implementation that registers the observer before its cancellation check returns a watch instead of the rejection. |
 
-The five discriminating mutations were exercised by hand on the delivered tree
+The discriminating mutations were exercised by hand on the delivered tree
 before the record was written, and each one failed exactly the case named for
 it: removing the post-read acquisition check, checking the close caller before
 cleanup, delivering the raw commit context instead of the masked one, reporting
-`Stopped` from a cancelled watch, and not starting the operation of an
-already-cancelled wait.
+`Stopped` from a cancelled watch, not starting the operation of an
+already-cancelled wait, and draining a buffered batch without re-sampling
+stop/cancellation between frames.
+
+### Why the commit context is carried
+
+The frozen watch scenario observes `frames[0].contextValue == "commit-context"`
+alongside `abortSignal: null`, which is the pi test `preserves commit Context
+values without inheriting producer cancellation`. A watch cannot separate that
+observation from its acquisition context without the commit's own context, so
+`Session::commit()` takes the caller's context and `DocumentFrameListener`
+receives it as the frozen callback's third argument. That is the minimum the
+comparison needs: the commit context is carried to observers only, and no
+transaction, delta, revision or storage behavior changes. pi's `#runCommit`
+abort check on an already-cancelled caller remains out of scope and unverified.
 
 ### Normalizations
 
@@ -128,9 +141,11 @@ abort reason, no value and no cancellation for either root.
 
 The row stays `upstream-captured` / `unverified`. The consolidation contract
 only promotes a row whose exact comparison scenarios map to a registered frozen
-artifact, and a C++ observation cannot substitute for a missing upstream
-capture. Registering a C++-derived expectation as frozen evidence would be the
-normalization the reconciliation forbids.
+artifact scenario, and this row records none: a promotion would need a new
+`audit-*` capture from the pinned pi checkout, not a C++ observation.
+Registering a C++-derived expectation as frozen evidence would be the
+normalization the reconciliation forbids, so the capture is delivered and the
+row keeps its recorded boundary.
 
 ### `cch_chord:Chord:context` — reviewed mapping, not promoted
 
@@ -160,13 +175,13 @@ stays unimplemented and unverified rather than being guessed from the C++ side.
 ## Validation
 
 Measured on this ticket's implementation commit `4e9ad3fbf` and, after the
-`origin/main` merge, on the merged tree `573fe0c82` that the receipt pins:
+`origin/main` merge, on the merged tree `c3d5fcc76` that the receipt pins:
 
 | Command | Result |
 | --- | --- |
 | `cmake --build --preset vcpkg` | built; build-phase Parity Architecture Gate PASS |
-| `ctest --preset vcpkg -N -L issue1184` | 9 selected |
-| `ctest --preset vcpkg -L issue1184 --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml` | 9/9 passed, 0 failed, 0 skipped |
+| `ctest --preset vcpkg -N -L issue1184` | 10 selected |
+| `ctest --preset vcpkg -L issue1184 --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml` | 10/10 passed, 0 failed, 0 skipped |
 | `ctest --preset vcpkg -N -L chord` | 79 selected on the merged tree (70 delivered + 3 new Chord cases + 6 from the merged #1185 packet) |
 | `ctest --preset vcpkg -L chord --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml` | 79/79 passed, 0 failed, 0 skipped |
 | `ctest --preset vcpkg -L architecture` | 43/43 passed |

@@ -555,12 +555,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml"
         ],
-        "testedRevision": "2e62fa140f7af423eb3f8a4a9de714718a80f287",
+        "testedRevision": "c3d5fcc760110213fc7eaa5802b4bb1387f520ef",
         "recordedAt": "2026-11-02T08:57:19Z",
         "selected": 36,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml",
-          "sha256": "695299d760a57d88aeb7eb053d5c9c562bbc2b3be7974a78b67218dffd484489"
+          "sha256": "e7d0d8670971150dbfff24f696f65613a6b7429b349e0df999f561b593771946"
         }
       },
       "inputs": [
@@ -2223,12 +2223,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml"
         ],
-        "testedRevision": "2e62fa140f7af423eb3f8a4a9de714718a80f287",
+        "testedRevision": "c3d5fcc760110213fc7eaa5802b4bb1387f520ef",
         "recordedAt": "2026-11-02T08:57:19Z",
         "selected": 79,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml",
-          "sha256": "84ad63cd4d1e742552a9c5d05e9405a8cfd1ae6256d9744a4270076c7a09467f"
+          "sha256": "3a726eee891d275d38ddf6a41053e356174fb5ba57d526243b2200b06bfcb47c"
         }
       },
       "rows": [
@@ -2804,7 +2804,7 @@
         },
         {
           "path": "src/chord/include/cch/chord/ChordContext.hpp",
-          "sha256": "38985e13280f91efc34bcf298b8e8040149208a261a4ed936e22f232e56c39c3"
+          "sha256": "1836f465236adccec9e2c1a23903582482166c7b61e201be4089fd1b969ed211"
         },
         {
           "path": "src/chord/include/cch/chord/Delta.hpp",
@@ -4317,12 +4317,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml"
         ],
-        "testedRevision": "573fe0c82d3d943f42002b64287d1397bcb98ca1",
+        "testedRevision": "c3d5fcc760110213fc7eaa5802b4bb1387f520ef",
         "recordedAt": "2026-11-02T08:57:19Z",
-        "selected": 9,
+        "selected": 10,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
-          "sha256": "af1bb334ebc744abba1556c6291f9e6675b48e562546b29bd4b35e941e48b1e8"
+          "sha256": "c55a7f42052ab1f79ea9d41a0b25550734bdfee0f2f8a89bb94bfd31776c4851"
         }
       },
       "rows": [
@@ -4439,11 +4439,11 @@
         },
         {
           "path": "src/chord/include/cch/chord/ChordContext.hpp",
-          "sha256": "38985e13280f91efc34bcf298b8e8040149208a261a4ed936e22f232e56c39c3"
+          "sha256": "1836f465236adccec9e2c1a23903582482166c7b61e201be4089fd1b969ed211"
         },
         {
           "path": "src/durable/Session.cpp",
-          "sha256": "3d4a9216f55629de4790bbec2f07a8bae8140c580865e3c6b503c468f4e5862d"
+          "sha256": "10cf6b34038fe8b65900851fd79217aba5e5f8f46c0028e11947972e597db4a7"
         },
         {
           "path": "src/durable/include/cch/durable/Records.hpp",
@@ -4487,11 +4487,11 @@
         },
         {
           "path": "tests/durable/GatedStorage.hpp",
-          "sha256": "c405563d4b888159cf31db8d31bb5ea3c32ca277a5b8b1d5f0df25f14621292d"
+          "sha256": "a9f6891ee28348a1114ae658f2835ec43948f9815a3dd495b952d485999686e8"
         },
         {
           "path": "tests/durable/HarnessWorkflowTest.cpp",
-          "sha256": "8630c6a7ef81297e3707c34b36408c7710ab0db782d9c5ccc9546083301ab1e3"
+          "sha256": "a0f8a9e1c3f7c939678835cfd8d62cc13bba7d9868ad257874d41616f64c71ab"
         },
         {
           "path": "tests/durable/Outcome.hpp",
@@ -4499,7 +4499,7 @@
         },
         {
           "path": "tests/durable/SessionWatchTest.cpp",
-          "sha256": "41d5f60ec45c40aea5d725c61b3c39495cf09b3ac2486559d4fbb4dbc7e52f86"
+          "sha256": "7b338e3fa06a55ad33ca46c7483df3f645394e3373fba0b014475d59bc5eca3d"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
@@ -4519,7 +4519,7 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
-          "sha256": "af1bb334ebc744abba1556c6291f9e6675b48e562546b29bd4b35e941e48b1e8"
+          "sha256": "c55a7f42052ab1f79ea9d41a0b25550734bdfee0f2f8a89bb94bfd31776c4851"
         }
       ]
     }
