@@ -249,3 +249,50 @@ The five captures are frozen and independently reproducible. The open work is th
 reason and the two source-reviewed transport halves. `#1044` and `#1183` stay open. Magpie-only AI
 access, XDG state, strict no-exception behavior, the ordinary application Session and the
 no-historical-Pike-durable-migration boundary are unchanged.
+
+## Appendix — exact scenario names
+
+The family records 28 scenarios. `orphanScenarios` routing can name these strings directly.
+
+### `mcp-tools-list.json`
+
+- `tools/list follows nextCursor across pages and ends on an empty cursor`
+- `a null nextCursor ends tools/list without another request`
+- `an empty nextCursor ends tools/list without another request`
+- `a repeated nextCursor is an explicit duplicate-cursor error`
+- `tools/list stops after pi's 1000-page bound`
+- `application tool names sanitize punctuation, bound at 64 and hash collisions from the raw pair`
+- `application tool names hash every colliding sanitized name order-independently`
+
+### `mcp-progress.json`
+
+- `stdio: onProgress injects _meta.progressToken and delivers only matching progress`
+- `HTTP: onProgress injects _meta.progressToken and delivers only matching progress`
+- `stdio: a progress notification re-arms the request deadline`
+- `HTTP: a progress notification re-arms the request deadline`
+- `application progress text uses the message verbatim or Progress <n>[/<total>]`
+
+### `mcp-request-cancellation.json`
+
+- `stdio: aborting an in-flight call notifies the server and leaves the child usable`
+- `HTTP: aborting an in-flight call posts notifications/cancelled and reuses the session`
+- `stdio: a timed-out request fails with pi's timeout error and reason`
+- `HTTP: a timed-out request fails with pi's timeout error and reason`
+- `an already-aborted request is never sent and emits no notifications/cancelled`
+- `a failed HTTP request does not emit notifications/cancelled`
+- `a failed stdio request does not emit notifications/cancelled`
+
+### `mcp-http-session-stream.json`
+
+- `HTTP: session headers carry through and a 405 GET is feature-absent`
+- `HTTP: a server retry hint overrides the client reconnect delay and resumes with Last-Event-ID`
+- `HTTP: an out-of-range retry hint reconnects without throwing or hanging`
+- `HTTP: an event on the server-to-client GET stream reaches the notification listener`
+- `HTTP: the client answers ping and roots/list requests delivered on the GET stream`
+- `HTTP: notifications/cancelled aborts an in-flight server request handler`
+- `HTTP: close aborts the GET stream without a dropped-stream error`
+
+### `mcp-stdio-stderr-tail.json`
+
+- `stdio: the transport ring keeps the last 64 KiB of a larger stderr stream`
+- `stdio: a failed connect appends pi's bounded 2000-character stderr tail`
