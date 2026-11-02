@@ -6,6 +6,8 @@
 
 #include <cch/tui/ProgramStatus.hpp>
 
+#include "support/PiTuiEvidence.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
@@ -52,18 +54,26 @@ namespace {
 
 } // namespace
 
-TEST_CASE("Program status format encodes frozen OSC 7501 fields and limits", "[tui][program-status][issue1123][spec]") {
+TEST_CASE("Program status format encodes frozen OSC 7501 fields and limits",
+        "[tui][program-status][issue1123][issue1182][spec]") {
     using cch::tui::format_program_status;
     using cch::tui::ProgramStatus;
 
-    // state=blocked:app=pi:kind=permission with a base64 message.
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "program-status-format.json");
+    REQUIRE(bundle);
+    const cch::support::JsonValue& scenario =
+            cch::tests::find_scenario(*bundle, "format-program-status-encodes-fields-and-limits");
+    const auto& expected = scenario.at("expected");
+
+    // state=blocked:app=pi:kind=permission with a base64 message, and the bare clear report.
     CHECK(format_program_status(ProgramStatus{
                   .state = ProgramStatus::State::Blocked,
                   .app = "pi",
                   .kind = ProgramStatus::Kind::Permission,
                   .message = "Allow bash?",
-          }) == "\x1b]7501;state=blocked:app=pi:kind=permission:msg=QWxsb3cgYmFzaD8=\x1b\\");
-    CHECK(format_program_status(ProgramStatus{.state = ProgramStatus::State::Clear}) == "\x1b]7501;state=clear\x1b\\");
+          }) == expected.at("blocked").get_string());
+    CHECK(format_program_status(ProgramStatus{.state = ProgramStatus::State::Clear}) ==
+            expected.at("clear").get_string());
 
     // An invalid app name, a kind outside blocked, and a blank message are all
     // omitted.
@@ -72,7 +82,7 @@ TEST_CASE("Program status format encodes frozen OSC 7501 fields and limits", "[t
                   .app = "my app",
                   .kind = ProgramStatus::Kind::Auth,
                   .message = " \n ",
-          }) == "\x1b]7501;state=working\x1b\\");
+          }) == expected.at("omitted").get_string());
     const auto app_32 = std::string(32, 'a');
     const auto app_33 = std::string(33, 'a');
     CHECK(format_program_status(ProgramStatus{.state = ProgramStatus::State::Idle, .app = app_32})
@@ -86,8 +96,8 @@ TEST_CASE("Program status format encodes frozen OSC 7501 fields and limits", "[t
             .state = ProgramStatus::State::Error,
             .message = "first\nsecond\x1b[31m\xc2\x9bthird\t",
     });
-    CHECK(control_characters == "\x1b]7501;state=error:msg=Zmlyc3Qgc2Vjb25kIFszMW0gdGhpcmQ=\x1b\\");
-    CHECK(decode_message(control_characters) == "first second [31m third");
+    CHECK(control_characters == expected.at("controlCharacters").get_string());
+    CHECK(decode_message(control_characters) == expected.at("controlCharactersMessage").get_string());
 
     // A long message is cut at a UTF-8 boundary within the decoded 2048-byte
     // limit; the frozen `é`-repeat observation keeps 1024 characters and a
@@ -104,12 +114,14 @@ TEST_CASE("Program status format encodes frozen OSC 7501 fields and limits", "[t
     for (std::size_t index = 0; index < 1024; ++index)
         expected_message += "\xc3\xa9";
     CHECK(decode_message(long_sequence) == expected_message);
-    CHECK(decode_message(long_sequence).size() == 2048);
-    CHECK(long_sequence.size() == 2766);
+    const auto decoded_characters = static_cast<std::size_t>(expected.at("longMessageDecodedLength").get_number());
+    CHECK(decode_message(long_sequence).size() == decoded_characters * 2);
+    CHECK(long_sequence.size() == static_cast<std::size_t>(expected.at("longMessageBytes").get_number()));
+    CHECK(expected_message.size() == decoded_characters * 2);
 }
 
 TEST_CASE("Program status reply recognition accepts only the frozen query echoes",
-        "[tui][program-status][issue1123][spec]") {
+        "[tui][program-status][issue1123][issue1182][spec]") {
     using cch::tui::is_program_status_reply;
 
     CHECK(is_program_status_reply("\x1b]7501;?\x1b\\"));

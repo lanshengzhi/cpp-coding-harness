@@ -3148,6 +3148,76 @@
         "cch_mcp:mcp-stdio-stderr-tail"
       ],
       "disposition": "#1191 compares these scenarios source-side; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1158",
+      "artifact": "listing.json",
+      "scenario": "directory pages continue where the previous page stopped",
+      "reason": "Frozen observation captured for #1158; the partial EnvIO slice does not establish the complete node-filesystem obligation. See 1158-ordering-and-scenarios.md for scenario-level coverage.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1158",
+      "artifact": "listing.json",
+      "scenario": "listFiles lists files and directories depth first in name order",
+      "reason": "Frozen observation captured for #1158; the partial EnvIO slice does not establish the complete node-filesystem obligation. See 1158-ordering-and-scenarios.md for scenario-level coverage.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1158",
+      "artifact": "listing.json",
+      "scenario": "listFiles stops at its entry and byte bounds and reports truncated",
+      "reason": "Frozen observation captured for #1158; the partial EnvIO slice does not establish the complete node-filesystem obligation. See 1158-ordering-and-scenarios.md for scenario-level coverage.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1158",
+      "artifact": "listing.json",
+      "scenario": "listFiles applies hidden and excluded names and never lists .git",
+      "reason": "Frozen observation captured for #1158; the partial EnvIO slice does not establish the complete node-filesystem obligation. See 1158-ordering-and-scenarios.md for scenario-level coverage.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1158",
+      "artifact": "positioned-read.json",
+      "scenario": "positioned reads return up to the requested length and stop early only at end of file",
+      "reason": "Frozen observation captured for #1158; the partial EnvIO slice does not establish the complete node-filesystem obligation. See 1158-ordering-and-scenarios.md for scenario-level coverage.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1158",
+      "artifact": "positioned-read.json",
+      "scenario": "a read at or past end of file returns the frozen empty result instead of an error",
+      "reason": "Frozen observation captured for #1158; the partial EnvIO slice does not establish the complete node-filesystem obligation. See 1158-ordering-and-scenarios.md for scenario-level coverage.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1158",
+      "artifact": "positioned-read.json",
+      "scenario": "a positioned read longer than one internal chunk crosses reads unchanged",
+      "reason": "Frozen observation captured for #1158; the partial EnvIO slice does not establish the complete node-filesystem obligation. See 1158-ordering-and-scenarios.md for scenario-level coverage.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
     }
   ],
   "groups": [

@@ -1,0 +1,327 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-01T20:17:52.388Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/env/index.ts:DirReader.next",
+    "packages/durable/src/env/index.ts:ListFilesOptions,FileListEntry,FileListing",
+    "packages/durable/src/env/node.ts:NodeDirReader.next",
+    "packages/env/daemon/src/list.rs:list,Options"
+  ],
+  "scenarios": [
+    {
+      "name": "directory pages continue where the previous page stopped",
+      "inputs": {
+        "files": [
+          "a",
+          "b",
+          "c"
+        ],
+        "pageSize": 2
+      },
+      "expected": {
+        "names": [
+          "a",
+          "b",
+          "c"
+        ],
+        "pageSizes": [
+          2,
+          1
+        ],
+        "done": [
+          false,
+          true
+        ]
+      },
+      "normalizations": [
+        "entries inside one page are in the order the file system returns them and are compared as a set"
+      ]
+    },
+    {
+      "name": "listFiles lists files and directories depth first in name order",
+      "inputs": {
+        "files": [
+          "b.txt",
+          "a/z.txt",
+          "a/b/c.txt",
+          ".hidden/x",
+          "A.txt"
+        ],
+        "directories": [
+          "empty"
+        ],
+        "options": {
+          "gitignore": false
+        }
+      },
+      "expected": {
+        "listing": {
+          "entries": [
+            {
+              "path": ".hidden",
+              "kind": "directory"
+            },
+            {
+              "path": ".hidden/x",
+              "kind": "file"
+            },
+            {
+              "path": "A.txt",
+              "kind": "file"
+            },
+            {
+              "path": "a",
+              "kind": "directory"
+            },
+            {
+              "path": "a/b",
+              "kind": "directory"
+            },
+            {
+              "path": "a/b/c.txt",
+              "kind": "file"
+            },
+            {
+              "path": "a/z.txt",
+              "kind": "file"
+            },
+            {
+              "path": "b.txt",
+              "kind": "file"
+            },
+            {
+              "path": "empty",
+              "kind": "directory"
+            }
+          ],
+          "truncated": false
+        },
+        "hiddenOff": {
+          "entries": [
+            {
+              "path": "A.txt",
+              "kind": "file"
+            },
+            {
+              "path": "a",
+              "kind": "directory"
+            },
+            {
+              "path": "a/b",
+              "kind": "directory"
+            },
+            {
+              "path": "a/b/c.txt",
+              "kind": "file"
+            },
+            {
+              "path": "a/z.txt",
+              "kind": "file"
+            },
+            {
+              "path": "b.txt",
+              "kind": "file"
+            },
+            {
+              "path": "empty",
+              "kind": "directory"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "normalizations": [
+        "temporary directory path omitted"
+      ]
+    },
+    {
+      "name": "listFiles stops at its entry and byte bounds and reports truncated",
+      "inputs": {
+        "files": [
+          "a",
+          "b",
+          "c"
+        ],
+        "gitignore": false
+      },
+      "expected": {
+        "cases": [
+          {
+            "options": {
+              "maxEntries": 2
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                },
+                {
+                  "path": "b",
+                  "kind": "file"
+                }
+              ],
+              "truncated": true
+            }
+          },
+          {
+            "options": {
+              "maxEntries": 3
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                },
+                {
+                  "path": "b",
+                  "kind": "file"
+                },
+                {
+                  "path": "c",
+                  "kind": "file"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          {
+            "options": {
+              "maxEntries": 0
+            },
+            "listing": {
+              "entries": [],
+              "truncated": true
+            }
+          },
+          {
+            "options": {
+              "maxBytes": 6
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                },
+                {
+                  "path": "b",
+                  "kind": "file"
+                }
+              ],
+              "truncated": true
+            }
+          },
+          {
+            "options": {
+              "maxBytes": 5
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                }
+              ],
+              "truncated": true
+            }
+          }
+        ]
+      },
+      "normalizations": [
+        "each entry counts its UTF-8 path plus two bytes"
+      ]
+    },
+    {
+      "name": "listFiles applies hidden and excluded names and never lists .git",
+      "inputs": {
+        "files": [
+          "keep.txt",
+          "out/x.js",
+          "sub/keep.txt",
+          "node_modules/m/i.js",
+          ".hidden/x.txt",
+          ".git/HEAD"
+        ],
+        "exclude": [
+          "node_modules"
+        ],
+        "gitignore": false
+      },
+      "expected": {
+        "excluded": {
+          "entries": [
+            {
+              "path": ".hidden",
+              "kind": "directory"
+            },
+            {
+              "path": ".hidden/x.txt",
+              "kind": "file"
+            },
+            {
+              "path": "keep.txt",
+              "kind": "file"
+            },
+            {
+              "path": "out",
+              "kind": "directory"
+            },
+            {
+              "path": "out/x.js",
+              "kind": "file"
+            },
+            {
+              "path": "sub",
+              "kind": "directory"
+            },
+            {
+              "path": "sub/keep.txt",
+              "kind": "file"
+            }
+          ],
+          "truncated": false
+        },
+        "hiddenOff": {
+          "entries": [
+            {
+              "path": "keep.txt",
+              "kind": "file"
+            },
+            {
+              "path": "out",
+              "kind": "directory"
+            },
+            {
+              "path": "out/x.js",
+              "kind": "file"
+            },
+            {
+              "path": "sub",
+              "kind": "directory"
+            },
+            {
+              "path": "sub/keep.txt",
+              "kind": "file"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "normalizations": [
+        "temporary directory path omitted"
+      ]
+    }
+  ]
+}

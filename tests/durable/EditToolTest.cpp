@@ -76,6 +76,10 @@ public:
     support::Expected<std::string> read(std::string_view path, std::stop_token stop) override {
         return inner_->read(path, stop);
     }
+    support::Expected<std::string> read(
+            std::string_view path, std::uintmax_t offset, std::size_t length, std::stop_token stop) override {
+        return inner_->read(path, offset, length, stop);
+    }
     support::ExpectedVoid write(std::string_view path, std::string_view content, std::stop_token stop) override {
         return inner_->write(path, content, stop);
     }
@@ -84,6 +88,10 @@ public:
     }
     support::Expected<FileInfo> stat(std::string_view path, std::stop_token stop) override {
         return inner_->stat(path, stop);
+    }
+    support::Expected<std::unique_ptr<DirectoryReader>> open_directory(
+            std::string_view path, std::stop_token stop) override {
+        return inner_->open_directory(path, stop);
     }
     support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
         return inner_->list(path, stop);

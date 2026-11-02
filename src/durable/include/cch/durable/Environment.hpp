@@ -23,6 +23,23 @@ struct FileInfo {
     std::uintmax_t size{};
 };
 
+/// One page of one directory's entries, continuing where the previous page stopped.
+struct ListingPage {
+    std::vector<FileInfo> entries;
+    /// The end of the directory was reached; a later page holds no entry.
+    bool done{};
+};
+
+/// Pages one directory, holding it open so every page continues the same scan.
+class DirectoryReader {
+public:
+    virtual ~DirectoryReader() = default;
+    /// Up to `max_entries` entries in the order the file system returns them.
+    /// `done` marks the end and may come with the last entries or with an empty
+    /// page. An entry that disappears before its metadata is read is skipped.
+    virtual support::Expected<ListingPage> next(std::size_t max_entries, std::stop_token stop) = 0;
+};
+
 struct ShellOutputWindow {
     std::size_t max_bytes{50000};
     std::size_t max_lines{2000};
@@ -77,9 +94,20 @@ class Environment {
 public:
     virtual ~Environment() = default;
     virtual support::Expected<std::string> read(std::string_view path, std::stop_token stop) = 0;
+    /// Up to `length` bytes at `offset`; fewer only at end of file. A
+    /// representable offset at or past the end reads an empty result, and
+    /// nothing before `offset` is read. A nonempty read that reaches beyond
+    /// the host's `off_t` range returns a Validation error. Each call opens
+    /// the path anew; unlike frozen pi `BinaryReader`, it does not retain file
+    /// identity across calls.
+    virtual support::Expected<std::string> read(
+            std::string_view path, std::uintmax_t offset, std::size_t length, std::stop_token stop) = 0;
     virtual support::ExpectedVoid write(std::string_view path, std::string_view content, std::stop_token stop) = 0;
     virtual support::ExpectedVoid append(std::string_view path, std::string_view content, std::stop_token stop) = 0;
     virtual support::Expected<FileInfo> stat(std::string_view path, std::stop_token stop) = 0;
+    /// Open a directory for paged listing; no entry is read until `next` is called.
+    virtual support::Expected<std::unique_ptr<DirectoryReader>> open_directory(
+            std::string_view path, std::stop_token stop) = 0;
     virtual support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) = 0;
     /// Create a fresh temporary directory for one run's output files. An
     /// environment without a temporary area reports that explicitly instead of

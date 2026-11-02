@@ -13,15 +13,18 @@
 
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <ranges>
 #include <mutex>
 #include <semaphore>
 #include <stop_token>
 #include <string>
+#include <sys/stat.h>
 #include <thread>
 #include <vector>
 
@@ -110,6 +113,10 @@ public:
     support::Expected<std::string> read(std::string_view path, std::stop_token stop) override {
         return inner_->read(path, stop);
     }
+    support::Expected<std::string> read(
+            std::string_view path, std::uintmax_t offset, std::size_t length, std::stop_token stop) override {
+        return inner_->read(path, offset, length, stop);
+    }
     support::ExpectedVoid write(std::string_view, std::string_view, std::stop_token) override {
         ++writes;
         return std::unexpected(support::make_error(support::ErrorCode::Workspace, "injected write failure"));
@@ -119,6 +126,10 @@ public:
     }
     support::Expected<FileInfo> stat(std::string_view path, std::stop_token stop) override {
         return inner_->stat(path, stop);
+    }
+    support::Expected<std::unique_ptr<DirectoryReader>> open_directory(
+            std::string_view path, std::stop_token stop) override {
+        return inner_->open_directory(path, stop);
     }
     support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
         return inner_->list(path, stop);
@@ -658,6 +669,216 @@ TEST_CASE("Durable recursive watch refuses a tree past the directory budget", "[
     auto watch = env->watch("tree", [](const WatchChange&) {}, WatchOptions{.recursive = true});
     REQUIRE_FALSE(watch);
     CHECK(watch.error().code == support::ErrorCode::Validation);
+}
+
+TEST_CASE("Durable directory pages continue where the previous page stopped", "[durable][environment][issue1158]") {
+    tests::TempWorkspace workspace;
+    auto env = local_environment(workspace.path().string());
+    const auto scenario = FrozenScenario::load(
+            "fixtures/pi-v1.3.0/audit-1158/listing.json", "directory pages continue where the previous page stopped");
+    REQUIRE(scenario.has_value());
+    const auto page_size = static_cast<std::size_t>(scenario->inputs().at("pageSize").get_number());
+    const auto* expected_files = scenario->inputs().at("files").get_if<support::JsonValue::array_t>();
+    REQUIRE(expected_files != nullptr);
+    for (const auto& file : *expected_files)
+        REQUIRE(env->write(file.get_string(), "", {}));
+    const auto* expected_sizes = scenario->array_member("pageSizes");
+    const auto* expected_done = scenario->array_member("done");
+    const auto* expected_names = scenario->array_member("names");
+    REQUIRE(expected_sizes != nullptr);
+    REQUIRE(expected_done != nullptr);
+    REQUIRE(expected_names != nullptr);
+
+    auto reader = env->open_directory(".", {});
+    REQUIRE(reader);
+    std::vector<std::size_t> sizes;
+    std::vector<bool> done;
+    std::vector<std::string> names;
+    // A reader that never reports `done` fails here instead of hanging.
+    for (std::size_t page_index = 0; page_index < 16; ++page_index) {
+        auto page = (*reader)->next(page_size, {});
+        REQUIRE(page);
+        sizes.push_back(page->entries.size());
+        done.push_back(page->done);
+        for (const auto& entry : page->entries)
+            names.push_back(entry.name);
+        if (page->done) break;
+    }
+    REQUIRE(done.size() == expected_sizes->size());
+    REQUIRE(done.size() == expected_done->size());
+    for (std::size_t index = 0; index < done.size(); ++index) {
+        CHECK(sizes[index] == static_cast<std::size_t>(expected_sizes->at(index).get_number()));
+        CHECK(done[index] == expected_done->at(index).get_boolean());
+    }
+    // A page is a file-system-ordered slice; the frozen capture compares the
+    // union of the pages as a set.
+    std::ranges::sort(names);
+    REQUIRE(names.size() == expected_names->size());
+    for (std::size_t index = 0; index < names.size(); ++index)
+        CHECK(names[index] == expected_names->at(index).get_string());
+
+    auto empty_page = (*reader)->next(page_size, {});
+    REQUIRE(empty_page);
+    CHECK(empty_page->entries.empty());
+    CHECK(empty_page->done);
+    auto rejected = (*reader)->next(0, {});
+    REQUIRE_FALSE(rejected);
+    CHECK(rejected.error().code == support::ErrorCode::Validation);
+}
+
+TEST_CASE("Durable directory pages skip unsupported file kinds", "[durable][environment][issue1158]") {
+    tests::TempWorkspace workspace;
+    const auto fifo = workspace.path() / "pipe";
+    REQUIRE(::mkfifo(fifo.c_str(), 0600) == 0);
+    auto env = local_environment(workspace.path().string());
+    REQUIRE(env->write("file", "x", {}));
+    auto reader = env->open_directory(".", {});
+    REQUIRE(reader);
+    auto page = (*reader)->next(10, {});
+    REQUIRE(page);
+    REQUIRE(page->entries.size() == 1);
+    CHECK(page->entries.front().name == "file");
+    CHECK(page->done);
+}
+
+namespace {
+
+/// This process's resident high-water mark in bytes (`VmHWM`). A read that
+/// loads a whole file raises it by the file's size; a positioned read raises it
+/// only by its own buffer, which is what the sparse-file case separates.
+std::uintmax_t high_water_bytes() {
+    std::ifstream status{"/proc/self/status"};
+    std::string line;
+    while (std::getline(status, line)) {
+        if (!line.starts_with("VmHWM:")) continue;
+        const char* first = line.c_str() + 6;
+        const char* last = line.c_str() + line.size();
+        while (first != last && (*first == ' ' || *first == '\t'))
+            ++first;
+        std::uintmax_t kilobytes{};
+        const auto [end, error] = std::from_chars(first, last, kilobytes);
+        if (error != std::errc{} || end == first) return 0;
+        return kilobytes * 1024;
+    }
+    return 0;
+}
+
+} // namespace
+
+TEST_CASE("Durable positioned reads return the frozen bytes and stop only at end of file",
+        "[durable][environment][issue1158]") {
+    tests::TempWorkspace workspace;
+    auto env = local_environment(workspace.path().string());
+    const auto reads = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1158/positioned-read.json",
+            "positioned reads return up to the requested length and stop early only at end of file");
+    REQUIRE(reads.has_value());
+    REQUIRE(env->write("digits.txt", reads->inputs().at("content").get_string(), {}));
+    for (const auto& expected : reads->expected().at("results").get_array()) {
+        const auto offset = expected.at("offset").get_number();
+        const auto length = expected.at("length").get_number();
+        auto content =
+                env->read("digits.txt", static_cast<std::uintmax_t>(offset), static_cast<std::size_t>(length), {});
+        REQUIRE(content);
+        INFO("offset " << offset << ", length " << length);
+        CHECK(*content == expected.at("text").get_string());
+    }
+
+    const auto past_end = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1158/positioned-read.json",
+            "a read at or past end of file returns the frozen empty result instead of an error");
+    REQUIRE(past_end.has_value());
+    REQUIRE(env->write("digits.txt", past_end->inputs().at("digits").get_string(), {}));
+    REQUIRE(env->write("empty.txt", "", {}));
+    for (const auto& expected : past_end->expected().at("results").get_array()) {
+        auto content = env->read(expected.at("file").get_string(),
+                static_cast<std::uintmax_t>(expected.at("offset").get_number()),
+                static_cast<std::size_t>(expected.at("length").get_number()),
+                {});
+        // An offset past end of file is an empty result, never an error.
+        REQUIRE(content);
+        CHECK(content->size() == static_cast<std::size_t>(expected.at("bytes").get_number()));
+        CHECK(*content == expected.at("text").get_string());
+    }
+
+    const auto crossing = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1158/positioned-read.json",
+            "a positioned read longer than one internal chunk crosses reads unchanged");
+    REQUIRE(crossing.has_value());
+    const std::string pattern = "0123456789abcdef";
+    std::string large;
+    large.reserve(static_cast<std::size_t>(crossing->inputs().at("bytes").get_number()));
+    while (large.size() < static_cast<std::size_t>(crossing->inputs().at("bytes").get_number()))
+        large += pattern;
+    large.resize(static_cast<std::size_t>(crossing->inputs().at("bytes").get_number()));
+    REQUIRE(env->write("large.txt", large, {}));
+    for (const auto& expected : crossing->expected().at("results").get_array()) {
+        const auto offset = static_cast<std::size_t>(expected.at("offset").get_number());
+        const auto length = static_cast<std::size_t>(expected.at("length").get_number());
+        auto content = env->read("large.txt", offset, length, {});
+        REQUIRE(content);
+        CHECK(content->size() == static_cast<std::size_t>(expected.at("bytes").get_number()));
+        CHECK(*content == large.substr(offset, length));
+        CHECK(content->substr(0, 8) == expected.at("head").get_string());
+        CHECK(content->substr(content->size() - 8) == expected.at("tail").get_string());
+    }
+}
+
+TEST_CASE("Durable directory pages and positioned reads stay bounded far past their bound",
+        "[durable][environment][issue1158]") {
+    tests::TempWorkspace workspace;
+    auto env = local_environment(workspace.path().string());
+    constexpr std::size_t kEntries = 3000;
+    auto created = env->exec(std::string{"mkdir -p many && cd many && i=0; while [ $i -lt 3000 ]; do : > \"f$i\"; "
+                                         "i=$((i+1)); done"},
+            {},
+            {},
+            {});
+    REQUIRE(created);
+    REQUIRE(created->exit_code == 0);
+
+    // Paging: every page is a bounded slice and the union covers the directory.
+    auto reader = env->open_directory("many", {});
+    REQUIRE(reader);
+    std::size_t paged = 0;
+    std::size_t pages = 0;
+    std::vector<std::string> names;
+    while (paged < kEntries * 2) {
+        auto page = (*reader)->next(100, {});
+        REQUIRE(page);
+        CHECK(page->entries.size() <= 100);
+        ++pages;
+        paged += page->entries.size();
+        for (const auto& entry : page->entries)
+            names.push_back(entry.name);
+        if (page->done) break;
+        REQUIRE(pages < 100);
+    }
+    CHECK(paged == kEntries);
+    CHECK(pages == kEntries / 100 + 1);
+    std::ranges::sort(names);
+    names.erase(std::ranges::unique(names).begin(), names.end());
+    CHECK(names.size() == kEntries);
+
+    // A positioned read of a 512 MiB sparse file touches only its own chunk: a
+    // whole-file implementation raises the process high-water mark by the file
+    // size, which this bound separates from the chunk-sized read.
+    constexpr std::uintmax_t kSparseBytes = 512ull * 1024 * 1024;
+    {
+        std::ofstream sparse(workspace.path() / "sparse.bin", std::ios::binary | std::ios::trunc);
+        REQUIRE(sparse.good());
+        sparse.seekp(static_cast<std::streamoff>(kSparseBytes - 1));
+        sparse.put('z');
+        REQUIRE(sparse.good());
+    }
+    const auto before = high_water_bytes();
+    auto tail = env->read("sparse.bin", kSparseBytes - 8, 8, {});
+    REQUIRE(tail);
+    CHECK(*tail == std::string(7, '\0') + "z");
+    // The end of the file is still the only early stop, and the far offset reads
+    // an empty result rather than failing.
+    auto beyond = env->read("sparse.bin", kSparseBytes + 1024, 8, {});
+    REQUIRE(beyond);
+    CHECK(beyond->empty());
+    const auto after = high_water_bytes();
+    CHECK(after < before + 64 * 1024 * 1024);
 }
 
 TEST_CASE("compaction tool text follows frozen UTF-16 limits through the model request",

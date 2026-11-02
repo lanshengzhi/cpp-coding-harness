@@ -2,6 +2,8 @@
 
 #include <cch/chord/Output.hpp>
 
+#include "Utf8Text.hpp"
+
 #include "support/UniqueFd.hpp"
 
 #include <algorithm>
@@ -11,6 +13,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <format>
 #include <fcntl.h>
@@ -223,6 +226,63 @@ support::Expected<support::UniqueFd> open_write_parent(const fs::path& target, b
     return fd;
 }
 
+/// One path's metadata without following a symbolic link (frozen `lstat`).
+FileInfo file_info_of(const fs::path& name, const struct stat& st) {
+    return FileInfo{.name = name.filename().string(),
+            .path = name.string(),
+            .kind = S_ISDIR(st.st_mode)   ? "directory"
+                    : S_ISLNK(st.st_mode) ? "symlink"
+                                          : "file",
+            .size = static_cast<std::uintmax_t>(st.st_size)};
+}
+
+support::Error missing_path(const fs::path& path, std::string_view operation) {
+    return support::make_error(support::ErrorCode::Workspace,
+            std::format("ENOENT: no such file or directory, {} '{}'", operation, path.string()),
+            "not_found");
+}
+
+/// Pages one open directory in file-system order. Metadata is read per entry, so
+/// a page never restarts the scan and an entry that vanished meanwhile is
+/// skipped instead of failing the page.
+class LocalDirectoryReader final : public DirectoryReader {
+public:
+    explicit LocalDirectoryReader(fs::directory_iterator iterator) : iterator_(std::move(iterator)) {}
+
+    support::Expected<ListingPage> next(std::size_t max_entries, std::stop_token stop) override {
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        if (max_entries == 0)
+            return std::unexpected(failure("maxEntries must be a positive integer", support::ErrorCode::Validation));
+        ListingPage page;
+        while (!done_ && page.entries.size() < max_entries) {
+            if (iterator_ == fs::directory_iterator{}) {
+                done_ = true;
+                break;
+            }
+            if (stop.stop_requested()) return std::unexpected(cancelled());
+            const auto entry_path = iterator_->path();
+            std::error_code increment_error;
+            iterator_.increment(increment_error);
+            if (increment_error) return std::unexpected(failure(increment_error.message()));
+            struct stat st{};
+            if (::lstat(entry_path.c_str(), &st) != 0) {
+                // Gone between enumeration and its metadata read: it is not part
+                // of the listing any more (frozen DirReader.next).
+                if (errno == ENOENT) continue;
+                return std::unexpected(system_failure("stat"));
+            }
+            if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode)) continue;
+            page.entries.push_back(file_info_of(entry_path, st));
+        }
+        page.done = done_;
+        return page;
+    }
+
+private:
+    fs::directory_iterator iterator_;
+    bool done_{};
+};
+
 class LocalEnvironment final : public Environment {
 public:
     explicit LocalEnvironment(std::string cwd, std::move_only_function<void()> before_rename = {})
@@ -251,6 +311,35 @@ public:
         }
         auto error = n < 0 ? std::optional{system_failure("read")} : std::nullopt;
         if (error) return std::unexpected(*error);
+        return result;
+    }
+    support::Expected<std::string> read(
+            std::string_view path, std::uintmax_t offset, std::size_t length, std::stop_token stop) override {
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        auto name = resolve(path).string();
+        support::UniqueFd fd{::open(name.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW)};
+        if (!fd) {
+            if (errno == ENOENT) return std::unexpected(missing_path(resolve(path), "open"));
+            return std::unexpected(system_failure("open"));
+        }
+        std::string result;
+        result.reserve(std::min<std::size_t>(length, 64 * 1024));
+        std::array<char, 64 * 1024> buffer{};
+        // Positional reads never move the descriptor, so a range entirely before
+        // `offset` is never transferred; fewer bytes only means the file ended.
+        while (result.size() < length) {
+            if (stop.stop_requested()) return std::unexpected(cancelled());
+            const auto max_offset = static_cast<std::uintmax_t>(std::numeric_limits<off_t>::max());
+            if (offset > max_offset || result.size() > max_offset - offset)
+                return std::unexpected(failure(
+                        "offset is beyond the file system's addressable range", support::ErrorCode::Validation));
+            const auto want = std::min(buffer.size(), length - result.size());
+            const ssize_t n = ::pread(fd.get(), buffer.data(), want, static_cast<off_t>(offset + result.size()));
+            if (n < 0 && errno == EINTR) continue;
+            if (n < 0) return std::unexpected(system_failure("pread"));
+            if (n == 0) break;
+            result.append(buffer.data(), static_cast<std::size_t>(n));
+        }
         return result;
     }
     support::ExpectedVoid write(std::string_view path, std::string_view content, std::stop_token stop) override {
@@ -292,12 +381,19 @@ public:
         auto name = resolve(path);
         struct stat st{};
         if (::lstat(name.c_str(), &st) != 0) return std::unexpected(system_failure("stat"));
-        return FileInfo{name.filename().string(),
-                name.string(),
-                S_ISDIR(st.st_mode)   ? "directory"
-                : S_ISLNK(st.st_mode) ? "symlink"
-                                      : "file",
-                static_cast<std::uintmax_t>(st.st_size)};
+        return file_info_of(name, st);
+    }
+    support::Expected<std::unique_ptr<DirectoryReader>> open_directory(
+            std::string_view path, std::stop_token stop) override {
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        auto directory = resolve(path);
+        std::error_code ec;
+        fs::directory_iterator iterator(directory, ec);
+        if (ec) {
+            if (ec == std::errc::no_such_file_or_directory) return std::unexpected(missing_path(directory, "scandir"));
+            return std::unexpected(failure(ec.message()));
+        }
+        return std::unique_ptr<DirectoryReader>{std::make_unique<LocalDirectoryReader>(std::move(iterator))};
     }
     support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
         std::error_code ec;
@@ -381,54 +477,6 @@ bool secret_name(std::string name) {
         if (name.find(part) != std::string::npos) return true;
     return false;
 }
-
-class Utf8Decoder {
-public:
-    std::string decode(std::string_view chunk, bool finish = false) {
-        pending_.append(chunk);
-        std::string result;
-        std::size_t i = 0;
-        while (i < pending_.size()) {
-            auto lead = static_cast<unsigned char>(pending_[i]);
-            if (lead < 0x80) {
-                result.push_back(pending_[i++]);
-                continue;
-            }
-            std::size_t length = lead >= 0xc2 && lead <= 0xdf   ? 2
-                                 : lead >= 0xe0 && lead <= 0xef ? 3
-                                 : lead >= 0xf0 && lead <= 0xf4 ? 4
-                                                                : 0;
-            if (length == 0) {
-                result += "\xef\xbf\xbd";
-                ++i;
-                continue;
-            }
-            std::size_t valid = 1;
-            while (valid < length && i + valid < pending_.size()) {
-                auto byte = static_cast<unsigned char>(pending_[i + valid]);
-                if (byte < 0x80 || byte > 0xbf ||
-                        (valid == 1 && ((lead == 0xe0 && byte < 0xa0) || (lead == 0xed && byte > 0x9f) ||
-                                               (lead == 0xf0 && byte < 0x90) || (lead == 0xf4 && byte > 0x8f))))
-                    break;
-                ++valid;
-            }
-            if (valid == length) {
-                result.append(pending_, i, length);
-                i += length;
-            } else if (i + valid == pending_.size() && !finish) {
-                break;
-            } else {
-                result += "\xef\xbf\xbd";
-                i += valid;
-            }
-        }
-        pending_.erase(0, i);
-        return result;
-    }
-
-private:
-    std::string pending_;
-};
 
 void retain_tail(
         std::string& text, std::optional<ShellOutputSkip>& skipped, std::string_view chunk, ShellOutputWindow window) {
