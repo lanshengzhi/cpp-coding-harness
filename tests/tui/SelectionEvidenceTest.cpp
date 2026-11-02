@@ -1,7 +1,9 @@
-// Named pi-v1.0.4 acceptance for fullscreen text selection (#1006),
+// Named pi-v1.3.0 acceptance for fullscreen text selection (#1006),
 // multi-click selection (#1007) and mouse action routing (#1009). Expectations
-// from the verified frozen bundle; the cases exercise the public AltScreen,
-// Text, ScrollView and VirtualTerminal seams.
+// come from the registered pi-v1.3.0 `audit-1050/selection-multiclick.json`
+// observation (#1182), whose scenarios are identical to the historical
+// pi-v1.0.4 selection bundle but bound to revision 71023aec; the cases exercise
+// the public AltScreen, Text, ScrollView and VirtualTerminal seams.
 
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/ScrollView.hpp>
@@ -49,7 +51,7 @@ void drag(cch::tui::VirtualTerminal& terminal, const JsonValue& inputs) {
 }
 
 [[nodiscard]] cch::support::Expected<JsonValue> selection_bundle() {
-    return cch::tests::read_pi_tui_evidence("selection.json");
+    return cch::tests::read_pi_v130_audit_evidence("audit-1050", "selection-multiclick.json");
 }
 
 [[nodiscard]] const JsonValue& mouse_scenario_of(const JsonValue& bundle, std::string_view name) {
@@ -261,7 +263,7 @@ TEST_CASE("AltScreen secondary button replays named Linux paste routing observat
 }
 
 TEST_CASE("AltScreen selection replays styled CJK cells across wrapped rows and copies frozen text",
-        "[tui][alt-screen][selection][issue1006][compat-pi]") {
+        "[tui][alt-screen][selection][issue1006][issue1182][compat-pi]") {
     const auto bundle = selection_bundle();
     REQUIRE(bundle);
     const auto& scenario = scenario_of(*bundle, "styled-cjk-wrapped-selection");
@@ -316,7 +318,7 @@ TEST_CASE("AltScreen selection replays styled CJK cells across wrapped rows and 
 }
 
 TEST_CASE("AltScreen selection preserves the cell range through content and focus changes",
-        "[tui][alt-screen][selection][issue1006][compat-pi]") {
+        "[tui][alt-screen][selection][issue1006][issue1182][compat-pi]") {
     const auto bundle = selection_bundle();
     REQUIRE(bundle);
     const auto& scenario = scenario_of(*bundle, "selection-content-focus-and-clear-lifecycle");

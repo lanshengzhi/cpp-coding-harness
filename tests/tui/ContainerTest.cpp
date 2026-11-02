@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "support/ImageCapabilitiesGuard.hpp"
+#include "support/PiTuiEvidence.hpp"
 #include "support/RenderedScreen.hpp"
 #include "tui/ContainerTestHooks.hpp"
 
@@ -240,31 +241,54 @@ TEST_CASE("Box re-renders at a new horizontal padding like frozen pi", "[tui][bo
     CHECK(at_zero->lines == std::vector<std::string>{"hey       "});
 }
 
-TEST_CASE("Text re-wraps at a new horizontal padding like frozen pi", "[tui][text][padding][issue1121][spec]") {
-    cch::tui::Text text("hello", 1, 0);
+TEST_CASE("Text re-wraps at a new horizontal padding like frozen pi",
+        "[tui][text][padding][issue1121][issue1182][spec]") {
+    // The expected rows are the frozen observation, read from the registered artifact rather than
+    // copied here, so an edited frozen row fails this comparison.
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "padding-and-selection-reset.json");
+    REQUIRE(bundle);
+    const cch::support::JsonValue* scenario = nullptr;
+    for (const auto& candidate : bundle->at("scenarios").get_array()) {
+        if (candidate.at("name").get_string() == "text-set-padding-x-rerenders-dynamic-width") scenario = &candidate;
+    }
+    REQUIRE(scenario != nullptr);
+    const auto& inputs = scenario->at("inputs");
+    const auto& expected = scenario->at("expected");
+    const auto frozen_lines = [](const cch::support::JsonValue& rows) {
+        std::vector<std::string> lines;
+        for (const auto& row : rows.get_array())
+            lines.push_back(row.get_string());
+        return lines;
+    };
 
-    const auto at_one = text.render(10);
+    cch::tui::Text text(inputs.at("text").get_string(), 1, 0);
+    const auto width = static_cast<std::size_t>(inputs.at("width").get_number());
+    const auto& transitions = inputs.at("transitions").get_array();
+    REQUIRE(transitions.size() == 3);
+    REQUIRE(static_cast<std::size_t>(transitions[0].get_number()) == 1);
+
+    const auto at_one = text.render(width);
     REQUIRE(at_one);
-    CHECK(at_one->lines == std::vector<std::string>{" hello    "});
+    CHECK(at_one->lines == frozen_lines(expected.at("atOne")));
 
     // A larger pad narrows the content width, so the text re-wraps instead of
     // keeping the previous single line.
-    text.set_padding_x(3);
-    const auto at_three = text.render(10);
+    text.set_padding_x(static_cast<std::size_t>(transitions[1].get_number()));
+    const auto at_three = text.render(width);
     REQUIRE(at_three);
-    CHECK(at_three->lines == std::vector<std::string>{"   hell   ", "   o      "});
+    CHECK(at_three->lines == frozen_lines(expected.at("atThree")));
 
-    text.set_padding_x(0);
-    const auto at_zero = text.render(10);
+    text.set_padding_x(static_cast<std::size_t>(transitions[2].get_number()));
+    const auto at_zero = text.render(width);
     REQUIRE(at_zero);
-    CHECK(at_zero->lines == std::vector<std::string>{"hello     "});
+    CHECK(at_zero->lines == frozen_lines(expected.at("atZero")));
 }
 
 // pi's `Box.setPaddingX` invalidates the render cache, so a child whose
 // rendered lines do not depend on the width still re-renders with the new
 // padding. Without the invalidation the cached composition (the old padding)
 // is returned, because the child's own lines are unchanged.
-TEST_CASE("Box padding change invalidates the render cache", "[tui][box][padding][issue1121][spec]") {
+TEST_CASE("Box padding change invalidates the render cache", "[tui][box][padding][issue1182][issue1121][spec]") {
     cch::tui::Box box(2, 0);
     REQUIRE(box.add_child(std::make_unique<RawLineComponent>("hey")));
 

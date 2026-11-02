@@ -38,3 +38,16 @@ include_guard(GLOBAL)
     set_tests_properties(cch_pi_v130_consolidation_boundaries PROPERTIES
         LABELS "evidence;consolidation;issue1058;spec"
         TIMEOUT 120)
+
+    # #1182: every supported cch_tui row is either covered by a whole-row delivery receipt or named
+    # by exactly one bounded comparison batch. The rebuild keeps the committed route index
+    # deterministic, and the boundary cases reject a dropped row, a duplicate assignment and a
+    # batch that loses its caller, scenario, discriminating case, dependency or implementation
+    # obligation.
+    add_test(
+        NAME cch_pi_v130_tui_route_batches
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/evidence/TuiReconciliationTest.py
+    )
+    set_tests_properties(cch_pi_v130_tui_route_batches PROPERTIES
+        LABELS "evidence;consolidation;tui;issue1182;spec"
+        TIMEOUT 120)
