@@ -94,7 +94,9 @@ the correction moves the comparison onto the named baseline without weakening an
 
 `ProcessTerminalProgramStatusTest.cpp` also stopped copying its expected terminal bytes: the query,
 status and clear writes now come from `audit-1050/program-status-detection.json`. That change
-exposed the finding below.
+exposed the finding below. Its four cases stay in the `-L issue1182` selection even though none of
+the rows they compare can be delivered: they are the executed comparison that established the
+finding, and excluding them would hide the evidence the batch obligation cites.
 
 ### Finding: the frozen stop sequence is not reproduced byte for byte
 
@@ -144,6 +146,12 @@ delivered row, and a batch that loses a required field fails the boundary test.
 | B16 loader, mouse regions, residuals | 32 | `Loader`, `CancellableLoader`, `MouseRegion`, program-status helpers | E07 Loader/CancellableLoader, E14 MouseRegion | loader/mouse-region capture; shares the B13 stop-sequence finding through `program-status:detection-override` |
 | B17 application product entries | 8 | ordinary application Session over a real terminal | native differential, program status, extension editor | #831, #1035, the dual-runtime capture environment, and a real emulator for clipboard/hyperlink |
 
+Each batch entry also names an `obligationOwner`. Where the remaining work has an open owner ticket
+it names that ticket (#1035 for B6 and B14, #831 and #1035 for B17); where a C++ implementation gap
+has no open implementation ticket, the bounded batch itself is the named owner, which the ticket's
+acceptance allows instead of a filed issue. No obligation is left unnamed and none is routed to
+#1126.
+
 Each batch entry in the index also carries the concrete normal and discriminating case that must
 exist before the batch can compare. Those are the cases the existing tests already implement (for
 example `ScrollViewEvidenceTest` for B3, `EditorTest` for B7, `SelectListTest` for B11, or
@@ -186,7 +194,8 @@ Measured on this ticket's comparison commit (see the delivery record for the exa
 | --- | --- |
 | `cmake --build --preset vcpkg --target cch_tests_tui` | built; build-phase Parity Architecture Gate PASS |
 | `ctest --preset vcpkg -N -L issue1182` | 13 selected: 4 claimed comparison cases, 4 discriminating cases, 4 program-status detection cases strengthened by this packet, and the route-index boundary test |
-| `ctest --preset vcpkg -L issue1182 --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1182-tui.xml` | 13/13 passed, 0 failed, 0 skipped |
+| `ctest --preset vcpkg -L issue1182 --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1182-revalidation-1187.xml` | 13/13 passed, 0 failed, 0 skipped, on the #1187-merged tree |
+| `ctest --preset vcpkg -L issue1182 … deliveries/1182-tui.xml` | the original 13/13 run, retained; the merged-tree rerun above is the pinned artifact and the revalidation entry records why no row, scenario or routing digest changed |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py check` | PASS — 920 supported rows: 7 delivered, 913 batched across 17 batches |
 | `python3 tests/evidence/TuiReconciliationTest.py` | 11 tests, all passed |
 | `ctest --preset vcpkg -L tui` | selected and passed (see below) |

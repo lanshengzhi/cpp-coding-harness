@@ -204,6 +204,14 @@ selected, 79 passed, including every case this record claims) and the record car
 `revalidation1184` entry with the refreshed digests. No claimed row, scenario or routing digest
 changed, and the original `deliveries/1178-chord.xml` stays committed.
 
+[#1187](1187-chord-progress-pacing.md) later changed `src/chord/Output.cpp`, its Owner header and
+`tests/chord/OutputTest.cpp` while adding the frozen progress byte-rate constant and the timer-free
+pacing seam. Three inputs this receipt pins therefore changed, and the selection now has the four new
+Chord progress cases. The shared selection was rerun on the #1187 merged tree into
+`deliveries/1178-revalidation-1187.xml` (88 selected, 88 passed, including every case this record
+claims) and the record carries a `revalidation1187` entry with the refreshed digests. No claimed row,
+scenario or routing digest changed, and the original `deliveries/1178-chord.xml` stays committed.
+
 [#1188](1188-chord-observer-serialization.md) later added one case to
 `tests/chord/ReplicatedStateTest.cpp` — the awaited-listener comparison for the last blocked B5
 scenario — while re-pairing the coarse 1054 `Chord:state` row to its registered audit-1057 detail
@@ -212,6 +220,11 @@ shared selection was rerun on the same tree into `deliveries/1178-revalidation-1
 selected, 85 passed, including every case this record claims) and the record carries a
 `revalidation1188` entry with the refreshed digest. No claimed row, scenario or routing digest
 changed, and the original `deliveries/1178-chord.xml` stays committed. B5 is closed by that record.
+
+After both changes merged, the shared selection was rerun on the merged tree into
+`deliveries/1178-revalidation-1187-1188.xml` (89 selected, 89 passed, including every case this
+record claims); the record's top-level validation points at that combined artifact and both
+revalidation entries retain their own previous-validation chains.
 
 The receipt pins the exact JUnit bytes, so the selected count, the case names and the scenario
 mapping cannot drift silently.

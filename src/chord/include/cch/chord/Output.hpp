@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -84,6 +85,60 @@ private:
     std::size_t total_bytes_{0};
     std::size_t total_newlines_{0};
     bool ends_with_newline_{true};
+};
+
+/// Frozen pi `PROGRESS_BYTES_PER_SECOND` (`packages/chord/src/output.ts`):
+/// every progress commit buys a pause proportional to what it wrote at this
+/// byte rate (100 KiB/s).
+inline constexpr std::size_t kProgressBytesPerSecond = 100 * 1024;
+
+/// A caller-owned clock reading for progress pacing: milliseconds since an
+/// arbitrary epoch. It is fractional because a byte-rate pause is not a whole
+/// millisecond (pi `Progress.#nextAt` is a JavaScript number).
+using ProgressTime = std::chrono::duration<double, std::milli>;
+
+/// The pause a successful progress commit buys (pi `Progress.#flush`): at
+/// least `min_interval`, otherwise the exact time `bytes` take at
+/// `kProgressBytesPerSecond`. The fraction is kept, never rounded to a whole
+/// millisecond.
+[[nodiscard]] ProgressTime progress_pause(std::size_t bytes, std::chrono::milliseconds min_interval);
+
+/// Timer-free pi `Progress` pacing. The caller owns the clock and the commit:
+/// `mark` records a change, `due` says when the next coalesced commit may
+/// start, and `committed` records what that commit wrote. No timer and no
+/// clock is read here, so a declared schedule is reproducible.
+class ProgressPacer {
+public:
+    explicit ProgressPacer(std::chrono::milliseconds min_interval) noexcept : min_interval_(min_interval) {}
+
+    /// pi `mark`: include a change in the next commit.
+    void mark() noexcept { pending_ = true; }
+
+    /// Whether a marked change still waits for a commit.
+    [[nodiscard]] bool pending() const noexcept { return pending_; }
+
+    /// Earliest time the next marked change may commit (pi `#nextAt`).
+    [[nodiscard]] ProgressTime next_commit_at() const noexcept { return next_commit_at_; }
+
+    /// Whether the marked change may commit at `now` (pi `#schedule`'s
+    /// `wait <= 0`). `now` and `next_commit_at()` share one time base.
+    [[nodiscard]] bool due(ProgressTime now) const noexcept { return pending_ && now >= next_commit_at_; }
+
+    /// Start the commit due now: the mark is consumed (pi `#flush` clears
+    /// `#dirty`). A mark that arrives during the commit stays pending.
+    void begin() noexcept { pending_ = false; }
+
+    /// Complete the commit that started at `started` and wrote `bytes`, so the
+    /// next marked change may commit at
+    /// `started + progress_pause(bytes, min_interval)`.
+    void committed(ProgressTime started, std::size_t bytes) noexcept {
+        next_commit_at_ = started + progress_pause(bytes, min_interval_);
+    }
+
+private:
+    std::chrono::milliseconds min_interval_;
+    ProgressTime next_commit_at_{};
+    bool pending_{false};
 };
 
 } // namespace cch::chord

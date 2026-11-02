@@ -26,6 +26,29 @@ DELIVERIES_PATH = ROOT / "docs/research/pi-v1.3.0/1058-deliveries.json"
 INDEX_PATH = ROOT / "docs/research/pi-v1.3.0/1182-tui-route-batches.json"
 
 SCHEMA = "pike/pi-v1.3.0-tui-route-batches/1"
+
+# Who owns each batch's remaining work. An obligation with an open owner ticket names it; where no
+# implementation ticket exists, the bounded batch itself is the named owner (the ticket accepts "a
+# bounded issue or explicit batch"), so no obligation is left unnamed for #1126 to absorb.
+OBLIGATION_OWNERS = {
+    "B1": "batch B1",
+    "B2": "batch B2",
+    "B3": "batch B3",
+    "B4": "batch B4",
+    "B5": "batch B5",
+    "B6": "#1035",
+    "B7": "batch B7",
+    "B8": "batch B8",
+    "B9": "batch B9",
+    "B10": "batch B10",
+    "B11": "batch B11",
+    "B12": "batch B12",
+    "B13": "batch B13",
+    "B14": "#1035",
+    "B15": "batch B15",
+    "B16": "batch B16",
+    "B17": "#831 and #1035",
+}
 OWNER = "cch_tui"
 TUI_PREFIX = "cch_tui:"
 
@@ -443,6 +466,7 @@ def build_index(ledger: dict, deliveries: dict) -> dict:
             "normalCase": batch["normalCase"],
             "discriminatingCase": batch["discriminatingCase"],
             "dependency": batch["dependency"],
+            "obligationOwner": OBLIGATION_OWNERS[batch["id"]],
             "implementationObligation": batch.get("implementationObligation"),
             "rows": [],
             "scenarioLabels": [],
@@ -491,7 +515,7 @@ def validate(index: dict, ledger: dict, deliveries: dict) -> list[str]:
     seen: dict[str, str] = {}
     for batch in index["batches"]:
         for field in ("id", "title", "disposition", "owner", "caller", "normalCase", "discriminatingCase",
-                      "dependency"):
+                      "dependency", "obligationOwner"):
             value = batch.get(field)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{batch.get('id', '<unnamed>')}: missing {field}")

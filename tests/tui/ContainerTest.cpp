@@ -247,13 +247,10 @@ TEST_CASE("Text re-wraps at a new horizontal padding like frozen pi",
     // copied here, so an edited frozen row fails this comparison.
     const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "padding-and-selection-reset.json");
     REQUIRE(bundle);
-    const cch::support::JsonValue* scenario = nullptr;
-    for (const auto& candidate : bundle->at("scenarios").get_array()) {
-        if (candidate.at("name").get_string() == "text-set-padding-x-rerenders-dynamic-width") scenario = &candidate;
-    }
-    REQUIRE(scenario != nullptr);
-    const auto& inputs = scenario->at("inputs");
-    const auto& expected = scenario->at("expected");
+    const cch::support::JsonValue& scenario =
+            cch::tests::find_scenario(*bundle, "text-set-padding-x-rerenders-dynamic-width");
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
     const auto frozen_lines = [](const cch::support::JsonValue& rows) {
         std::vector<std::string> lines;
         for (const auto& row : rows.get_array())

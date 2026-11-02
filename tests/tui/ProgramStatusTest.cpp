@@ -43,17 +43,6 @@ namespace {
     return decoded;
 }
 
-/// The frozen format scenario. Every expected sequence below is read from the registered artifact,
-/// so an edited observation fails the comparison instead of only invalidating a receipt digest.
-[[nodiscard]] const cch::support::JsonValue& scenario_named(
-        const cch::support::JsonValue& bundle, std::string_view name) {
-    for (const auto& scenario : bundle.at("scenarios").get_array()) {
-        if (scenario.at("name").get_string() == name) return scenario;
-    }
-    REQUIRE(false);
-    return bundle.at("scenarios").get_array().front();
-}
-
 [[nodiscard]] std::string decode_message(const std::string& sequence) {
     constexpr std::string_view kMarker = ":msg=";
     const auto marker = sequence.find(kMarker);
@@ -73,7 +62,7 @@ TEST_CASE("Program status format encodes frozen OSC 7501 fields and limits",
     const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "program-status-format.json");
     REQUIRE(bundle);
     const cch::support::JsonValue& scenario =
-            scenario_named(*bundle, "format-program-status-encodes-fields-and-limits");
+            cch::tests::find_scenario(*bundle, "format-program-status-encodes-fields-and-limits");
     const auto& expected = scenario.at("expected");
 
     // state=blocked:app=pi:kind=permission with a base64 message, and the bare clear report.

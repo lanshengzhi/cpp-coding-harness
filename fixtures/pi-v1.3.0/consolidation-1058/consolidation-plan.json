@@ -796,6 +796,22 @@
         "cch_chord:json:json-value"
       ],
       "authority": "#1186 supplemental audit-1057-typed-json capture plus tests/chord/StrictJsonTest.cpp direct JsonValue model comparison"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "progress commits the first change at once then paces later commits by their written bytes",
+      "rows": [
+        "cch_chord:output:progress"
+      ],
+      "authority": "#1187 registered frozen capture plus tests/chord/OutputTest.cpp public Output comparisons; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "progress keeps the exact fractional byte-rate pause instead of rounding it",
+      "rows": [
+        "cch_chord:output:progress"
+      ],
+      "authority": "#1187 registered frozen capture plus tests/chord/OutputTest.cpp public Output comparisons; verification remains upstream-captured"
     }
   ],
   "orphanScenarios": [

@@ -229,8 +229,7 @@ TEST_CASE("ITui clear_children does not dispatch to detached children", "[tui][i
 }
 
 TEST_CASE("ITui roots support hardware-cursor preference and IME positioning",
-        "[issue1182]"
-        "[tui][hardware-cursor][issue1037][spec]") {
+        "[tui][hardware-cursor][issue1037][issue1182][spec]") {
     SECTION("defaults to false on both roots") {
         cch::tui::VirtualTerminal term_main({.columns = 20, .rows = 5});
         cch::tui::MainScreen main_screen{term_main};

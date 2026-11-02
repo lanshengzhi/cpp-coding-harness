@@ -28,6 +28,7 @@
    "normalCase": "tests/tui/ScreenStateGoldenTest.cpp and tests/tui/TuiTest.cpp replay the common-root add/remove/focus/input/clear/stop sequence and the regular renderer frames",
    "discriminatingCase": "a stopped root that still paints, or a clear that leaves the deferred-wrap cursor, fails; the diagnostic-callback rows need a write-log capture so a callback that never runs separates from one that runs late",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture screen-state.json at 71023aec; tests/tui/ScreenStateGoldenTest.cpp already replays the historical bundle",
+   "obligationOwner": "batch B1",
    "implementationObligation": "Fake-cursor marker contract: C++ has no renderFakeCursor marker pair (CURSOR_MARKER, tui:fake-cursor-marker-constants, renderFakeCursor, tui:resolveFakeCursors) and keeps cursor positioning out of band; C++ overlay composition is not compared against TUI.showOverlay's cursor-preservation case",
    "rows": [
     "cch_tui:CURSOR_MARKER",
@@ -177,6 +178,7 @@
    "normalCase": "tests/tui/RenderDifferentialTest.cpp and tests/tui/TuiTest.cpp drive MainScreen render, invalidate and stop through a VirtualTerminal",
    "discriminatingCase": "a regular frame that keeps the layout root attached after a fullscreen switch, or a render-state transfer that starts the new root, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture renderer-switch.json; the product rows in B17 own the application-level switch",
+   "obligationOwner": "batch B2",
    "implementationObligation": "The same marker contract: TuiMainScreen.doRender has no fake-cursor resolution stage and no v1.3.0 comparison",
    "rows": [
     "cch_tui:TuiMainScreen",
@@ -226,6 +228,7 @@
    "normalCase": "tests/tui/ScrollViewEvidenceTest.cpp, tests/tui/ScrollbarEvidenceTest.cpp and tests/tui/AltScreenSearchTest.cpp replay the frozen scroll, scrollbar and search scenarios",
    "discriminatingCase": "a followed window that stops following on append, a scrollbar reservation that changes the transcript width, or a search match painted without its highlight style, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture the alt-screen families; #1035 owns the image placement-span frames inside the same viewport",
+   "obligationOwner": "batch B3",
    "implementationObligation": "The same marker contract for the alt-screen frame: TuiAltScreen.render draws the focused fake cursor as inline SGR",
    "rows": [
     "cch_tui:TuiAltScreen",
@@ -310,6 +313,7 @@
    "normalCase": "tests/tui/SelectionEvidenceTest.cpp replays the word/line cycle, wrapped-row geometry and the copy-on-select default",
    "discriminatingCase": "a third click that selects a word instead of the line, a drag that keeps the double-click history after a reset, or a copy that returns the joined cell range instead of the frozen text, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture selection.json; the styled CJK scenario is already registered and verified by this packet",
+   "obligationOwner": "batch B4",
    "implementationObligation": "C++ has no public resetTextSelection() combining the selection clear with the multi-click history reset; clear_text_selection() keeps the history and lastClick has no public reset",
    "rows": [
     "cch_tui:TuiAltScreen.applySelectionHighlight",
@@ -377,6 +381,7 @@
    "normalCase": "tests/tui/MouseRoutingTest.cpp, tests/tui/OverlayTest.cpp and tests/tui/MouseEvidenceTest.cpp replay the frozen wheel consumption, overlay hit testing and mouse capture rules",
    "discriminatingCase": "a focused overlay that still forwards an unhandled wheel to the transcript (the recorded partial), or a wheel over an overlay that scrolls the transcript underneath, fails",
    "dependency": "the C++ overlay wheel deferral is recorded partial in the ledger; a capture at pi-v1.3.0 plus the implementation fix is required before this batch can compare",
+   "obligationOwner": "batch B5",
    "implementationObligation": "C++ AltScreen still defers an unhandled wheel to the focused overlay (shouldDeferViewportInputToOverlay gates handleViewportInput) instead of scrolling the transcript",
    "rows": [
     "cch_tui:TuiAltScreen.applyMouseDispatchResult",
@@ -425,6 +430,7 @@
    "normalCase": "tests/tui/AltScreenImageEvidenceTest.cpp replays crop/restore, anchor move, removal and eviction through VirtualTerminal",
    "discriminatingCase": "an image re-emitted as a full transmission instead of a placement-only a=p command, or a session teardown that leaves the placement on screen, fails",
    "dependency": "#1035 owns the placement-span repaint and its remaining emulator observation; #831 owns the dock footer frames",
+   "obligationOwner": "#1035",
    "implementationObligation": null,
    "rows": [
     "cch_tui:TuiAltScreen.deleteKittyImages",
@@ -451,6 +457,7 @@
    "normalCase": "tests/tui/EditorTest.cpp and tests/tui/EditorLayoutTest.cpp drive editing, wrapping, history, undo and the frozen word navigation",
    "discriminatingCase": "an undo that leaves the cursor on the pre-edit column, a kill ring that yanks the wrong entry, or a wrapped click that maps to the previous grapheme, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture editor-autocomplete.json and the screen-state editor scenarios; the fake-cursor rows stay with the cursor batch",
+   "obligationOwner": "batch B7",
    "implementationObligation": "Editor.render emits the drawn cursor as raw reverse video instead of renderFakeCursor markers; the editor family has no v1.3.0 comparison",
    "rows": [
     "cch_tui:Editor",
@@ -569,6 +576,7 @@
    "normalCase": "tests/tui/InputTest.cpp replays the frozen editing, placeholder, narrow-scroll and submit observations",
    "discriminatingCase": "a paste that submits mid-fragment, or a rebound submit key that still inserts a newline, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture input.json",
+   "obligationOwner": "batch B8",
    "implementationObligation": "Input.render emits the drawn cursor as raw reverse video instead of renderFakeCursor markers; the input family has no v1.3.0 comparison",
    "rows": [
     "cch_tui:Input",
@@ -624,6 +632,7 @@
    "normalCase": "tests/tui/MarkdownTest.cpp and tests/tui/LatexTest.cpp render headings, lists, tables, CJK and the frozen inline/display latex grammar",
    "discriminatingCase": "a table column that ignores a wide grapheme, or a latex fraction rendered from a different grammar, fails; the markdown family has no historical capture, so a new frozen capture is required",
    "dependency": "a new frozen pi-v1.3.0 markdown capture (no historical markdown artifact exists) plus the existing latex.json re-capture",
+   "obligationOwner": "batch B9",
    "implementationObligation": null,
    "rows": [
     "cch_tui:DefaultTextStyle",
@@ -696,6 +705,7 @@
    "normalCase": "tests/tui/ColorUtilsTest.cpp and tests/tui/TerminalColorsTest.cpp parse the frozen hex, rgb, ansi256 and oklch/okhsl spellings",
    "discriminatingCase": "a color that silently falls back instead of returning the frozen failure value, or an oklab mix that rounds through sRGB, fails; no historical color capture exists, so a new frozen capture is required",
    "dependency": "a new frozen pi-v1.3.0 color capture (the historical route was never captured) and the unchanged-source diff",
+   "obligationOwner": "batch B10",
    "implementationObligation": null,
    "rows": [
     "cch_tui:Color",
@@ -768,6 +778,7 @@
    "normalCase": "tests/tui/SelectListTest.cpp and tests/tui/SettingsListTest.cpp replay the windowing, description truncation, hover and click activation scenarios",
    "discriminatingCase": "a five-row window that centers on the wrong row, a description cut mid-grapheme, or a separator row that activates a setting, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture the select-list and settings-list scenarios",
+   "obligationOwner": "batch B11",
    "implementationObligation": null,
    "rows": [
     "cch_tui:SelectItem",
@@ -876,6 +887,7 @@
    "normalCase": "tests/tui/StackLayoutEvidenceTest.cpp, tests/tui/HStackEvidenceTest.cpp, tests/tui/ScrollViewEvidenceTest.cpp and tests/tui/ContainerTest.cpp replay the frozen frames",
    "discriminatingCase": "an auto basis measured at the frame width instead of its natural width, a dock whose growth drops the footer row, or a padding change that only re-clamps without re-wrapping, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture layout.json and component.json; #831 owns the dock growth frames",
+   "obligationOwner": "batch B12",
    "implementationObligation": "Box has no set_padding_x (padding only at construction) and shares the fake-cursor marker boundary obligation through utils:extractSegments",
    "rows": [
     "cch_tui:Box",
@@ -1017,6 +1029,7 @@
    "normalCase": "tests/tui/ProcessTerminalTest.cpp, tests/tui/StdinBufferTest.cpp and tests/tui/KeysTest.cpp replay the frozen startup, framing and key-identity observations",
    "discriminatingCase": "a fragmented terminal reply that leaks into typed input, a Shift-modified symbol key that misses its produced character, or a keybinding context that converges on the wrong binding, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture input.json and keys-kitty-text.json",
+   "obligationOwner": "batch B13",
    "implementationObligation": "C++ ProcessTerminal.stop() omits the frozen `ESC[>4;0m` modifyOtherKeys restore whenever modifyOtherKeys was never active, so the registered audit-1050 program-status-detection stop sequence is not reproduced byte for byte (#1182 finding); C++ parse_key/matches_key keep the explicit Shift flag on a produced symbol; StdinBuffer flushes a partial OSC/APC/kitty reply tail as typed input at the timeout; the remaining terminal families have no v1.3.0 comparison",
    "rows": [
     "cch_tui:Key",
@@ -1166,6 +1179,7 @@
    "normalCase": "tests/tui/TerminalImageTest.cpp and tests/tui/ImageTest.cpp compare the protocol matrix, cell dimensions and the fallback rows",
    "discriminatingCase": "a capability detected from the wrong environment variable, or a fallback row emitted after the image sequence, fails; the rendered placement needs a real emulator",
    "dependency": "a frozen pi-v1.3.0 image dimension/protocol capture plus a real emulator observation; #1035 owns the placement-span repaint",
+   "obligationOwner": "#1035",
    "implementationObligation": "C++ terminal image detection has no Herdr branch and no Herdr-before-Kitty ordering",
    "rows": [
     "cch_tui:CellDimensions",
@@ -1253,6 +1267,7 @@
    "normalCase": "tests/tui/AutocompleteTest.cpp, tests/tui/AutocompleteRankingTest.cpp and tests/tui/FuzzyTest.cpp replay the frozen completion contexts, ranking and UTF-16 offsets",
    "discriminatingCase": "a provider that completes at the wrong token boundary, or a fuzzy score that keeps the UTF-16 offset instead of the frozen UTF-8 one, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture autocomplete.json and fuzzy.json",
+   "obligationOwner": "batch B15",
    "implementationObligation": null,
    "rows": [
     "cch_tui:AutocompleteItem",
@@ -1314,6 +1329,7 @@
    "normalCase": "tests/tui/LoaderTest.cpp and tests/tui/MouseRoutingTest.cpp replay the frozen spinner frames and mouse-region routing",
    "discriminatingCase": "a loader that repaints only on the animation tick and misses a synchronous frame, or a mouse region that keeps routing after removal, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture the loader and mouse-region scenarios",
+   "obligationOwner": "batch B16",
    "implementationObligation": null,
    "rows": [
     "cch_tui:CancellableLoader",
@@ -1374,6 +1390,7 @@
    "normalCase": "tests/coding_agent/tui/NativeTuiDifferentialTest.cpp drives the dual-runtime scenario cells and tests/coding_agent/tui/ProductCursorEvidenceTest.cpp replays the frozen cursor frames",
    "discriminatingCase": "a product row whose scenario is only observed by the external dual-runtime harness (skipped without the capture environment), or a row with no recorded comparison scenario at all (the #831/#1035 residuals), cannot be verified and must stay open",
    "dependency": "#831 and #1035 own their exact remaining emulator scenarios; the native differential cells need the separately selected dual-runtime capture environment; the clipboard and hyperlink outcomes need a real emulator observation, not PTY bytes",
+   "obligationOwner": "#831 and #1035",
    "implementationObligation": "The three scenario-less residual rows (hardware-cursor, residual-1035-image-placement, residual-831-dock-growth-footer) cannot carry a whole-row receipt until a comparison scenario is registered; program-status-protocol, transcript-selection-reset and wheel-over-overlay have no C++ implementation",
    "rows": [
     "cch_tui:hardware-cursor",
