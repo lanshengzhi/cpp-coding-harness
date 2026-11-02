@@ -4347,12 +4347,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml"
           ],
-          "testedRevision": "2e62fa140f7af423eb3f8a4a9de714718a80f287",
+          "testedRevision": "573fe0c82d3d943f42002b64287d1397bcb98ca1",
           "recordedAt": "2026-11-02T08:57:19Z",
           "selected": 9,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
-            "sha256": "35181e11fe53e3ffc946d2ef9e5743b749728572a64be2850c6c388dcc11ffc4"
+            "sha256": "af1bb334ebc744abba1556c6291f9e6675b48e562546b29bd4b35e941e48b1e8"
           }
         },
         "rows": [
@@ -4517,7 +4517,7 @@
           },
           {
             "path": "tests/durable/GatedStorage.hpp",
-            "sha256": "43a7d23f32d460b5de071e7a2dc223be63e20d5eb288635d322e4550c07868a3"
+            "sha256": "c405563d4b888159cf31db8d31bb5ea3c32ca277a5b8b1d5f0df25f14621292d"
           },
           {
             "path": "tests/durable/HarnessWorkflowTest.cpp",
@@ -4549,7 +4549,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
-            "sha256": "35181e11fe53e3ffc946d2ef9e5743b749728572a64be2850c6c388dcc11ffc4"
+            "sha256": "af1bb334ebc744abba1556c6291f9e6675b48e562546b29bd4b35e941e48b1e8"
           }
         ]
       }

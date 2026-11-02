@@ -160,7 +160,7 @@ stays unimplemented and unverified rather than being guessed from the C++ side.
 ## Validation
 
 Measured on this ticket's implementation commit `4e9ad3fbf` and, after the
-`origin/main` merge, on the merged tree `2e62fa140` that the receipt pins:
+`origin/main` merge, on the merged tree `573fe0c82` that the receipt pins:
 
 | Command | Result |
 | --- | --- |
