@@ -5308,11 +5308,11 @@
      "/home/lansy/.herdr/worktrees/cpp-coding-harness/1182/docs/research/pi-v1.3.0/deliveries/1182-revalidation-1187.xml"
     ],
     "testedRevision": "f56b8bd42ab7cbdba308913b25ff12d6f42664f7",
-    "recordedAt": "2026-11-02T14:10:15Z",
+    "recordedAt": "2026-11-02T14:32:42Z",
     "selected": 13,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1182-revalidation-1187.xml",
-     "sha256": "4fe1b4281e7ecd77ca853d50ab3643851ddc6a609e2cf9e1f663fe3cb0c4425b"
+     "sha256": "8e8f7d1217de1f2b85d2d1289b835dbcfc6c9c74384d99903f86615c1a366e75"
     }
    },
    "rows": [
@@ -5579,7 +5579,7 @@
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
-     "sha256": "3ae3f102728e91660127c0368adf87f4a20da7761264282d3bc8c6b62d2c259b"
+     "sha256": "5919e400380aac6b4170006405ee828ec3e7df179fd909a2cc3734a536a15a2a"
     },
     {
      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui.xml",

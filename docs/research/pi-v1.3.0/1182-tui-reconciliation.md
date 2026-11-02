@@ -198,14 +198,24 @@ Measured on this ticket's comparison commit (see the delivery record for the exa
 | `ctest --preset vcpkg -L issue1182 … deliveries/1182-tui.xml` | the original 13/13 run, retained; the merged-tree rerun above is the pinned artifact and the revalidation entry records why no row, scenario or routing digest changed |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py check` | PASS — 920 supported rows: 7 delivered, 913 batched across 17 batches |
 | `python3 tests/evidence/TuiReconciliationTest.py` | 11 tests, all passed |
-| `ctest --preset vcpkg -L tui` | selected and passed (see below) |
-| `ctest --preset vcpkg -L architecture` | 43 selected, 43 passed |
-| `cmake --build --preset vcpkg` then `ctest --preset vcpkg` | see the full-run paragraph below |
-| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` and `check` | see below |
+| `ctest --preset vcpkg -L tui -j1` with `TERM_PROGRAM=herdr` | 1,662 selected, 1,662 passed, 0 failed, 0 skipped |
+| `ctest --preset vcpkg -L architecture -j1` | 43 selected, 43 passed |
+| `cmake --build --preset vcpkg` then `TERM_PROGRAM=herdr ctest --preset vcpkg -j1` | 4,244 selected, 1 failed, 11 skipped; the one failure passes 3/3 in isolation (see below) |
+| `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` and `check` | ledger rebuilt (1,464 rows, 67 verified) and PASS — 649 scenarios, 366 named by a row, 56 covered by a referenced artifact, 227 explicit orphans, 0 uncovered |
 | `scripts/format-check.sh 6a5093438` | clean |
 
 The receipt pins the exact JUnit bytes, so the selected count, the case names and the scenario
 mapping cannot drift silently.
+
+The repository-wide full run is not a requirement for this verification packet — the operator
+cancelled the per-ticket full-suite obligation — and the run below is reported because it exists,
+not because the packet needs it. It selected 4,244 cases on the merged tree
+(`TERM_PROGRAM=herdr`, serial): one failure and eleven skips. The failure,
+`Process Terminal atomic stop and default stop detect postdrain EIO on closed master`, is a
+load-sensitive PTY case this packet does not touch (`tests/tui/ProcessTerminalTest.cpp` is not a
+pinned input); it passed 3/3 when rerun in isolation on the same tree. The skips are the frozen
+dual-runtime and external-checkout prerequisites, which supply no acceptance evidence. No timeout,
+label or assertion was changed to obtain that result.
 
 ## Capability status
 
