@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "f066c9a77ea1344a20e2a0ca5221abd8ec23dc50d4cdda262e46c387ed2f50ea"
+            "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -549,6 +549,13 @@
             "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1101.xml",
             "sha256": "2eb5b93e2988c3f73d97aff9a27a73899b8e99bdd078e57ffb2f499dfa25890b"
           }
+        },
+        "revalidation1190m": {
+          "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -622,7 +629,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
+            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -942,6 +949,13 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1190m": {
+          "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -1086,7 +1100,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
+            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
@@ -1482,6 +1496,13 @@
               "sha256": "c6d6f2482af70388ddec32e417c41cdb119ddcec5e94ee507fe69adc78042244"
             }
           }
+        },
+        "revalidation1190m": {
+          "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -1741,11 +1762,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
+            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "f066c9a77ea1344a20e2a0ca5221abd8ec23dc50d4cdda262e46c387ed2f50ea"
+            "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2145,6 +2166,13 @@
             "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1118.xml",
             "sha256": "f01d7e874b32f241111177d0b952a3c215910776388d6e7ffdc2f55018feeb21"
           }
+        },
+        "revalidation1190m": {
+          "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -3230,7 +3258,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "f066c9a77ea1344a20e2a0ca5221abd8ec23dc50d4cdda262e46c387ed2f50ea"
+            "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3238,7 +3266,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
+            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
           }
         ],
         "validation": {
@@ -3619,6 +3647,13 @@
             "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1181.xml",
             "sha256": "29214d656a11d43b5e7ddc877f103a5f4e20b7f36a4622f9de824aaac04a8651"
           }
+        },
+        "revalidation1190m": {
+          "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       },
       {
@@ -3683,7 +3718,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
+            "sha256": "d1f12f95ad0d05e730b96f832dae5d5a1bc49561f38593e0ab0e175e5490ba88"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -3691,7 +3726,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "f066c9a77ea1344a20e2a0ca5221abd8ec23dc50d4cdda262e46c387ed2f50ea"
+            "sha256": "b1f3233c302406a129538beb09ff7178bbf6b8c1bbe6a854342507a8bdf46c4c"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3945,6 +3980,13 @@
             "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml",
             "sha256": "e04694821270c9086db9a4169b998fde8b2dfe91cb5310c62ff52a592f695f2a"
           }
+        },
+        "revalidation1190m": {
+          "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ]
         }
       }
     ]
@@ -4287,7 +4329,7 @@
     ],
     "missingObservationRows": 1016,
     "scenarioCoverage": {
-      "scenarios": 614,
+      "scenarios": 617,
       "scenarioNamed": 362,
       "artifactCovered": 56,
       "orphaned": [
@@ -4486,7 +4528,10 @@
         "audit-1115/settings-diagnostics.json:the settings schema rejects an invalid thinking level and a negative compaction reserve naming the key",
         "audit-1115/settings-diagnostics.json:the settings schema names the offending path and pi message for each rejected shape",
         "audit-1115/settings-diagnostics.json:a schema-rejected thinking level loads without a diagnostic and the runtime keeps the raw value",
-        "audit-1115/settings-diagnostics.json:the compaction consumer rejects negative and fractional token settings naming the field"
+        "audit-1115/settings-diagnostics.json:the compaction consumer rejects negative and fractional token settings naming the field",
+        "audit-1190/server-requests.json:a stdio server ping is answered with an empty result and roots/list returns the connection's configured roots",
+        "audit-1190/server-requests.json:a streamable HTTP server ping is answered with an empty result and roots/list returns the connection's configured roots",
+        "audit-1190/server-requests.json:a server request with no matching handler is answered -32601 before the connection closes"
       ],
       "uncovered": []
     }
@@ -8646,6 +8691,36 @@
         "cch_coding_agent:settings-runtime"
       ],
       "disposition": "#1115 compares these scenarios on its branch; #1177 owns the whole-row application receipt."
+    },
+    {
+      "family": "audit-1190",
+      "artifact": "server-requests.json",
+      "scenario": "a stdio server ping is answered with an empty result and roots/list returns the connection's configured roots",
+      "reason": "Captured by #1190 from the clean pi-v1.3.0 checkout through the public MCP Owner; the consolidate row routes no audit lane into this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-roots-list"
+      ],
+      "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1190",
+      "artifact": "server-requests.json",
+      "scenario": "a streamable HTTP server ping is answered with an empty result and roots/list returns the connection's configured roots",
+      "reason": "Captured by #1190 from the clean pi-v1.3.0 checkout through the public MCP Owner; the consolidate row routes no audit lane into this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-roots-list"
+      ],
+      "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
+    },
+    {
+      "family": "audit-1190",
+      "artifact": "server-requests.json",
+      "scenario": "a server request with no matching handler is answered -32601 before the connection closes",
+      "reason": "Captured by #1190 from the clean pi-v1.3.0 checkout through the public MCP Owner; the consolidate row routes no audit lane into this supplemental artifact before #1177.",
+      "rows": [
+        "cch_mcp:mcp-roots-list"
+      ],
+      "disposition": "#1190 compares these scenarios on its branch; #1177 owns the whole-row application receipt and may promote or keep them explicit."
     }
   ],
   "correctionsIndex": [
