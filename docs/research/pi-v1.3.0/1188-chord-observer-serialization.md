@@ -64,6 +64,18 @@ window in commit order (`attachment captures the snapshot before activation and 
 frames in commit order`, already compared under `state:attached-hydration`). It is cited here rather
 than re-claimed, because this row's obligation is the observer serialization.
 
+**What this record does and does not claim.** The comparison asserts every frozen `expected` field
+and the delivered sequence's kind, sequence, value and absent abort signal. It does **not** claim
+the durable watch's own pre-start buffering or its synchronous one-at-a-time drain: those are the
+delivered `CommittedWatch` behavior (`DocumentWatch` holds the acquisition revision and buffers
+committed frames until `start()`), compared by the durable case `a document watch acquired before
+start buffers committed frames and delivers them in commit order` in
+`tests/durable/SessionWatchTest.cpp`. The durable document rows that own it
+(`cch_chord:document:watch-buffer`, `cch_chord:document:watch-overflow`) keep their recorded status
+and stay with the durable packet (#1180); no durable source or durable comparison is claimed here.
+The row `cch_chord:state:delivery-order` is the Chord state's per-subscriber serialization, and that
+is what its frozen expectations observe.
+
 ## Delivered behavior
 
 ### Complete delivered rows (2)
@@ -84,13 +96,27 @@ JUnit result. Each row's `remainingBoundary` is empty.
 | `cch_chord:Chord:state` | `audit-1057/replicated-state.json`: `attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order` (reviewed re-pairing, below) | `attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order` (`tests/chord/ReplicatedStateTest.cpp`) |
 
 Five of the six `state:delivery-order` scenarios were already compared by the delivered #1062 cases
-and keep their exact comparison test names. Only the audit-1057 watch scenario needed a case.
+and keep their exact comparison test names. Only the audit-1057 watch scenario needed a case. The new
+case records the full delivery sequence (`kind`, `sequence`, `value` and abort-signal presence) and
+the frozen concurrency counter; it separates a state that overlaps the second delivery, a state that
+drops the frame committed while a callback runs, and a state that hydrates at a stale revision.
 
 ### Discriminating cases
 
-| Row | Discriminating case | Why the comparison alone cannot separate it |
+The issue names three discriminating properties: a listener invoked reentrantly, a watch that drops
+frames buffered while one is in flight, and a held listener that delays another subscription. Each
+has a passing case in the pinned selection, and each case was checked against the mutation it must
+separate. Three throwaway probes were run on the delivered tree before this record was written:
+
+| Mutation (throwaway probe) | Case that fails it |
+| --- | --- |
+| A drain that ignores the pending handshake and delivers the next frame concurrently | `a watch acquired before start buffers frames and serializes callbacks` (`max_active` 2 and updates `[1,2]` before the release) and `a held listener serializes its own updates while another subscription converges independently` (the held subscription delays the fast one) |
+| A drain that re-enters the listener instead of serializing (reentrant delivery) | `one subscription serializes reentrant hydration and update callbacks in publication order` (nested `start:0, start:1, …` trace), the new case, and the held-listener isolation case |
+| A `push` that drops frames while a callback runs | `a watch acquired before start buffers frames and serializes callbacks` (updates stay at `[1]` after the release) |
+
+| Row | Registered discriminating case | Why the comparison alone cannot separate it |
 | --- | --- | --- |
-| `state:delivery-order` | `a watch acquired before start buffers frames and serializes callbacks` | The case is also the discriminator for the one scenario that had none: it requires the second committed frame to wait behind the held delivery and then arrive. Two throwaway probes were run on the delivered tree before this record was written. A drain loop that ignored the pending handshake delivered both callbacks concurrently (`max_active` 2, updates `[1,2]` before the release) and failed; a `push` that dropped frames while a callback was running left the updates at `[1]` after the release and failed. |
+| `state:delivery-order` | `a watch acquired before start buffers frames and serializes callbacks` | The case is the discriminator for the one scenario that had none: it requires the second committed frame to wait behind the held delivery and then arrive. The two mutations above that change the queue or the drain both fail it while every passing assertion still describes the normal observation. |
 | `Chord:state` | `exact source values are published without applying or re-diffing frame operations` | The composite capability is "immutable values, delivery and dispose". A state that re-derived the published revision from the frame's operation batch would publish `7` where the committed frame carries `1`, and the case separates that without the frozen hydration sequence needing an operation batch. |
 
 The two other frozen discriminators the issue names are the reentrant-listener cases
@@ -141,8 +167,8 @@ they are the durable watch rows routed to the durable packet (#1180), which owns
 
 ## Validation
 
-Measured on this ticket's implementation commit `10671a181` (checkout `10671a181` plus the receipt
-and report commit):
+Measured on this ticket's implementation commits `10671a181` (the comparison case) and `a80581bc8`
+(the two-axis review fixes to that case), with the receipt and report commit on the same tree:
 
 | Command | Result |
 | --- | --- |
@@ -157,17 +183,18 @@ and report commit):
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check` | PASS |
 | `python3 tests/evidence/ConsolidationAuditTest.py` | 42 tests, all passed |
 | `python3 scripts/evidence/audit_evidence.py verify --baseline pi-v1.3.0` | 55 bundles, 115 artifacts and 652 scenarios verified at `71023aec…` |
-| `TERM_PROGRAM=herdr ctest --preset vcpkg -j1` | 4,239 selected, 4,227 passed, 1 failed, 11 skipped (details below) |
+| `TERM_PROGRAM=herdr ctest --preset vcpkg -j1` | 4,239 selected, 4,228 passed, 0 failed, 11 skipped (exit 0) |
 | `scripts/format-check.sh f492ca41e` | clean |
 
-No `cch_chord` case failed. The one failure was
+The final unfiltered serial run on the receipt tree passed every selected case. An earlier serial
+run on the pre-review tree (the same code except the review fixes to the new case) failed
 `an MCP call errors explicitly when the server dies between tools/list and tools/call`
-(`tests/coding_agent/McpFailureIsolationTest.cpp`, owner #872): a process-death race in the MCP
-failure-isolation test double. It failed once under the serial full run and passed 2 of 3 isolated
-reruns on the same tree. It is outside this slice, no MCP or durable watch source changed here, and
-it is recorded instead of quarantined or retuned. The 11 skips are environment-gated pi-checkout
-and dual-runtime differential cases; they supply no acceptance evidence. No assertion, timeout or
-label exclusion was changed to obtain the result.
+(`tests/coding_agent/McpFailureIsolationTest.cpp`, owner #872) once; it passed 2 of 3 isolated
+reruns on that tree and passed in the final run. It is a process-death race in the MCP
+failure-isolation test double, outside this slice: no MCP or durable source changed here and no
+assertion, timeout or label exclusion was changed to obtain the result. The 11 skips are
+environment-gated pi-checkout and dual-runtime differential cases; they supply no acceptance
+evidence.
 
 ## Capability status
 

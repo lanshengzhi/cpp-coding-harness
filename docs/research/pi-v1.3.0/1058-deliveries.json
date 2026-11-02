@@ -2247,12 +2247,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1188.xml"
         ],
-        "testedRevision": "10671a1816a9cb9dcbbbf29f771cc68aef36a845",
-        "recordedAt": "2026-11-02T11:30:24Z",
+        "testedRevision": "a80581bc81cbe2923ccbfa160194de8031438312",
+        "recordedAt": "2026-11-02T12:22:01Z",
         "selected": 85,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1188.xml",
-          "sha256": "8fb69312b60b80d29e9af9ad53052118f0803159fec022be57f929d4c7c53586"
+          "sha256": "ce2d3699ee260d14a40b3fb7f1ab3a428d2efac5b597c7a8938789d9075462e7"
         }
       },
       "rows": [
@@ -2884,7 +2884,7 @@
         },
         {
           "path": "tests/chord/ReplicatedStateTest.cpp",
-          "sha256": "94a9ca5c267b8db75ee44f928544de3474d8b6fdd67900a49207c41c480c81ea"
+          "sha256": "58b947e60de6006e00a19ebd0951d5f786baef02d6c304e4a1d4dccc23a233de"
         },
         {
           "path": "tests/chord/TrackerTest.cpp",
@@ -2987,7 +2987,7 @@
         }
       },
       "revalidation1188": {
-        "reason": "#1188 compares the last blocked audit-1057 replicated-state scenario through the delivered Chord serialized-domain contract and re-pairs the coarse 1054 Chord:state row. It adds one case to tests/chord/ReplicatedStateTest.cpp, an input this receipt pins; the shared -L chord selection was rerun on the same tree into deliveries/1178-revalidation-1188.xml (85 cases, all passing, including every case this record claims). No row, comparison scenario or routing digest of this receipt changes, and the original deliveries/1178-chord.xml artifact is retained.",
+        "reason": "#1188 compares the last blocked audit-1057 replicated-state scenario through the delivered Chord serialized-domain contract and re-pairs the coarse 1054 Chord:state row. It changed tests/chord/ReplicatedStateTest.cpp, an input this receipt pins (the case itself, then the two-axis review fixes to it); the shared -L chord selection was rerun on the post-review tree into deliveries/1178-revalidation-1188.xml (85 cases, all passing, including every case this record claims). No row, comparison scenario or routing digest of this receipt changes, and the original deliveries/1178-chord.xml artifact is retained.",
         "changedInputs": [
           "tests/chord/ReplicatedStateTest.cpp"
         ],
@@ -3000,14 +3000,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml"
+            "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1188.xml"
           ],
-          "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
-          "recordedAt": "2026-11-02T08:57:19Z",
-          "selected": 79,
+          "testedRevision": "10671a1816a9cb9dcbbbf29f771cc68aef36a845",
+          "recordedAt": "2026-11-02T11:30:24Z",
+          "selected": 85,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml",
-            "sha256": "3a726eee891d275d38ddf6a41053e356174fb5ba57d526243b2200b06bfcb47c"
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1188.xml",
+            "sha256": "8fb69312b60b80d29e9af9ad53052118f0803159fec022be57f929d4c7c53586"
           }
         }
       }
@@ -4846,7 +4846,8 @@
       "id": "1188-chord-observer-serialization",
       "ticket": "1188",
       "implementationCommits": [
-        "10671a1816a9cb9dcbbbf29f771cc68aef36a845"
+        "10671a1816a9cb9dcbbbf29f771cc68aef36a845",
+        "a80581bc81cbe2923ccbfa160194de8031438312"
       ],
       "report": "docs/research/pi-v1.3.0/1188-chord-observer-serialization.md",
       "validation": {
@@ -4860,12 +4861,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1188-chord.xml"
         ],
-        "testedRevision": "10671a1816a9cb9dcbbbf29f771cc68aef36a845",
-        "recordedAt": "2026-11-02T11:30:50Z",
+        "testedRevision": "a80581bc81cbe2923ccbfa160194de8031438312",
+        "recordedAt": "2026-11-02T12:22:01Z",
         "selected": 85,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1188-chord.xml",
-          "sha256": "f402294817c96db79235b4d960dbf646bbb8e47a1372b74da17f0ee2b350d9c6"
+          "sha256": "d9a3e8e2f41516945070dc526d49d6fea8b288ddfe70f132161f65dd0a9bfb03"
         }
       },
       "rows": [
@@ -5005,7 +5006,7 @@
         },
         {
           "path": "tests/chord/ReplicatedStateTest.cpp",
-          "sha256": "94a9ca5c267b8db75ee44f928544de3474d8b6fdd67900a49207c41c480c81ea"
+          "sha256": "58b947e60de6006e00a19ebd0951d5f786baef02d6c304e4a1d4dccc23a233de"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -5049,11 +5050,11 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/1188-chord-observer-serialization.md",
-          "sha256": "ae9f03f28dd0ce74810e0adb08372548e7675144fbf5dbb9ef198a5e7ad734df"
+          "sha256": "fd509feae03635acbadfb9bc8a7af8b28f6ac4e65218ae6cee08958bbc3dc0e4"
         },
         {
           "path": "docs/research/pi-v1.3.0/deliveries/1188-chord.xml",
-          "sha256": "f402294817c96db79235b4d960dbf646bbb8e47a1372b74da17f0ee2b350d9c6"
+          "sha256": "d9a3e8e2f41516945070dc526d49d6fea8b288ddfe70f132161f65dd0a9bfb03"
         }
       ],
       "routingSha256": "e7975ba65c4a7efab08925838d63c3855cfdedc42ecd43dc4d07a08dfefd7517"
