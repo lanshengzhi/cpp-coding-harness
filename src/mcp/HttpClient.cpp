@@ -541,10 +541,9 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpC
     };
     support::Expected<support::JsonValue> initialized{std::unexpected(support::Error{})};
     for (std::size_t attempt = 0; attempt <= 2; ++attempt) {
-        initialized = co_await support::detail::await_async_result(
-                client->request("initialize",
-                        detail::initialize_params(client->config_.roots.has_value()),
-                        {.stop_token = stop_token}));
+        initialized = co_await support::detail::await_async_result(client->request("initialize",
+                detail::initialize_params(client->config_.roots.has_value()),
+                {.stop_token = stop_token}));
         if (initialized) {
             break;
         }
