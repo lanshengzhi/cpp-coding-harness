@@ -2732,11 +2732,11 @@
       "consumer": "cch_durable documentState (planned)",
       "boundary": null,
       "implementation_ticket": "#1058-draft",
-      "scenario": "document watches and states deliver only committed frames",
+      "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "evidence": {
-        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
-        "scenario": "document watches and states deliver only committed frames",
-        "result": "documentState(CounterDoc).value reported count 2 and dispose released it."
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+        "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+        "result": "The attached state hydrated at cursor zero with value 1, delivered update sequence 1 with value 2, reported no listener errors and disposed its attachment once."
       },
       "gaps": [
         "No C++ replicated state exists; owned by #1057.",

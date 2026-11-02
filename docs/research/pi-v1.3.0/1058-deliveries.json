@@ -2245,14 +2245,14 @@
           "chord",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml"
+          "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1188.xml"
         ],
-        "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
-        "recordedAt": "2026-11-02T08:57:19Z",
-        "selected": 79,
+        "testedRevision": "10671a1816a9cb9dcbbbf29f771cc68aef36a845",
+        "recordedAt": "2026-11-02T11:30:24Z",
+        "selected": 85,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml",
-          "sha256": "3a726eee891d275d38ddf6a41053e356174fb5ba57d526243b2200b06bfcb47c"
+          "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1188.xml",
+          "sha256": "8fb69312b60b80d29e9af9ad53052118f0803159fec022be57f929d4c7c53586"
         }
       },
       "rows": [
@@ -2884,7 +2884,7 @@
         },
         {
           "path": "tests/chord/ReplicatedStateTest.cpp",
-          "sha256": "b3b33852cc3089eaccc11b073a32ccc8535d5f0c55a66f246cf4c24e748c5e79"
+          "sha256": "94a9ca5c267b8db75ee44f928544de3474d8b6fdd67900a49207c41c480c81ea"
         },
         {
           "path": "tests/chord/TrackerTest.cpp",
@@ -2983,6 +2983,31 @@
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1185.xml",
             "sha256": "9bfa75c5674ae9981f3f439fe3019a37b14fdec6d69438f168c1b6f1a10c2753"
+          }
+        }
+      },
+      "revalidation1188": {
+        "reason": "#1188 compares the last blocked audit-1057 replicated-state scenario through the delivered Chord serialized-domain contract and re-pairs the coarse 1054 Chord:state row. It adds one case to tests/chord/ReplicatedStateTest.cpp, an input this receipt pins; the shared -L chord selection was rerun on the same tree into deliveries/1178-revalidation-1188.xml (85 cases, all passing, including every case this record claims). No row, comparison scenario or routing digest of this receipt changes, and the original deliveries/1178-chord.xml artifact is retained.",
+        "changedInputs": [
+          "tests/chord/ReplicatedStateTest.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml"
+          ],
+          "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
+          "recordedAt": "2026-11-02T08:57:19Z",
+          "selected": 79,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml",
+            "sha256": "3a726eee891d275d38ddf6a41053e356174fb5ba57d526243b2200b06bfcb47c"
           }
         }
       }
@@ -4318,7 +4343,7 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json",
-          "sha256": "06a78d90459c612f89a7b939f2b4733cb0c0868450a6ef1e16dd10a8b2ec5e7a"
+          "sha256": "80e9d71b79e6e292e80f093937e0957df70bf662f142bd0c19f64f75ff2e76cb"
         },
         {
           "path": "docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.json",
@@ -4336,6 +4361,12 @@
       "routingSha256": "e10f486b2f341da5cfff683f179814cc61459d6b807afbce2150711e88c97d05",
       "revalidation1186": {
         "reason": "#1186 re-paired the coarse 1054 Chord:json row to the captured audit-1057-typed-json alias-detachment scenario. The 1054 source audit is a pinned input of this record; the digest refreshes here. Its rows, scenarios and routing digest are unchanged.",
+        "changedInputs": [
+          "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json"
+        ]
+      },
+      "revalidation1188m": {
+        "reason": "#1188 re-paired the coarse cch_durable:Chord:state scenario in the 1054 source ledger to the registered audit-1057 replicated-state hydration/delivery/dispose scenario. That ledger is a pinned input of this receipt; the rows this receipt claims keep their comparison scenarios and routing digest, so only the input digest is refreshed and this receipt makes no new verification claim.",
         "changedInputs": [
           "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json"
         ]
@@ -4780,7 +4811,7 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json",
-          "sha256": "06a78d90459c612f89a7b939f2b4733cb0c0868450a6ef1e16dd10a8b2ec5e7a"
+          "sha256": "80e9d71b79e6e292e80f093937e0957df70bf662f142bd0c19f64f75ff2e76cb"
         },
         {
           "path": "docs/research/pi-v1.3.0/1186-chord-typed-json.md",
@@ -4803,7 +4834,229 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1188m": {
+        "reason": "#1188 re-paired the coarse cch_durable:Chord:state scenario in the 1054 source ledger to the registered audit-1057 replicated-state hydration/delivery/dispose scenario. That ledger is a pinned input of this receipt; the rows this receipt claims keep their comparison scenarios and routing digest, so only the input digest is refreshed and this receipt makes no new verification claim.",
+        "changedInputs": [
+          "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json"
+        ]
       }
+    },
+    {
+      "id": "1188-chord-observer-serialization",
+      "ticket": "1188",
+      "implementationCommits": [
+        "10671a1816a9cb9dcbbbf29f771cc68aef36a845"
+      ],
+      "report": "docs/research/pi-v1.3.0/1188-chord-observer-serialization.md",
+      "validation": {
+        "command": [
+          "ctest",
+          "--preset",
+          "vcpkg",
+          "-L",
+          "chord",
+          "--output-on-failure",
+          "--output-junit",
+          "docs/research/pi-v1.3.0/deliveries/1188-chord.xml"
+        ],
+        "testedRevision": "10671a1816a9cb9dcbbbf29f771cc68aef36a845",
+        "recordedAt": "2026-11-02T11:30:50Z",
+        "selected": 85,
+        "junit": {
+          "path": "docs/research/pi-v1.3.0/deliveries/1188-chord.xml",
+          "sha256": "f402294817c96db79235b4d960dbf646bbb8e47a1372b74da17f0ee2b350d9c6"
+        }
+      },
+      "rows": [
+        {
+          "id": "cch_chord:state:delivery-order",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1057/replicated-state.json",
+              "scenario": "a watch acquired before start buffers frames and serializes callbacks",
+              "test": "a watch acquired before start buffers frames and serializes callbacks",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp"
+            },
+            {
+              "artifact": "audit-1062/ordered-frames.json",
+              "scenario": "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence",
+              "test": "reentrant commits buffer in order and a late subscriber hydrates at the latest sequence",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp"
+            },
+            {
+              "artifact": "audit-1062/ordered-frames.json",
+              "scenario": "one subscription serializes reentrant hydration and update callbacks in publication order",
+              "test": "one subscription serializes reentrant hydration and update callbacks in publication order",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp"
+            },
+            {
+              "artifact": "audit-1062/observer-delivery.json",
+              "scenario": "a held listener serializes its own updates while another subscription converges independently",
+              "test": "a held listener serializes its own updates while another subscription converges independently",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp"
+            },
+            {
+              "artifact": "audit-1062/observer-delivery.json",
+              "scenario": "two subscriptions of the same listener are delivered independently",
+              "test": "two subscriptions of the same listener behavior are delivered independently",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp"
+            },
+            {
+              "artifact": "audit-1062/review-edges.json",
+              "scenario": "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
+              "test": "subscribers are delivered in registration order with reentrant unsubscribe and subscribe",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "a watch acquired before start buffers frames and serializes callbacks",
+            "testSource": "tests/chord/ReplicatedStateTest.cpp",
+            "reason": "The case is the discriminator for the awaited-listener scenario that had none: the second committed frame must buffer behind the held delivery and then arrive. A drain loop that ignores the pending handshake enters both callbacks concurrently (measured max_active 2 and updates [1,2] before the release) and fails; a push that drops frames while a callback runs leaves the updates at [1] after the release and fails."
+          }
+        },
+        {
+          "id": "cch_chord:Chord:state",
+          "remainingBoundary": [],
+          "comparisons": [
+            {
+              "artifact": "audit-1057/replicated-state.json",
+              "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+              "test": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+              "testSource": "tests/chord/ReplicatedStateTest.cpp"
+            }
+          ],
+          "discriminatingCase": {
+            "test": "exact source values are published without applying or re-diffing frame operations",
+            "testSource": "tests/chord/ReplicatedStateTest.cpp",
+            "reason": "The composite capability is immutable values, delivery and dispose. A state that re-derived the published revision from the frame operation batch would publish 7 where the committed frame carries 1, and the case separates that without the frozen hydration sequence needing an operation batch."
+          }
+        }
+      ],
+      "inputs": [
+        {
+          "path": "CMakeLists.txt",
+          "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+        },
+        {
+          "path": "CMakePresets.json",
+          "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+        },
+        {
+          "path": "vcpkg.json",
+          "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+        },
+        {
+          "path": "cmake/targets/Chord.cmake",
+          "sha256": "db34ddc2693d5187df2a94f0e38eacb3262796fe2b0d93ab7ef99167aceccf76"
+        },
+        {
+          "path": "cmake/tests/ChordTests.cmake",
+          "sha256": "610e08f8cf731fac5d13e57cf0e417b18cb0625d564715053d97402eeeb0f409"
+        },
+        {
+          "path": "cmake/tests/TestsSetup.cmake",
+          "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+        },
+        {
+          "path": "src/chord/ReplicatedState.cpp",
+          "sha256": "6957b87f6d43adfcd42581a65aafff072e151fa2c22d3bb59efeae1e72773768"
+        },
+        {
+          "path": "src/chord/Json.cpp",
+          "sha256": "10a95224acf9ea62a6e024440066dca84ed8a459949a1e96c9f9b780ad85451a"
+        },
+        {
+          "path": "src/chord/include/cch/chord/ReplicatedState.hpp",
+          "sha256": "14bc955d8455f69a939e33ed4d716ace3eb5f8d005dc486adaeba85a9d086318"
+        },
+        {
+          "path": "src/chord/include/cch/chord/ChordContext.hpp",
+          "sha256": "1836f465236adccec9e2c1a23903582482166c7b61e201be4089fd1b969ed211"
+        },
+        {
+          "path": "src/chord/include/cch/chord/Delta.hpp",
+          "sha256": "57ac34ffd820f82bfecc45850ddfdda904e7259e279ba81266bb0032d7980d5c"
+        },
+        {
+          "path": "src/chord/include/cch/chord/Json.hpp",
+          "sha256": "a0770553e00418ca5add8b9437bc9f0809e19f8fa723e47d2812e235541b9839"
+        },
+        {
+          "path": "src/support/include/cch/support/AsyncResult.hpp",
+          "sha256": "db1e2881ae278abd38df766bc02aaba31963edea2575421d98759b4c21cef188"
+        },
+        {
+          "path": "src/support/include/cch/support/Error.hpp",
+          "sha256": "195585394d91c60b92f5b5ee85bb81e3961cd9a3e4a293298403f8f1032e558f"
+        },
+        {
+          "path": "src/support/include/cch/support/JsonObject.hpp",
+          "sha256": "bd24f86e03a85fdf402246dd4fbbeb812cec21ccd77ab25f09b6d8bd8bc1680d"
+        },
+        {
+          "path": "src/support/include/cch/support/JsonValue.hpp",
+          "sha256": "93875a958f5e36e0d41feb68de0fbfc66e4d242b525eed7dc74eaf64b048dbee"
+        },
+        {
+          "path": "tests/Catch2Main.cpp",
+          "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+        },
+        {
+          "path": "tests/chord/ReplicatedStateTest.cpp",
+          "sha256": "94a9ca5c267b8db75ee44f928544de3474d8b6fdd67900a49207c41c480c81ea"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
+          "sha256": "d56e0cb0f2a8afbb2045de990390d74e7898d50f7dfad9458cd34a7e23a63e6d"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+          "sha256": "31d83e25d6245809ad78f2f7dfd37ca87c5321d3eca17deda0e4fe38c3238d53"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1062/manifest.json",
+          "sha256": "ac11bd98a0b63afaa6cb241e9758812875cec21db75b5e99b36b1dca6bc1b00e"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1062/ordered-frames.json",
+          "sha256": "a8d1edb7fe56d25ef795208c9fafa1e29964e2c3c8fb2226a42ed4ebf25a644e"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1062/observer-delivery.json",
+          "sha256": "a4e0eaefb0f15d35da5abad0825ac62883c8dae2b53fffc1d3b4527e9c2f01de"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1062/review-edges.json",
+          "sha256": "2286ffea931eadb52bd723a1e874c061742ac65810b55a3dd9c245d69d093332"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+        },
+        {
+          "path": "scripts/evidence/audit_evidence.py",
+          "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json",
+          "sha256": "80e9d71b79e6e292e80f093937e0957df70bf662f142bd0c19f64f75ff2e76cb"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/1188-chord-observer-serialization.md",
+          "sha256": "ae9f03f28dd0ce74810e0adb08372548e7675144fbf5dbb9ef198a5e7ad734df"
+        },
+        {
+          "path": "docs/research/pi-v1.3.0/deliveries/1188-chord.xml",
+          "sha256": "f402294817c96db79235b4d960dbf646bbb8e47a1372b74da17f0ee2b350d9c6"
+        }
+      ],
+      "routingSha256": "e7975ba65c4a7efab08925838d63c3855cfdedc42ecd43dc4d07a08dfefd7517"
     }
   ]
 }
