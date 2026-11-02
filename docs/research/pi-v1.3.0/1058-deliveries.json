@@ -2245,14 +2245,14 @@
           "chord",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1188.xml"
+          "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187-1188.xml"
         ],
-        "testedRevision": "a80581bc81cbe2923ccbfa160194de8031438312",
-        "recordedAt": "2026-11-02T12:22:01Z",
-        "selected": 85,
+        "testedRevision": "fefc022744fadfaf6507674ca5115614600b3bdb",
+        "recordedAt": "2026-11-02T12:52:15Z",
+        "selected": 89,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1188.xml",
-          "sha256": "ce2d3699ee260d14a40b3fb7f1ab3a428d2efac5b597c7a8938789d9075462e7"
+          "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187-1188.xml",
+          "sha256": "fe7da1fc92e5518e043e83af019c0855da7d78efee1c86888996c34221e1f5da"
         }
       },
       "rows": [
@@ -3037,6 +3037,15 @@
             "sha256": "3a726eee891d275d38ddf6a41053e356174fb5ba57d526243b2200b06bfcb47c"
           }
         }
+      },
+      "revalidation1187m": {
+        "reason": "#1187 and #1188 merged into one tree: the progress pacing seam changed src/chord/Output.cpp, its Owner header and tests/chord/OutputTest.cpp, and the observer comparison changed tests/chord/ReplicatedStateTest.cpp. The shared `-L chord` selection was rerun on the merge tree into deliveries/1178-revalidation-1187-1188.xml (89 cases, all passing, including every case this record claims). No claimed row, comparison scenario or routing digest changes; the original artifact and both individual revalidations are retained.",
+        "changedInputs": [
+          "src/chord/Output.cpp",
+          "src/chord/include/cch/chord/Output.hpp",
+          "tests/chord/OutputTest.cpp",
+          "tests/chord/ReplicatedStateTest.cpp"
+        ]
       }
     },
     {
@@ -5196,7 +5205,7 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/1187-chord-progress-pacing.md",
-          "sha256": "5249785c5343a06aeda0a662331b57e7a2cbf93d9861eb231ce39faa40801f03"
+          "sha256": "2d2a21be835872b105fa4294c8f12e3a8eb2b7752a246eb572bfb41cb87eae52"
         },
         {
           "path": "docs/research/pi-v1.3.0/deliveries/1187-chord.xml",

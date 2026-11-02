@@ -108,7 +108,8 @@ failed exactly the named cases:
 
 Measured on this ticket's implementation commits `e168504be` and `70489aa5d` (the two-axis review
 fix) and, after the `origin/main` merge, on the tree
-`70489aa5d05945b7485949b6581658775146a76e` that the receipt pins:
+`70489aa5d05945b7485949b6581658775146a76e` that the receipt pins (the shared chord selection was
+later rerun after the final `origin/main` merge into the 89-case combined artifact):
 
 | Command | Result |
 | --- | --- |
@@ -118,6 +119,7 @@ fix) and, after the `origin/main` merge, on the tree
 | `ctest --preset vcpkg -L issue1187 --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1187-chord.xml` | 4/4 passed, 0 failed, 0 skipped |
 | `ctest --preset vcpkg -N -L chord` | 88 selected on the merged tree (84 delivered + 4 from this ticket) |
 | `ctest --preset vcpkg -L chord --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187.xml` | 88/88 passed, 0 failed, 0 skipped |
+| `ctest --preset vcpkg -L chord --output-on-failure --output-junit docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187-1188.xml` | 89/89 passed on the final merge tree (the #1187 and #1188 cases together), 0 failed, 0 skipped |
 | `ctest --preset vcpkg -L architecture` | 43/43 passed |
 | `PI_CHECKOUT=… TERM_PROGRAM=herdr ctest --preset vcpkg -j1` | 4,242 selected, 4,242 passed, 0 failed, 2 skipped. The two skips are the recorded environment prerequisites (`CCH_TEST_REALTIME_JUMP` on the directly registered case, whose LD_PRELOAD wrapper passes, and `CCH_DIFFERENTIAL_SCENARIO`). An earlier serial run on the pre-review tree failed two load-sensitive codemode cases that passed 2/2 in isolation; no assertion, timeout or label exclusion was changed. |
 | `python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build` | ledger rebuilt; 59 delivery-backed rows |
