@@ -127,6 +127,13 @@ load/write path. `src/durable/*`, `src/mcp/*` and
   nested tool hooks). The 11 skips are the nine frozen-pi durable continuation
   cases, the realtime-clock wrapper and the Native TUI differential capture,
   none of which this slice touches.
+- Merged tree, after `git merge origin/main` (which brought #1173's durable
+  event stream and its `audit-1173` registration):
+  `cmake --build --preset vcpkg` passed, `ctest --preset vcpkg -L issue1115`
+  16/16, `ctest --preset vcpkg -L architecture` 43/43, and the serial
+  `TERM_PROGRAM=herdr` full suite 4,206 selected, 0 failed, 11 skipped
+  (937 s). The two consolidation gates pass on the merged plan (607 scenarios,
+  189 explicit orphans, 0 uncovered).
 - Formatting: `scripts/format-check.sh origin/main` clean.
 - Pinned-receipt revalidation on checkout base
   `ba45599a1d9249b73992a5fa92aa45da1f9db05a`, with fresh JUnit artifacts:
