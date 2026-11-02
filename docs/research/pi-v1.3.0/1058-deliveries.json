@@ -555,7 +555,7 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1184.xml"
         ],
-        "testedRevision": "c3d5fcc760110213fc7eaa5802b4bb1387f520ef",
+        "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
         "recordedAt": "2026-11-02T08:57:19Z",
         "selected": 36,
         "junit": {
@@ -2223,7 +2223,7 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1184.xml"
         ],
-        "testedRevision": "c3d5fcc760110213fc7eaa5802b4bb1387f520ef",
+        "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
         "recordedAt": "2026-11-02T08:57:19Z",
         "selected": 79,
         "junit": {
@@ -4317,12 +4317,12 @@
           "--output-junit",
           "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml"
         ],
-        "testedRevision": "c3d5fcc760110213fc7eaa5802b4bb1387f520ef",
+        "testedRevision": "1d536dd012f53a47dc095e4796eb81f0adfe16ea",
         "recordedAt": "2026-11-02T08:57:19Z",
         "selected": 10,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
-          "sha256": "c55a7f42052ab1f79ea9d41a0b25550734bdfee0f2f8a89bb94bfd31776c4851"
+          "sha256": "0d5ad2f41ea2c7cb4d24af35e99b5efb3e15c0dd3a436ed86fb0d3b4d40e164c"
         }
       },
       "rows": [
@@ -4499,7 +4499,7 @@
         },
         {
           "path": "tests/durable/SessionWatchTest.cpp",
-          "sha256": "7b338e3fa06a55ad33ca46c7483df3f645394e3373fba0b014475d59bc5eca3d"
+          "sha256": "e002a064a05a985a971103be2e37fd3c78f334a82ca77b1d08319665c819cfb3"
         },
         {
           "path": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
@@ -4519,7 +4519,7 @@
         },
         {
           "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
-          "sha256": "c55a7f42052ab1f79ea9d41a0b25550734bdfee0f2f8a89bb94bfd31776c4851"
+          "sha256": "0d5ad2f41ea2c7cb4d24af35e99b5efb3e15c0dd3a436ed86fb0d3b4d40e164c"
         }
       ]
     }

@@ -175,7 +175,7 @@ stays unimplemented and unverified rather than being guessed from the C++ side.
 ## Validation
 
 Measured on this ticket's implementation commit `4e9ad3fbf` and, after the
-`origin/main` merge, on the merged tree `c3d5fcc76` that the receipt pins:
+`origin/main` merge, on the merged tree `1d536dd01` that the receipt pins:
 
 | Command | Result |
 | --- | --- |
