@@ -670,16 +670,21 @@ TEST_CASE("stopping or cancelling a watch during a callback discards the queued 
     // acquisition context.
     std::vector<ObservedFrame> stopped_frames;
     bool stopped_callback_completed = false;
+    // A terminal reason this case never produces, so the check below only passes
+    // when the callback's own `stop()` produced it.
+    WatchEndReason stopped_during_callback{WatchEndReason::SessionClosed};
     REQUIRE(stopped_watch.value().value().start([&](DocumentFrame frame, chord::Context) {
-        stopped_frames.push_back(ObservedFrame{.value = std::move(frame.value)});
-        stopped_watch.value().value().stop();
+        stopped_frames.push_back(
+                ObservedFrame{.value = std::move(frame.value), .abort_signal_present = false, .context_value = {}});
+        stopped_during_callback = stopped_watch.value().value().stop();
         stopped_callback_completed = true;
     }));
 
     std::vector<ObservedFrame> cancelled_frames;
     bool cancelled_callback_completed = false;
     REQUIRE(cancelled_watch.value().value().start([&](DocumentFrame frame, chord::Context) {
-        cancelled_frames.push_back(ObservedFrame{.value = std::move(frame.value)});
+        cancelled_frames.push_back(
+                ObservedFrame{.value = std::move(frame.value), .abort_signal_present = false, .context_value = {}});
         cancelled_scope.cancel("stop watching");
         cancelled_callback_completed = true;
     }));
@@ -687,6 +692,7 @@ TEST_CASE("stopping or cancelling a watch during a callback discards the queued 
     // The running callback completed and delivered exactly its own frame; the
     // queued frame was discarded rather than delivered after the stop.
     CHECK(stopped_callback_completed);
+    CHECK(stopped_during_callback == WatchEndReason::Stopped);
     CHECK(stopped_frames.size() == 1);
     CHECK(cancelled_callback_completed);
     CHECK(cancelled_frames.size() == 1);
