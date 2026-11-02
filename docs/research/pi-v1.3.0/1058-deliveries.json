@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -535,7 +535,7 @@
         ]
       },
       "revalidation1186m": {
-        "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
+        "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
@@ -973,9 +973,9 @@
         }
       },
       "revalidation1186m": {
-        "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
+        "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
-          "fixtures/pi-v1.3.0/baselines.json"
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
     },
@@ -1533,9 +1533,9 @@
         ]
       },
       "revalidation1186m": {
-        "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
+        "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
-          "fixtures/pi-v1.3.0/baselines.json"
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
     },
@@ -1800,7 +1800,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2216,9 +2216,8 @@
         ]
       },
       "revalidation1186m": {
-        "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
+        "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
-          "fixtures/pi-v1.3.0/baselines.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
@@ -3341,7 +3340,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3746,10 +3745,9 @@
         ]
       },
       "revalidation1186m": {
-        "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
+        "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
-          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "fixtures/pi-v1.3.0/baselines.json"
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
     },
@@ -3823,7 +3821,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -4093,9 +4091,8 @@
         ]
       },
       "revalidation1186m": {
-        "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
+        "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "changedInputs": [
-          "fixtures/pi-v1.3.0/baselines.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
@@ -4771,7 +4768,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "537a49b2fadc46c27261d01e3c88568379d5e09b6b35ad991f0958c5c05e0dcb"
+          "sha256": "e9c3bb1d102837eaf9e3a73c44b87430c6e5fa556ed7b604aa97dbb6b2e7270a"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4796,13 +4793,16 @@
       ],
       "routingSha256": "c35ce8797d3e36b7d5663d750fe29b749c84c7fb61c4b07bfe9eb722c4d2f7f8",
       "revalidation1186m": {
-        "reason": "This record pins one or both of the registry/plan inputs. They changed when the audit-1057-typed-json family was registered and origin/main (#1184) was merged. Only the listed changedInputs digests moved; no row, scenario or routing digest changed.",
+        "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
         "testedRevision": "4ec8104152151e46328459092e9d2e06aa3a726f",
         "selected": 84,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1186-chord.xml",
           "sha256": "ca26ceb4bbb3f3106e5dabf5f6812afdd478bb33574683f669c956290fb8ce92"
-        }
+        },
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     }
   ]
