@@ -247,6 +247,9 @@ exact main `b5b88e11ff0d45a806abe3fd828ac256ee0e1af4` passed that single case
 5/5; the branch then passed the same case 5/5. This limited comparison does not
 explain or invalidate the earlier two branch failures. The exact commands,
 revisions and individual output are in [1158-main-comparison.txt](1158-main-comparison.txt).
+A later bounded investigation reproduced the same symptom on exact main and
+examined the callback ordering; its limits and individual scenario-routing
+assessment are recorded in [1158-ordering-and-scenarios.md](1158-ordering-and-scenarios.md).
 
 The 1090/1101/1104 receipt selection passed 36/36 and the 1184 selection passed
 10/10; their post-merge JUnit artifacts and reviewed changed-input digests replace
