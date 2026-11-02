@@ -513,13 +513,17 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpC
         HttpServerConfig config,
         std::shared_ptr<support::StreamTransport> transport,
         std::shared_ptr<RequestAuthSource> request_auth,
-        HttpGetStreamOptions get_stream_options) {
+        HttpGetStreamOptions get_stream_options,
+        std::stop_token stop_token) {
     if (auto valid = validate_http_server_config(config); !valid) {
         co_return std::unexpected(std::move(valid.error()));
     }
     if (transport == nullptr) {
         co_return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "MCP server '" + config.name + "' has no HTTP transport"));
+    }
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(detail::cancelled_error(config.name));
     }
     auto executor = co_await boost::asio::this_coro::executor;
     const std::string server_name = config.name;
@@ -538,7 +542,9 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpC
     support::Expected<support::JsonValue> initialized{std::unexpected(support::Error{})};
     for (std::size_t attempt = 0; attempt <= 2; ++attempt) {
         initialized = co_await support::detail::await_async_result(
-                client->request("initialize", detail::initialize_params(client->config_.roots.has_value())));
+                client->request("initialize",
+                        detail::initialize_params(client->config_.roots.has_value()),
+                        {.stop_token = stop_token}));
         if (initialized) {
             break;
         }
@@ -548,7 +554,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpC
                                   err.message.contains("HTTP 500") || err.message.contains("HTTP 502") ||
                                   err.message.contains("HTTP 503") || err.message.contains("HTTP 504") ||
                                   err.code == support::ErrorCode::Network;
-        if (!is_transient || attempt >= 2) {
+        if (!is_transient || attempt >= 2 || stop_token.stop_requested()) {
             break;
         }
         boost::asio::steady_timer retry_timer(client->executor_);
@@ -557,7 +563,14 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpC
         co_await retry_timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
     }
     if (!initialized) {
+        // The caller's close/cancellation aborts the pending initialize; the
+        // client may still hold the initialized transport, so release it.
+        client->close();
         co_return std::unexpected(std::move(initialized.error()));
+    }
+    if (stop_token.stop_requested()) {
+        client->close();
+        co_return std::unexpected(detail::cancelled_error(server_name));
     }
     if (auto valid = detail::validate_initialize_result(server_name, *initialized); !valid) {
         co_return std::unexpected(std::move(valid.error()));
@@ -763,59 +776,76 @@ boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImp
     }
 }
 
-boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImpl::post(std::string_view body,
+boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImpl::post(std::string body,
         std::stop_token stop_token,
         support::BodyChunkHandler on_body_chunk,
         std::shared_ptr<std::atomic_bool> request_sent) {
-    CCH_TRY(headers, co_await request_headers_for_call(stop_token));
-    support::StreamRequest request;
-    request.method = "POST";
-    request.url = config_.url;
-    request.headers = std::move(headers);
-    request.body = std::string{body};
-    request.timeout = config_.request_timeout;
-    // The reused transport resolves the token into its own Cancelled error, so
-    // an aborted Agent Turn cancels the HTTPS request instead of waiting out
-    // the deadline. The transport's own timeout bounds connection setup and
-    // response headers only; the MCP-layer request deadline lives in
-    // `send_request` so progress can re-arm it (pi `armTimeout`).
-    request.stop_token = stop_token;
-    if (request_sent) {
-        *request_sent = true;
+    for (int attempt = 0;; ++attempt) {
+        CCH_TRY(headers, co_await request_headers_for_call(stop_token));
+        std::string sent_authorization;
+        for (const auto& [name, value] : headers) {
+            if (name.size() == 13) {
+                std::string lowered = name;
+                for (char& character : lowered) {
+                    character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+                }
+                if (lowered == "authorization") {
+                    sent_authorization = value;
+                    break;
+                }
+            }
+        }
+        support::StreamRequest request;
+        request.method = "POST";
+        request.url = config_.url;
+        request.headers = std::move(headers);
+        request.body = body;
+        request.timeout = config_.request_timeout;
+        // The reused transport resolves the token into its own Cancelled error,
+        // so an aborted Agent Turn cancels the HTTPS request instead of waiting
+        // out the deadline. The transport's own timeout bounds connection
+        // setup and response headers only; the MCP-layer request deadline lives
+        // in `send_request` so progress can re-arm it (pi `armTimeout`).
+        request.stop_token = stop_token;
+        if (request_sent) {
+            *request_sent = true;
+        }
+        auto response = co_await stream_with_redirects(
+                std::move(request), attempt == 0 ? std::move(on_body_chunk) : support::BodyChunkHandler{});
+        if (!response || attempt > 0 || request_auth_ == nullptr || sent_authorization.empty() ||
+                response->head.status_code != 401) {
+            co_return response;
+        }
+        // pi `authorizedFetch`: a 401 (or a 403 asking for more scope) is
+        // handed to the auth provider once, and the request is retried with
+        // whatever credentials it left behind. The recovery is the shared
+        // background refresh: a cancelled waiter settles immediately and the
+        // retry is suppressed, while the token exchange keeps running.
+        auto recovered = co_await support::detail::await_async_result(
+                request_auth_->recover_unauthorized(stop_token, std::move(sent_authorization)));
+        if (!recovered) {
+            if (recovered.error().code == support::ErrorCode::Cancelled) {
+                // The caller (or the deadline) settled the request; its 401 is
+                // the observable outcome and no retry follows.
+                co_return response;
+            }
+            co_return std::unexpected(std::move(recovered.error()));
+        }
+        if (!*recovered) {
+            co_return response;
+        }
     }
-    co_return co_await stream_with_redirects(std::move(request), std::move(on_body_chunk));
 }
 
 boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::send_request(
         std::string_view frame, int id, std::stop_token stop_token, bool cancellable, ProgressCallback on_progress) {
-    // A request without a progress observer keeps the plain buffered POST:
-    // the transport's deadline covers connection and headers, and the body
-    // streams unbounded until completion or cancellation.
-    if (on_progress == nullptr) {
-        auto request_sent = std::make_shared<std::atomic_bool>(false);
-        auto response = co_await post(frame, stop_token, {}, request_sent);
-        if (!response) {
-            // pi `cancelPending`: a cancellable request that is aborted or times
-            // out tells the server through `notifications/cancelled` (with the pi
-            // reason) before the call fails. A request cancelled while resolving
-            // OAuth headers never reached the server and has no id to cancel.
-            const support::ErrorCode code = response.error().code;
-            if (cancellable && request_sent->load() &&
-                    (code == support::ErrorCode::Cancelled || code == support::ErrorCode::Timeout)) {
-                co_await notify_cancelled(id, code == support::ErrorCode::Timeout ? "Request timed out" : "Aborted");
-            }
-            co_return std::unexpected(std::move(response.error()));
-        }
-        capture_session(*response);
-        auto outcome = interpret_response(id, *response);
-        co_return outcome;
-    }
-
-    // Observed request: race the POST against pi's request deadline. The
-    // producer (the POST) and the watcher (the deadline) settle exactly one
-    // outcome through the channel; progress on either stream re-arms the
-    // deadline. Everything runs on this client's executor: the pump
-    // serializes POSTs, so one progress registration serves the request, and
+    // Race the POST against pi's request deadline. The deadline covers the
+    // whole request — including request-time OAuth, so a stalled token refresh
+    // settles the caller at the bound instead of waiting for the exchange —
+    // while an observed request re-arms it on every `notifications/progress`
+    // (pi `armTimeout`). The producer (POST) and the watcher (deadline) settle
+    // exactly one outcome through the channel; everything runs on this client's
+    // executor, so one progress registration serves the serialized request and
     // the GET-stream dispatch may deliver progress too (pi `handleProgress`
     // listens on every stream).
     auto executor = co_await boost::asio::this_coro::executor;
@@ -827,10 +857,14 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
     auto deadline = std::make_shared<boost::asio::steady_timer>(executor);
     auto post_stop = std::make_shared<std::stop_source>();
     auto request_sent = std::make_shared<std::atomic_bool>(false);
-    // The caller's cancellation aborts the POST as before (ADR 0020).
+    // The caller's cancellation and a timeout abort the POST (ADR 0020); the
+    // request-time refresh keeps running behind a cancelled waiter (#1189).
     std::stop_callback cancellation{stop_token, [post_stop] { post_stop->request_stop(); }};
 
-    progress_registration_ = ProgressRegistration{id, std::move(on_progress), rearm, deadline};
+    const bool observes_progress = on_progress != nullptr;
+    if (observes_progress) {
+        progress_registration_ = ProgressRegistration{id, std::move(on_progress), rearm, deadline};
+    }
 
     if (config_.request_timeout > std::chrono::milliseconds::zero()) {
         const auto timeout = config_.request_timeout;
@@ -878,38 +912,42 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
                     deadline,
                     id,
                     request_sent,
+                    observes_progress,
                     stop_token]() mutable -> boost::asio::awaitable<void> {
-                // Incremental SSE parse of the response stream: a
-                // notifications/progress for this request's token re-arms the
-                // deadline and delivers to the observer (pi
-                // `consumeResponseStream`'s progress events).
+                // Incremental SSE parse of the response stream: an observed
+                // request's `notifications/progress` re-arms the deadline and
+                // delivers to the observer (pi `consumeResponseStream`).
                 auto reader = std::make_shared<GetStreamSseReader>();
                 auto buffered_body = std::make_shared<std::string>();
-                support::BodyChunkHandler chunk = [self, reader, rearm, deadline, id, buffered_body](
-                                                          std::string_view bytes) -> support::ExpectedVoid {
-                    buffered_body->append(bytes.data(), bytes.size());
-                    auto events = reader->append(bytes);
-                    if (!events) {
-                        return std::unexpected(std::move(events.error()));
-                    }
-                    for (const auto& event : *events) {
-                        auto parsed = support::read_json(event.data);
-                        if (!parsed) {
-                            continue;
+                support::BodyChunkHandler chunk;
+                if (observes_progress) {
+                    chunk = [self, reader, rearm, deadline, id, buffered_body](
+                                    std::string_view bytes) -> support::ExpectedVoid {
+                        buffered_body->append(bytes.data(), bytes.size());
+                        auto events = reader->append(bytes);
+                        if (!events) {
+                            return std::unexpected(std::move(events.error()));
                         }
-                        const auto token = detail::progress_token_of(*parsed);
-                        if (!token.has_value() || static_cast<int>(*token) != id ||
-                                !self->progress_registration_.has_value() || !self->progress_registration_->callback) {
-                            continue;
+                        for (const auto& event : *events) {
+                            auto parsed = support::read_json(event.data);
+                            if (!parsed) {
+                                continue;
+                            }
+                            const auto token = detail::progress_token_of(*parsed);
+                            if (!token.has_value() || static_cast<int>(*token) != id ||
+                                    !self->progress_registration_.has_value() ||
+                                    !self->progress_registration_->callback) {
+                                continue;
+                            }
+                            rearm->store(true);
+                            deadline->cancel();
+                            const auto* object = parsed->get_if<support::JsonValue::object_t>();
+                            const auto params = object->find("params");
+                            self->progress_registration_->callback(params->second);
                         }
-                        rearm->store(true);
-                        deadline->cancel();
-                        const auto* object = parsed->get_if<support::JsonValue::object_t>();
-                        const auto params = object->find("params");
-                        self->progress_registration_->callback(params->second);
-                    }
-                    return support::ExpectedVoid{};
-                };
+                        return support::ExpectedVoid{};
+                    };
+                }
                 auto response =
                         co_await self->post(std::move(body), post_stop->get_token(), std::move(chunk), request_sent);
                 if (response && (stop_token.stop_requested() || self->closed_)) {
@@ -935,7 +973,9 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
     // `settled` (already settled) and exits.
     (void)settled->exchange(true);
     deadline->cancel();
-    progress_registration_.reset();
+    if (observes_progress) {
+        progress_registration_.reset();
+    }
     if (receive_error) {
         co_return std::unexpected(
                 support::make_error(support::ErrorCode::Process, "MCP request outcome channel closed"));
@@ -954,7 +994,7 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
 }
 
 boost::asio::awaitable<std::optional<support::Error>> HttpClientImpl::send_notification(std::string_view frame) {
-    auto response = co_await post(frame, {});
+    auto response = co_await post(std::string{frame}, {});
     if (!response) {
         co_return std::move(response.error());
     }
@@ -1379,20 +1419,22 @@ support::Expected<support::JsonValue> HttpClientImpl::interpret_response(
 support::AsyncResult<std::shared_ptr<HttpClient>> HttpClient::connect(HttpServerConfig config,
         std::shared_ptr<support::StreamTransport> transport,
         std::shared_ptr<RequestAuthSource> request_auth,
-        HttpGetStreamOptions get_stream_options) {
+        HttpGetStreamOptions get_stream_options,
+        std::stop_token stop_token) {
     return support::detail::make_async_result(
             [config = std::move(config),
                     transport = std::move(transport),
                     request_auth = std::move(request_auth),
-                    get_stream_options = std::move(get_stream_options)]() mutable
-                    -> boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClient>>> {
+                    get_stream_options = std::move(get_stream_options),
+                    stop_token]() mutable -> boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClient>>> {
                 if (transport == nullptr) {
                     transport = std::make_shared<support::BoostBeastStreamTransport>();
                 }
                 auto connected = co_await HttpClientImpl::connect_impl(std::move(config),
                         std::move(transport),
                         std::move(request_auth),
-                        std::move(get_stream_options));
+                        std::move(get_stream_options),
+                        stop_token);
                 if (!connected) {
                     co_return std::unexpected(std::move(connected.error()));
                 }

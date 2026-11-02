@@ -124,12 +124,22 @@ public:
             std::stop_token stop_token = {},
             cch::mcp::RequestAuthPurpose purpose = cch::mcp::RequestAuthPurpose::Operation) override;
 
+    /// The flow resolver keeps its verified discovery/registration
+    /// cancellation semantics (#1102); a 401 without a pre-resolved endpoint
+    /// stays the explicit re-login error, so no implicit refresh/retry runs
+    /// here.
+    [[nodiscard]] support::AsyncResult<bool> recover_unauthorized(
+            std::stop_token stop_token, std::string rejected_authorization) override;
+
 private:
     std::shared_ptr<McpAuthStore> store_;
     std::string server_name_;
     std::string server_url_;
     cch::mcp::OAuthConfig oauth_;
     std::shared_ptr<cch::mcp::OAuthHttpClient> http_;
+    /// pi `StreamableHttpTransport.lastToken`: close's DELETE reuses the last
+    /// token the connection sent instead of asking for a new one (#1189).
+    std::shared_ptr<std::optional<std::string>> last_access_token_;
 };
 
 } // namespace cch::coding_agent::mcp

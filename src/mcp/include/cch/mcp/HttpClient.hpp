@@ -64,7 +64,8 @@ public:
     [[nodiscard]] static support::AsyncResult<std::shared_ptr<HttpClient>> connect(HttpServerConfig config,
             std::shared_ptr<support::StreamTransport> transport = nullptr,
             std::shared_ptr<RequestAuthSource> request_auth = nullptr,
-            HttpGetStreamOptions get_stream_options = {});
+            HttpGetStreamOptions get_stream_options = {},
+            std::stop_token stop_token = {});
 
     /// One server-to-client notification received on the GET stream (pi
     /// `TransportEvents`'s `message`).

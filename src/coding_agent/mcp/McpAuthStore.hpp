@@ -11,16 +11,36 @@
 
 #include <cch/mcp/OAuthState.hpp>
 
+#include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace cch::coding_agent::mcp {
+
+/// The cross-process refresh lock pi's `McpOAuthCredentialStore` holds from
+/// reading the tokens to saving the rotated ones (ticket #1189). The lock is
+/// an advisory `flock` on a per-server file: the kernel releases it when the
+/// holder exits, so a dead process never leaves a stale refresh lock. The file
+/// stays in place (removing it while waiters hold a descriptor would let two
+/// processes lock different inodes).
+class McpAuthRefreshLock final {
+public:
+    McpAuthRefreshLock(std::filesystem::path path, int descriptor);
+    McpAuthRefreshLock(const McpAuthRefreshLock&) = delete;
+    McpAuthRefreshLock& operator=(const McpAuthRefreshLock&) = delete;
+    ~McpAuthRefreshLock();
+
+private:
+    std::filesystem::path path_;
+    int descriptor_{-1};
+};
 
 /// The per-server OAuth state in `<agentDir>/mcp-auth.json`.
 class McpAuthStore final : public cch::mcp::OAuthStateStore {
@@ -52,6 +72,15 @@ public:
     /// key or the legacy bare-URL key. Returns false when none were stored
     /// (pi `remove`).
     [[nodiscard]] support::Expected<bool> remove(std::string_view name, std::string_view server_url);
+
+    /// The per-server lock path pi derives from the store key
+    /// (`mcp-auth-refresh-<sha256(key)[:16 hex]>` in the same directory).
+    [[nodiscard]] std::filesystem::path refresh_lock_path(std::string_view name, std::string_view server_url) const;
+
+    /// Acquire the server's cross-process refresh lock, retrying for 25 s
+    /// while another process refreshes (pi `REFRESH_LOCK_WAIT_MS`).
+    [[nodiscard]] support::AsyncResult<std::shared_ptr<McpAuthRefreshLock>> refresh_lock(
+            std::string_view name, std::string_view server_url) const;
 
     /// Migrate a `#875`-era `mcp__<server>` OAuth record out of `auth.json`
     /// into this store: convert it to a `OAuthState` under the namespaced

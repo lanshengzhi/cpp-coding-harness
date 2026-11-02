@@ -27,7 +27,10 @@ Redirect endpoints exercise the frozen fetch redirect semantics (audit-1052
 When `PIKE_MCP_REQUIRE_AUTHORIZATION` is set, every POST without an
 `Authorization` header is answered 401 (the frozen cross-origin redirect
 target's behavior), so a test can prove the cross-origin hop stripped the
-credential. When `PIKE_MCP_TRACE` names a file, the server appends one flushed
+credential. When `PIKE_MCP_REVOKED_AUTHORIZATION` names a header value, a
+`tools/call` carrying exactly that value is answered 401 once per request
+(the audit-1052 refreshed-token scenario), while the rotated token is
+accepted. When `PIKE_MCP_TRACE` names a file, the server appends one flushed
 line per observed event; the `recv` line records whether an Authorization
 header was present (never its value).
 
@@ -82,6 +85,7 @@ REDIRECT_PATH = os.environ.get("PIKE_MCP_REDIRECT_PATH")
 REDIRECT_TARGET = os.environ.get("PIKE_MCP_REDIRECT_TARGET")
 REDIRECT_LOCATION = os.environ.get("PIKE_MCP_REDIRECT_LOCATION", "ftp://127.0.0.1/mcp")
 REQUIRE_AUTHORIZATION = os.environ.get("PIKE_MCP_REQUIRE_AUTHORIZATION")
+REVOKED_AUTHORIZATION = os.environ.get("PIKE_MCP_REVOKED_AUTHORIZATION")
 # When `PIKE_MCP_SERVER_REQUESTS=roots`, the server-to-client GET stream issues
 # the audit-1190 exchange after the session initializes: `ping` (id 101),
 # `roots/list` (id 102), and an unhandled `sampling/createMessage` (id 103).
@@ -248,6 +252,11 @@ class Handler(BaseHTTPRequestHandler):
         trace("recv " + str(method) + " id=" + str(rid) +
               " authorization_present=" + str(bool(self.headers.get("Authorization"))).lower())
         trace("request-path " + self.path)
+        if (method == "tools/call" and REVOKED_AUTHORIZATION is not None
+                and self.headers.get("Authorization") == REVOKED_AUTHORIZATION):
+            trace("recv 401 " + str(method) + " id=" + str(rid))
+            self._unauthorized(rid, {})
+            return
         if REQUIRE_AUTHORIZATION and not self.headers.get("Authorization"):
             # The frozen cross-origin redirect target answers 401 when the
             # redirect hop stripped the credential (audit-1052

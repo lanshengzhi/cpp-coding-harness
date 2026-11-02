@@ -172,9 +172,12 @@ public:
     /// Connect one enabled entry and list its tools. Completes with the live
     /// connection whose `state()` is `Connected`, `NeedsAuth`, or `Failed`; a
     /// launch/handshake/`tools/list` failure is a `Failed` connection carrying
-    /// the error and, for stdio, the stderr tail.
+    /// the error and, for stdio, the stderr tail. `stop_token` is the manager's
+    /// close/cancel seam: a production factory aborts the pending initialize
+    /// and settles with pi's closed error (ticket #1189); a factory that cannot
+    /// interrupt returns whatever its connect produced.
     [[nodiscard]] virtual support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(
-            const mcp::McpConfigEntry& entry) = 0;
+            const mcp::McpConfigEntry& entry, std::stop_token stop_token = {}) = 0;
 };
 
 /// pi `client.callTool`: one `tools/call` execution on a server's live
@@ -489,6 +492,15 @@ private:
         /// target (disable, close): the late completion compares against its
         /// launch-time generation and drops the connection.
         std::uint64_t generation{0};
+        /// The close/cancel seam of the connect `launch_start` is running
+        /// (ticket #1189): `close()` requests it so a pending initialize is
+        /// aborted instead of being dropped silently.
+        std::stop_source connect_stop;
+        /// pi `connection.error` when a connect that landed after close was
+        /// dropped: the wrapped `MCP server "<name>" failed to connect: ...`
+        /// message the manager snapshot exposes as the closed connection's
+        /// error.
+        std::optional<std::string> connect_error;
     };
 
     [[nodiscard]] ManagedServer* find(std::string_view server);
@@ -498,7 +510,7 @@ private:
     /// after the manager closed (or the server was disabled) drops the late
     /// connection instead of touching the released Agent (#1104).
     [[nodiscard]] support::AsyncResult<void> start_connection(
-            std::string_view server, std::uint64_t expected_generation = 0);
+            std::string_view server, std::uint64_t expected_generation = 0, std::stop_token stop_token = {});
     /// Launch one server's connect as a detached background task on
     /// `executor` (pi's unawaited `createConnection`, tracked in
     /// `backgroundActions`). Guards the double-launch and the closed manager.

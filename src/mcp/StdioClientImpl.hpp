@@ -55,7 +55,7 @@ public:
     StdioClientImpl& operator=(const StdioClientImpl&) = delete;
 
     [[nodiscard]] static boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClientImpl>>> connect_impl(
-            StdioServerConfig config);
+            StdioServerConfig config, std::stop_token stop_token = {});
     ~StdioClientImpl();
 
     void close() noexcept override;

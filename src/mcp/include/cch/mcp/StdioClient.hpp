@@ -13,6 +13,7 @@
 #include <cch/support/Error.hpp>
 
 #include <memory>
+#include <stop_token>
 
 namespace cch::mcp {
 
@@ -22,7 +23,8 @@ namespace cch::mcp {
 /// no fallback server and no silent empty connection.
 class StdioClient : public Client {
 public:
-    [[nodiscard]] static support::AsyncResult<std::shared_ptr<StdioClient>> connect(StdioServerConfig config);
+    [[nodiscard]] static support::AsyncResult<std::shared_ptr<StdioClient>> connect(
+            StdioServerConfig config, std::stop_token stop_token = {});
 
     /// Whether the child has exited or the transport was closed. A closed
     /// client is not reusable.

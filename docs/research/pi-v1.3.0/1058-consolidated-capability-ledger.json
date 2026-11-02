@@ -60,7 +60,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "021b523022d28d92a6cf1c62c221fc92ba7d13ac68e85bfe940deab4d30d4dcf"
+            "sha256": "ff7e5b4886208345ffb4ea916d797aa7a503ed5a2591851584cad1071961b25f"
           },
           {
             "path": "cmake/targets/Support.cmake",
@@ -84,19 +84,19 @@
           },
           {
             "path": "src/mcp/StdioClient.cpp",
-            "sha256": "b0bb7fe2d60ac6ddd6b611cef08a9c7cd3cc2373a57e34ef2340c7f9dd3a2924"
+            "sha256": "166bde34dfb1a3c4c9479e8e6b30b5ba1a07ee476449a91015a1d6b1a9995164"
           },
           {
             "path": "src/mcp/StdioClientImpl.hpp",
-            "sha256": "f989d17e3d4b17ca418b0499788a7f1cab40ab026037559c18349f6ad2b1d0b9"
+            "sha256": "194f7ee2a63b486909f7776dd2123cd2e10413853082fcde789cd523d800938f"
           },
           {
             "path": "src/mcp/HttpClient.cpp",
-            "sha256": "408a5bf01b8d79c7bfc1ce3ffff10faafa2c4bdb5e7b651e7ddd0ff41938ab6e"
+            "sha256": "10ab17f0e2c175e51ced3c7f2aeadbf9dc6640f2103a098a10832b256ed2053f"
           },
           {
             "path": "src/mcp/HttpClientImpl.hpp",
-            "sha256": "ec16586184ec08a708c4d5bea04782badad3dfad712f3d5c7adc530a7f6bc194"
+            "sha256": "b8039b8e17a9de193f52c776e7716fd91bf24e775a8ead7dd1b3389850660c05"
           },
           {
             "path": "src/mcp/ProtocolInternal.hpp",
@@ -112,7 +112,7 @@
           },
           {
             "path": "src/mcp/include/cch/mcp/StdioClient.hpp",
-            "sha256": "c7730a1d9006be4f71de56fb040f582d74dbabd6964a6aa6020000633cad88ff"
+            "sha256": "9a69ee395a6ff2a45b6a1d47bac2f3edb1f4f5c5e26cf62ff79dbec97d5c0ee3"
           },
           {
             "path": "src/mcp/include/cch/mcp/StdioServerConfig.hpp",
@@ -120,7 +120,7 @@
           },
           {
             "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
-            "sha256": "d23ca1776ffc928fe0fe8fac24ffd621d2cbdac7f804dd5f1f480115b95af822"
+            "sha256": "01afbd30a3c4fa73b24fabb9477a56539a6e1fa34e5ff4dd105b9a8a29957428"
           },
           {
             "path": "src/mcp/include/cch/mcp/HttpServerConfig.hpp",
@@ -140,19 +140,19 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "3fd057d89d6e66397aa0dd41a439bad32d25a531a6e0d6ad9c7956df64bbfb87"
+            "sha256": "958c97fcf37088def7f015f717b049c92a3edd5ce7f6d922fc0e4c94f9e7af7c"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "314984a7a0a0eaceda4063fbd98a02565d5e120f6a18937542250ab56e373fa3"
+            "sha256": "ddb2f694572f6671b1ea5cd128a5377283f3e83f83b01b62e85f58b4960c348c"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "47bbacbe5a04d20d9f206e0032d446dd1e14b368f0161fc04e79d2da05db30f2"
+            "sha256": "b6ecb9bf4da4c489f66729c0c44dbea840960599067b4091c34814d83b2637e4"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "0ef5d6aff17a0009b9df9bc0077f82b56f14a262ef9527005c7fbf25d2092517"
+            "sha256": "0412801f6613c9bf54f43cefa3d1350d7e75d0e2ed7a8706089d86c935877948"
           },
           {
             "path": "src/support/Json.cpp",
@@ -188,7 +188,7 @@
           },
           {
             "path": "fixtures/pi-mcp/http_server.py",
-            "sha256": "9116250f66c1a0f7d6f51febfa175e94cef62efa686899164b2c7752c128820c"
+            "sha256": "8118f3b13929692dafc8df49b3901f25d96eeb329657b8eaea56db0cfccb6738"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1052/structured-content.json",
@@ -260,14 +260,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml"
+            "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml"
           ],
-          "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
-          "recordedAt": "2026-11-02T04:10:28Z",
+          "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
+          "recordedAt": "2026-11-02T05:33:19Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
-            "sha256": "c6d6f2482af70388ddec32e417c41cdb119ddcec5e94ee507fe69adc78042244"
+            "path": "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml",
+            "sha256": "42610b900d396ff9aaa33e2e91403b4cfcbfbfa4d02a39f8a017b6362453b2e1"
           }
         },
         "rows": [
@@ -490,6 +490,42 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1189": {
+          "reason": "#1189 makes MCP OAuth refresh the shared background operation per server: one exchange, pi's 30-second skew, a cross-process refresh lock that reuses a grant another process rotated, cancellation/timeout settling the caller without a post-refresh dispatch, close reusing its last token and never refreshing, and a pending initialize aborted by close with pi's closed error. This record pins the touched MCP production, test and fixture inputs; its delivered rows, scenarios and routing digest are unchanged. The recorded selection was rebuilt and rerun on the code revision into a fresh JUnit artifact. The rerun is the shared 36-case #1090/#1101/#1104 selection into docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml.",
+          "changedInputs": [
+            "cmake/targets/CodingAgent.cmake",
+            "fixtures/pi-mcp/http_server.py",
+            "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "src/coding_agent/runtime/McpProductionAdapters.hpp",
+            "src/coding_agent/runtime/McpSessionManager.cpp",
+            "src/coding_agent/runtime/McpSessionManager.hpp",
+            "src/mcp/HttpClient.cpp",
+            "src/mcp/HttpClientImpl.hpp",
+            "src/mcp/StdioClient.cpp",
+            "src/mcp/StdioClientImpl.hpp",
+            "src/mcp/include/cch/mcp/HttpClient.hpp",
+            "src/mcp/include/cch/mcp/StdioClient.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml"
+            ],
+            "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
+            "recordedAt": "2026-11-02T04:10:28Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
+              "sha256": "c6d6f2482af70388ddec32e417c41cdb119ddcec5e94ee507fe69adc78042244"
+            }
+          }
         }
       },
       {
@@ -907,7 +943,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "021b523022d28d92a6cf1c62c221fc92ba7d13ac68e85bfe940deab4d30d4dcf"
+            "sha256": "ff7e5b4886208345ffb4ea916d797aa7a503ed5a2591851584cad1071961b25f"
           },
           {
             "path": "cmake/targets/Mcp.cmake",
@@ -935,19 +971,19 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "3fd057d89d6e66397aa0dd41a439bad32d25a531a6e0d6ad9c7956df64bbfb87"
+            "sha256": "958c97fcf37088def7f015f717b049c92a3edd5ce7f6d922fc0e4c94f9e7af7c"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "314984a7a0a0eaceda4063fbd98a02565d5e120f6a18937542250ab56e373fa3"
+            "sha256": "ddb2f694572f6671b1ea5cd128a5377283f3e83f83b01b62e85f58b4960c348c"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "47bbacbe5a04d20d9f206e0032d446dd1e14b368f0161fc04e79d2da05db30f2"
+            "sha256": "b6ecb9bf4da4c489f66729c0c44dbea840960599067b4091c34814d83b2637e4"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "0ef5d6aff17a0009b9df9bc0077f82b56f14a262ef9527005c7fbf25d2092517"
+            "sha256": "0412801f6613c9bf54f43cefa3d1350d7e75d0e2ed7a8706089d86c935877948"
           },
           {
             "path": "src/coding_agent/runtime/SessionFactory.cpp",
@@ -1011,19 +1047,19 @@
           },
           {
             "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "sha256": "7f7dd16aa9af75fb78901c148d3c2c19a1eda009713824b423fa68a3e817b7d3"
+            "sha256": "e0e03f8d53717464174a8b0a569014b125fd6c976ded60f87920e5d4efe0721e"
           },
           {
             "path": "tests/coding_agent/McpSessionManagerTest.cpp",
-            "sha256": "dc3be3e51f40e0b47835314c1e6060e65e0979cf03eedf2fa6d99b258b3a83c9"
+            "sha256": "a867127b3bc2ca7fc8e4cd69250d0a84f276fab5578f72e3129c8970475c91ff"
           },
           {
             "path": "tests/coding_agent/tui/McpManagerFlowTest.cpp",
-            "sha256": "3175b4f0157878d5527963ec986f21a8687723a194f825a91dd42a2d41538726"
+            "sha256": "94a1da8466c992bc680b64d0a2083f8675e9c44ed45c360effc68816c47eb488"
           },
           {
             "path": "tests/coding_agent/tui/McpManagerPresenterTest.cpp",
-            "sha256": "64fdcc9887548ab38aec242ed7d520984a92bce50e35691d362985fea5b2d0cd"
+            "sha256": "b48622d0d12321c3d2ab36a2396caab0e5153ee9564459c6046a5cfa394ecf5a"
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
@@ -1115,14 +1151,14 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml"
+            "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml"
           ],
-          "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
-          "recordedAt": "2026-11-02T04:10:28Z",
+          "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
+          "recordedAt": "2026-11-02T05:33:19Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
-            "sha256": "c6d6f2482af70388ddec32e417c41cdb119ddcec5e94ee507fe69adc78042244"
+            "path": "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml",
+            "sha256": "42610b900d396ff9aaa33e2e91403b4cfcbfbfa4d02a39f8a017b6362453b2e1"
           }
         },
         "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
@@ -1390,6 +1426,39 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1189": {
+          "reason": "#1189 makes MCP OAuth refresh the shared background operation per server: one exchange, pi's 30-second skew, a cross-process refresh lock that reuses a grant another process rotated, cancellation/timeout settling the caller without a post-refresh dispatch, close reusing its last token and never refreshing, and a pending initialize aborted by close with pi's closed error. This record pins the touched MCP production, test and fixture inputs; its delivered rows, scenarios and routing digest are unchanged. The recorded selection was rebuilt and rerun on the code revision into a fresh JUnit artifact. The rerun is the shared 36-case #1090/#1101/#1104 selection into docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml.",
+          "changedInputs": [
+            "cmake/targets/CodingAgent.cmake",
+            "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "src/coding_agent/runtime/McpProductionAdapters.hpp",
+            "src/coding_agent/runtime/McpSessionManager.cpp",
+            "src/coding_agent/runtime/McpSessionManager.hpp",
+            "tests/coding_agent/McpSessionIntegrationTest.cpp",
+            "tests/coding_agent/McpSessionManagerTest.cpp",
+            "tests/coding_agent/tui/McpManagerFlowTest.cpp",
+            "tests/coding_agent/tui/McpManagerPresenterTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml"
+            ],
+            "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
+            "recordedAt": "2026-11-02T04:10:28Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
+              "sha256": "c6d6f2482af70388ddec32e417c41cdb119ddcec5e94ee507fe69adc78042244"
+            }
+          }
         }
       },
       {
@@ -1417,7 +1486,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "021b523022d28d92a6cf1c62c221fc92ba7d13ac68e85bfe940deab4d30d4dcf"
+            "sha256": "ff7e5b4886208345ffb4ea916d797aa7a503ed5a2591851584cad1071961b25f"
           },
           {
             "path": "cmake/targets/Codemode.cmake",
@@ -1537,19 +1606,19 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "3fd057d89d6e66397aa0dd41a439bad32d25a531a6e0d6ad9c7956df64bbfb87"
+            "sha256": "958c97fcf37088def7f015f717b049c92a3edd5ce7f6d922fc0e4c94f9e7af7c"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "314984a7a0a0eaceda4063fbd98a02565d5e120f6a18937542250ab56e373fa3"
+            "sha256": "ddb2f694572f6671b1ea5cd128a5377283f3e83f83b01b62e85f58b4960c348c"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "47bbacbe5a04d20d9f206e0032d446dd1e14b368f0161fc04e79d2da05db30f2"
+            "sha256": "b6ecb9bf4da4c489f66729c0c44dbea840960599067b4091c34814d83b2637e4"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "0ef5d6aff17a0009b9df9bc0077f82b56f14a262ef9527005c7fbf25d2092517"
+            "sha256": "0412801f6613c9bf54f43cefa3d1350d7e75d0e2ed7a8706089d86c935877948"
           },
           {
             "path": "src/coding_agent/runtime/RuntimeServices.hpp",
@@ -1577,7 +1646,7 @@
           },
           {
             "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "sha256": "7f7dd16aa9af75fb78901c148d3c2c19a1eda009713824b423fa68a3e817b7d3"
+            "sha256": "e0e03f8d53717464174a8b0a569014b125fd6c976ded60f87920e5d4efe0721e"
           },
           {
             "path": "tests/coding_agent/McpStdioSessionTest.cpp",
@@ -1677,14 +1746,14 @@
             "issue1118",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1118.xml"
+            "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1118.xml"
           ],
-          "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
-          "recordedAt": "2026-11-02T04:10:28Z",
+          "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
+          "recordedAt": "2026-11-02T05:33:19Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1118.xml",
-            "sha256": "8ccd1eee06800b3a9b9296631260c0d5da70b8519f6f1553d4426b5678d7c6e4"
+            "path": "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1118.xml",
+            "sha256": "c2a64ae404757231f65bdbf8d9aefe6f91503b3bfa5ab0c2d5b67cb8d2e9e555"
           }
         },
         "rows": [
@@ -2011,6 +2080,36 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1189": {
+          "reason": "#1189 makes MCP OAuth refresh the shared background operation per server: one exchange, pi's 30-second skew, a cross-process refresh lock that reuses a grant another process rotated, cancellation/timeout settling the caller without a post-refresh dispatch, close reusing its last token and never refreshing, and a pending initialize aborted by close with pi's closed error. This record pins the touched MCP production, test and fixture inputs; its delivered rows, scenarios and routing digest are unchanged. The recorded selection was rebuilt and rerun on the code revision into a fresh JUnit artifact. The rerun is the 19-case issue1118 selection into docs/research/pi-v1.3.0/deliveries/1189-revalidation-1118.xml.",
+          "changedInputs": [
+            "cmake/targets/CodingAgent.cmake",
+            "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "src/coding_agent/runtime/McpProductionAdapters.hpp",
+            "src/coding_agent/runtime/McpSessionManager.cpp",
+            "src/coding_agent/runtime/McpSessionManager.hpp",
+            "tests/coding_agent/McpSessionIntegrationTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1118.xml"
+            ],
+            "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
+            "recordedAt": "2026-11-02T04:10:28Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1118.xml",
+              "sha256": "8ccd1eee06800b3a9b9296631260c0d5da70b8519f6f1553d4426b5678d7c6e4"
+            }
+          }
         }
       },
       {
@@ -2776,7 +2875,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "021b523022d28d92a6cf1c62c221fc92ba7d13ac68e85bfe940deab4d30d4dcf"
+            "sha256": "ff7e5b4886208345ffb4ea916d797aa7a503ed5a2591851584cad1071961b25f"
           },
           {
             "path": "cmake/targets/Support.cmake",
@@ -2800,19 +2899,19 @@
           },
           {
             "path": "src/mcp/StdioClient.cpp",
-            "sha256": "b0bb7fe2d60ac6ddd6b611cef08a9c7cd3cc2373a57e34ef2340c7f9dd3a2924"
+            "sha256": "166bde34dfb1a3c4c9479e8e6b30b5ba1a07ee476449a91015a1d6b1a9995164"
           },
           {
             "path": "src/mcp/StdioClientImpl.hpp",
-            "sha256": "f989d17e3d4b17ca418b0499788a7f1cab40ab026037559c18349f6ad2b1d0b9"
+            "sha256": "194f7ee2a63b486909f7776dd2123cd2e10413853082fcde789cd523d800938f"
           },
           {
             "path": "src/mcp/HttpClient.cpp",
-            "sha256": "408a5bf01b8d79c7bfc1ce3ffff10faafa2c4bdb5e7b651e7ddd0ff41938ab6e"
+            "sha256": "10ab17f0e2c175e51ced3c7f2aeadbf9dc6640f2103a098a10832b256ed2053f"
           },
           {
             "path": "src/mcp/HttpClientImpl.hpp",
-            "sha256": "ec16586184ec08a708c4d5bea04782badad3dfad712f3d5c7adc530a7f6bc194"
+            "sha256": "b8039b8e17a9de193f52c776e7716fd91bf24e775a8ead7dd1b3389850660c05"
           },
           {
             "path": "src/mcp/HttpServerConfig.cpp",
@@ -2872,7 +2971,7 @@
           },
           {
             "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
-            "sha256": "d23ca1776ffc928fe0fe8fac24ffd621d2cbdac7f804dd5f1f480115b95af822"
+            "sha256": "01afbd30a3c4fa73b24fabb9477a56539a6e1fa34e5ff4dd105b9a8a29957428"
           },
           {
             "path": "src/mcp/include/cch/mcp/HttpServerConfig.hpp",
@@ -2916,7 +3015,7 @@
           },
           {
             "path": "src/mcp/include/cch/mcp/RequestAuthSource.hpp",
-            "sha256": "3f91cbf08b2579aa3bde10d008e1e6f01a06df8a479cf63f1889d54a5dbd0874"
+            "sha256": "30e67ecd7d961733757ccdc0643bcd6c2a75b0c6df8cd53dfb04c9fd2aaff842"
           },
           {
             "path": "src/mcp/include/cch/mcp/Url.hpp",
@@ -2924,7 +3023,7 @@
           },
           {
             "path": "src/mcp/include/cch/mcp/StdioClient.hpp",
-            "sha256": "c7730a1d9006be4f71de56fb040f582d74dbabd6964a6aa6020000633cad88ff"
+            "sha256": "9a69ee395a6ff2a45b6a1d47bac2f3edb1f4f5c5e26cf62ff79dbec97d5c0ee3"
           },
           {
             "path": "src/mcp/include/cch/mcp/StdioServerConfig.hpp",
@@ -2932,23 +3031,23 @@
           },
           {
             "path": "src/coding_agent/mcp/McpOAuthSignIn.cpp",
-            "sha256": "84947b06d9927c787244d5c1af5f81163d73db171f6cb89b091111a0114abddc"
+            "sha256": "06d6687ff42883eaf8c7179ecf12b349880deda2a4044d5f06f77d59ad439f11"
           },
           {
             "path": "src/coding_agent/mcp/McpOAuthSignIn.hpp",
-            "sha256": "5e3704a3f3f27ffe969b8bbd0e2c0efee73c5dac4fa4fce16725b6e0ea919104"
+            "sha256": "451aa3462fb186be6d59e38272746c009163311a4a80e194c4a7f5b73edcccc1"
           },
           {
             "path": "src/coding_agent/mcp/McpOAuthTokenResolver.cpp",
-            "sha256": "c6e555304084bec555d4fcb8a60e697cc13fbde3bcf943cd4f8cc7f6f79e86d4"
+            "sha256": "9008868c4c7d64f5fc929d8aaf463e7fb108d04e6dd3a27c4f091c9037283ce1"
           },
           {
             "path": "src/coding_agent/mcp/McpAuthStore.cpp",
-            "sha256": "1a3d5f186a01a4bc49a2c1099a914f554804cf1f654d74a4f07fda525463196b"
+            "sha256": "fe1b8afda071da8f8f5c5d3fbfb961168d79efcda47d301cd5eb2dc6b0bf354c"
           },
           {
             "path": "src/coding_agent/mcp/McpAuthStore.hpp",
-            "sha256": "96e233d310e330acc65c4e9a213f310cf47313ae298f50759ad075c00da94ed9"
+            "sha256": "41460bb0f08f9872b4d2555d6f70898efc94ebacb2d9113389e93cb7b35bab35"
           },
           {
             "path": "src/coding_agent/mcp/McpOAuthLogin.cpp",
@@ -2972,19 +3071,19 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "3fd057d89d6e66397aa0dd41a439bad32d25a531a6e0d6ad9c7956df64bbfb87"
+            "sha256": "958c97fcf37088def7f015f717b049c92a3edd5ce7f6d922fc0e4c94f9e7af7c"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "314984a7a0a0eaceda4063fbd98a02565d5e120f6a18937542250ab56e373fa3"
+            "sha256": "ddb2f694572f6671b1ea5cd128a5377283f3e83f83b01b62e85f58b4960c348c"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "47bbacbe5a04d20d9f206e0032d446dd1e14b368f0161fc04e79d2da05db30f2"
+            "sha256": "b6ecb9bf4da4c489f66729c0c44dbea840960599067b4091c34814d83b2637e4"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "0ef5d6aff17a0009b9df9bc0077f82b56f14a262ef9527005c7fbf25d2092517"
+            "sha256": "0412801f6613c9bf54f43cefa3d1350d7e75d0e2ed7a8706089d86c935877948"
           },
           {
             "path": "src/support/CancellationBridge.hpp",
@@ -3008,7 +3107,7 @@
           },
           {
             "path": "tests/coding_agent/McpOAuthSessionTest.cpp",
-            "sha256": "25ee051a7dc953bb16b16f3fb3e0244946149dab68684627c4bf099d845e1bb4"
+            "sha256": "8942a42a8af08a5a3aaa61cf16711659dacad2aaf8826ca2936f161f5c49d46f"
           },
           {
             "path": "tests/coding_agent/McpOAuthSignInTest.cpp",
@@ -3016,7 +3115,7 @@
           },
           {
             "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "sha256": "7f7dd16aa9af75fb78901c148d3c2c19a1eda009713824b423fa68a3e817b7d3"
+            "sha256": "e0e03f8d53717464174a8b0a569014b125fd6c976ded60f87920e5d4efe0721e"
           },
           {
             "path": "tests/coding_agent/McpResourceToolsTest.cpp",
@@ -3024,7 +3123,7 @@
           },
           {
             "path": "tests/support/FakeOAuthHttpClient.hpp",
-            "sha256": "e7608f6f2f40a4ac261d74787571e403961c37d01c71d3b36b1dacb4b419c928"
+            "sha256": "8923e51713f15b95166b7a13be4cd74db3e10bfacc6001cb4bae6b91cc412bda"
           },
           {
             "path": "tests/support/McpTestKit.hpp",
@@ -3048,7 +3147,7 @@
           },
           {
             "path": "fixtures/pi-mcp/http_server.py",
-            "sha256": "9116250f66c1a0f7d6f51febfa175e94cef62efa686899164b2c7752c128820c"
+            "sha256": "8118f3b13929692dafc8df49b3901f25d96eeb329657b8eaea56db0cfccb6738"
           },
           {
             "path": "fixtures/pi-mcp/resource_isolation_server.py",
@@ -3116,14 +3215,14 @@
             "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1181.xml"
+            "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1181.xml"
           ],
-          "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
-          "recordedAt": "2026-11-02T04:10:28Z",
+          "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
+          "recordedAt": "2026-11-02T05:33:19Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1181.xml",
-            "sha256": "dce029f2b7c58a586b16bdef73d0f7e237d60dff21598e5e55c8da373d37a9ef"
+            "path": "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1181.xml",
+            "sha256": "7bc920bd00b4f6947870b4d9db07ca9d52999df17411e7e0adab30bfb71aed82"
           }
         },
         "rows": [
@@ -3417,7 +3516,362 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
             "fixtures/pi-v1.3.0/baselines.json"
           ]
+        },
+        "revalidation1189": {
+          "reason": "#1189 makes MCP OAuth refresh the shared background operation per server: one exchange, pi's 30-second skew, a cross-process refresh lock that reuses a grant another process rotated, cancellation/timeout settling the caller without a post-refresh dispatch, close reusing its last token and never refreshing, and a pending initialize aborted by close with pi's closed error. This record pins the touched MCP production, test and fixture inputs; its delivered rows, scenarios and routing digest are unchanged. The recorded selection was rebuilt and rerun on the code revision into a fresh JUnit artifact. The rerun is the 16-case #1181 selection into docs/research/pi-v1.3.0/deliveries/1189-revalidation-1181.xml.",
+          "changedInputs": [
+            "cmake/targets/CodingAgent.cmake",
+            "fixtures/pi-mcp/http_server.py",
+            "src/coding_agent/mcp/McpAuthStore.cpp",
+            "src/coding_agent/mcp/McpAuthStore.hpp",
+            "src/coding_agent/mcp/McpOAuthSignIn.cpp",
+            "src/coding_agent/mcp/McpOAuthSignIn.hpp",
+            "src/coding_agent/mcp/McpOAuthTokenResolver.cpp",
+            "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "src/coding_agent/runtime/McpProductionAdapters.hpp",
+            "src/coding_agent/runtime/McpSessionManager.cpp",
+            "src/coding_agent/runtime/McpSessionManager.hpp",
+            "src/mcp/HttpClient.cpp",
+            "src/mcp/HttpClientImpl.hpp",
+            "src/mcp/StdioClient.cpp",
+            "src/mcp/StdioClientImpl.hpp",
+            "src/mcp/include/cch/mcp/HttpClient.hpp",
+            "src/mcp/include/cch/mcp/RequestAuthSource.hpp",
+            "src/mcp/include/cch/mcp/StdioClient.hpp",
+            "tests/coding_agent/McpOAuthSessionTest.cpp",
+            "tests/coding_agent/McpSessionIntegrationTest.cpp",
+            "tests/support/FakeOAuthHttpClient.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1181.xml"
+            ],
+            "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
+            "recordedAt": "2026-11-02T04:10:28Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1181.xml",
+              "sha256": "dce029f2b7c58a586b16bdef73d0f7e237d60dff21598e5e55c8da373d37a9ef"
+            }
+          }
         }
+      },
+      {
+        "id": "1189-close-refresh",
+        "ticket": "1189",
+        "implementationCommits": [
+          "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028"
+        ],
+        "report": "docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "cmake/targets/CodingAgent.cmake",
+            "sha256": "ff7e5b4886208345ffb4ea916d797aa7a503ed5a2591851584cad1071961b25f"
+          },
+          {
+            "path": "cmake/targets/Mcp.cmake",
+            "sha256": "589e3411f006490b201b7f9f758374bd4fe96617c74c29d411f275cc28c25e04"
+          },
+          {
+            "path": "cmake/targets/Support.cmake",
+            "sha256": "536d6b8a41c3fa26de6b0f1e3ba23131e9fb70c5ac6870212752246606bba438"
+          },
+          {
+            "path": "cmake/tests/CodingAgentTests.cmake",
+            "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
+          },
+          {
+            "path": "cmake/tests/McpTests.cmake",
+            "sha256": "ee04ce20f26bf81af1ef236c5e1bf92a9715a49c7049a2597a398f41f090a148"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "fixtures/pi-mcp/http_server.py",
+            "sha256": "8118f3b13929692dafc8df49b3901f25d96eeb329657b8eaea56db0cfccb6738"
+          },
+          {
+            "path": "fixtures/pi-mcp/oauth/replay.json",
+            "sha256": "e73ce69e0e8fde80a38fc2ec73393c26ac1ca775477fac69f94523334fc2a539"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1052/application-initialization.json",
+            "sha256": "71d447812fc6fbf5c95ddc423552e8dd1fa1c879924886f6987d531876346cb8"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1052/manifest.json",
+            "sha256": "15acbbfe81dbb9a226f6e5f963953b354b5823d892868a2d134fb5418c629eb9"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
+            "sha256": "21d20a43ddb027e1ce322d9632164776c7d6c8b5144ae8f01bee929a0eee2c47"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/baselines.json",
+            "sha256": "7d82413c30fcce9279c3063db32ce53cb785d9a54026b41ea6928d56289a53a5"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "sha256": "f066c9a77ea1344a20e2a0ca5221abd8ec23dc50d4cdda262e46c387ed2f50ea"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpAuthStore.cpp",
+            "sha256": "fe1b8afda071da8f8f5c5d3fbfb961168d79efcda47d301cd5eb2dc6b0bf354c"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpAuthStore.hpp",
+            "sha256": "41460bb0f08f9872b4d2555d6f70898efc94ebacb2d9113389e93cb7b35bab35"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpOAuthRefresh.cpp",
+            "sha256": "3282b55fdf31411dc196e8f96d535876a809cdcdc765055460ed1b853107f8ab"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpOAuthRefresh.hpp",
+            "sha256": "98e08776aee3a78d89b8c317869cafe7479bea9b430b841a977dad6cac7296e4"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpOAuthSignIn.cpp",
+            "sha256": "06d6687ff42883eaf8c7179ecf12b349880deda2a4044d5f06f77d59ad439f11"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpOAuthSignIn.hpp",
+            "sha256": "451aa3462fb186be6d59e38272746c009163311a4a80e194c4a7f5b73edcccc1"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpOAuthTokenResolver.cpp",
+            "sha256": "9008868c4c7d64f5fc929d8aaf463e7fb108d04e6dd3a27c4f091c9037283ce1"
+          },
+          {
+            "path": "src/coding_agent/mcp/McpOAuthTokenResolver.hpp",
+            "sha256": "05a80c262a24735ede0a46e995f8bd299bdb6b8f881460717581165df9fdd755"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
+            "sha256": "958c97fcf37088def7f015f717b049c92a3edd5ce7f6d922fc0e4c94f9e7af7c"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
+            "sha256": "ddb2f694572f6671b1ea5cd128a5377283f3e83f83b01b62e85f58b4960c348c"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpSessionManager.cpp",
+            "sha256": "b6ecb9bf4da4c489f66729c0c44dbea840960599067b4091c34814d83b2637e4"
+          },
+          {
+            "path": "src/coding_agent/runtime/McpSessionManager.hpp",
+            "sha256": "0412801f6613c9bf54f43cefa3d1350d7e75d0e2ed7a8706089d86c935877948"
+          },
+          {
+            "path": "src/mcp/HttpClient.cpp",
+            "sha256": "10ab17f0e2c175e51ced3c7f2aeadbf9dc6640f2103a098a10832b256ed2053f"
+          },
+          {
+            "path": "src/mcp/HttpClientImpl.hpp",
+            "sha256": "b8039b8e17a9de193f52c776e7716fd91bf24e775a8ead7dd1b3389850660c05"
+          },
+          {
+            "path": "src/mcp/StdioClient.cpp",
+            "sha256": "166bde34dfb1a3c4c9479e8e6b30b5ba1a07ee476449a91015a1d6b1a9995164"
+          },
+          {
+            "path": "src/mcp/StdioClientImpl.hpp",
+            "sha256": "194f7ee2a63b486909f7776dd2123cd2e10413853082fcde789cd523d800938f"
+          },
+          {
+            "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
+            "sha256": "01afbd30a3c4fa73b24fabb9477a56539a6e1fa34e5ff4dd105b9a8a29957428"
+          },
+          {
+            "path": "src/mcp/include/cch/mcp/RequestAuthSource.hpp",
+            "sha256": "30e67ecd7d961733757ccdc0643bcd6c2a75b0c6df8cd53dfb04c9fd2aaff842"
+          },
+          {
+            "path": "src/mcp/include/cch/mcp/StdioClient.hpp",
+            "sha256": "9a69ee395a6ff2a45b6a1d47bac2f3edb1f4f5c5e26cf62ff79dbec97d5c0ee3"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/coding_agent/McpOAuthSessionTest.cpp",
+            "sha256": "8942a42a8af08a5a3aaa61cf16711659dacad2aaf8826ca2936f161f5c49d46f"
+          },
+          {
+            "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
+            "sha256": "e0e03f8d53717464174a8b0a569014b125fd6c976ded60f87920e5d4efe0721e"
+          },
+          {
+            "path": "tests/coding_agent/McpSessionManagerTest.cpp",
+            "sha256": "a867127b3bc2ca7fc8e4cd69250d0a84f276fab5578f72e3129c8970475c91ff"
+          },
+          {
+            "path": "tests/coding_agent/tui/McpManagerFlowTest.cpp",
+            "sha256": "94a1da8466c992bc680b64d0a2083f8675e9c44ed45c360effc68816c47eb488"
+          },
+          {
+            "path": "tests/coding_agent/tui/McpManagerPresenterTest.cpp",
+            "sha256": "b48622d0d12321c3d2ab36a2396caab0e5153ee9564459c6046a5cfa394ecf5a"
+          },
+          {
+            "path": "tests/support/FakeOAuthHttpClient.hpp",
+            "sha256": "8923e51713f15b95166b7a13be4cd74db3e10bfacc6001cb4bae6b91cc412bda"
+          },
+          {
+            "path": "tests/support/McpTestKit.hpp",
+            "sha256": "06ab36bb65c056096a599f696cbe416003ede98f2567f87d30f5118c33d20f1d"
+          },
+          {
+            "path": "tests/support/ReleaseGate.hpp",
+            "sha256": "c3f156d5fb4bd67ab7cc33be2ed99650e14e77e732cc6e4b362ee7561c725a07"
+          },
+          {
+            "path": "tests/support/RuntimeFixture.hpp",
+            "sha256": "bd441349fa9473da544f544b9edc451fc8fb548ea14d3b5bf11a3d3b16aba1c0"
+          },
+          {
+            "path": "tests/support/TempWorkspace.hpp",
+            "sha256": "4c3811b22c3abae96d3261a54d401899033ffb80fcc325a5ac5dd2c9f8f75140"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          }
+        ],
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-R",
+            "^(closing while a real initialize is pending returns with pi's closed error|close during a pending connect returns promptly and drops the late connection|closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token|a cancelled MCP OAuth refresh stops before the request reaches the MCP server|a timed-out MCP OAuth request settles at the deadline while the shared refresh completes|concurrent MCP OAuth requests share one refresh|MCP OAuth refresh uses pi's 30-second skew|a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh|a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1189-close-refresh.xml"
+          ],
+          "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
+          "recordedAt": "2026-11-02T05:51:24Z",
+          "selected": 9,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1189-close-refresh.xml",
+            "sha256": "621ea140170231f410afdfe43ccfeab5a205525441f9f84b44c68237b61c6d03"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_mcp:mcp-client-lifecycle",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1052/application-initialization.json",
+                "scenario": "closing while initialize is pending returns without waiting",
+                "test": "closing while a real initialize is pending returns with pi's closed error",
+                "testSource": "tests/coding_agent/McpSessionManagerTest.cpp"
+              },
+              {
+                "artifact": "audit-1052/oauth-lifecycle.json",
+                "scenario": "closing while a token refresh is in flight does not wait for the refresh",
+                "test": "closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token",
+                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "close during a pending connect returns promptly and drops the late connection",
+              "testSource": "tests/coding_agent/McpSessionManagerTest.cpp",
+              "reason": "A scripted factory that ignores the stop seam still returns promptly and its healthy late connection is dropped without a closed error, separating the production factory's abort path and observable closed error from the generic close/drop path."
+            }
+          },
+          {
+            "id": "cch_mcp:mcp-close-no-refresh",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1052/oauth-lifecycle.json",
+                "scenario": "closing while a token refresh is in flight does not wait for the refresh",
+                "test": "closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token",
+                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "MCP OAuth refresh uses pi's 30-second skew",
+              "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp",
+              "reason": "A request-time token inside the 30-second skew does refresh, so the close path's one stalled refresh and pre-refresh DELETE token separate 'close never refreshes' from 'refresh never happens'."
+            }
+          },
+          {
+            "id": "cch_mcp:mcp-oauth-refresh",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1052/oauth-lifecycle.json",
+                "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
+                "test": "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes",
+                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
+              },
+              {
+                "artifact": "audit-1052/oauth-lifecycle.json",
+                "scenario": "a tool call that times out during OAuth refresh never sends it after the refresh completes",
+                "test": "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes",
+                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh",
+              "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp",
+              "reason": "A second process waits on the per-server lock and reuses the grant the first process rotated with zero refresh POSTs, separating the lock plus re-check from a per-request refresh that would send a second POST with a consumed refresh token."
+            }
+          },
+          {
+            "id": "cch_mcp:mcp-refresh-cancellation",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1052/oauth-lifecycle.json",
+                "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
+                "test": "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes",
+                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
+              },
+              {
+                "artifact": "audit-1052/oauth-lifecycle.json",
+                "scenario": "a tool call that times out during OAuth refresh never sends it after the refresh completes",
+                "test": "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes",
+                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a cancelled MCP OAuth refresh stops before the request reaches the MCP server",
+              "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp",
+              "reason": "The caller settles as Cancelled while the shared refresh is still in flight, its stop token stays unset, and the rotated token is persisted, separating the shared-background rule from the old caller-aborts-refresh behavior."
+            }
+          }
+        ],
+        "routingSha256": "7fc19e917b0d999a8d4188516385cf866475f6ffd56635666cbd3b718e5723f1"
       }
     ]
   },
@@ -3684,10 +4138,10 @@
         "partial": 83
       },
       "cch_mcp": {
-        "implemented": 12,
+        "implemented": 16,
         "missing": 1,
         "not-applicable": 1,
-        "partial": 5
+        "partial": 1
       },
       "cch_tui": {
         "implemented": 882,
@@ -3700,16 +4154,16 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1056,
+      "implemented": 1060,
       "missing": 201,
       "not-applicable": 18,
-      "partial": 189
+      "partial": 185
     },
     "verification": {
       "not-applicable": 28,
       "unverified": 1016,
-      "upstream-captured": 379,
-      "verified": 41
+      "upstream-captured": 375,
+      "verified": 45
     },
     "evidenceRoute": {
       "captured": 420,
@@ -35197,15 +35651,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_mcp",
       "consumer": "Generic `McpClient` and application `McpServerConnection`/`McpSessionManager`; transport callers do not own JSON-RPC state themselves.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1189",
       "scenario": "closing while initialize is pending returns without waiting",
       "comparisonScenarios": [
         "closing while initialize is pending returns without waiting",
@@ -35214,16 +35668,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/application-initialization.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "closing while initialize is pending returns without waiting"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1189-mcp-close-refresh.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Port the v1.3.0 `McpServerConnection` state/retry shape and make close abort a pending initialize and any refresh wait. Add a C++ test that starts a never-answering initialize, closes, and asserts prompt/creation does not block; distinguish close-during-connect from close-after-connected.",
+      "remainingWork": null,
+      "notes": "Delivered by #1189; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [
@@ -35238,7 +35692,26 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1052/application-initialization.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "closing while initialize is pending returns without waiting"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Port the v1.3.0 `McpServerConnection` state/retry shape and make close abort a pending initialize and any refresh wait. Add a C++ test that starts a never-answering initialize, closes, and asserts prompt/creation does not block; distinguish close-during-connect from close-after-connected."
+      },
+      "delivery": "1189-close-refresh"
     },
     {
       "id": "cch_mcp:mcp-close-no-refresh",
@@ -35250,15 +35723,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_mcp",
       "consumer": "Application shutdown, `/mcp` disable/reconnect, and Agent session teardown.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1189",
       "scenario": "closing while a token refresh is in flight does not wait for the refresh",
       "comparisonScenarios": [
         "closing while a token refresh is in flight does not wait for the refresh"
@@ -35266,16 +35739,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "closing while a token refresh is in flight does not wait for the refresh"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1189-mcp-close-refresh.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add a token-provider `settled()`/in-flight tracking seam so close can skip starting a refresh while still allowing an already-answered refresh to persist. Test that close returns within a bounded time while `/token` is stalled and that DELETE carries the pre-refresh access token.",
+      "remainingWork": null,
+      "notes": "Delivered by #1189; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -35288,7 +35761,26 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "closing while a token refresh is in flight does not wait for the refresh"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Add a token-provider `settled()`/in-flight tracking seam so close can skip starting a refresh while still allowing an already-answered refresh to persist. Test that close returns within a bounded time while `/token` is stalled and that DELETE carries the pre-refresh access token."
+      },
+      "delivery": "1189-close-refresh"
     },
     {
       "id": "cch_mcp:mcp-http-session-stream",
@@ -35635,15 +36127,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_mcp",
       "consumer": "`createMcpAuthProvider` in the application integration; `McpOAuthTokenResolver` for request-time credentials.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1189",
       "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
       "comparisonScenarios": [
         "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
@@ -35652,16 +36144,17 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
-          "cancelling a tool call during OAuth refresh never sends it after the refresh completes"
+          "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
+          "a tool call that times out during OAuth refresh never sends it after the refresh completes"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1189-mcp-close-refresh.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Extract refresh into a per-server single-flight with pi's 30-second skew and a file lock; keep the no-loop `invalid_grant` rule. Add concurrent-401 and cross-process lock cases before claiming parity.",
+      "remainingWork": null,
+      "notes": "Delivered by #1189; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -35674,7 +36167,26 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "cancelling a tool call during OAuth refresh never sends it after the refresh completes"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Extract refresh into a per-server single-flight with pi's 30-second skew and a file lock; keep the no-loop `invalid_grant` rule. Add concurrent-401 and cross-process lock cases before claiming parity."
+      },
+      "delivery": "1189-close-refresh"
     },
     {
       "id": "cch_mcp:mcp-oauth-registration-signin",
@@ -35854,15 +36366,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_mcp",
       "consumer": "OAuth-eligible HTTP MCP calls; the application tool wrapper and Agent turn cancellation.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1189",
       "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
       "comparisonScenarios": [
         "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
@@ -35871,16 +36383,17 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
-          "cancelling a tool call during OAuth refresh never sends it after the refresh completes"
+          "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
+          "a tool call that times out during OAuth refresh never sends it after the refresh completes"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1189-mcp-close-refresh.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Make the refresh a shared background operation (per server/URL) that the request waits on only while not cancelled; on cancellation settle immediately, keep the refresh alive, and suppress dispatch. Add the captured abort and timeout cases, asserting exactly one 401 tool attempt and zero post-refresh calls.",
+      "remainingWork": null,
+      "notes": "Delivered by #1189; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -35893,7 +36406,26 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "cancelling a tool call during OAuth refresh never sends it after the refresh completes"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Make the refresh a shared background operation (per server/URL) that the request waits on only while not cancelled; on cancellation settle immediately, keep the refresh alive, and suppress dispatch. Add the captured abort and timeout cases, asserting exactly one 401 tool attempt and zero post-refresh calls."
+      },
+      "delivery": "1189-close-refresh"
     },
     {
       "id": "cch_mcp:mcp-request-auth",

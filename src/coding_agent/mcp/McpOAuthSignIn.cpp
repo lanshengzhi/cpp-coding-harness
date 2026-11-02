@@ -49,9 +49,9 @@ namespace {
 
 using cch::mcp::OAuthState;
 
-/// The request-time refresh margin, matching `McpOAuthTokenResolver` (the
-/// Models runtime's `kOAuthMinimumValidity`).
-inline constexpr auto kOAuthMinimumValidity = std::chrono::minutes{5};
+/// pi `REFRESH_SKEW_MS`: an access token this close to expiry is refreshed
+/// before it is sent, matching `McpOAuthTokenResolver` (#1189).
+inline constexpr auto kRefreshSkew = std::chrono::seconds{30};
 
 constexpr std::string_view kFallbackRedirectUrl = "http://127.0.0.1/callback";
 
@@ -265,7 +265,7 @@ using RaceOutcome = support::Expected<std::optional<AuthorizationResponse>>;
 }
 
 [[nodiscard]] bool token_expires_soon(const cch::mcp::OAuthCredential& credential) {
-    return credential.expires <= ai::current_timestamp_ms() + kOAuthMinimumValidity.count() * 1000;
+    return credential.expires <= ai::current_timestamp_ms() + kRefreshSkew.count() * 1000;
 }
 
 /// The `Authorization: Bearer <access>` header for a stored state, or
@@ -458,7 +458,8 @@ McpOAuthFlowTokenResolver::McpOAuthFlowTokenResolver(std::shared_ptr<McpAuthStor
         cch::mcp::OAuthConfig oauth,
         std::shared_ptr<cch::mcp::OAuthHttpClient> http)
     : store_(std::move(store)), server_name_(std::move(server_name)), server_url_(std::move(server_url)),
-      oauth_(std::move(oauth)), http_(http ? std::move(http) : cch::mcp::default_oauth_http_client()) {}
+      oauth_(std::move(oauth)), http_(http ? std::move(http) : cch::mcp::default_oauth_http_client()),
+      last_access_token_(std::make_shared<std::optional<std::string>>()) {}
 
 McpOAuthFlowTokenResolver::McpOAuthFlowTokenResolver(McpOAuthFlowTokenResolver&&) noexcept = default;
 McpOAuthFlowTokenResolver& McpOAuthFlowTokenResolver::operator=(McpOAuthFlowTokenResolver&&) noexcept = default;
@@ -472,6 +473,7 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthFlowTokenResolv
                     server_url = server_url_,
                     oauth = oauth_,
                     http = http_,
+                    last_access_token = last_access_token_,
                     stop_token,
                     purpose]() -> boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> {
                 auto loaded = store->load(server_name, server_url);
@@ -479,6 +481,10 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthFlowTokenResolv
                     co_return std::unexpected(std::move(loaded.error()));
                 }
                 if (purpose == cch::mcp::RequestAuthPurpose::SessionClose) {
+                    if (last_access_token->has_value()) {
+                        co_return std::map<std::string, std::string>{
+                                {"Authorization", "Bearer " + **last_access_token}};
+                    }
                     if (loaded->has_value()) {
                         if (auto headers = bearer_headers(**loaded); headers) {
                             co_return std::move(*headers);
@@ -494,6 +500,7 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthFlowTokenResolv
                 if (loaded->has_value()) {
                     const auto credential = cch::mcp::mcp_oauth_credential_from_state(**loaded);
                     if (credential && !token_expires_soon(*credential)) {
+                        *last_access_token = credential->access;
                         auto headers = bearer_headers(**loaded);
                         if (headers) {
                             co_return std::move(*headers);
@@ -528,11 +535,21 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthFlowTokenResolv
                 }
                 if (refreshed->has_value()) {
                     if (auto headers = bearer_headers(**refreshed); headers) {
+                        if (const auto credential = cch::mcp::mcp_oauth_credential_from_state(**refreshed);
+                                credential) {
+                            *last_access_token = credential->access;
+                        }
                         co_return std::move(*headers);
                     }
                 }
                 co_return std::unexpected(re_login_error(server_name, "no stored OAuth credential"));
             });
+}
+
+support::AsyncResult<bool> McpOAuthFlowTokenResolver::recover_unauthorized(std::stop_token, std::string) {
+    // Discovery/registration configurations keep the #1102 explicit re-login
+    // behavior; a 401 does not start an uncancellable flow behind the caller.
+    return support::AsyncResult<bool>{false};
 }
 
 } // namespace cch::coding_agent::mcp

@@ -28,6 +28,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -58,7 +59,10 @@ class ProductionMcpConnection final : public McpLiveConnection,
                                       public std::enable_shared_from_this<ProductionMcpConnection> {
 public:
     /// The factory's connect operation: one fresh transport with handshake.
-    using ConnectSource = std::function<boost::asio::awaitable<support::Expected<ConnectedMcpTransport>>()>;
+    /// The stop token aborts a pending initialize for the manager's close
+    /// (#1189); reconnect passes an empty token.
+    using ConnectSource =
+            std::function<boost::asio::awaitable<support::Expected<ConnectedMcpTransport>>(std::stop_token)>;
 
     /// `connected` carries the fresh transport, when the connect succeeded;
     /// the connection starts in `Connecting` and the factory runs `refresh()`
@@ -143,7 +147,7 @@ public:
     explicit ProductionMcpConnectionFactory(std::filesystem::path agent_dir);
 
     [[nodiscard]] support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(
-            const mcp::McpConfigEntry& entry) override;
+            const mcp::McpConfigEntry& entry, std::stop_token stop_token = {}) override;
 
 private:
     [[nodiscard]] std::shared_ptr<mcp::McpAuthStore> auth_store() const;
