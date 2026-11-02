@@ -3223,7 +3223,7 @@ TEST_CASE("generation publishes the attempt before the model stream and usage wi
     std::mutex frames_mutex;
     std::vector<DocumentFrame> frames;
     std::atomic_int atomic_answer_commits{0};
-    REQUIRE(watch.start([&](DocumentFrame frame) {
+    REQUIRE(watch.start([&](DocumentFrame frame, chord::Context) {
         std::lock_guard lock(frames_mutex);
         frames.push_back(std::move(frame));
     }));

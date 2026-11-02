@@ -1,6 +1,10 @@
 #pragma once
 
+#include <cch/support/AsyncResult.hpp>
+#include <cch/support/Error.hpp>
+
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -60,6 +64,11 @@ template <typename T> [[nodiscard]] ContextKey<T> create_context_key(std::string
 /// root; deriving a context never mutates its parent.
 class Context {
 public:
+    /// An absent context: no root, no values and no cancellation. The ordinary
+    /// empty root is `background_context()`; this exists so a stored or
+    /// buffered context can be default-initialized, and it behaves like an
+    /// empty root everywhere (`to_string()` reports `[Context]`).
+    Context() = default;
     Context(const Context&) = default;
     Context(Context&&) noexcept = default;
     Context& operator=(const Context&) = default;
@@ -97,6 +106,11 @@ private:
     std::shared_ptr<const detail::ContextNode> node_;
 };
 
+/// The terminal error of a context-scoped wait that the caller cancelled
+/// (pi `AbortError`): `ErrorCode::Cancelled` with the frozen message and the
+/// caller's abort reason as the detail.
+[[nodiscard]] support::Error context_abort_error(std::string reason);
+
 namespace detail {
 
 /// Type-erased value-layer constructor used by the typed `with_context_value`
@@ -106,7 +120,77 @@ namespace detail {
         std::shared_ptr<const void> value,
         const Context& parent);
 
+template <typename T> struct ContextWaitState;
+
+/// The caller-cancellation outcome of one `await_with_context` wait. It keeps
+/// only a weak reference, so the wait state is destroyed by whichever side
+/// settles last and never from inside this callback.
+template <typename T> struct ContextWaitCancel {
+    std::weak_ptr<ContextWaitState<T>> state;
+
+    void operator()() const;
+};
+
+/// One context-scoped wait. Whichever of the caller cancellation and the
+/// operation settles first delivers the one terminal outcome; the other is
+/// dropped.
+template <typename T> struct ContextWaitState {
+    explicit ContextWaitState(Context value) : context(std::move(value)) {}
+
+    std::mutex mutex;
+    /// The waiter's terminal delivery, emptied by the winning outcome.
+    std::optional<support::AsyncCompletion<T, support::Error>> completion;
+    /// Kept alive so the abort reason stays readable after the caller drops its
+    /// own handle.
+    Context context;
+    /// Registered on the context token for the lifetime of the wait.
+    std::optional<std::stop_callback<ContextWaitCancel<T>>> on_cancel;
+};
+
+template <typename T> void ContextWaitCancel<T>::operator()() const {
+    const std::shared_ptr<ContextWaitState<T>> locked = state.lock();
+    if (!locked) return;
+    std::optional<support::AsyncCompletion<T, support::Error>> rejected;
+    std::string reason;
+    {
+        const std::lock_guard guard(locked->mutex);
+        rejected = std::exchange(locked->completion, std::nullopt);
+        if (rejected) reason = locked->context.abort_reason().value_or(std::string{});
+    }
+    if (rejected) (*rejected)(std::unexpected(context_abort_error(std::move(reason))));
+}
+
 } // namespace detail
+
+/// Wait on one pending operation until it completes or `context` is cancelled
+/// (pi `awaitWithContext`). Cancelling the caller rejects the wait with
+/// `context_abort_error()` and never cancels the operation: the producer still
+/// runs to completion and its terminal result is dropped. A context without a
+/// cancellation layer returns the operation unchanged.
+template <typename T>
+[[nodiscard]] support::AsyncResult<T> await_with_context(support::AsyncResult<T> operation, Context context) {
+    const std::stop_token token = context.stop_token();
+    if (!token.stop_possible()) return operation;
+    return support::AsyncResult<T>{support::AsyncProducer<T, support::Error>{
+            [operation = std::move(operation), context = std::move(context), token](
+                    support::AsyncCompletion<T, support::Error> completion) mutable noexcept {
+                auto state = std::make_shared<detail::ContextWaitState<T>>(context);
+                state->completion.emplace(std::move(completion));
+                // Registering delivers the cancellation inline when the
+                // context is already cancelled.
+                state->on_cancel.emplace(token, detail::ContextWaitCancel<T>{state});
+                // The operation always runs to completion; only its terminal
+                // delivery is dropped once the wait has rejected.
+                std::move(operation).start([state](std::expected<T, support::Error> outcome) mutable noexcept {
+                    std::optional<support::AsyncCompletion<T, support::Error>> settled;
+                    {
+                        const std::lock_guard guard(state->mutex);
+                        settled = std::exchange(state->completion, std::nullopt);
+                    }
+                    if (settled) (*settled)(std::move(outcome));
+                });
+            }}};
+}
 
 /// Derive a context with one additional or replaced value.
 template <typename T>

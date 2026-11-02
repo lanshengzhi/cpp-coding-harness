@@ -75,6 +75,15 @@ public:
     /// Observe the inner backend just before Session closes it after a failure.
     void on_close(std::function<void(::cch::durable::Storage&)> observer) { close_observer_ = std::move(observer); }
 
+    /// Observe one committed document read before it is answered. The observer
+    /// runs while the reading caller holds the Session's mutation line, so a
+    /// test can cancel an acquiring context while the acquisition's read is in
+    /// flight (the `audit-1057` acquisition-cancellation shape).
+    void on_find_document(std::function<void()> observer) { find_observer_ = std::move(observer); }
+
+    /// The number of `find_document()` calls this double received.
+    [[nodiscard]] std::size_t find_calls() const noexcept { return find_calls_; }
+
     /// The last batch rejected by the fault injector.
     [[nodiscard]] const std::vector<::cch::durable::StorageWrite>& failed_writes() const noexcept {
         return failed_writes_;
@@ -144,6 +153,8 @@ public:
     [[nodiscard]] support::Expected<std::optional<::cch::durable::DocumentRecord>> find_document(std::string_view kind,
             const ::cch::durable::DocumentAddress& address,
             ::cch::durable::DocumentPoint at) override {
+        find_calls_ += 1;
+        if (find_observer_) find_observer_();
         return inner_->find_document(kind, address, at);
     }
 
@@ -210,10 +221,12 @@ private:
     std::optional<std::string> failure_;
     std::vector<::cch::durable::StorageWrite> failed_writes_;
     std::function<void(::cch::durable::Storage&)> close_observer_;
+    std::function<void()> find_observer_;
     bool hold_armed_{false};
     std::size_t permits_{0};
     std::size_t commit_calls_{0};
     std::size_t close_calls_{0};
+    std::size_t find_calls_{0};
 };
 
 } // namespace cch::tests
