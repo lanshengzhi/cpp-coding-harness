@@ -316,9 +316,10 @@ Pinned comparison inputs (the two artifacts and the three test sources the four 
 
 Membership is unchanged: 152 supported `cch_coding_agent` rows before and after, plus the excluded
 rows that keep their existing boundaries. Six rows are verified through the existing #1104 and
-#1118 receipts. Four rows (62, 71, 73, 146) now have a passing artifact-read comparison and a
-discriminating case; their receipts are registered serially by the operator, and until then their
-ledger status is untouched. Three candidates were rejected with a named failing condition and keep
+#1118 receipts, which the section above records as not artifact reads. Four rows (62, 71, 73, 146)
+are promoted through the registered receipt `1177-application-comparisons`, each with the artifact
+fields named in the delivered-rows table; that registration is the only status change this packet
+causes. Three candidates were rejected with a named failing condition and keep
 their recorded status. The remaining 142 rows are routed to P1–P8; none is left unnamed.
 
 No blanket promotion occurred. Row 62's ledger `implementation: missing` and rows 71/73's `partial`

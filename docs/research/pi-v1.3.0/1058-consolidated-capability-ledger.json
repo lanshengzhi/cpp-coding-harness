@@ -7303,6 +7303,218 @@
           }
         ],
         "routingSha256": "cb9c1dc2fa2fae1373095783ab8600545eed4a4419f08c0a95846d05113535b5"
+      },
+      {
+        "id": "1177-application-comparisons",
+        "ticket": "1177",
+        "implementationCommits": [
+          "ef3fc9b281ad15e3a3ce5f5d1866fcd037894eb6"
+        ],
+        "report": "docs/research/pi-v1.3.0/1177-application-reconciliation.md",
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/tests/CodingAgentTests.cmake",
+            "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/coding_agent/CodemodeCatalogTest.cpp",
+            "sha256": "e26dc3bd8a2502393ad8c3fecc6ae76c07fba1fffc6755cd3ffcd3541d6950f5"
+          },
+          {
+            "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+            "sha256": "f923e46e26fda8ed4b4fd674751e98bb1e5ccc3f3e9329775612fe52de60746f"
+          },
+          {
+            "path": "tests/coding_agent/tui/ThemeTest.cpp",
+            "sha256": "8330296e93d9913be89899ff46c5af580ed81deb234d7bc5e6191a9df5321703"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1053/manifest.json",
+            "sha256": "f4c48cc5db9bf4a0e40db6651e5c43e17023d9635a1dd9f85f2b9a472cb793bf"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
+            "sha256": "68a7e9716755ef5ebba97948b3ad9343b1621c1bdf72517248554d0927f52fb6"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1049/manifest.json",
+            "sha256": "82b0ef09dc628dc2ae2107faa719998ccfaaf0fcd6ca4ad9ef78e96c06a022bf"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1049/configuration-schema.json",
+            "sha256": "a7191ccc7c8c9f5f45d90a951b6d6c661c3e1531a53d6feed9aa395a987adeb8"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/baselines.json",
+            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1177-application-reconciliation.md",
+            "sha256": "cf39fb01668ebf88a93531b4ace2a2b7ebe9fc40b50e8b9213548ae0314a2bd4"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/deliveries/1177-app-subset.xml",
+            "sha256": "0accacec69781e31740a07f982293a4072e3d51e056025adcd726bdfa4ae899a"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeCatalog.cpp",
+            "sha256": "6b02d666fe0b0f8d81a5a9ebc33cf881d5bb6742e406b4a1bc525f53d8036573"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeCatalog.hpp",
+            "sha256": "e5f1cfe71b0f99cb9f260d3801a6f2062d319dc048011f4036874e779dc0e14a"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
+            "sha256": "0e2b3744149defdd66f3b2a42a08bb6a0357e6804a3dc9486fa788f590586dd2"
+          },
+          {
+            "path": "src/coding_agent/tui/Theme.cpp",
+            "sha256": "19a1454951ce2c28840549bb0399e41c736e2e9559614104f74613fc9b1d1719"
+          },
+          {
+            "path": "src/coding_agent/tui/Theme.hpp",
+            "sha256": "c93558366e6a65f7a703c0ef10e7995b8f92c454e67f34d839142f5a92541b2d"
+          },
+          {
+            "path": "src/coding_agent/tui/ThemeTokens.inc",
+            "sha256": "af9dea4bc897c9e0ae732c08649a574f8e72c85d8f8cd46f2b764bef60ffb393"
+          }
+        ],
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-R",
+            "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1177-app-subset.xml"
+          ],
+          "testedRevision": "ef3fc9b281ad15e3a3ce5f5d1866fcd037894eb6",
+          "recordedAt": "2026-11-03T03:10:00Z",
+          "selected": 9,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1177-app-subset.xml",
+            "sha256": "0accacec69781e31740a07f982293a4072e3d51e056025adcd726bdfa4ae899a"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_coding_agent:codemode-application-inline-budget",
+            "comparisons": [
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "test": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "an inline budget omits a namespace's tools with pi's marker",
+              "testSource": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+              "reason": "The session case reaches the same rule through a real Session with settings.json {\"codemode\":{\"inlineBudget\":1}}, so a catalog that ignores the setting fails even when the pure renderer is correct."
+            },
+            "remainingBoundary": []
+          },
+          {
+            "id": "cch_coding_agent:codemode-mcp-refresh",
+            "comparisons": [
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "the empty codemode catalog still declares globals, discovery and the options grammar",
+                "test": "the empty codemode catalog matches the frozen pi-v1.3.0 description",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              },
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "test": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a real session's next request lists MCP tools registered late and executes them",
+              "testSource": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+              "reason": "The fixture server offers a second tool only after a tools/call and emits notifications/tools/list_changed; the next real request must list mcp__echo__late and the earlier one must not have contained it. A catalog that refreshes only on reconnect, or that re-renders unchanged text, fails."
+            },
+            "remainingBoundary": []
+          },
+          {
+            "id": "cch_coding_agent:codemode-settings",
+            "comparisons": [
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+                "test": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              },
+              {
+                "artifact": "audit-1053/application-catalog.json",
+                "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "test": "namespaces group sections and the inline budget omits tools with an explicit marker",
+                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a settings document the schema accepts reshapes the request and reload re-reads it",
+              "testSource": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+              "reason": "Starting from {\"codemode\":{\"mode\":\"on\"}} the case rewrites the same scope to mode only, reloads through the public Session::reload() and requires the direct read declaration to leave the request and the catalog to list read instead. A loader that applies the document only at construction, or a catalog that never re-renders, fails."
+            },
+            "remainingBoundary": []
+          },
+          {
+            "id": "cch_coding_agent:theme-token-set",
+            "comparisons": [
+              {
+                "artifact": "audit-1049/configuration-schema.json",
+                "scenario": "theme schema accepts the 56-token built-in shape",
+                "test": "the theme token set matches the frozen pi-v1.3.0 capture",
+                "testSource": "tests/coding_agent/tui/ThemeTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "the theme token set matches the frozen pi-v1.3.0 capture",
+              "testSource": "tests/coding_agent/tui/ThemeTest.cpp",
+              "reason": "No separate discriminating case exists: the comparison enumerates the whole inventory (56 names, 51 required, the complete optional fallback set), so an inventory that omits, duplicates or miscounts a token fails the same case. Recorded as a weaker discriminator than a dedicated case."
+            },
+            "remainingBoundary": []
+          }
+        ],
+        "routingSha256": "09fd1c8767933bd90fc1b9514c9ccb99647ff639755deca9e717adb2850b7e64"
       }
     ]
   },
@@ -7557,10 +7769,10 @@
         "partial": 2
       },
       "cch_coding_agent": {
-        "implemented": 87,
-        "missing": 16,
+        "implemented": 91,
+        "missing": 15,
         "not-applicable": 6,
-        "partial": 50
+        "partial": 47
       },
       "cch_durable": {
         "implemented": 6,
@@ -7585,21 +7797,21 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1091,
-      "missing": 180,
+      "implemented": 1095,
+      "missing": 179,
       "not-applicable": 18,
-      "partial": 175
+      "partial": 172
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1011,
-      "upstream-captured": 314,
-      "verified": 111
+      "unverified": 1010,
+      "upstream-captured": 311,
+      "verified": 115
     },
     "evidenceRoute": {
-      "captured": 425,
+      "captured": 426,
       "artifact-only": 0,
-      "related-captured": 22,
+      "related-captured": 21,
       "declared-comparison": 29,
       "cpp-regression-only": 10,
       "unobserved": 50,
@@ -7609,7 +7821,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1011,
+    "unobservedSupported": 1010,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -7642,7 +7854,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1011,
+    "missingObservationRows": 1010,
     "scenarioCoverage": {
       "scenarios": 658,
       "scenarioNamed": 368,
@@ -24915,15 +25127,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "Codemode catalog, system prompt size and MCP late registration.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1177",
       "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
       "comparisonScenarios": [
         "namespaces group sections and the inline budget omits tools with an explicit marker"
@@ -24931,16 +25143,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "namespaces group sections and the inline budget omits tools with an explicit marker"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1177-application-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Consume the setting in the catalog renderer and test the default and a tiny budget; do not leave the constant as the only artifact.",
+      "remainingWork": null,
+      "notes": "Delivered by #1177; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1177-application-reconciliation.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -24953,7 +25165,26 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "namespaces group sections and the inline budget omits tools with an explicit marker"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Consume the setting in the catalog renderer and test the default and a tiny budget; do not leave the constant as the only artifact."
+      },
+      "delivery": "1177-application-comparisons"
     },
     {
       "id": "cch_coding_agent:codemode-application-namespace",
@@ -25426,15 +25657,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "Application MCP surface, codemode catalog and MCP exposure management.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1177",
       "scenario": "the empty codemode catalog still declares globals, discovery and the options grammar",
       "comparisonScenarios": [
         "the empty codemode catalog still declares globals, discovery and the options grammar",
@@ -25443,16 +25674,17 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
-          "the empty codemode catalog still declares globals, discovery and the options grammar"
+          "the empty codemode catalog still declares globals, discovery and the options grammar",
+          "namespaces group sections and the inline budget omits tools with an explicit marker"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1177-application-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Keep the live refresh trigger; swap in the v1.3.0 catalog and thread namespace/exposure metadata from `AgentMcpToolSurface`. Test a late tool registration and a hidden tool.",
+      "remainingWork": null,
+      "notes": "Delivered by #1177; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1177-application-reconciliation.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -25465,7 +25697,26 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "the empty codemode catalog still declares globals, discovery and the options grammar"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Keep the live refresh trigger; swap in the v1.3.0 catalog and thread namespace/exposure metadata from `AgentMcpToolSurface`. Test a late tool registration and a hidden tool."
+      },
+      "delivery": "1177-application-comparisons"
     },
     {
       "id": "cch_coding_agent:codemode-models-description-gate",
@@ -25544,33 +25795,34 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "Application settings and codemode loadout.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1177",
       "scenario": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
       "comparisonScenarios": [
         "the on loadout lists only non-direct callable tools and adds script-call descriptions",
         "namespaces group sections and the inline budget omits tools with an explicit marker"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
-          "the on loadout lists only non-direct callable tools and adds script-call descriptions"
+          "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+          "namespaces group sections and the inline budget omits tools with an explicit marker"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1177-application-reconciliation.md"
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "notes": "Recommendation: Feed both settings into the loadout/catalog and add an integration assertion that a project `codemode.mode=only` changes the description.",
+      "remainingWork": null,
+      "notes": "Delivered by #1177; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1177-application-reconciliation.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -25583,7 +25835,26 @@
           "verification": "unverified",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "the on loadout lists only non-direct callable tools and adds script-call descriptions"
+          ],
+          "result": null
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": "Recommendation: Feed both settings into the loadout/catalog and add an integration assertion that a project `codemode.mode=only` changes the description."
+      },
+      "delivery": "1177-application-comparisons"
     },
     {
       "id": "cch_coding_agent:codemode-store-entry",
@@ -29396,15 +29667,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_coding_agent",
       "consumer": "`theme-tokens.ts:THEME_TOKENS`, the published theme schema, built-in dark/light themes and runtime resolution.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1177",
       "scenario": "theme schema accepts the 56-token built-in shape",
       "comparisonScenarios": [
         "theme schema accepts the 56-token built-in shape"
@@ -29412,16 +29683,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1049/configuration-schema.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "theme schema accepts the 56-token built-in shape"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1177-application-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add the three v1.3.0 optional tokens with their documented fallbacks (`muted`, `selectedBg`, `text`) and retain the existing required-token validation. This is a schema-shape delta, not a new theme UI feature.",
+      "remainingWork": null,
+      "notes": "Delivered by #1177; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1177-application-reconciliation.md",
       "lane": "1049",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -29434,7 +29705,26 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1049/configuration-schema.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "theme schema accepts the 56-token built-in shape"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Add the three v1.3.0 optional tokens with their documented fallbacks (`muted`, `selectedBg`, `text`) and retain the existing required-token validation. This is a schema-shape delta, not a new theme UI feature."
+      },
+      "delivery": "1177-application-comparisons"
     },
     {
       "id": "cch_coding_agent:thinking-selector",
