@@ -6,6 +6,7 @@
 #include "support/ModelFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "support/Json.hpp"
+#include "agent/AuditArtifact.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -593,6 +594,16 @@ TEST_CASE("reset restores the System Message baseline and clears queues while re
     // input, reset replays the transcript's System Messages into one baseline,
     // clears both queues and the transient run facts, and leaves the live
     // tools, model and thinking level alone.
+    const auto artifact = tests::audit_1047::read_artifact("lifecycle.json");
+    const auto* scenario =
+            tests::audit_1047::find_scenario(artifact, "reset restores the prompt baseline and clears both queues");
+    REQUIRE(scenario != nullptr);
+    const auto& inputs = tests::audit_1047::member(*scenario, "inputs");
+    const auto& expected = tests::audit_1047::member(*scenario, "expected");
+    const auto& prompt = tests::audit_1047::member(inputs, "prompt").get_string();
+    const auto& queued = tests::audit_1047::member(inputs, "queuedBeforeReset").get_array();
+    REQUIRE(queued.size() == 2);
+
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("ok"));
     runtime->responses.push_back(ai::assistant_text_message("again"));
@@ -611,6 +622,8 @@ TEST_CASE("reset restores the System Message baseline and clears queues while re
 
     agent::AsyncAgentOptions options;
     options.model = tests::make_full_thinking_model("reasoning-model");
+    // The capture's initial system prompt (scenarios.mts:414); the expected
+    // baseline below is the artifact's own `systemPrompt` member.
     options.system_prompt = "sys";
     agent::Agent subject(runtime->factory(),
             std::move(tools),
@@ -618,33 +631,37 @@ TEST_CASE("reset restores the System Message baseline and clears queues while re
             agent::AgentInitialState{.messages = {}, .thinking_level = "high"});
     CHECK(subject.state().thinking_level == "high");
 
-    REQUIRE(run_prompt(subject, "go"));
-    subject.steer(ai::user_text_message("steer"));
-    subject.follow_up(ai::user_text_message("follow"));
+    REQUIRE(run_prompt(subject, prompt));
+    subject.steer(ai::user_text_message(queued[0].get_string()));
+    subject.follow_up(ai::user_text_message(queued[1].get_string()));
     CHECK(subject.input_queue_counts().steering == 1);
     CHECK(subject.input_queue_counts().follow_up == 1);
 
     REQUIRE(subject.reset());
 
     const auto state = subject.state();
-    REQUIRE(state.messages.size() == 1);
+    const auto& roles = tests::audit_1047::member(expected, "roles").get_array();
+    REQUIRE(state.messages.size() == roles.size());
+    REQUIRE(roles.front().get_string() == "system");
     const auto* baseline = std::get_if<ai::SystemMessage>(&state.messages[0]);
     REQUIRE(baseline != nullptr);
-    CHECK(baseline->content == "sys");
+    CHECK(baseline->content == tests::audit_1047::member(expected, "systemPrompt").get_string());
     REQUIRE(baseline->tools_added.size() == 1);
     CHECK(baseline->tools_added[0].name == "echo");
-    CHECK(state.system_prompt == "sys");
+    CHECK(state.system_prompt == tests::audit_1047::member(expected, "systemPrompt").get_string());
     // Retained live policy: tools, model and thinking level are not transcript
     // state (frozen pi `reset` clears only the message/system baseline).
     CHECK(subject.active_tools() == std::vector<std::string>{"echo"});
     CHECK(state.model.id == "reasoning-model");
     CHECK(state.thinking_level == "high");
-    // Cleared transient facts and queues.
-    CHECK_FALSE(state.is_running);
+    // Cleared transient facts and queues. The reset state is idle, so pi's
+    // `isStreaming` and C++ `is_running` are both false here.
+    CHECK(state.is_running == tests::audit_1047::member(expected, "isStreaming").get_boolean());
     CHECK_FALSE(state.streaming_message.has_value());
     CHECK(state.pending_tool_call_ids.empty());
     CHECK(subject.input_queue_counts().steering == 0);
     CHECK(subject.input_queue_counts().follow_up == 0);
+    CHECK(subject.has_queued_messages() == tests::audit_1047::member(expected, "hasQueuedMessages").get_boolean());
 
     // The next run starts from the baseline: one System Message followed by the
     // new prompt, with the retained tool still declared.
@@ -1229,6 +1246,15 @@ TEST_CASE("stateful Agent retains history while agent_end stays invocation-local
 
 TEST_CASE("stateful Agent rejects a second prompt while its active run is suspended",
         "[agent][stateful][issue35][spec]") {
+    const auto artifact = tests::audit_1047::read_artifact("lifecycle.json");
+    const auto* scenario = tests::audit_1047::find_scenario(
+            artifact, "a second prompt while a run is active is rejected without replacing the run");
+    REQUIRE(scenario != nullptr);
+    const auto& inputs = tests::audit_1047::member(*scenario, "inputs");
+    const auto& expected = tests::audit_1047::member(*scenario, "expected");
+    const auto& first_prompt_text = tests::audit_1047::member(inputs, "firstPrompt").get_string();
+    const auto& second_prompt_text = tests::audit_1047::member(inputs, "secondPromptWhileActive").get_string();
+
     boost::asio::io_context io;
     auto client = std::make_shared<GatedModelRuntime>();
     agent::ToolRegistry tools;
@@ -1241,7 +1267,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                first_prompt = co_await support::detail::await_async_result(subject.prompt("first"));
+                first_prompt = co_await support::detail::await_async_result(subject.prompt(first_prompt_text));
                 co_return;
             },
             boost::asio::detached);
@@ -1256,7 +1282,7 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                second_prompt = co_await support::detail::await_async_result(subject.prompt("second"));
+                second_prompt = co_await support::detail::await_async_result(subject.prompt(second_prompt_text));
                 co_return;
             },
             boost::asio::detached);
@@ -1266,11 +1292,9 @@ TEST_CASE("stateful Agent rejects a second prompt while its active run is suspen
     REQUIRE_FALSE(*second_prompt);
     CHECK(second_prompt->error().code == support::ErrorCode::Validation);
     // audit-1047 `a second prompt while a run is active is rejected without
-    // replacing the run`: the diagnostic is pi's exact text, and the run that
-    // was active before the rejection is the one that completes afterwards.
-    CHECK(second_prompt->error().message ==
-            "Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for "
-            "completion.");
+    // replacing the run`: the diagnostic is the artifact's own frozen text, and
+    // the run that was active before the rejection is the one that completes.
+    CHECK(second_prompt->error().message == tests::audit_1047::member(expected, "secondPromptError").get_string());
     CHECK(subject.state().is_running);
     CHECK(subject.state().messages.size() == 1);
     CHECK(client->request_count == 1);
@@ -1559,27 +1583,38 @@ TEST_CASE("stateful Agent queue admission keeps a message larger than the retire
 
 TEST_CASE("stateful Agent queue peek prefers steering and clear removes both queues",
         "[agent][stateful][issue1113][spec]") {
+    const auto artifact = tests::audit_1047::read_artifact("queue-admission.json");
+    const auto* scenario =
+            tests::audit_1047::find_scenario(artifact, "peek prefers steering and clearAllQueues removes both queues");
+    REQUIRE(scenario != nullptr);
+    const auto& inputs = tests::audit_1047::member(*scenario, "inputs");
+    const auto& expected = tests::audit_1047::member(*scenario, "expected");
+
     auto client = std::make_shared<ScriptedFakeRuntime>();
     agent::AsyncAgentOptions options;
     options.model = tests::make_model("fake-model");
     agent::Agent subject(client->factory(), agent::ToolRegistry{}, std::move(options));
 
-    subject.steer(ai::user_text_message("steer1"));
-    subject.steer(ai::user_text_message("steer2"));
-    subject.follow_up(ai::user_text_message("follow"));
+    for (const auto& message : tests::audit_1047::member(inputs, "steeringMessages").get_array()) {
+        subject.steer(ai::user_text_message(message.get_string()));
+    }
+    subject.follow_up(ai::user_text_message(tests::audit_1047::member(inputs, "followUpMessage").get_string()));
 
     auto peeked = subject.peek_queued_messages();
     REQUIRE(peeked.size() == 1);
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(peeked.front())) == "steer1");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(peeked.front())) ==
+            tests::audit_1047::member(expected, "peekBefore").get_string());
 
     REQUIRE(subject.clear_steering_queue());
     peeked = subject.peek_queued_messages();
     REQUIRE(peeked.size() == 1);
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(peeked.front())) == "follow");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(peeked.front())) ==
+            tests::audit_1047::member(expected, "peekAfterSteeringClear").get_string());
 
     REQUIRE(subject.clear_input_queues());
-    CHECK_FALSE(subject.has_queued_messages());
-    CHECK(subject.peek_queued_messages().empty());
+    CHECK(subject.has_queued_messages() == tests::audit_1047::member(expected, "hasQueuedMessages").get_boolean());
+    CHECK(subject.peek_queued_messages().size() ==
+            static_cast<std::size_t>(tests::audit_1047::member(expected, "peekCount").get_number()));
 }
 
 TEST_CASE("stateful Agent accepts steering and follow-up while streaming without disrupting the active run",

@@ -5,6 +5,7 @@
 #include "support/ToolArgumentCompatibilityFixture.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "support/Json.hpp"
+#include "agent/AuditArtifact.hpp"
 #include <cch/agent/AgentContext.hpp>
 #include <cch/agent/NestedToolCalls.hpp>
 #include <cch/agent/RunToolCall.hpp>
@@ -2870,6 +2871,13 @@ agent::AgentToolCallOutcome run_single_tool(ai::ToolCallContent tool_call, agent
 TEST_CASE("run_tool_call executes successfully and records execute-only duration",
         "[agent][tool-executor][run-tool-call][issue1109][spec]") {
     // audit-1047 scenario 5: "runToolCall runs the hooks and reports execute-only duration"
+    const auto artifact = tests::audit_1047::read_artifact("tool-execution.json");
+    const auto* scenario =
+            tests::audit_1047::find_scenario(artifact, "runToolCall runs the hooks and reports execute-only duration");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = tests::audit_1047::member(*scenario, "expected");
+    const auto& ok = tests::audit_1047::member(expected, "ok");
+
     agent::ToolRegistry registry;
     int before_calls = 0;
     int after_calls = 0;
@@ -2902,12 +2910,13 @@ TEST_CASE("run_tool_call executes successfully and records execute-only duration
     auto call = make_call("call-1", "echo", R"({"msg":"hello"})");
     auto outcome = run_single_tool(std::move(call), std::move(options));
 
-    CHECK_FALSE(outcome.is_error);
+    CHECK(outcome.is_error == tests::audit_1047::member(ok, "isError").get_boolean());
     CHECK(outcome.result.content.size() == 1);
-    CHECK(outcome.duration_ms.has_value());
-    CHECK(before_calls == 1);
-    CHECK(execute_calls == 1);
-    CHECK(after_calls == 1);
+    CHECK(outcome.duration_ms.has_value() == tests::audit_1047::member(ok, "durationPresent").get_boolean());
+    CHECK(before_calls == static_cast<int>(tests::audit_1047::member(ok, "beforeCalls").get_number()));
+    CHECK(execute_calls == static_cast<int>(tests::audit_1047::member(ok, "executeCalls").get_number()));
+    CHECK(after_calls == static_cast<int>(tests::audit_1047::member(ok, "afterCalls").get_number()));
+    CHECK(ai::text_from_content(outcome.result.content) == tests::audit_1047::member(ok, "text").get_string());
 }
 
 TEST_CASE("run_tool_call returns error outcome without running hooks for unknown tool or validation failure",
@@ -2974,6 +2983,13 @@ TEST_CASE("run_tool_call returns error outcome without running hooks for unknown
 
 TEST_CASE("run_tool_call returns error outcome for blocked tool call without executing",
         "[agent][tool-executor][run-tool-call][issue1109][spec]") {
+    const auto artifact = tests::audit_1047::read_artifact("tool-execution.json");
+    const auto* scenario =
+            tests::audit_1047::find_scenario(artifact, "runToolCall runs the hooks and reports execute-only duration");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = tests::audit_1047::member(*scenario, "expected");
+    const auto& blocked = tests::audit_1047::member(expected, "blocked");
+
     agent::ToolRegistry registry;
     int execute_calls = 0;
     auto tool = tests::make_fake_tool(ai::Tool{"echo", "Echo", test::permissive_object_tool_argument_contract()},
@@ -2988,9 +3004,11 @@ TEST_CASE("run_tool_call returns error outcome for blocked tool call without exe
 
     int after_calls = 0;
     agent::BeforeToolCallHook before_hook = [](agent::BeforeToolCallContext, std::stop_token) {
+        // The frozen capture blocks with `reason: "no"` (scenarios.mts:1092);
+        // the expected text below is the artifact's own `blocked.text`.
         agent::BeforeToolCallResult res{
                 .block = true,
-                .reason = "denied by policy",
+                .reason = "no",
                 .terminate = true,
         };
         return support::AsyncResult<agent::BeforeToolCallResult>{std::move(res)};
@@ -3007,15 +3025,15 @@ TEST_CASE("run_tool_call returns error outcome for blocked tool call without exe
     auto call = make_call("call-blocked", "echo", R"({"msg":"hello"})");
     auto outcome = run_single_tool(std::move(call), std::move(options));
 
-    CHECK(outcome.is_error);
-    CHECK_FALSE(outcome.duration_ms.has_value());
+    CHECK(outcome.is_error == tests::audit_1047::member(blocked, "isError").get_boolean());
+    CHECK(outcome.duration_ms.has_value() == tests::audit_1047::member(blocked, "durationPresent").get_boolean());
     CHECK(execute_calls == 0);
     CHECK(after_calls == 0);
     CHECK(outcome.result.terminate);
     REQUIRE(outcome.result.content.size() == 1);
     const auto* text = std::get_if<ai::TextContent>(&outcome.result.content[0]);
     REQUIRE(text != nullptr);
-    CHECK(text->text == "denied by policy");
+    CHECK(text->text == tests::audit_1047::member(blocked, "text").get_string());
 }
 
 TEST_CASE("run_tool_call preserves duration on tool execution failure and after hook failure",
