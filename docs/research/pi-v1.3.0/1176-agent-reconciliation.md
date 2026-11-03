@@ -233,8 +233,9 @@ work.
 
 ## Capability status
 
-- **No row is promoted.** The four subset rows are comparison-ready; their receipt registration is
-  pending PM serial work.
+- **Four rows are promoted** through the registered receipt `1176-agent-comparisons`
+  (`InputQueue:peek-clear`, `Agent:reset`, `Agent:prompt-busy`, `ToolCallExecutor:run-tool-call`),
+  each with the exact artifact fields named in the subset table above.
 - **A1–A4 remain `upstream-captured`** with the named gaps above.
 - **`Agent:wait-for-idle` remains `partial`** on the seam blocker.
 - **`ToolRegistry:active-set` remains `upstream-captured`** on the recorded text divergence.

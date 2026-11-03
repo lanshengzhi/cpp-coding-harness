@@ -7119,6 +7119,190 @@
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
         }
+      },
+      {
+        "id": "1176-agent-comparisons",
+        "ticket": "1176",
+        "implementationCommits": [
+          "12be64a25628304adc47c726ae47f443eada6c1c"
+        ],
+        "report": "docs/research/pi-v1.3.0/1176-agent-reconciliation.md",
+        "inputs": [
+          {
+            "path": "CMakeLists.txt",
+            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
+          },
+          {
+            "path": "CMakePresets.json",
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
+          },
+          {
+            "path": "vcpkg.json",
+            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
+          },
+          {
+            "path": "cmake/tests/AgentTests.cmake",
+            "sha256": "cb02c34923ee55d16924748ed720a91d65d2c5ed7b4045abdd7181f8b42a53cb"
+          },
+          {
+            "path": "cmake/tests/TestsSetup.cmake",
+            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
+          },
+          {
+            "path": "tests/Catch2Main.cpp",
+            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
+          },
+          {
+            "path": "tests/agent/AuditArtifact.hpp",
+            "sha256": "6ceba5c8fd4799bbb5d4a758e446bbf0b88603aa51fd9ac405e550dfd35004ce"
+          },
+          {
+            "path": "tests/agent/AgentTest.cpp",
+            "sha256": "8ad6d03ef6bf46da711f900798caa5579e02c92947d397c384d0f39298c04b78"
+          },
+          {
+            "path": "tests/agent/ToolCallExecutorTest.cpp",
+            "sha256": "5def1f68ef5ca3fc8ef2f2f0e6c532793919590cf14e258542ea36f61457ec3b"
+          },
+          {
+            "path": "src/agent/ToolCallExecutor.cpp",
+            "sha256": "39ee4a5ea663b7d0c7c04b5ab92c8e0c0b8cb077e92ecae90b6eed74b4a96e7c"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1047/manifest.json",
+            "sha256": "0d146159a27ceaf1e657cd22997c1ebdc972818215054a860d88226e7d58d59a"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+            "sha256": "2aef0aa9b2d85e7267e3ab1d0b9a865e47a61aa0b71b801374cb4a8fe974eebd"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+            "sha256": "48039a377d500663012497882bf5fbdca384d6fcc60ec74c1f6075982693f609"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+            "sha256": "fbc55adb5947c3e722fdf6902ec0e6e057a3947f2d154982f3466dbacb080a35"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/baselines.json",
+            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+          },
+          {
+            "path": "scripts/evidence/audit_evidence.py",
+            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1047-agent-execution-audit.md",
+            "sha256": "e7d9a9028d1e1103236ef2972701778e6cccfc10a591c2b9a37e7f1b226eadde"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1176-agent-reconciliation.md",
+            "sha256": "61376034c4af7098c3cf7b66520c2161721eee7a1fd7938e03c653e06214290d"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-subset.xml",
+            "sha256": "d1de6b24a953f661a79d6920d4261f923349eaa9903212481bd893d95aea7313"
+          }
+        ],
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-R",
+            "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1176-agent-subset.xml"
+          ],
+          "testedRevision": "12be64a25628304adc47c726ae47f443eada6c1c",
+          "recordedAt": "2026-11-03T00:00:00Z",
+          "selected": 5,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-subset.xml",
+            "sha256": "d1de6b24a953f661a79d6920d4261f923349eaa9903212481bd893d95aea7313"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_agent_core:InputQueue:peek-clear",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1047/queue-admission.json",
+                "scenario": "peek prefers steering and clearAllQueues removes both queues",
+                "test": "stateful Agent queue peek prefers steering and clear removes both queues",
+                "testSource": "tests/agent/AgentTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "stateful Agent queue peek prefers steering and clear removes both queues",
+              "testSource": "tests/agent/AgentTest.cpp",
+              "reason": "The case asserts the frozen peekBefore, peekAfterSteeringClear, hasQueuedMessages and peekCount in order: a clear-everything implementation removes the follow-up queue early and fails the middle step, and a peek that ignores steering order fails the first."
+            }
+          },
+          {
+            "id": "cch_agent_core:Agent:reset",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1047/lifecycle.json",
+                "scenario": "reset restores the prompt baseline and clears both queues",
+                "test": "reset restores the System Message baseline and clears queues while retaining live policy",
+                "testSource": "tests/agent/AgentTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "reset restores the System Message baseline and clears queues while retaining live policy",
+              "testSource": "tests/agent/AgentTest.cpp",
+              "reason": "The case compares the frozen roles, systemPrompt, hasQueuedMessages and isStreaming and then asserts the live tools/model/thinking survive: a reset that wipes live policy passes the frozen fields and fails the retained-policy half."
+            }
+          },
+          {
+            "id": "cch_agent_core:Agent:prompt-busy",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1047/lifecycle.json",
+                "scenario": "a second prompt while a run is active is rejected without replacing the run",
+                "test": "stateful Agent rejects a second prompt while its active run is suspended",
+                "testSource": "tests/agent/AgentTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "stateful Agent rejects a second prompt while its active run is suspended",
+              "testSource": "tests/agent/AgentTest.cpp",
+              "reason": "The case asserts the frozen secondPromptError text and then lets the original run complete: a reject-and-cancel implementation produces the right error and fails the completion half."
+            }
+          },
+          {
+            "id": "cch_agent_core:ToolCallExecutor:run-tool-call",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1047/tool-execution.json",
+                "scenario": "runToolCall runs the hooks and reports execute-only duration",
+                "test": "run_tool_call executes successfully and records execute-only duration",
+                "testSource": "tests/agent/ToolCallExecutorTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "run_tool_call returns error outcome for blocked tool call without executing",
+              "testSource": "tests/agent/ToolCallExecutorTest.cpp",
+              "reason": "The blocked half compares the frozen blocked.durationPresent, blocked.isError and blocked.text (\"no\"): a blocked path that still executes the tool or fabricates a duration fails, and it is a separate case from the ok half."
+            }
+          }
+        ],
+        "routingSha256": "cb9c1dc2fa2fae1373095783ab8600545eed4a4419f08c0a95846d05113535b5"
       }
     ]
   },
@@ -7352,9 +7536,9 @@
     },
     "byOwnerImplementation": {
       "cch_agent_core": {
-        "implemented": 13,
-        "missing": 6,
-        "partial": 10
+        "implemented": 16,
+        "missing": 4,
+        "partial": 9
       },
       "cch_ai": {
         "missing": 2,
@@ -7401,16 +7585,16 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1088,
-      "missing": 182,
+      "implemented": 1091,
+      "missing": 180,
       "not-applicable": 18,
-      "partial": 176
+      "partial": 175
     },
     "verification": {
       "not-applicable": 28,
       "unverified": 1011,
-      "upstream-captured": 318,
-      "verified": 107
+      "upstream-captured": 314,
+      "verified": 111
     },
     "evidenceRoute": {
       "captured": 425,
@@ -13043,8 +13227,8 @@
         "Agent.prompt"
       ],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_agent_core",
       "consumer": "src/coding_agent/AgentSessionExecution.cpp AgentSession::prompt",
       "consumerOwners": [
@@ -13052,7 +13236,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1176",
       "scenario": "a second prompt while a run is active is rejected without replacing the run",
       "comparisonScenarios": [
         "a second prompt while a run is active is rejected without replacing the run"
@@ -13064,12 +13248,12 @@
         "capturedScenarios": [
           "a second prompt while a run is active is rejected without replacing the run"
         ],
-        "result": "upstream-captured"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1176-agent-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "C++ rejects a concurrent prompt/continue but the diagnostic text is \"agent is busy (prompt already in flight)\" rather than pi's exact message. The frozen run remains the active one. Consumer chain: AgentSession::prompt",
+      "remainingWork": null,
+      "notes": "Delivered by #1176; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1176-agent-reconciliation.md",
       "lane": "1047",
       "frozenSymbolsSource": "1047 piSymbols",
       "appliedCorrections": [],
@@ -13082,7 +13266,26 @@
           "verification": "upstream-captured",
           "owner": "cch_agent_core"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a second prompt while a run is active is rejected without replacing the run"
+          ],
+          "result": "upstream-captured"
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "C++ rejects a concurrent prompt/continue but the diagnostic text is \"agent is busy (prompt already in flight)\" rather than pi's exact message. The frozen run remains the active one. Consumer chain: AgentSession::prompt"
+      },
+      "delivery": "1176-agent-comparisons"
     },
     {
       "id": "cch_agent_core:Agent:provider-error",
@@ -13145,13 +13348,13 @@
         "Agent.reset"
       ],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_agent_core",
       "consumer": "None currently: no C++ application caller invokes Agent::reset; proposed public caller: cch_agent_core Agent API.",
       "consumerOwners": [],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1176",
       "scenario": "reset restores the prompt baseline and clears both queues",
       "comparisonScenarios": [
         "reset restores the prompt baseline and clears both queues"
@@ -13163,12 +13366,12 @@
         "capturedScenarios": [
           "reset restores the prompt baseline and clears both queues"
         ],
-        "result": "upstream-captured"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1176-agent-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "No Agent::reset in C++ and no equivalent system-prompt/message re-seed. Frozen reset re-applies the initial system prompt/tools/model/thinking and clears both queues plus transient streaming/error state.",
+      "remainingWork": null,
+      "notes": "Delivered by #1176; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1176-agent-reconciliation.md",
       "lane": "1047",
       "frozenSymbolsSource": "1047 piSymbols",
       "appliedCorrections": [],
@@ -13181,7 +13384,26 @@
           "verification": "upstream-captured",
           "owner": "cch_agent_core"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "reset restores the prompt baseline and clears both queues"
+          ],
+          "result": "upstream-captured"
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "No Agent::reset in C++ and no equivalent system-prompt/message re-seed. Frozen reset re-applies the initial system prompt/tools/model/thinking and clears both queues plus transient streaming/error state."
+      },
+      "delivery": "1176-agent-comparisons"
     },
     {
       "id": "cch_agent_core:Agent:stream-injection",
@@ -13406,14 +13628,14 @@
       ],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_agent_core",
       "consumer": "Current consumer: cch_coding_agent::AgentSession clear_steering_queue/clear_follow_up_queue/clear_input_queues (AgentSessionInteraction.cpp); peek_* has no application caller; proposed public caller: cch_agent_core Agent queue API.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1176",
       "scenario": "peek prefers steering and clearAllQueues removes both queues",
       "comparisonScenarios": [
         "peek prefers steering and clearAllQueues removes both queues"
@@ -13425,12 +13647,12 @@
         "capturedScenarios": [
           "peek prefers steering and clearAllQueues removes both queues"
         ],
-        "result": "upstream-captured"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1176-agent-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Frozen peek returns the oldest steering message when present and otherwise the oldest follow-up; clearAllQueues empties both. C++ has the same methods; no capacity interaction remains after the admission fix.",
+      "remainingWork": null,
+      "notes": "Delivered by #1176; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1176-agent-reconciliation.md",
       "lane": "1047",
       "frozenSymbolsSource": "1047 piSymbols",
       "appliedCorrections": [],
@@ -13443,7 +13665,26 @@
           "verification": "upstream-captured",
           "owner": "cch_agent_core"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "peek prefers steering and clearAllQueues removes both queues"
+          ],
+          "result": "upstream-captured"
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Frozen peek returns the oldest steering message when present and otherwise the oldest follow-up; clearAllQueues empties both. C++ has the same methods; no capacity interaction remains after the admission fix."
+      },
+      "delivery": "1176-agent-comparisons"
     },
     {
       "id": "cch_agent_core:InputQueue:steering-all",
@@ -13957,13 +14198,13 @@
         "runToolCall"
       ],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_agent_core",
       "consumer": "None currently: runToolCall is internal to ToolCallExecutor/NestedToolCalls and has no application caller; proposed public caller: cch_agent_core ToolCallExecutor API.",
       "consumerOwners": [],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1176",
       "scenario": "runToolCall runs the hooks and reports execute-only duration",
       "comparisonScenarios": [
         "runToolCall runs the hooks and reports execute-only duration"
@@ -13975,12 +14216,12 @@
         "capturedScenarios": [
           "runToolCall runs the hooks and reports execute-only duration"
         ],
-        "result": "upstream-captured"
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1176-agent-reconciliation.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Frozen exports runToolCall as an independent public function returning {ok,result,durationMs,startedAt} or a blocked outcome with no duration. C++ exposes only the executor/nested-runner internals; there is no public equivalent result shape.",
+      "remainingWork": null,
+      "notes": "Delivered by #1176; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1176-agent-reconciliation.md",
       "lane": "1047",
       "frozenSymbolsSource": "1047 piSymbols",
       "appliedCorrections": [],
@@ -13993,7 +14234,26 @@
           "verification": "upstream-captured",
           "owner": "cch_agent_core"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "runToolCall runs the hooks and reports execute-only duration"
+          ],
+          "result": "upstream-captured"
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Frozen exports runToolCall as an independent public function returning {ok,result,durationMs,startedAt} or a blocked outcome with no duration. C++ exposes only the executor/nested-runner internals; there is no public equivalent result shape."
+      },
+      "delivery": "1176-agent-comparisons"
     },
     {
       "id": "cch_agent_core:ToolCallExecutor:truncation",
