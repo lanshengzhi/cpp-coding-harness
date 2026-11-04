@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
+          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -576,6 +576,12 @@
         "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1183rulings": {
+        "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
@@ -1367,7 +1373,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
+          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1825,6 +1831,12 @@
         "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1183rulings": {
+        "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
@@ -3014,7 +3026,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
+          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3461,6 +3473,12 @@
         "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1183rulings": {
+        "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
@@ -4179,7 +4197,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
+          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4258,6 +4276,12 @@
         "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1183rulings": {
+        "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
@@ -4454,7 +4478,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
+          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4514,6 +4538,12 @@
         "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1183rulings": {
+        "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
@@ -4932,7 +4962,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
+          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5023,6 +5053,12 @@
         "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1183rulings": {
+        "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }
@@ -5233,7 +5269,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
+          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6190,6 +6226,12 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1183rulings": {
+        "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -6262,7 +6304,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
+          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6381,6 +6423,12 @@
           "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1183rulings": {
+        "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -6449,7 +6497,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
+          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6598,6 +6646,12 @@
         "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1183rulings": {
+        "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
       }

@@ -716,10 +716,13 @@ class TicketMappedLedgerTest(unittest.TestCase):
 
     Every mapped row's ticket is its mapped issue (live reference or history reference),
     no delivery-backed row carries a mapping (the conflict rule), and the rows the
-    execution report left unmapped are exactly the reported ambiguity sets.
+    execution report left unmapped per the reported ambiguity sets now carry the
+    owner's 2026-11-05 rulings: the proposal group-2 abort-family and admission-family
+    candidates map to #1148, and the seven implemented Session rows whose per-row
+    delivering slice is unresolvable map to live verification owner #1180.
     """
 
-    REMAINING_NULL = [
+    RULED_ABORT_ADMISSION_1148 = [
         "cch_durable:busy-admission-modes",
         "cch_durable:conversation-abort",
         "cch_durable:conversation-abort-effects",
@@ -731,7 +734,7 @@ class TicketMappedLedgerTest(unittest.TestCase):
         "cch_durable:submission-abort",
         "cch_durable:wait-cancellation-is-not-abort",
     ]
-    REMAINING_DRAFT_IMPLEMENTED = [
+    RULED_DRAFT_IMPLEMENTED_1180 = [
         "cch_coding_agent:AgentSession:lifecycle:close",
         "cch_coding_agent:Session:assembly:createAgentSession",
         "cch_coding_agent:Session:event-commitment",
@@ -764,17 +767,27 @@ class TicketMappedLedgerTest(unittest.TestCase):
             if "delivery" in row:
                 self.assertNotIn(row["id"], mapped)
 
-    def test_unmapped_rows_are_exactly_the_reported_ambiguity_sets(self) -> None:
+    def test_unreferenced_rows_are_empty_and_the_rulings_are_applied(self) -> None:
         null_refs, draft_refs = consolidate.unreferenced_ticket_rows(self.ledger["rows"])
-        self.assertEqual(null_refs, self.REMAINING_NULL)
+        self.assertEqual(null_refs, [])
         self.assertEqual(draft_refs, [])
+        for row_id in self.RULED_ABORT_ADMISSION_1148:
+            with self.subTest(row=row_id):
+                row = self.rows[row_id]
+                self.assertEqual(row["implementation_ticket"], "#1148")
+                self.assertIn(row["implementation"], ("missing", "partial"))
         draft_implemented = sorted(
             row["id"]
             for row in self.ledger["rows"]
             if row["implementation_ticket"] == "#1058-draft"
             and row["implementation"] == "implemented"
         )
-        self.assertEqual(draft_implemented, self.REMAINING_DRAFT_IMPLEMENTED)
+        self.assertEqual(draft_implemented, [])
+        for row_id in self.RULED_DRAFT_IMPLEMENTED_1180:
+            with self.subTest(row=row_id):
+                row = self.rows[row_id]
+                self.assertEqual(row["implementation_ticket"], "#1180")
+                self.assertEqual(row["implementation"], "implemented")
 
 
 class ScenarioCoverageTest(unittest.TestCase):

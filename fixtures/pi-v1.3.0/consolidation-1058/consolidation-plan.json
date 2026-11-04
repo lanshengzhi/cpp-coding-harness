@@ -4186,7 +4186,7 @@
         "id": "TM-durable-reservation-abort-races",
         "ticket": "#1148",
         "history": false,
-        "note": "Proposal section 2 group 2 (open ticket): the named reservation/abort/admission-race rows. The group's remaining five rows are not individually named by the proposal; see the execution report.",
+        "note": "Proposal section 2 group 2 (open ticket): the named reservation/abort/admission-race rows. The group's remaining candidates were ruled by the owner on 2026-11-05; see TM-durable-abort-admission-ruling-1148.",
         "rows": [
           "cch_durable:abort-cascade-bottom-up",
           "cch_durable:abort-task-protocol",
@@ -4194,6 +4194,24 @@
           "cch_durable:request-id-deduplication",
           "cch_durable:task-reservation-checkpoint",
           "cch_durable:task-terminal-receipt-atomicity"
+        ]
+      },
+      {
+        "id": "TM-durable-abort-admission-ruling-1148",
+        "ticket": "#1148",
+        "history": false,
+        "note": "Owner ruling 2026-11-05 on proposal section 2 group 2's unnamed rows: both candidate readings map to #1148. The abort-family candidates (conversation-abort, conversation-abort-effects, submission-abort, recovery-abort-mark, wait-cancellation-is-not-abort) and the admission-family candidates (busy-admission-modes, generation-admission, idle-input-admission, passive-write-admission, recovery-after-admission) all land here; no row matched both readings, so each is listed once. The group resolves to these ten rows plus the six named rows in TM-durable-reservation-abort-races.",
+        "rows": [
+          "cch_durable:busy-admission-modes",
+          "cch_durable:conversation-abort",
+          "cch_durable:conversation-abort-effects",
+          "cch_durable:generation-admission",
+          "cch_durable:idle-input-admission",
+          "cch_durable:passive-write-admission",
+          "cch_durable:recovery-abort-mark",
+          "cch_durable:recovery-after-admission",
+          "cch_durable:submission-abort",
+          "cch_durable:wait-cancellation-is-not-abort"
         ]
       },
       {
@@ -4391,6 +4409,21 @@
           "cch_coding_agent:Session:wire:entry-kinds",
           "cch_coding_agent:Session:wire:header-fields",
           "cch_coding_agent:Session:wire:migrations"
+        ]
+      },
+      {
+        "id": "TM-session-implemented-live-verification-1180",
+        "ticket": "#1180",
+        "history": false,
+        "note": "Owner ruling 2026-11-05 on proposal section 2's history-only retarget alternative for the implemented Session rows: per-row delivering-slice attribution (#1068-#1072/#1111/#1116) is unresolvable, so the seven implemented rows still citing #1058-draft map to the live verification owner #1180.",
+        "rows": [
+          "cch_coding_agent:AgentSession:lifecycle:close",
+          "cch_coding_agent:Session:assembly:createAgentSession",
+          "cch_coding_agent:Session:event-commitment",
+          "cch_coding_agent:Session:fork:branch-file",
+          "cch_coding_agent:Session:history:tree-ops",
+          "cch_coding_agent:Session:publication:deferred-jsonl",
+          "cch_coding_agent:Session:tree:live-store"
         ]
       },
       {
