@@ -25,6 +25,27 @@ by consolidation `check`; other plan changes that do not change the delivery's r
 are not receipt inputs. The comparison mapping and completeness of ordinary file inputs remain
 review obligations.
 
+## Ticket mappings (proposal E1 of #1183)
+
+The plan's checked-in `ticketMappings` section retargets consolidated rows whose recorded
+ticket reference is null or the `#1058-draft` placeholder onto a real issue, per the #1183
+reconciliation proposal (`docs/wiki/pi-alignment/reconciliation-1183-proposal-2026-11-04.md`
+section 2) and the owner decisions of 2026-11-04. Each entry names the consolidated row ids
+(stable ledger ids), the target issue, a `history` marker, and a note recording the proposal
+group and its authority. A `history: true` entry marks rows the proposal classifies as history
+references: the behavior was delivered by a closed slice and the note names that slice, while
+the target issue owns the live verification obligation; the reference itself claims no
+acceptance and leaves `verification`, `evidence`, `gaps` and `sourceRows` untouched.
+
+`build` applies a mapping only after the delivery updates, and only to a row whose ticket is
+still null/`#1058-draft`; `check` revalidates the section against the committed ledger — every
+mapping must reference an existing row, no row may carry both a mapping and a delivery-backed
+ticket (a conflict fails closed), and each mapped row's committed ticket must equal its mapped
+issue. Rows that still carry no reference stay allowed: `check` counts and reports them (the
+build does not fail while rows legitimately await new tickets). With no `ticketMappings`
+section — or an empty `entries` list — the build is byte-identical to a build without the
+channel.
+
 ## Per-claim withdrawal
 
 A receipt that stays otherwise active can withdraw exactly the claims #1202 disputed through a

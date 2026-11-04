@@ -4012,5 +4012,698 @@
       "statement": "#1088 delivers the conversation view, document-change view, task graph and ready/running/waiting/blocked inspection as projections of committed records; the agent event stream (ledger row cch_durable:event-stream / frozen pi WatchEvents) is explicitly excluded because it is not derived from committed records and the ticket's reuse list does not include it. The exclusion does not affect #1088's acceptance criteria, which name only the conversation view, document changes, task graph, and task states.",
       "authority": "issue #1088 orchestrator direction (2026-10-28): watchEvents exclusion must land in the delivery notes and the ledger remaining boundary"
     }
-  ]
+  ],
+  "ticketMappings": {
+    "issue": "#1183",
+    "recordedAt": "2026-11-05",
+    "authority": [
+      "docs/wiki/pi-alignment/reconciliation-1183-proposal-2026-11-04.md",
+      "docs/wiki/pi-alignment/decisions-2026-11-04.md"
+    ],
+    "entries": [
+      {
+        "id": "TM-durable-observed-upstream",
+        "ticket": "#1180",
+        "history": true,
+        "note": "Proposal section 2 group 1: behavior observed upstream at the frozen baseline, delivered by the closed #1079-#1095-era durable slices and #1081/#1082/#1084 where applicable; #1180 owns the verification receipts (its acceptance criterion 1 is this reconciliation). Receipts only via the delivery contract.",
+        "rows": [
+          "cch_durable:Document:address-identity",
+          "cch_durable:Document:as-of",
+          "cch_durable:Document:checkpoint",
+          "cch_durable:Document:copy-record",
+          "cch_durable:Document:create-base",
+          "cch_durable:Document:defineDoc",
+          "cch_durable:Document:defineDocFamily",
+          "cch_durable:Document:delta",
+          "cch_durable:Document:fork-copy",
+          "cch_durable:Document:retire",
+          "cch_durable:Document:scopes",
+          "cch_durable:Document:task-scope",
+          "cch_durable:Document:version-migrate",
+          "cch_durable:Entry:append-typed",
+          "cch_durable:Entry:builtin-kinds",
+          "cch_durable:Entry:defineEntry",
+          "cch_durable:Entry:edits",
+          "cch_durable:Entry:fork-ancestry",
+          "cch_durable:Entry:head-marker",
+          "cch_durable:Entry:record",
+          "cch_durable:Identity:id-namespace",
+          "cch_durable:Identity:seq",
+          "cch_durable:Interchange:alternating-writers",
+          "cch_durable:Interchange:cpp-create",
+          "cch_durable:Interchange:jsonl-pi-create",
+          "cch_durable:Interchange:sqlite-pi-create",
+          "cch_durable:Query:cursor",
+          "cch_durable:Query:filters",
+          "cch_durable:Session:close",
+          "cch_durable:Session:commit",
+          "cch_durable:Session:commit:callback-rollback",
+          "cch_durable:Session:commit:settlement-visibility",
+          "cch_durable:Session:commit:storage-failure",
+          "cch_durable:Session:create",
+          "cch_durable:Session:document-retention",
+          "cch_durable:Session:documentState",
+          "cch_durable:Session:snapshot",
+          "cch_durable:Session:snapshotAsOf",
+          "cch_durable:Session:subscribeClose",
+          "cch_durable:Session:subscribeCommits",
+          "cch_durable:Session:watchDoc",
+          "cch_durable:Storage:close",
+          "cch_durable:Storage:commit",
+          "cch_durable:Storage:conversation",
+          "cch_durable:Storage:document",
+          "cch_durable:Storage:entries",
+          "cch_durable:Storage:entry",
+          "cch_durable:Storage:findDocument",
+          "cch_durable:Storage:head-marker",
+          "cch_durable:Storage:jsonl:corruption",
+          "cch_durable:Storage:jsonl:node",
+          "cch_durable:Storage:jsonl:open",
+          "cch_durable:Storage:jsonl:poison",
+          "cch_durable:Storage:jsonl:reclaim-document",
+          "cch_durable:Storage:jsonl:reclaim-task",
+          "cch_durable:Storage:jsonl:recovery-torn",
+          "cch_durable:Storage:memory",
+          "cch_durable:Storage:memory:prepare",
+          "cch_durable:Storage:mintId",
+          "cch_durable:Storage:scanConversations",
+          "cch_durable:Storage:scanDocuments",
+          "cch_durable:Storage:scanSubmissions",
+          "cch_durable:Storage:scanTasks",
+          "cch_durable:Storage:sqlite:close",
+          "cch_durable:Storage:sqlite:conversations",
+          "cch_durable:Storage:sqlite:documents",
+          "cch_durable:Storage:sqlite:entries",
+          "cch_durable:Storage:sqlite:metadata",
+          "cch_durable:Storage:sqlite:open",
+          "cch_durable:Storage:sqlite:options",
+          "cch_durable:Storage:sqlite:prefix",
+          "cch_durable:Storage:sqlite:record-ids",
+          "cch_durable:Storage:sqlite:revisions",
+          "cch_durable:Storage:sqlite:schema-version",
+          "cch_durable:Storage:sqlite:strict",
+          "cch_durable:Storage:sqlite:submissions",
+          "cch_durable:Storage:sqlite:tasks",
+          "cch_durable:Storage:sqlite:transaction",
+          "cch_durable:Storage:submission",
+          "cch_durable:Storage:submissionByRequest",
+          "cch_durable:Storage:task",
+          "cch_durable:Tx:appendEntry",
+          "cch_durable:Tx:createConversation",
+          "cch_durable:Tx:createSubmission",
+          "cch_durable:Tx:createTask",
+          "cch_durable:Tx:doc",
+          "cch_durable:Tx:forkConversation",
+          "cch_durable:Tx:placeSubmission",
+          "cch_durable:Tx:read:conversation",
+          "cch_durable:Tx:read:entry",
+          "cch_durable:Tx:read:latestHeadMarker",
+          "cch_durable:Tx:read:scanConversations",
+          "cch_durable:Tx:read:scanEntries",
+          "cch_durable:Tx:read:scanTasks",
+          "cch_durable:Tx:read:submissionByRequest",
+          "cch_durable:Tx:read:task",
+          "cch_durable:Tx:retireDoc",
+          "cch_durable:Tx:settleSubmission",
+          "cch_durable:Tx:task-attribution",
+          "cch_durable:Tx:write-before-read",
+          "cch_durable:blocked-definition-orphaned",
+          "cch_durable:builtin-tools",
+          "cch_durable:commit-subscription",
+          "cch_durable:compaction-decline",
+          "cch_durable:compaction-no-cut",
+          "cch_durable:context-at-entry",
+          "cch_durable:conversation-entries-config",
+          "cch_durable:conversation-fork",
+          "cch_durable:conversation-ownership",
+          "cch_durable:conversation-reopen",
+          "cch_durable:conversation-view-delta",
+          "cch_durable:extension-sections",
+          "cch_durable:generation-onYield",
+          "cch_durable:harness-documents",
+          "cch_durable:harness-open-close",
+          "cch_durable:harness-run-control",
+          "cch_durable:inspect-submissions",
+          "cch_durable:inspect-task-states",
+          "cch_durable:inspection-and-idle",
+          "cch_durable:inspection-state",
+          "cch_durable:jsonl-storage",
+          "cch_durable:manual-compaction",
+          "cch_durable:memory-storage",
+          "cch_durable:prompt-context",
+          "cch_durable:queue-mode-selection",
+          "cch_durable:recovery-after-effect",
+          "cch_durable:recovery-after-terminal",
+          "cch_durable:registry-task-definitions",
+          "cch_durable:registry-transition",
+          "cch_durable:reset-handoff",
+          "cch_durable:retry-policy",
+          "cch_durable:sqlite-storage",
+          "cch_durable:storage-failure-session",
+          "cch_durable:submission-wait-handle",
+          "cch_durable:task-completing-hold",
+          "cch_durable:task-definition-registry",
+          "cch_durable:task-effect-sandwich",
+          "cch_durable:task-graph",
+          "cch_durable:task-lifecycle-hooks",
+          "cch_durable:task-lifecycle-times",
+          "cch_durable:task-memos",
+          "cch_durable:task-observed-outcomes",
+          "cch_durable:task-ownership-graph",
+          "cch_durable:task-recovery",
+          "cch_durable:threshold-compaction",
+          "cch_durable:tool-execution-timing",
+          "cch_durable:tool-hooks",
+          "cch_durable:toolsearch-load",
+          "cch_durable:toolsearch-no-match",
+          "cch_durable:usage-aggregate",
+          "cch_durable:version-migration-before-reservation",
+          "cch_durable:waiting-allsettled-join",
+          "cch_durable:waiting-failfast-join"
+        ]
+      },
+      {
+        "id": "TM-durable-reservation-abort-races",
+        "ticket": "#1148",
+        "history": false,
+        "note": "Proposal section 2 group 2 (open ticket): the named reservation/abort/admission-race rows. The group's remaining five rows are not individually named by the proposal; see the execution report.",
+        "rows": [
+          "cch_durable:abort-cascade-bottom-up",
+          "cch_durable:abort-task-protocol",
+          "cch_durable:atomic-admission-inbox",
+          "cch_durable:request-id-deduplication",
+          "cch_durable:task-reservation-checkpoint",
+          "cch_durable:task-terminal-receipt-atomicity"
+        ]
+      },
+      {
+        "id": "TM-durable-env-io",
+        "ticket": "#1158",
+        "history": false,
+        "note": "Proposal section 2 group 3 (open): durable environment IO (listing/read boundedness); the #1197-#1200 follow-ups sit under the same route.",
+        "rows": [
+          "cch_durable:node-exec",
+          "cch_durable:node-filesystem"
+        ]
+      },
+      {
+        "id": "TM-durable-unobserved-capture",
+        "ticket": "#1203",
+        "history": false,
+        "note": "Proposal section 2 group 5 -> N1 (#1203, filed): no v1.3.0 frozen observation exists; #1203 owns the captures and routes follow-up receipts to #1180. node-env-watch is also tracked by the environment-IO route (#1158, #1197-#1200); the codemode-* rows overlap the closed #1170-#1172 slices.",
+        "rows": [
+          "cch_durable:background-compaction",
+          "cch_durable:background-ownership-boundary",
+          "cch_durable:builtin-tool-limits",
+          "cch_durable:codemode-limits",
+          "cch_durable:codemode-models",
+          "cch_durable:codemode-output",
+          "cch_durable:codemode-replay",
+          "cch_durable:harness-settings-defaults",
+          "cch_durable:idle-waits",
+          "cch_durable:native-run-triggering",
+          "cch_durable:node-env-watch",
+          "cch_durable:overflow-compaction-retry",
+          "cch_durable:steering-boundary-placement",
+          "cch_durable:steering-followup",
+          "cch_durable:submission-queues",
+          "cch_durable:task-hooks",
+          "cch_durable:task-outcomes",
+          "cch_durable:task-scheduler-outcomes",
+          "cch_durable:task-versioning",
+          "cch_durable:tool-task-cancellation",
+          "cch_durable:toolsearch-persistence"
+        ]
+      },
+      {
+        "id": "TM-durable-delivered-1170",
+        "ticket": "#1180",
+        "history": true,
+        "note": "Proposal section 2 group 4: delivered by the closed #1170 nested-tool-tasks slice; #1180 owns verification. codemode-store is in the group's codemode-* membership; the proposal names no individual slice for it.",
+        "rows": [
+          "cch_durable:codemode-failure",
+          "cch_durable:codemode-script",
+          "cch_durable:codemode-store"
+        ]
+      },
+      {
+        "id": "TM-durable-delivered-1173",
+        "ticket": "#1180",
+        "history": true,
+        "note": "Proposal section 2 group 4: delivered by the closed #1173 event-stream slice; #1180 owns verification.",
+        "rows": [
+          "cch_durable:event-stream"
+        ]
+      },
+      {
+        "id": "TM-durable-delivered-1174",
+        "ticket": "#1180",
+        "history": true,
+        "note": "Proposal section 2 group 4: #1174 JSONL fsync slice; Storage:jsonl:ordering/sidecar/main-marker stay blocked on the two-sidecar capture ruling (proposal section 3, owner decision 3).",
+        "rows": [
+          "cch_durable:Storage:jsonl:fsync",
+          "cch_durable:Storage:jsonl:main-marker",
+          "cch_durable:Storage:jsonl:ordering",
+          "cch_durable:Storage:jsonl:sidecar"
+        ]
+      },
+      {
+        "id": "TM-durable-delivered-1175",
+        "ticket": "#1180",
+        "history": true,
+        "note": "Proposal section 2 group 4: delivered by the closed #1175 abandon-on-restart slice; #1180 owns verification.",
+        "rows": [
+          "cch_durable:abandon-on-restart"
+        ]
+      },
+      {
+        "id": "TM-chord-b6-b7",
+        "ticket": "#1180",
+        "history": false,
+        "note": "Proposal section 2: the fifteen cch_chord:document:* rows plus chord-delta and chord-documents, routed to #1180 by the closed #1178 reconciliation (B6/B7).",
+        "rows": [
+          "cch_chord:chord-delta",
+          "cch_chord:chord-documents",
+          "cch_chord:document:base-creation",
+          "cch_chord:document:callback-rollback",
+          "cch_chord:document:checkpoint-bases",
+          "cch_chord:document:commit-publication",
+          "cch_chord:document:draft-lifecycle",
+          "cch_chord:document:immutable-snapshots",
+          "cch_chord:document:retention",
+          "cch_chord:document:retirement",
+          "cch_chord:document:revision-mismatch",
+          "cch_chord:document:state-delivery",
+          "cch_chord:document:storage-failure",
+          "cch_chord:document:structural-no-op",
+          "cch_chord:document:watch-acquisition-cancellation",
+          "cch_chord:document:watch-buffer",
+          "cch_chord:document:watch-overflow"
+        ]
+      },
+      {
+        "id": "TM-chord-leftovers",
+        "ticket": "#1204",
+        "history": false,
+        "note": "Proposal section 2 group 7 -> N2 (#1204, filed): the four rows left over by the closed B1-B5 batches; #1187's serial-merger steps for output:progress are recorded there.",
+        "rows": [
+          "cch_chord:Chord:context",
+          "cch_chord:context:root-background",
+          "cch_chord:json:json-representation",
+          "cch_chord:output:progress"
+        ]
+      },
+      {
+        "id": "TM-codemode-tool-table-close",
+        "ticket": "#1192",
+        "history": false,
+        "note": "Proposal section 1.5/#1192: codemode-execute-outcome and codemode-inline-close map to #1192 (public tool-table and close comparison surface).",
+        "rows": [
+          "cch_codemode:codemode-execute-outcome",
+          "cch_codemode:codemode-inline-close"
+        ]
+      },
+      {
+        "id": "TM-codemode-portable-entry",
+        "ticket": "#1194",
+        "history": false,
+        "note": "Proposal section 1.5/#1194: portable no-Node codemode entry.",
+        "rows": [
+          "cch_codemode:codemode-portable-entry"
+        ]
+      },
+      {
+        "id": "TM-codemode-host-semantics",
+        "ticket": "#1195",
+        "history": false,
+        "note": "Proposal section 1.5/#1195: host-timezone and discovery-absence semantics.",
+        "rows": [
+          "cch_codemode:codemode-script-clock-timezone"
+        ]
+      },
+      {
+        "id": "TM-codemode-source-only",
+        "ticket": "#1193",
+        "history": false,
+        "note": "Proposal section 2 group 9 -> #1193: the three implemented source-only cch_codemode rows carry no frozen scenario; #1193 owns the captures and comparisons.",
+        "rows": [
+          "cch_codemode:codemode-remote",
+          "cch_codemode:codemode-sandbox-create-errors",
+          "cch_codemode:codemode-source-output-token-option"
+        ]
+      },
+      {
+        "id": "TM-agent-core-verification",
+        "ticket": "#1205",
+        "history": false,
+        "note": "Proposal section 2 group 10 -> N3 (#1205, filed, successor to #1176): the thirteen agent-core rows were delivered by the closed #1107-#1113 slices; #1205 owns their verification.",
+        "rows": [
+          "cch_agent_core:Agent:default-state",
+          "cch_agent_core:Agent:finish-turn-hook",
+          "cch_agent_core:Agent:prepare-next-turn-hook",
+          "cch_agent_core:Agent:prepare-request-hook",
+          "cch_agent_core:InputQueue:admission",
+          "cch_agent_core:NestedToolCalls:duration",
+          "cch_agent_core:ToolCallExecutor:after-tool-call",
+          "cch_agent_core:ToolCallExecutor:duration",
+          "cch_agent_core:ToolCallExecutor:outcomes",
+          "cch_agent_core:ToolCallExecutor:parallel-scheduling",
+          "cch_agent_core:ToolCallExecutor:prepare-arguments",
+          "cch_agent_core:ToolRegistry:active-set",
+          "cch_agent_core:ToolResult:duration-field"
+        ]
+      },
+      {
+        "id": "TM-application-session",
+        "ticket": "#1206",
+        "history": true,
+        "note": "Proposal section 2 group 11 -> N4 (#1206, filed, successor to #1177): Session assembly/wire/compaction delivered by the closed #1068-#1072/#1081-class/#1116 slices; #1206 owns verification.",
+        "rows": [
+          "cch_coding_agent:Session:compaction:auto-recovery",
+          "cch_coding_agent:Session:compaction:in-memory",
+          "cch_coding_agent:Session:compaction:manual",
+          "cch_coding_agent:Session:consumers:tui-live-session",
+          "cch_coding_agent:Session:context:context-edit",
+          "cch_coding_agent:Session:context:projection",
+          "cch_coding_agent:Session:resume:context",
+          "cch_coding_agent:Session:wire:baseline-alignment",
+          "cch_coding_agent:Session:wire:compaction-boundary",
+          "cch_coding_agent:Session:wire:entry-kinds",
+          "cch_coding_agent:Session:wire:header-fields",
+          "cch_coding_agent:Session:wire:migrations"
+        ]
+      },
+      {
+        "id": "TM-application-additions",
+        "ticket": "#1206",
+        "history": true,
+        "note": "Proposal section 2 group 12 -> N4 (#1206): application additions delivered by the closed #1106/#1115/#1117/#1119/#1124/#1111 slices; #1206 owns verification.",
+        "rows": [
+          "cch_coding_agent:AgentSession:lifecycle:abort",
+          "cch_coding_agent:AgentSession:queue-admission",
+          "cch_coding_agent:AgentSession:tool-telemetry",
+          "cch_coding_agent:TUI:tool-duration",
+          "cch_coding_agent:codemode-application-deferred",
+          "cch_coding_agent:codemode-application-direct-exposure",
+          "cch_coding_agent:codemode-application-error-summary",
+          "cch_coding_agent:codemode-application-image-output",
+          "cch_coding_agent:codemode-application-nested-calls",
+          "cch_coding_agent:codemode-application-result",
+          "cch_coding_agent:codemode-application-tool-guidelines",
+          "cch_coding_agent:codemode-store-entry",
+          "cch_coding_agent:exit-restoration",
+          "cch_coding_agent:export-html",
+          "cch_coding_agent:extension-prompt-status-ui",
+          "cch_coding_agent:extension-registration-tool-source",
+          "cch_coding_agent:import-session",
+          "cch_coding_agent:keybindings-config",
+          "cch_coding_agent:model-selector",
+          "cch_coding_agent:output-pad",
+          "cch_coding_agent:print-mode-length-truncated",
+          "cch_coding_agent:prompt-busy-lifecycle",
+          "cch_coding_agent:settings-runtime",
+          "cch_coding_agent:settings-schema",
+          "cch_coding_agent:settings-selector",
+          "cch_coding_agent:startup-header-help",
+          "cch_coding_agent:startup-loaded-resources",
+          "cch_coding_agent:theme-schema",
+          "cch_coding_agent:theme-selection-tokens",
+          "cch_coding_agent:thinking-selector",
+          "cch_coding_agent:tool-duration",
+          "cch_coding_agent:tool-result-presentation",
+          "cch_coding_agent:transcript-state-scrollback"
+        ]
+      },
+      {
+        "id": "TM-application-mcp",
+        "ticket": "#1206",
+        "history": false,
+        "note": "Proposal section 2 group 13 -> N4 (#1206): application MCP rows; the #1202 disposition comes first and re-anchoring goes through #1202's acceptance criteria and the automated boundary check.",
+        "rows": [
+          "cch_coding_agent:mcp-application-resource-init",
+          "cch_coding_agent:mcp-application-startup",
+          "cch_coding_agent:mcp-config",
+          "cch_coding_agent:mcp-exposure",
+          "cch_coding_agent:mcp-external-signin-pickup",
+          "cch_coding_agent:mcp-tool-result-conversion"
+        ]
+      },
+      {
+        "id": "TM-application-residuals",
+        "ticket": "#1206",
+        "history": true,
+        "note": "Proposal section 2 group 14 -> N4 (#1206): closed-slice history per the frontier residualReconciliation (#808/#810/#812/#1043, action closed-slice-retain-verification-boundary); #1206 owns verification.",
+        "rows": [
+          "cch_coding_agent:residual-1043-scrollback",
+          "cch_coding_agent:residual-1043-settings-viewport",
+          "cch_coding_agent:residual-1043-startup-wrap",
+          "cch_coding_agent:residual-1043-tool-result-timing",
+          "cch_coding_agent:residual-808-model-selector",
+          "cch_coding_agent:residual-810-thinking-selector",
+          "cch_coding_agent:residual-812-tool-result-presentation"
+        ]
+      },
+      {
+        "id": "TM-application-unobserved",
+        "ticket": "#1206",
+        "history": false,
+        "note": "Proposal section 2 groups 14/15 -> N4 (#1206): application capture cases inside the verification follow-up; residual-1032-system-theme also records the closed #1032 slice.",
+        "rows": [
+          "cch_coding_agent:osc52-opt-in",
+          "cch_coding_agent:residual-1032-system-theme",
+          "cch_coding_agent:system-theme",
+          "cch_coding_agent:tool-read-line-range"
+        ]
+      },
+      {
+        "id": "TM-application-1118-withdrawn",
+        "ticket": "#1206",
+        "history": false,
+        "note": "Withdrawn by the #1202 per-claim disposition (commit a29188d3e): the #1118 receipt's three disputed application rows reverted to source-audit status. They stay with the #1206 application follow-up (the proposal's N4 pattern for #1202-disputed application rows); re-anchoring goes through #1202.",
+        "rows": [
+          "cch_coding_agent:codemode-application-namespace",
+          "cch_coding_agent:codemode-description-catalog",
+          "cch_coding_agent:codemode-description-loadout"
+        ]
+      },
+      {
+        "id": "TM-application-1104-withdrawn",
+        "ticket": "#1206",
+        "history": false,
+        "note": "Withdrawn #1104 row per owner decision 1 (commit a4df1a1): the proposal's group 13 names both withdrawn #1104 rows for N4; #1206 lists the six missing/partial MCP rows, and this implemented sibling follows the same clause. #1202 disposition comes first.",
+        "rows": [
+          "cch_coding_agent:mcp-management-ui"
+        ]
+      },
+      {
+        "id": "TM-history-1111",
+        "ticket": "#1111",
+        "history": true,
+        "note": "Proposal history retarget (implemented rows): delivered by the closed #1111 recorded-tool-loadout slice (#1111's report names both rows). Verification unchanged.",
+        "rows": [
+          "cch_coding_agent:Session:resume:relative-tool-modifiers",
+          "cch_coding_agent:Session:resume:tool-loadout"
+        ]
+      },
+      {
+        "id": "TM-history-1116",
+        "ticket": "#1116",
+        "history": true,
+        "note": "Proposal history retarget (implemented rows): delivered by the closed #1116 summary-serialization slice. Verification unchanged.",
+        "rows": [
+          "cch_coding_agent:Session:compaction:summary-serialization"
+        ]
+      },
+      {
+        "id": "TM-codemode-1179-withdrawn",
+        "ticket": "#1202",
+        "history": false,
+        "note": "Withdrawn by the #1202 per-claim disposition (commit a29188d3e): #1179's four disputed rows (implemented; tickets nulled) revert to source-audit status and await re-anchoring through #1202's acceptance criteria.",
+        "rows": [
+          "cch_codemode:codemode-source-timeout-option",
+          "cch_codemode:codemode-worker-admission",
+          "cch_codemode:codemode-worker-construction-failure",
+          "cch_codemode:codemode-worker-repeated-cancellation"
+        ]
+      },
+      {
+        "id": "TM-durable-1090-withdrawn",
+        "ticket": "#1202",
+        "history": false,
+        "note": "Withdrawn by the #1202 per-claim disposition (commit a29188d3e): #1090's two disputed comparisons downgraded the rows' receipt backing; re-anchoring goes through #1202's acceptance criteria.",
+        "rows": [
+          "cch_durable:image-processor",
+          "cch_durable:read-image"
+        ]
+      },
+      {
+        "id": "TM-tui-b1",
+        "ticket": "#1209",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B1 filed as #1208 + 1 (Root TUI lifecycle, root mutation and diagnostic callbacks).",
+        "rows": [
+          "cch_tui:CURSOR_MARKER",
+          "cch_tui:TUI",
+          "cch_tui:TUI.showOverlay",
+          "cch_tui:renderFakeCursor",
+          "cch_tui:tui:fake-cursor-marker-constants",
+          "cch_tui:tui:resolveFakeCursors"
+        ]
+      },
+      {
+        "id": "TM-tui-b2",
+        "ticket": "#1210",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B2 filed as #1208 + 2 (Regular renderer, frame commit and render-state transfer).",
+        "rows": [
+          "cch_tui:TuiMainScreen",
+          "cch_tui:TuiMainScreen.doRender"
+        ]
+      },
+      {
+        "id": "TM-tui-b3",
+        "ticket": "#1211",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B3 filed as #1208 + 3 (Alternate-screen viewport: frames, scroll algebra, scrollbar and search).",
+        "rows": [
+          "cch_tui:TuiAltScreen",
+          "cch_tui:TuiAltScreen.render"
+        ]
+      },
+      {
+        "id": "TM-tui-b4",
+        "ticket": "#1212",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B4 filed as #1208 + 4 (Alternate-screen transcript selection, multi-click and copy).",
+        "rows": [
+          "cch_tui:TuiAltScreen.clearTextSelection",
+          "cch_tui:TuiAltScreen.lastClick",
+          "cch_tui:TuiAltScreen.resetTextSelection"
+        ]
+      },
+      {
+        "id": "TM-tui-b5",
+        "ticket": "#1213",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B5 filed as #1208 + 5 (Alternate-screen overlay, wheel and mouse routing).",
+        "rows": [
+          "cch_tui:TuiAltScreen.handleViewportInput",
+          "cch_tui:TuiAltScreen.shouldDeferViewportInputToOverlay"
+        ]
+      },
+      {
+        "id": "TM-tui-b7",
+        "ticket": "#1215",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B7 filed as #1208 + 7 (Editor: layout, history, undo and kill/yank).",
+        "rows": [
+          "cch_tui:Editor",
+          "cch_tui:Editor.render"
+        ]
+      },
+      {
+        "id": "TM-tui-b8",
+        "ticket": "#1216",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B8 filed as #1208 + 8 (Input: editing, paste and submit).",
+        "rows": [
+          "cch_tui:Input",
+          "cch_tui:Input.render"
+        ]
+      },
+      {
+        "id": "TM-tui-b12",
+        "ticket": "#1220",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B12 filed as #1208 + 12 (Layout algebra, scroll containers and the small text components).",
+        "rows": [
+          "cch_tui:Box",
+          "cch_tui:Box.setPaddingX",
+          "cch_tui:utils:extractSegments"
+        ]
+      },
+      {
+        "id": "TM-tui-b13",
+        "ticket": "#1221",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B13 filed as #1208 + 13 (Terminal IO: process terminal, stdin framing, keys and keybindings).",
+        "rows": [
+          "cch_tui:StdinBuffer",
+          "cch_tui:StdinBuffer.flush",
+          "cch_tui:StdinBuffer.process",
+          "cch_tui:keys:shifted-symbol-matching",
+          "cch_tui:matchesKey",
+          "cch_tui:parseKey",
+          "cch_tui:stdin-buffer:fragmented-terminal-replies"
+        ]
+      },
+      {
+        "id": "TM-tui-b14",
+        "ticket": "#1222",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B14 filed as #1208 + 14 (Image dimensions, protocol detection and the Image component).",
+        "rows": [
+          "cch_tui:detectCapabilities",
+          "cch_tui:terminal-image:detectCapabilitiesFromEnvironment"
+        ]
+      },
+      {
+        "id": "TM-tui-b17",
+        "ticket": "#1225",
+        "history": false,
+        "note": "Proposal section 2 group 16 -> N5: #1182 route batch B17 filed as #1208 + 17 (Application product entries and the selected emulator scenarios).",
+        "rows": [
+          "cch_tui:hardware-cursor",
+          "cch_tui:images-placement-herdr",
+          "cch_tui:program-status-protocol",
+          "cch_tui:transcript-selection-reset",
+          "cch_tui:wheel-over-overlay"
+        ]
+      },
+      {
+        "id": "TM-tui-terminal-residuals-831",
+        "ticket": "#831",
+        "history": false,
+        "note": "Proposal section 2 group 16: the terminal row stays on the open #831 (reopened terminal evidence gap).",
+        "rows": [
+          "cch_tui:residual-831-dock-growth-footer"
+        ]
+      },
+      {
+        "id": "TM-tui-terminal-residuals-1035",
+        "ticket": "#1035",
+        "history": false,
+        "note": "Proposal section 2 group 16: the terminal row stays on the open #1035 (reopened terminal evidence gap).",
+        "rows": [
+          "cch_tui:residual-1035-image-placement"
+        ]
+      },
+      {
+        "id": "TM-mcp-unobserved",
+        "ticket": "#1207",
+        "history": false,
+        "note": "Proposal section 2 group 17 -> N6 (#1207, filed): mcp-roots-list and mcp-stdio-stderr-tail are unobserved with no ticket.",
+        "rows": [
+          "cch_mcp:mcp-roots-list",
+          "cch_mcp:mcp-stdio-stderr-tail"
+        ]
+      },
+      {
+        "id": "TM-mcp-withdrawn",
+        "ticket": "#1202",
+        "history": false,
+        "note": "Withdrawn by the #1202 dispositions (commits a4df1a1/a29188d3e): the #1189 whole record and #1181's four disputed claims; the rows revert to source-audit status and await re-anchoring through #1202's acceptance criteria.",
+        "rows": [
+          "cch_mcp:mcp-client-lifecycle",
+          "cch_mcp:mcp-close-no-refresh",
+          "cch_mcp:mcp-oauth-discovery",
+          "cch_mcp:mcp-oauth-flow-cancellation",
+          "cch_mcp:mcp-oauth-refresh",
+          "cch_mcp:mcp-oauth-registration-signin",
+          "cch_mcp:mcp-refresh-cancellation",
+          "cch_mcp:mcp-resources-list-read"
+        ]
+      }
+    ]
+  }
 }

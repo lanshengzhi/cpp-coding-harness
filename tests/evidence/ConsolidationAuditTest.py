@@ -433,6 +433,111 @@ class CorrectionScopeTest(unittest.TestCase):
         self.assertEqual(applied, [])
 
 
+class TicketMappingTest(unittest.TestCase):
+    """The #1183 E1 ticket-mapping channel: the checked-in plan section retargets rows.
+
+    A mapping rewrites only the ticket reference of a row whose recorded ticket is null
+    or the `#1058-draft` placeholder, after the delivery updates; a mapping that names an
+    unknown row, appears twice, or collides with a delivery-backed ticket fails closed.
+    An absent or empty section rewrites nothing (byte-identical output).
+    """
+
+    def setUp(self) -> None:
+        self.rows = [
+            {"id": "cch_mcp:example", "membership": "supported", "implementation": "missing",
+             "verification": "unverified", "implementation_ticket": None, "gaps": ["gap"],
+             "notes": "notes", "evidence": {"route": "unobserved"}},
+            {"id": "cch_mcp:draft", "membership": "supported", "implementation": "partial",
+             "verification": "unverified", "implementation_ticket": "#1058-draft", "gaps": [],
+             "notes": "notes", "evidence": {"route": "unobserved"}},
+            {"id": "cch_mcp:delivered", "membership": "supported", "implementation": "implemented",
+             "verification": "verified", "implementation_ticket": "#1101", "gaps": [],
+             "notes": "notes", "evidence": {"route": "captured"}, "delivery": "example"},
+        ]
+
+    def entry(self, row_id: str, ticket: str = "#1180", history: bool = False) -> dict:
+        return {"id": f"TM-test-{row_id}", "ticket": ticket, "history": history,
+                "note": "test mapping", "rows": [row_id]}
+
+    def apply(self, mappings: dict) -> tuple[int, int]:
+        return consolidate.apply_ticket_mappings(self.rows, mappings)
+
+    def test_mapping_applies_the_ticket_and_leaves_every_status_untouched(self) -> None:
+        before = copy.deepcopy(self.rows)
+        applied, history_applied = self.apply({
+            "cch_mcp:example": self.entry("cch_mcp:example", "#1180", history=True),
+            "cch_mcp:draft": self.entry("cch_mcp:draft", "#1206"),
+        })
+        self.assertEqual((applied, history_applied), (2, 1))
+        self.assertEqual(self.rows[0]["implementation_ticket"], "#1180")
+        self.assertEqual(self.rows[1]["implementation_ticket"], "#1206")
+        for row, original in zip(self.rows, before):
+            for key in ("membership", "implementation", "verification", "gaps", "notes", "evidence"):
+                self.assertEqual(row[key], original[key])
+
+    def test_mapping_conflicting_with_a_delivery_ticket_fails(self) -> None:
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "delivery-backed ticket"):
+            self.apply({"cch_mcp:delivered": self.entry("cch_mcp:delivered", "#1206")})
+
+    def test_unknown_mapping_row_fails_closed(self) -> None:
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "unknown row"):
+            self.apply({"cch_mcp:absent": self.entry("cch_mcp:absent")})
+
+    def test_malformed_mapping_entries_fail_closed(self) -> None:
+        base = self.entry("cch_mcp:example")
+        cases = [
+            ({"id": "", **{k: v for k, v in base.items() if k != "id"}}, "id"),
+            ({**base, "ticket": "1180"}, "ticket"),
+            ({**base, "ticket": "#draft"}, "ticket"),
+            ({**base, "history": "yes"}, "history"),
+            ({**base, "note": " "}, "note"),
+            ({**base, "rows": []}, "rows"),
+        ]
+        for entry, _ in cases:
+            with self.subTest(entry=entry):
+                with self.assertRaises(consolidate.ConsolidationError):
+                    consolidate.load_ticket_mappings({"ticketMappings": {"entries": [entry]}})
+        other_id = {**self.entry("cch_mcp:other"), "rows": ["cch_mcp:example"]}
+        duplicate = {"ticketMappings": {"entries": [base, other_id]}}
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "more than one"):
+            consolidate.load_ticket_mappings(duplicate)
+
+    def test_absent_and_empty_mapping_sections_are_inert_and_byte_identical(self) -> None:
+        """The compatibility contract: no section and an empty section rewrite nothing.
+
+        Both variants must produce byte-identical ledgers, and that output differs from
+        the full plan's build exactly on the mapped rows' ticket references.
+        """
+        plan = load(PLAN)
+        bundles = consolidate.build_bundle_index()
+        scenario_index = consolidate.build_scenario_index(bundles)
+        without_section = copy.deepcopy(plan)
+        without_section.pop("ticketMappings")
+        with_empty = copy.deepcopy(plan)
+        with_empty["ticketMappings"] = {"entries": []}
+        bare_bytes = consolidate.json_bytes(consolidate.build_ledger(without_section, bundles, scenario_index))
+        self.assertEqual(
+            consolidate.json_bytes(consolidate.build_ledger(with_empty, bundles, scenario_index)),
+            bare_bytes,
+        )
+        full_bytes = consolidate.json_bytes(consolidate.build_ledger(plan, bundles, scenario_index))
+        self.assertNotEqual(full_bytes, bare_bytes)
+        mapped = {
+            row_id: entry["ticket"]
+            for entry in plan["ticketMappings"]["entries"]
+            for row_id in entry["rows"]
+        }
+        bare = json.loads(bare_bytes)
+        full = json.loads(full_bytes)
+        for bare_row, full_row in zip(bare["rows"], full["rows"]):
+            self.assertEqual(bare_row["id"], full_row["id"])
+            if full_row["id"] in mapped:
+                self.assertIn(bare_row["implementation_ticket"], (None, "#1058-draft"))
+                self.assertEqual(full_row["implementation_ticket"], mapped[full_row["id"]])
+            else:
+                self.assertEqual(bare_row["implementation_ticket"], full_row["implementation_ticket"])
+
+
 class CommittedLedgerTest(unittest.TestCase):
     def setUp(self) -> None:
         self.plan = load(PLAN)
@@ -527,13 +632,22 @@ class WithdrawnLedgerTest(unittest.TestCase):
         }
 
     def test_withdrawn_rows_revert_to_source_audit_status(self) -> None:
+        plan = load(PLAN)
+        mapped = {
+            row_id: entry["ticket"]
+            for entry in consolidate.load_ticket_mappings(plan)
+            for row_id in entry["rows"]
+        }
         for row_id, (implementation, verification) in self.WITHDRAWN.items():
             with self.subTest(row=row_id):
                 row = self.rows[row_id]
                 self.assertEqual(row["implementation"], implementation)
                 self.assertEqual(row["verification"], verification)
                 self.assertNotIn("delivery", row)
-                self.assertIsNone(row["implementation_ticket"])
+                # E1 gives every withdrawn row its re-anchoring reference (#1202's
+                # disposition, or the #1206 application follow-up) without touching
+                # the reverted source-audit status.
+                self.assertEqual(row["implementation_ticket"], mapped[row_id])
 
     def test_unaffected_siblings_stay_verified_by_their_receipts(self) -> None:
         for row_id, receipt in self.SIBLINGS.items():
@@ -595,6 +709,72 @@ class WithdrawnLedgerTest(unittest.TestCase):
         scenario_index = consolidate.build_scenario_index(bundles)
         fresh = consolidate.build_ledger(plan, bundles, scenario_index)
         self.assertEqual(consolidate.json_bytes(fresh), LEDGER.read_bytes())
+
+
+class TicketMappedLedgerTest(unittest.TestCase):
+    """The committed ledger carries the #1183 E1 plan mappings exactly.
+
+    Every mapped row's ticket is its mapped issue (live reference or history reference),
+    no delivery-backed row carries a mapping (the conflict rule), and the rows the
+    execution report left unmapped are exactly the reported ambiguity sets.
+    """
+
+    REMAINING_NULL = [
+        "cch_durable:busy-admission-modes",
+        "cch_durable:conversation-abort",
+        "cch_durable:conversation-abort-effects",
+        "cch_durable:generation-admission",
+        "cch_durable:idle-input-admission",
+        "cch_durable:passive-write-admission",
+        "cch_durable:recovery-abort-mark",
+        "cch_durable:recovery-after-admission",
+        "cch_durable:submission-abort",
+        "cch_durable:wait-cancellation-is-not-abort",
+    ]
+    REMAINING_DRAFT_IMPLEMENTED = [
+        "cch_coding_agent:AgentSession:lifecycle:close",
+        "cch_coding_agent:Session:assembly:createAgentSession",
+        "cch_coding_agent:Session:event-commitment",
+        "cch_coding_agent:Session:fork:branch-file",
+        "cch_coding_agent:Session:history:tree-ops",
+        "cch_coding_agent:Session:publication:deferred-jsonl",
+        "cch_coding_agent:Session:tree:live-store",
+    ]
+
+    def setUp(self) -> None:
+        self.plan = load(PLAN)
+        self.ledger = load(LEDGER)
+        self.rows = {row["id"]: row for row in self.ledger["rows"]}
+        self.entries = consolidate.load_ticket_mappings(self.plan)
+
+    def test_every_mapping_is_applied_to_its_row(self) -> None:
+        self.assertTrue(self.entries)
+        for entry in self.entries:
+            for row_id in entry["rows"]:
+                with self.subTest(entry=entry["id"], row=row_id):
+                    row = self.rows[row_id]
+                    self.assertEqual(row["implementation_ticket"], entry["ticket"])
+                    self.assertNotIn("delivery", row)
+
+    def test_no_delivery_backed_row_carries_a_mapping(self) -> None:
+        mapped = {
+            row_id for entry in self.entries for row_id in entry["rows"]
+        }
+        for row in self.ledger["rows"]:
+            if "delivery" in row:
+                self.assertNotIn(row["id"], mapped)
+
+    def test_unmapped_rows_are_exactly_the_reported_ambiguity_sets(self) -> None:
+        null_refs, draft_refs = consolidate.unreferenced_ticket_rows(self.ledger["rows"])
+        self.assertEqual(null_refs, self.REMAINING_NULL)
+        self.assertEqual(draft_refs, [])
+        draft_implemented = sorted(
+            row["id"]
+            for row in self.ledger["rows"]
+            if row["implementation_ticket"] == "#1058-draft"
+            and row["implementation"] == "implemented"
+        )
+        self.assertEqual(draft_implemented, self.REMAINING_DRAFT_IMPLEMENTED)
 
 
 class ScenarioCoverageTest(unittest.TestCase):

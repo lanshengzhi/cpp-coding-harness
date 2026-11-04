@@ -174,11 +174,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -571,6 +571,13 @@
             "sha256": "2eb5b93e2988c3f73d97aff9a27a73899b8e99bdd078e57ffb2f499dfa25890b"
           }
         }
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -1360,11 +1367,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -1813,6 +1820,13 @@
             "sha256": "f01d7e874b32f241111177d0b952a3c215910776388d6e7ffdc2f55018feeb21"
           }
         }
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -2533,7 +2547,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -2638,6 +2652,12 @@
           "src/chord/include/cch/chord/Output.hpp",
           "tests/chord/OutputTest.cpp",
           "tests/chord/ReplicatedStateTest.cpp"
+        ]
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
         ]
       }
     },
@@ -2990,11 +3010,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3436,6 +3456,13 @@
             "sha256": "29214d656a11d43b5e7ddc877f103a5f4e20b7f36a4622f9de824aaac04a8651"
           }
         }
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -3651,7 +3678,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3685,6 +3712,12 @@
         "reason": "#1188 re-paired the coarse cch_durable:Chord:state scenario in the 1054 source ledger to the registered audit-1057 replicated-state hydration/delivery/dispose scenario. That ledger is a pinned input of this receipt; the rows this receipt claims keep their comparison scenarios and routing digest, so only the input digest is refreshed and this receipt makes no new verification claim.",
         "changedInputs": [
           "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json"
+        ]
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
         ]
       }
     },
@@ -3902,7 +3935,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3937,6 +3970,12 @@
             "sha256": "0d5ad2f41ea2c7cb4d24af35e99b5efb3e15c0dd3a436ed86fb0d3b4d40e164c"
           }
         }
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+        ]
       }
     },
     {
@@ -4140,11 +4179,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -4214,6 +4253,13 @@
             "sha256": "ca26ceb4bbb3f3106e5dabf5f6812afdd478bb33574683f669c956290fb8ce92"
           }
         }
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -4408,11 +4454,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -4463,6 +4509,13 @@
             "sha256": "d9a3e8e2f41516945070dc526d49d6fea8b288ddfe70f132161f65dd0a9bfb03"
           }
         }
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -4563,7 +4616,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -4601,7 +4654,13 @@
             "reason": "The frozen constant is the 100 KiB/s byte rate, so the pause for a 50 KiB commit is 500 ms and a 1 025-byte commit buys 10.009765625 ms. A seam that uses a fixed millisecond interval reports 100 ms for the first and a seam that rounds the bytes or the pause reports 10 ms for the second; both fail here while the bare constant assertion still passes."
           }
         }
-      ]
+      ],
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+        ]
+      }
     },
     {
       "id": "1182-tui-comparisons",
@@ -4873,11 +4932,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -4959,6 +5018,13 @@
             "sha256": "8e8f7d1217de1f2b85d2d1289b835dbcfc6c9c74384d99903f86615c1a366e75"
           }
         }
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -5167,11 +5233,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -6117,6 +6183,13 @@
           "fixtures/pi-v1.3.0/baselines.json",
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -6189,11 +6262,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -6301,7 +6374,14 @@
           }
         }
       ],
-      "routingSha256": "cb9c1dc2fa2fae1373095783ab8600545eed4a4419f08c0a95846d05113535b5"
+      "routingSha256": "cb9c1dc2fa2fae1373095783ab8600545eed4a4419f08c0a95846d05113535b5",
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      }
     },
     {
       "id": "1177-application-comparisons",
@@ -6369,11 +6449,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+          "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+          "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -6513,7 +6593,14 @@
           "remainingBoundary": []
         }
       ],
-      "routingSha256": "09fd1c8767933bd90fc1b9514c9ccb99647ff639755deca9e717adb2850b7e64"
+      "routingSha256": "09fd1c8767933bd90fc1b9514c9ccb99647ff639755deca9e717adb2850b7e64",
+      "revalidation1183": {
+        "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      }
     }
   ]
 }

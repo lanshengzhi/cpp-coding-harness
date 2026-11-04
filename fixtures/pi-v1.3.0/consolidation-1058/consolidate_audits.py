@@ -26,6 +26,18 @@ that label is delivery-backed only. The ledger embeds the effective deliveries: 
 are absent and withdrawn comparisons drop from their claim. With no withdrawal record present the
 deliveries are embedded unchanged and the build is byte-identical to a build without the channel.
 
+The plan's checked-in `ticketMappings` section (proposal E1 of the #1183 reconciliation,
+docs/wiki/pi-alignment/reconciliation-1183-proposal-2026-11-04.md) retargets the consolidated
+rows whose recorded ticket reference is null or the `#1058-draft` placeholder onto a real issue:
+each entry names the consolidated row ids, the target issue, a `history` marker for rows the
+proposal classifies as history references (behavior delivered by a closed slice; the reference
+records that slice without claiming acceptance), and a note. `build` applies a mapping only to a
+row whose ticket is still null/`#1058-draft` after the delivery updates, and fails closed when a
+mapping names an unknown row, appears twice, or collides with a delivery-backed ticket. `check`
+revalidates the section against the committed ledger and reports the rows that still carry no
+reference (legitimately awaiting new tickets). With no `ticketMappings` section the build is
+byte-identical to a build without the channel.
+
 Usage:
     python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build
     python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check [--pi-root <frozen>]
@@ -727,6 +739,100 @@ def apply_withdrawals(
     return effective
 
 
+def load_ticket_mappings(plan: dict) -> list[dict]:
+    """The checked-in E1 ticket-mapping section; shape validation is fail-closed.
+
+    Each entry names a stable consolidated row id list, the target issue ("#<issue>"), a
+    `history` marker (rows the proposal classifies as history references to closed slices),
+    and a note recording the proposal group and its authority. The section is the reviewed
+    channel for ticket retargeting: absent or empty, it rewrites nothing.
+    """
+    section = plan.get("ticketMappings")
+    if section is None:
+        return []
+    require(isinstance(section, dict), "ticketMappings section is not an object")
+    entries = section.get("entries")
+    require(isinstance(entries, list), "ticketMappings.entries is not a list")
+    entry_ids: set[str] = set()
+    row_ids: set[str] = set()
+    for entry in entries:
+        require(isinstance(entry, dict), "ticket mapping entry is not an object")
+        identity = entry.get("id")
+        require(
+            isinstance(identity, str) and identity and identity not in entry_ids,
+            f"ticket mapping has a missing, duplicate or empty id: {identity!r}",
+        )
+        entry_ids.add(identity)
+        require(
+            re.fullmatch(r"#\d+", entry.get("ticket", "")) is not None,
+            f"{identity}: mapping ticket is not a #<issue> reference: {entry.get('ticket')!r}",
+        )
+        require(isinstance(entry.get("history"), bool), f"{identity}: history is not a boolean")
+        require(
+            isinstance(entry.get("note"), str) and entry["note"].strip(),
+            f"{identity}: mapping records no note",
+        )
+        members = entry.get("rows")
+        require(isinstance(members, list) and members, f"{identity}: mapping names no rows")
+        for row_id in members:
+            require(isinstance(row_id, str) and row_id, f"{identity}: row id is not a string")
+            require(row_id not in row_ids, f"{row_id}: row appears in more than one ticket mapping")
+            row_ids.add(row_id)
+    return entries
+
+
+def ticket_mapping_map(entries: list[dict]) -> dict[str, dict]:
+    return {row_id: entry for entry in entries for row_id in entry["rows"]}
+
+
+def apply_ticket_mappings(rows: list[dict], mappings: dict[str, dict]) -> tuple[int, int]:
+    """Retarget null/`#1058-draft` ticket refs onto their mapped issue; conflict fails closed.
+
+    Runs after the delivery updates, so a row a validated delivery promoted already carries its
+    receipt's ticket: a mapping naming it is a plan defect and fails, as is a mapping naming an
+    unknown row. Only the ticket reference changes; membership, implementation, verification,
+    evidence, gaps and sourceRows stay exactly as the audits and deliveries recorded them.
+    Returns (applied, history-applied) counts.
+    """
+    if not mappings:
+        return 0, 0
+    by_id = {row["id"]: row for row in rows}
+    applied = 0
+    history_applied = 0
+    for row_id, entry in sorted(mappings.items()):
+        row = by_id.get(row_id)
+        require(row is not None, f"{entry['id']}: ticket mapping names unknown row {row_id}")
+        recorded = row["implementation_ticket"]
+        require(
+            recorded in (None, "#1058-draft"),
+            f"{row_id}: ticket mapping {entry['id']} conflicts with the delivery-backed ticket "
+            f"{recorded}",
+        )
+        row["implementation_ticket"] = entry["ticket"]
+        applied += 1
+        history_applied += 1 if entry["history"] else 0
+    return applied, history_applied
+
+
+def unreferenced_ticket_rows(rows: list[dict]) -> tuple[list[str], list[str]]:
+    """Supported missing/partial rows still carrying no real ticket reference, for the report."""
+    null_refs = sorted(
+        row["id"]
+        for row in rows
+        if row["membership"] == "supported"
+        and row["implementation"] in ("missing", "partial")
+        and row["implementation_ticket"] is None
+    )
+    draft_refs = sorted(
+        row["id"]
+        for row in rows
+        if row["membership"] == "supported"
+        and row["implementation"] in ("missing", "partial")
+        and row["implementation_ticket"] == "#1058-draft"
+    )
+    return null_refs, draft_refs
+
+
 def delivery_routing_digest(rows: list[dict], claims: list[dict], artifacts: dict[str, bytes]) -> str:
     """Hash each claimed row's pre-delivery scenarios and their registered artifact identities."""
     by_id = {row["id"]: row for row in rows}
@@ -994,6 +1100,8 @@ def build_ledger(
         if row["id"] not in updates and row["id"] in withdrawn_rows and row["verification"] == "verified":
             row["verification"] = "unverified"
 
+    apply_ticket_mappings(rows, ticket_mapping_map(load_ticket_mappings(plan)))
+
     register = attach_gap_register(plan, raw_rows)
     counts = count_rows(rows)
     counts["scenarioCoverage"] = scenario_coverage(rows, bundles, plan.get("orphanScenarios", []))
@@ -1237,6 +1345,30 @@ def check_ledger(
                     f"{row['id']}: status differs from its validated delivery")
             require(row.get("auditStatus"), f"{row['id']}: missing original audit status")
     notes.append(f"deliveries: {len(updates)} rows backed by pinned C++ comparison results")
+
+    # 1b. The checked-in ticket mappings name real rows, carry no delivery conflict, and were
+    # applied exactly: each mapped row's committed ticket is the mapped issue.
+    mappings = ticket_mapping_map(load_ticket_mappings(plan))
+    rows_by_ticket = {row["id"]: row for row in rows}
+    for row_id, entry in sorted(mappings.items()):
+        row = rows_by_ticket.get(row_id)
+        require(row is not None, f"{entry['id']}: ticket mapping names unknown row {row_id}")
+        require("delivery" not in row, f"{row_id}: ticket mapping conflicts with a validated delivery")
+        require(
+            row["implementation_ticket"] == entry["ticket"],
+            f"{row_id}: ticket mapping {entry['id']} targets {entry['ticket']} but the ledger "
+            f"carries {row['implementation_ticket']}",
+        )
+    remaining_null, remaining_draft = unreferenced_ticket_rows(rows)
+    if mappings:
+        notes.append(
+            f"ticket mappings: {len(mappings)} applied ({sum(1 for e in mappings.values() if e['history'])} "
+            f"history references); unreferenced supported missing/partial rows remain: "
+            f"{len(remaining_null)} null, {len(remaining_draft)} #1058-draft"
+        )
+        for label, ids in (("null", remaining_null), ("#1058-draft", remaining_draft)):
+            if ids:
+                notes.append(f"ticket mappings: remaining {label}: {', '.join(ids)}")
 
     # 2. Vocabularies, ownership and remaining work.
     for row in rows:

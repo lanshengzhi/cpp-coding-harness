@@ -204,11 +204,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+            "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -601,6 +601,13 @@
               "sha256": "2eb5b93e2988c3f73d97aff9a27a73899b8e99bdd078e57ffb2f499dfa25890b"
             }
           }
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -1378,11 +1385,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+            "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -1756,6 +1763,13 @@
               "sha256": "f01d7e874b32f241111177d0b952a3c215910776388d6e7ffdc2f55018feeb21"
             }
           }
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -2476,7 +2490,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -2581,6 +2595,12 @@
             "src/chord/include/cch/chord/Output.hpp",
             "tests/chord/OutputTest.cpp",
             "tests/chord/ReplicatedStateTest.cpp"
+          ]
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
         }
       },
@@ -2933,11 +2953,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+            "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3275,6 +3295,13 @@
               "sha256": "29214d656a11d43b5e7ddc877f103a5f4e20b7f36a4622f9de824aaac04a8651"
             }
           }
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -3490,7 +3517,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3524,6 +3551,12 @@
           "reason": "#1188 re-paired the coarse cch_durable:Chord:state scenario in the 1054 source ledger to the registered audit-1057 replicated-state hydration/delivery/dispose scenario. That ledger is a pinned input of this receipt; the rows this receipt claims keep their comparison scenarios and routing digest, so only the input digest is refreshed and this receipt makes no new verification claim.",
           "changedInputs": [
             "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json"
+          ]
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
         }
       },
@@ -3741,7 +3774,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3776,6 +3809,12 @@
               "sha256": "0d5ad2f41ea2c7cb4d24af35e99b5efb3e15c0dd3a436ed86fb0d3b4d40e164c"
             }
           }
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -3979,11 +4018,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+            "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4053,6 +4092,13 @@
               "sha256": "ca26ceb4bbb3f3106e5dabf5f6812afdd478bb33574683f669c956290fb8ce92"
             }
           }
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -4247,11 +4293,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+            "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4302,6 +4348,13 @@
               "sha256": "d9a3e8e2f41516945070dc526d49d6fea8b288ddfe70f132161f65dd0a9bfb03"
             }
           }
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -4402,7 +4455,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4440,7 +4493,13 @@
               "reason": "The frozen constant is the 100 KiB/s byte rate, so the pause for a 50 KiB commit is 500 ms and a 1 025-byte commit buys 10.009765625 ms. A seam that uses a fixed millisecond interval reports 100 ms for the first and a seam that rounds the bytes or the pause reports 10 ms for the second; both fail here while the bare constant assertion still passes."
             }
           }
-        ]
+        ],
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
+        }
       },
       {
         "id": "1182-tui-comparisons",
@@ -4712,11 +4771,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+            "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -4798,6 +4857,13 @@
               "sha256": "8e8f7d1217de1f2b85d2d1289b835dbcfc6c9c74384d99903f86615c1a366e75"
             }
           }
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -5006,11 +5072,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+            "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -5864,6 +5930,13 @@
             "fixtures/pi-v1.3.0/baselines.json",
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
+        },
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
         }
       },
       {
@@ -5936,11 +6009,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+            "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -6048,7 +6121,14 @@
             }
           }
         ],
-        "routingSha256": "cb9c1dc2fa2fae1373095783ab8600545eed4a4419f08c0a95846d05113535b5"
+        "routingSha256": "cb9c1dc2fa2fae1373095783ab8600545eed4a4419f08c0a95846d05113535b5",
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        }
       },
       {
         "id": "1177-application-comparisons",
@@ -6116,11 +6196,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
+            "sha256": "1ca57777b60fe7a76c33c7abe72c98cd158113dc816369c1566802ad4fede1e6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
+            "sha256": "3cedf901fa9406680b7cf327b573492e12646ee64bee69e60bb499de3015cf3b"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -6260,7 +6340,14 @@
             "remainingBoundary": []
           }
         ],
-        "routingSha256": "09fd1c8767933bd90fc1b9514c9ccb99647ff639755deca9e717adb2850b7e64"
+        "routingSha256": "09fd1c8767933bd90fc1b9514c9ccb99647ff639755deca9e717adb2850b7e64",
+        "revalidation1183": {
+          "reason": "The #1183 reconciliation proposal E1 adds the checked-in ticketMappings channel: consolidate_audits.py applies and validates the plan section, and consolidation-plan.json carries the section. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ]
+        }
       }
     ]
   },
@@ -11941,7 +12028,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "Agent defaults select off thinking, parallel tools and one-at-a-time queues",
       "comparisonScenarios": [
         "Agent defaults select off thinking, parallel tools and one-at-a-time queues",
@@ -12044,7 +12131,7 @@
       "consumer": "None currently: no C++ application caller sets AgentOptions.finishTurn; proposed public caller: cch_agent_core AgentOptions.finishTurn.",
       "consumerOwners": [],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "finishTurn action end stops the run before follow-up polling",
       "comparisonScenarios": [
         "finishTurn action end stops the run before follow-up polling"
@@ -12095,7 +12182,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "prepareNextTurn runs once before a continuing turn and can append messages",
       "comparisonScenarios": [
         "prepareNextTurn runs once before a continuing turn and can append messages"
@@ -12143,7 +12230,7 @@
       "consumer": "None currently: no C++ application caller sets AgentOptions.prepareRequest; proposed public caller: cch_agent_core AgentOptions.prepareRequest.",
       "consumerOwners": [],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "prepareRequest observes the pending prompt before the provider request",
       "comparisonScenarios": [
         "prepareRequest observes the pending prompt before the provider request"
@@ -12488,7 +12575,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "queue admission is unbounded and both queues default to one-at-a-time",
       "comparisonScenarios": [
         "queue admission is unbounded and both queues default to one-at-a-time"
@@ -12765,7 +12852,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "nested calls forward parent ids and separate record duration from execute duration",
       "comparisonScenarios": [
         "nested calls forward parent ids and separate record duration from execute duration"
@@ -12864,7 +12951,7 @@
       "consumer": "None currently: no C++ application caller installs AgentOptions.afterToolCall; proposed public caller: cch_agent_core AgentOptions.afterToolCall.",
       "consumerOwners": [],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "afterToolCall content replacement drops structuredContent but keeps duration",
       "comparisonScenarios": [
         "afterToolCall content replacement drops structuredContent but keeps duration"
@@ -12965,7 +13052,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "hook and execute activity are distinguishable in duration and wall time",
       "comparisonScenarios": [
         "hook and execute activity are distinguishable in duration and wall time"
@@ -13017,7 +13104,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
       "comparisonScenarios": [
         "executed success, thrown failure, blocked and unknown calls keep distinct duration presence"
@@ -13066,7 +13153,7 @@
       "consumer": "None currently: no C++ application caller sets AgentOptions.toolExecution; proposed public caller: cch_agent_core AgentOptions.toolExecution.",
       "consumerOwners": [],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "parallel tool ends follow completion order while result messages keep source order",
       "comparisonScenarios": [
         "parallel tool ends follow completion order while result messages keep source order"
@@ -13114,7 +13201,7 @@
       "consumer": "None currently: no C++ application tool definition sets prepareArguments; proposed public caller: cch_agent_core ToolDefinition.prepareArguments.",
       "consumerOwners": [],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation",
       "comparisonScenarios": [
         "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation"
@@ -13285,7 +13372,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "replacing state.tools narrows the executable set and declares the system tool delta",
       "comparisonScenarios": [
         "replacing state.tools narrows the executable set and declares the system tool delta"
@@ -13337,7 +13424,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1205",
       "scenario": "executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
       "comparisonScenarios": [
         "executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
@@ -13556,7 +13643,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1204",
       "scenario": "C++ Session cancellation and close with a Context",
       "comparisonScenarios": [
         "C++ Session cancellation and close with a Context"
@@ -13893,7 +13980,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "conversation watch publishes delta frames whose final view equals a fresh hydration",
       "comparisonScenarios": [
         "conversation watch publishes delta frames whose final view equals a fresh hydration"
@@ -13945,7 +14032,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "the root conversation is created lazily in one commit with its five built-in documents",
       "comparisonScenarios": [
         "the root conversation is created lazily in one commit with its five built-in documents",
@@ -14337,7 +14424,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1204",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -15466,7 +15553,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
       "comparisonScenarios": [
         "a watcher acquired at an older definition receives a root replacement on a newer-definition commit"
@@ -15515,7 +15602,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a callback rollback publishes nothing and keeps the committed revision",
       "comparisonScenarios": [
         "a callback rollback publishes nothing and keeps the committed revision"
@@ -15566,7 +15653,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -15613,7 +15700,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "exact committed frames replay from the acquisition revision",
       "comparisonScenarios": [
         "exact committed frames replay from the acquisition revision"
@@ -15664,7 +15751,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
       "comparisonScenarios": [
         "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
@@ -15715,7 +15802,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "committed snapshots keep earlier revisions immutable while a later commit advances the document",
       "comparisonScenarios": [
         "committed snapshots keep earlier revisions immutable while a later commit advances the document"
@@ -15764,7 +15851,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -15811,7 +15898,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "retiring a document publishes the canonical root-null batch and closes its watcher",
       "comparisonScenarios": [
         "retiring a document publishes the canonical root-null batch and closes its watcher"
@@ -15860,7 +15947,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
       "comparisonScenarios": [
         "a watcher acquired at an older definition receives a root replacement on a newer-definition commit"
@@ -15909,7 +15996,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "document state hydrates from the source snapshot and then delivers the committed update with caller values",
       "comparisonScenarios": [
         "document state hydrates from the source snapshot and then delivers the committed update with caller values"
@@ -15960,7 +16047,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a storage failure publishes nothing and ends the Session without a partial commit",
       "comparisonScenarios": [
         "a storage failure publishes nothing and ends the Session without a partial commit"
@@ -16009,7 +16096,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a structurally rewritten but value-identical commit still publishes a nonempty exact batch",
       "comparisonScenarios": [
         "a structurally rewritten but value-identical commit still publishes a nonempty exact batch"
@@ -16057,7 +16144,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "cancelling a watch acquisition rejects the wait and leaves no write or partial observer",
       "comparisonScenarios": [
         "cancelling a watch acquisition rejects the wait and leaves no write or partial observer"
@@ -16105,7 +16192,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a watch acquired before start buffers frames and serializes callbacks",
       "comparisonScenarios": [
         "a watch acquired before start buffers frames and serializes callbacks"
@@ -16154,7 +16241,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a watch whose pending frames overflow delivers one root replacement with the latest value",
       "comparisonScenarios": [
         "a watch whose pending frames overflow delivers one root replacement with the latest value"
@@ -16483,7 +16570,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1204",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -16871,7 +16958,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1204",
       "scenario": "progress commits the first change at once then paces later commits by their written bytes",
       "comparisonScenarios": [
         "progress commits the first change at once then paces later commits by their written bytes",
@@ -18228,7 +18315,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1192",
       "scenario": "a script returns a JSON value after top-level await and collects output in order",
       "comparisonScenarios": [
         "a script returns a JSON value after top-level await and collects output in order",
@@ -18280,7 +18367,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1192",
       "scenario": "the public tool table can be registered, listed and unregistered; close rejects later runs",
       "comparisonScenarios": [
         "the public tool table can be registered, listed and unregistered; close rejects later runs"
@@ -18583,7 +18670,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1194",
       "scenario": "the public options prefix and grammar constants are fixed",
       "comparisonScenarios": [
         "the public options prefix and grammar constants are fixed"
@@ -18632,7 +18719,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1193",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -19227,7 +19314,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1193",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -19428,7 +19515,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1195",
       "scenario": "execute() is not deterministic while start() is",
       "comparisonScenarios": [
         "execute() is not deterministic while start() is",
@@ -20229,7 +20316,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1193",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -20419,7 +20506,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "a script that computes past its deadline is a timeout",
       "comparisonScenarios": [
         "a script that computes past its deadline is a timeout",
@@ -20469,7 +20556,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "admission denial rejects before a worker starts and keeps the start hook uncalled",
       "comparisonScenarios": [
         "admission denial rejects before a worker starts and keeps the start hook uncalled",
@@ -20572,7 +20659,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "a wasm loading failure does not reserve admission",
       "comparisonScenarios": [
         "a wasm loading failure does not reserve admission",
@@ -20675,7 +20762,7 @@
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "repeated abort results settle while cancelled workers remain unreleased; exits release every admission",
       "comparisonScenarios": [
         "repeated abort results settle while cancelled workers remain unreleased; exits release every admission"
@@ -20724,7 +20811,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "packages/coding-agent/test/suite/agent-session-compaction.test.ts:aborts an in-progress manual compaction and waits until the session is idle",
       "comparisonScenarios": [
         "packages/coding-agent/test/suite/agent-session-compaction.test.ts:aborts an in-progress manual compaction and waits until the session is idle",
@@ -20827,7 +20914,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "queue admission is unbounded and both queues default to one-at-a-time",
       "comparisonScenarios": [
         "queue admission is unbounded and both queues default to one-at-a-time"
@@ -20877,7 +20964,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "hook and execute activity are distinguishable in duration and wall time",
       "comparisonScenarios": [
         "hook and execute activity are distinguishable in duration and wall time"
@@ -22035,7 +22122,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "packages/coding-agent/test/suite/agent-session-compaction.test.ts:does not retry overflow recovery more than once",
       "comparisonScenarios": [
         "packages/coding-agent/test/suite/agent-session-compaction.test.ts:does not retry overflow recovery more than once",
@@ -22087,7 +22174,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "in-memory sessions keep the live entry model without a file",
       "comparisonScenarios": [
         "in-memory sessions keep the live entry model without a file"
@@ -22139,7 +22226,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "compaction appends a checkpoint without rewriting the earlier transcript lines",
       "comparisonScenarios": [
         "compaction appends a checkpoint without rewriting the earlier transcript lines"
@@ -22192,7 +22279,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1116",
       "scenario": "summary serialization omits thinking while the stored transcript retains it",
       "comparisonScenarios": [
         "summary serialization omits thinking while the stored transcript retains it"
@@ -22243,7 +22330,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "static consumer trace",
       "comparisonScenarios": [
         "static consumer trace",
@@ -22296,7 +22383,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "usage and context_edit entries persist without rewriting the stored message",
       "comparisonScenarios": [
         "usage and context_edit entries persist without rewriting the stored message"
@@ -22349,7 +22436,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "usage and context_edit entries persist without rewriting the stored message",
       "comparisonScenarios": [
         "usage and context_edit entries persist without rewriting the stored message"
@@ -22650,7 +22737,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "resume without modifiers restores the recorded order and does not rewrite the transcript",
       "comparisonScenarios": [
         "resume without modifiers restores the recorded order and does not rewrite the transcript"
@@ -22704,7 +22791,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1111",
       "scenario": "resume applies relative tool modifiers to the recorded loadout",
       "comparisonScenarios": [
         "resume applies relative tool modifiers to the recorded loadout"
@@ -22753,7 +22840,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1111",
       "scenario": "resume without modifiers restores the recorded order and does not rewrite the transcript",
       "comparisonScenarios": [
         "resume without modifiers restores the recorded order and does not rewrite the transcript"
@@ -22951,7 +23038,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "usage and context_edit entries persist without rewriting the stored message",
       "comparisonScenarios": [
         "usage and context_edit entries persist without rewriting the stored message"
@@ -23005,7 +23092,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "compaction appends a checkpoint without rewriting the earlier transcript lines",
       "comparisonScenarios": [
         "compaction appends a checkpoint without rewriting the earlier transcript lines"
@@ -23058,7 +23145,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "usage and context_edit entries persist without rewriting the stored message",
       "comparisonScenarios": [
         "usage and context_edit entries persist without rewriting the stored message"
@@ -23111,7 +23198,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "tests/coding_agent/session/JsonlSessionStoreTest.cpp:v3 session header writes and loads correctly",
       "comparisonScenarios": [
         "tests/coding_agent/session/JsonlSessionStoreTest.cpp:v3 session header writes and loads correctly",
@@ -23162,7 +23249,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1206",
       "scenario": "packages/coding-agent/test/session-manager/migration.test.ts:should add id/parentId to v1 entries",
       "comparisonScenarios": [
         "packages/coding-agent/test/session-manager/migration.test.ts:should add id/parentId to v1 entries",
@@ -23266,7 +23353,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "hook and execute activity are distinguishable in duration and wall time",
       "comparisonScenarios": [
         "hook and execute activity are distinguishable in duration and wall time"
@@ -23602,7 +23689,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "deferred tools are never listed and do not change the description",
       "comparisonScenarios": [
         "deferred tools are never listed and do not change the description"
@@ -23651,7 +23738,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
       "comparisonScenarios": [
         "the on loadout lists only non-direct callable tools and adds script-call descriptions",
@@ -23702,7 +23789,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "a script failure keeps prior output and reports the script error with its line",
       "comparisonScenarios": [
         "a script failure keeps prior output and reports the script error with its line",
@@ -23752,7 +23839,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "text values are stringified and image accepts data URLs and image blocks",
       "comparisonScenarios": [
         "text values are stringified and image accepts data URLs and image blocks"
@@ -23869,7 +23956,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
       "comparisonScenarios": [
         "namespaces group sections and the inline budget omits tools with an explicit marker"
@@ -23918,7 +24005,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "an unawaited tool call is aborted when the script returns and its record is cancelled",
       "comparisonScenarios": [
         "an unawaited tool call is aborted when the script returns and its record is cancelled",
@@ -23968,7 +24055,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "a script returns a JSON value after top-level await and collects output in order",
       "comparisonScenarios": [
         "a script returns a JSON value after top-level await and collects output in order",
@@ -24019,7 +24106,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "a tool declaration defaults its output schema to string and appends prompt guidelines",
       "comparisonScenarios": [
         "a tool declaration defaults its output schema to string and appends prompt guidelines",
@@ -24118,7 +24205,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "the empty codemode catalog still declares globals, discovery and the options grammar",
       "comparisonScenarios": [
         "the empty codemode catalog still declares globals, discovery and the options grammar",
@@ -24170,7 +24257,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
       "comparisonScenarios": [
         "the on loadout lists only non-direct callable tools and adds script-call descriptions",
@@ -24478,7 +24565,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "store and load use a JSON snapshot and only successful executions report writes",
       "comparisonScenarios": [
         "store and load use a JSON snapshot and only successful executions report writes",
@@ -24806,7 +24893,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun shutdown -> Terminal stop",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential boot-100 at 100 columns",
       "comparisonScenarios": [
         "native differential boot-100 at 100 columns"
@@ -24856,7 +24943,7 @@
         "cch_coding_agent"
       ],
       "boundary": "The HTML export is a local file write owned by the application; it is not a share/upload service and carries no outbound network behavior.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "the exported document has every pi template slot substituted and its SESSION_DATA payload decodes to pi's sessionData shape",
       "comparisonScenarios": [
         "the exported document has every pi template slot substituted and its SESSION_DATA payload decodes to pi's sessionData shape"
@@ -25101,7 +25188,7 @@
         "cch_coding_agent"
       ],
       "boundary": "ExtensionUIContext -> InteractiveView/ExtensionUiHost",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "before_agent_start observes busy state and contributes prompt plus custom message",
       "comparisonScenarios": [
         "before_agent_start observes busy state and contributes prompt plus custom message",
@@ -25152,7 +25239,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun extension registration factory -> ExtensionUiHost; SessionFactory tool assembly",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls",
       "comparisonScenarios": [
         "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls",
@@ -25252,7 +25339,7 @@
         "cch_coding_agent"
       ],
       "boundary": "The import copies one session file into the current session directory and switches the running session; it is not an import/migration/automatic upgrade/dual-read of historical Pike durable data, and no existing user data is deleted or reinterpreted.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "a confirmed import copies the file into the session directory and the imported session becomes the current session",
       "comparisonScenarios": [
         "a confirmed import copies the file into the session directory and the imported session becomes the current session"
@@ -25302,7 +25389,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "keybindings schema accepts unknown action ids with valid keys and rejects malformed values",
       "comparisonScenarios": [
         "keybindings schema accepts unknown action ids with valid keys and rejects malformed values",
@@ -25401,7 +25488,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "connecting a server lists tools but not resources",
       "comparisonScenarios": [
         "connecting a server lists tools but not resources",
@@ -25455,7 +25542,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "first prompt does not wait for a codemode server still initializing",
       "comparisonScenarios": [
         "first prompt does not wait for a codemode server still initializing",
@@ -25507,7 +25594,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "application config accepts http and https but rejects another scheme",
       "comparisonScenarios": [
         "application config accepts http and https but rejects another scheme"
@@ -25611,7 +25698,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "first prompt does not wait for a codemode server still initializing",
       "comparisonScenarios": [
         "first prompt does not wait for a codemode server still initializing",
@@ -25663,7 +25750,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "a sign-in performed outside the session is picked up on the next turn",
       "comparisonScenarios": [
         "a sign-in performed outside the session is picked up on the next turn"
@@ -25713,7 +25800,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "the /mcp manager lists connecting servers and completes a sign-in while another server connects",
       "comparisonScenarios": [
         "the /mcp manager lists connecting servers and completes a sign-in while another server connects"
@@ -25950,7 +26037,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "tool conversion serializes structuredContent into model text",
       "comparisonScenarios": [
         "tool conversion serializes structuredContent into model text",
@@ -26049,7 +26136,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun -> ModelFlowController -> ModelSelector",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential model-selector at 100 columns",
       "comparisonScenarios": [
         "native differential model-selector at 100 columns"
@@ -26098,7 +26185,7 @@
         "cch_coding_agent"
       ],
       "boundary": "Clipboard copy -> ClipboardWrite -> terminal",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -26143,7 +26230,7 @@
         "cch_coding_agent"
       ],
       "boundary": "SettingsManager -> InteractiveView -> ChatContainer",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential user-message at 72 columns",
       "comparisonScenarios": [
         "native differential user-message at 72 columns",
@@ -26289,7 +26376,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "length-truncated text response prints partial stdout, warning stderr and exits 1",
       "comparisonScenarios": [
         "length-truncated text response prints partial stdout, warning stderr and exits 1"
@@ -26823,7 +26910,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun -> InteractiveEngine event loop -> InteractiveView/status",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "program status reports idle, blocked, working, done and error through the terminal contract",
       "comparisonScenarios": [
         "program status reports idle, blocked, working, done and error through the terminal contract",
@@ -27074,7 +27161,7 @@
         "cch_coding_agent"
       ],
       "boundary": "See base row `system-theme`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -27166,7 +27253,7 @@
         "cch_coding_agent"
       ],
       "boundary": "See base row `transcript-state-scrollback`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential scrollback at 72 columns",
       "comparisonScenarios": [
         "native differential scrollback at 72 columns"
@@ -27214,7 +27301,7 @@
         "cch_coding_agent"
       ],
       "boundary": "See base row `settings-selector`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential settings-selector at 100 columns",
       "comparisonScenarios": [
         "native differential settings-selector at 100 columns"
@@ -27262,7 +27349,7 @@
         "cch_coding_agent"
       ],
       "boundary": "See base row `startup-header-help`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential boot-72 at 72 columns",
       "comparisonScenarios": [
         "native differential boot-72 at 72 columns"
@@ -27310,7 +27397,7 @@
         "cch_coding_agent"
       ],
       "boundary": "See base row `tool-result-presentation`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential tool-result at 100 columns",
       "comparisonScenarios": [
         "native differential tool-result at 100 columns"
@@ -27358,7 +27445,7 @@
         "cch_coding_agent"
       ],
       "boundary": "See base row `model-selector`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential model-selector at 100 columns",
       "comparisonScenarios": [
         "native differential model-selector at 100 columns"
@@ -27406,7 +27493,7 @@
         "cch_coding_agent"
       ],
       "boundary": "See base row `thinking-selector`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential thinking-selector at 100 columns",
       "comparisonScenarios": [
         "native differential thinking-selector at 100 columns"
@@ -27454,7 +27541,7 @@
         "cch_coding_agent"
       ],
       "boundary": "See base row `tool-result-presentation`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential tool-result at 100 columns",
       "comparisonScenarios": [
         "native differential tool-result at 100 columns"
@@ -27651,7 +27738,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "settings manager reads package and local resource paths and reloads changed values",
       "comparisonScenarios": [
         "settings manager reads package and local resource paths and reloads changed values",
@@ -27750,7 +27837,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "settings schema accepts the supported shape and unknown top-level keys",
       "comparisonScenarios": [
         "settings schema accepts the supported shape and unknown top-level keys",
@@ -27800,7 +27887,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun -> SettingsFlowController -> SettingsSelector",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential settings-selector at 100 columns",
       "comparisonScenarios": [
         "native differential settings-selector at 100 columns"
@@ -27849,7 +27936,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun -> InteractiveEngine -> InteractiveView startup",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential boot-100 at 100 columns",
       "comparisonScenarios": [
         "native differential boot-100 at 100 columns",
@@ -27903,7 +27990,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun -> InteractiveView startup document",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls",
       "comparisonScenarios": [
         "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
@@ -28047,7 +28134,7 @@
         "cch_coding_agent"
       ],
       "boundary": "ThemeController -> generated system theme",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -28142,7 +28229,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "theme schema accepts the 56-token built-in shape",
       "comparisonScenarios": [
         "theme schema accepts the 56-token built-in shape",
@@ -28193,7 +28280,7 @@
         "cch_coding_agent"
       ],
       "boundary": "ThemeController -> LiveTheme",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential boot-100 at 100 columns",
       "comparisonScenarios": [
         "native differential boot-100 at 100 columns",
@@ -28310,7 +28397,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun -> ThinkingSelector",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential thinking-selector at 100 columns",
       "comparisonScenarios": [
         "native differential thinking-selector at 100 columns"
@@ -28447,7 +28534,7 @@
         "cch_coding_agent"
       ],
       "boundary": "Agent tool execution -> result/event -> TUI renderer",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "runToolCall runs the hooks and reports execute-only duration",
       "comparisonScenarios": [
         "runToolCall runs the hooks and reports execute-only duration",
@@ -28499,7 +28586,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun -> ReadRenderer",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -28544,7 +28631,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun -> ChatContainer -> ToolExecutionComponent",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential tool-result at 100 columns",
       "comparisonScenarios": [
         "native differential tool-result at 100 columns"
@@ -28593,7 +28680,7 @@
         "cch_coding_agent"
       ],
       "boundary": "InteractiveSessionRun -> ChatContainer/ChatViewport -> terminal scrollback",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1206",
       "scenario": "native differential scrollback at 72 columns",
       "comparisonScenarios": [
         "native differential scrollback at 72 columns",
@@ -28644,7 +28731,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -28696,7 +28783,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
       "comparisonScenarios": [
         "rewindable history reads an entry revision and retirement keeps it addressable"
@@ -28748,7 +28835,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
       "comparisonScenarios": [
         "a JSONL checkpoint replaces a current-only sidecar and retirement removes it"
@@ -28800,7 +28887,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
       "comparisonScenarios": [
         "forking a conversation copies as-of and current documents and leaves initial-only members absent"
@@ -28852,7 +28939,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
         "a JSONL commit appends every sidecar before the main marker"
@@ -28904,7 +28991,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -28956,7 +29043,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -29009,7 +29096,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
       "comparisonScenarios": [
         "a JSONL checkpoint replaces a current-only sidecar and retirement removes it"
@@ -29061,7 +29148,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
       "comparisonScenarios": [
         "forking a conversation copies as-of and current documents and leaves initial-only members absent"
@@ -29115,7 +29202,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
       "comparisonScenarios": [
         "rewindable history reads an entry revision and retirement keeps it addressable"
@@ -29167,7 +29254,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -29219,7 +29306,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ task document created and read through a task invocation",
       "comparisonScenarios": [
         "C++ task document created and read through a task invocation"
@@ -29270,7 +29357,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ reopen of a document stored at an older version",
       "comparisonScenarios": [
         "C++ reopen of a document stored at an older version"
@@ -29323,7 +29410,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -29376,7 +29463,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ built-in durable entry kinds round-tripping through a store",
       "comparisonScenarios": [
         "C++ built-in durable entry kinds round-tripping through a store"
@@ -29427,7 +29514,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -29478,7 +29565,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ entry context edits surviving a reopen",
       "comparisonScenarios": [
         "C++ entry context edits surviving a reopen"
@@ -29529,7 +29616,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ scan of a forked conversation's inherited and own entries",
       "comparisonScenarios": [
         "C++ scan of a forked conversation's inherited and own entries"
@@ -29580,7 +29667,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -29631,7 +29718,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -29684,7 +29771,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
       "comparisonScenarios": [
         "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues"
@@ -29736,7 +29823,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
         "a JSONL commit appends every sidecar before the main marker"
@@ -29788,7 +29875,7 @@
         "cch_durable"
       ],
       "boundary": "Alternating writers after close/reopen only; simultaneous independent writers are not promised by upstream.",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "pi-create, C++-continue, pi-reopen/continue, C++-reopen acceptance scenario",
       "comparisonScenarios": [
         "pi-create, C++-continue, pi-reopen/continue, C++-reopen acceptance scenario"
@@ -29840,7 +29927,7 @@
         "cch_durable"
       ],
       "boundary": "No simultaneous independent writers beyond upstream guarantees.",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++-create, pi-continue, C++-reopen acceptance scenario",
       "comparisonScenarios": [
         "C++-create, pi-continue, C++-reopen acceptance scenario"
@@ -29935,7 +30022,7 @@
         "cch_durable"
       ],
       "boundary": "pi-durable transactional main/sidecar format; not the application JSONL transcript.",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
       "comparisonScenarios": [
         "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues"
@@ -29987,7 +30074,7 @@
         "cch_durable"
       ],
       "boundary": "durable schema v1 with prefix/version/metadata obligations; not the current Pike session/task tables.",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "sqlite store created by pi reopens with unfinished task, documents and checkpoints and continues",
       "comparisonScenarios": [
         "sqlite store created by pi reopens with unfinished task, documents and checkpoints and continues"
@@ -30041,7 +30128,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -30093,7 +30180,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ filtered scans over a durable store",
       "comparisonScenarios": [
         "C++ filtered scans over a durable store"
@@ -30143,7 +30230,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "closing seals admission and notifies close subscribers once",
       "comparisonScenarios": [
         "closing seals admission and notifies close subscribers once"
@@ -30195,7 +30282,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -30248,7 +30335,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a failed transaction callback publishes nothing and leaves the Session usable",
       "comparisonScenarios": [
         "a failed transaction callback publishes nothing and leaves the Session usable"
@@ -30300,7 +30387,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a prepared draft is not observable before Storage settles its commit",
       "comparisonScenarios": [
         "a prepared draft is not observable before Storage settles its commit"
@@ -30352,7 +30439,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a failed Storage commit fails the Session and publishes nothing",
       "comparisonScenarios": [
         "a failed Storage commit fails the Session and publishes nothing"
@@ -30403,7 +30490,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the same public operation yields the same records on memory, JSONL and SQLite",
       "comparisonScenarios": [
         "the same public operation yields the same records on memory, JSONL and SQLite"
@@ -30455,7 +30542,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "document retention controls whether a committed document is reloaded from Storage",
       "comparisonScenarios": [
         "document retention controls whether a committed document is reloaded from Storage"
@@ -30508,7 +30595,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "document watches and states deliver only committed frames",
       "comparisonScenarios": [
         "document watches and states deliver only committed frames"
@@ -30560,7 +30647,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -30612,7 +30699,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
       "comparisonScenarios": [
         "rewindable history reads an entry revision and retirement keeps it addressable"
@@ -30709,7 +30796,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "closing seals admission and notifies close subscribers once",
       "comparisonScenarios": [
         "closing seals admission and notifies close subscribers once"
@@ -30760,7 +30847,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -30813,7 +30900,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "document watches and states deliver only committed frames",
       "comparisonScenarios": [
         "document watches and states deliver only committed frames"
@@ -30864,7 +30951,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "closing seals admission and notifies close subscribers once",
       "comparisonScenarios": [
         "closing seals admission and notifies close subscribers once"
@@ -30917,7 +31004,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
       "comparisonScenarios": [
         "a failing SQLite batch rolls back every write and leaves the sequence unchanged"
@@ -30970,7 +31057,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
       "comparisonScenarios": [
         "the SQLite schema prefix renames every durable table and isolates an unprefixed schema"
@@ -31021,7 +31108,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
       "comparisonScenarios": [
         "rewindable history reads an entry revision and retirement keeps it addressable"
@@ -31072,7 +31159,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -31123,7 +31210,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -31174,7 +31261,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -31225,7 +31312,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -31277,7 +31364,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "JSONL refuses a main marker whose confirmed sidecar record is missing",
       "comparisonScenarios": [
         "JSONL refuses a main marker whose confirmed sidecar record is missing"
@@ -31330,7 +31417,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "JSONL fsync flushes sidecar bytes before the main marker is appended",
       "comparisonScenarios": [
         "JSONL fsync flushes sidecar bytes before the main marker is appended"
@@ -31381,7 +31468,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
         "a JSONL commit appends every sidecar before the main marker"
@@ -31432,7 +31519,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
         "a JSONL commit appends every sidecar before the main marker"
@@ -31484,7 +31571,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
         "a JSONL commit appends every sidecar before the main marker"
@@ -31537,7 +31624,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
         "a JSONL commit appends every sidecar before the main marker"
@@ -31589,7 +31676,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL main-marker I/O failure poisons the instance while reopen recovers the published prefix",
       "comparisonScenarios": [
         "a JSONL main-marker I/O failure poisons the instance while reopen recovers the published prefix"
@@ -31641,7 +31728,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
       "comparisonScenarios": [
         "a JSONL checkpoint replaces a current-only sidecar and retirement removes it"
@@ -31692,7 +31779,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ terminal task reclaim in a JSONL store",
       "comparisonScenarios": [
         "C++ terminal task reclaim in a JSONL store"
@@ -31743,7 +31830,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "JSONL recovery truncates a torn main marker and an unconfirmed sidecar tail",
       "comparisonScenarios": [
         "JSONL recovery truncates a torn main marker and an unconfirmed sidecar tail"
@@ -31794,7 +31881,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
         "a JSONL commit appends every sidecar before the main marker"
@@ -31846,7 +31933,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the same public operation yields the same records on memory, JSONL and SQLite",
       "comparisonScenarios": [
         "the same public operation yields the same records on memory, JSONL and SQLite"
@@ -31898,7 +31985,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ prepared batch before apply",
       "comparisonScenarios": [
         "C++ prepared batch before apply"
@@ -31949,7 +32036,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the same public operation yields the same records on memory, JSONL and SQLite",
       "comparisonScenarios": [
         "the same public operation yields the same records on memory, JSONL and SQLite"
@@ -32000,7 +32087,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -32051,7 +32138,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ scan of live versus retired documents at a commit point",
       "comparisonScenarios": [
         "C++ scan of live versus retired documents at a commit point"
@@ -32101,7 +32188,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ filtered submission scan over a durable store",
       "comparisonScenarios": [
         "C++ filtered submission scan over a durable store"
@@ -32151,7 +32238,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ filtered task scan over a durable store",
       "comparisonScenarios": [
         "C++ filtered task scan over a durable store"
@@ -32202,7 +32289,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32299,7 +32386,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32351,7 +32438,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32402,7 +32489,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32454,7 +32541,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32507,7 +32594,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32558,7 +32645,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ SQLite open with non-default WAL checkpoint and busy timeout",
       "comparisonScenarios": [
         "C++ SQLite open with non-default WAL checkpoint and busy timeout",
@@ -32611,7 +32698,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
       "comparisonScenarios": [
         "the SQLite schema prefix renames every durable table and isolates an unprefixed schema"
@@ -32663,7 +32750,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
       "comparisonScenarios": [
         "a failing SQLite batch rolls back every write and leaves the sequence unchanged"
@@ -32715,7 +32802,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32768,7 +32855,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "SQLite refuses a store written by a newer durable schema version",
       "comparisonScenarios": [
         "SQLite refuses a store written by a newer durable schema version"
@@ -32822,7 +32909,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32873,7 +32960,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32924,7 +33011,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
       "comparisonScenarios": [
         "the SQLite schema records the durable tables, metadata and document revisions"
@@ -32976,7 +33063,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
       "comparisonScenarios": [
         "a failing SQLite batch rolls back every write and leaves the sequence unchanged"
@@ -33027,7 +33114,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ submission lookup over a durable store",
       "comparisonScenarios": [
         "C++ submission lookup over a durable store"
@@ -33078,7 +33165,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ TaskStore deduplication versus the durable request key",
       "comparisonScenarios": [
         "C++ TaskStore deduplication versus the durable request key"
@@ -33128,7 +33215,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
       "comparisonScenarios": [
         "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues"
@@ -33180,7 +33267,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -33232,7 +33319,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -33283,7 +33370,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ Tx.createSubmission over a durable store",
       "comparisonScenarios": [
         "C++ Tx.createSubmission over a durable store"
@@ -33334,7 +33421,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
       "comparisonScenarios": [
         "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues"
@@ -33387,7 +33474,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -33440,7 +33527,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
       "comparisonScenarios": [
         "forking a conversation copies as-of and current documents and leaves initial-only members absent"
@@ -33493,7 +33580,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ Tx.placeSubmission over a queued record",
       "comparisonScenarios": [
         "C++ Tx.placeSubmission over a queued record"
@@ -33544,7 +33631,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
       "comparisonScenarios": [
         "the SQLite schema prefix renames every durable table and isolates an unprefixed schema"
@@ -33596,7 +33683,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "a commit that changes an entry and documents observes one committed revision",
       "comparisonScenarios": [
         "a commit that changes an entry and documents observes one committed revision"
@@ -33650,7 +33737,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -33702,7 +33789,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -33754,7 +33841,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "table scans continue by cursor and family members initialize from their first seed",
       "comparisonScenarios": [
         "table scans continue by cursor and family members initialize from their first seed"
@@ -33807,7 +33894,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ Tx.scanTasks over a reopened JSONL/SQLite store",
       "comparisonScenarios": [
         "C++ Tx.scanTasks over a reopened JSONL/SQLite store"
@@ -33858,7 +33945,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ TaskStore deduplication versus a durable submission request key",
       "comparisonScenarios": [
         "C++ TaskStore deduplication versus a durable submission request key"
@@ -33910,7 +33997,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
       "comparisonScenarios": [
         "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues"
@@ -33962,7 +34049,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
       "comparisonScenarios": [
         "rewindable history reads an entry revision and retirement keeps it addressable"
@@ -34013,7 +34100,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ Tx.settleSubmission over a placed record",
       "comparisonScenarios": [
         "C++ Tx.settleSubmission over a placed record"
@@ -34064,7 +34151,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ task-attributed entry and task document",
       "comparisonScenarios": [
         "C++ task-attributed entry and task document"
@@ -34115,7 +34202,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1180",
       "scenario": "C++ transaction rejecting a table read after a table write",
       "comparisonScenarios": [
         "C++ transaction rejecting a table read after a table write"
@@ -34167,7 +34254,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a task abandoned on restart is aborted with reason restart after reopen",
       "comparisonScenarios": [
         "a task abandoned on restart is aborted with reason restart after reopen"
@@ -34217,7 +34304,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1148",
       "scenario": "aborting a parent runs descendants' abort handlers before the parent and preserves order",
       "comparisonScenarios": [
         "aborting a parent runs descendants' abort handlers before the parent and preserves order",
@@ -34269,7 +34356,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1148",
       "scenario": "abortTask marks a running task and runs its abort handler after the run invocation joins",
       "comparisonScenarios": [
         "abortTask marks a running task and runs its abort handler after the run invocation joins",
@@ -34320,7 +34407,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1148",
       "scenario": "admission commits the queued submission and its inbox change in one storage batch",
       "comparisonScenarios": [
         "admission commits the queued submission and its inbox change in one storage batch"
@@ -34369,7 +34456,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -34417,7 +34504,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -34463,7 +34550,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a task whose stored version is newer than the installed definition stays pending and blocked",
       "comparisonScenarios": [
         "a task whose stored version is newer than the installed definition stays pending and blocked",
@@ -34516,7 +34603,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -34564,7 +34651,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "the built-in read, write, edit and bash tools run over a real injected local environment",
       "comparisonScenarios": [
         "the built-in read, write, edit and bash tools run over a real injected local environment"
@@ -34709,7 +34796,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a failed code mode script reports its error and the nested calls already made",
       "comparisonScenarios": [
         "a failed code mode script reports its error and the nested calls already made"
@@ -34760,7 +34847,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -34807,7 +34894,7 @@
         "cch_durable"
       ],
       "boundary": "Classifier and image-generation provider execution are excluded by ADR 0075; only capabilities actually exposed through the retained Magpie contract may be bridged.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -34854,7 +34941,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -34901,7 +34988,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -34949,7 +35036,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "code mode runs a script that calls a real nested tool and keeps its store across turns",
       "comparisonScenarios": [
         "code mode runs a script that calls a real nested tool and keeps its store across turns"
@@ -35000,7 +35087,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "code mode runs a script that calls a real nested tool and keeps its store across turns",
       "comparisonScenarios": [
         "code mode runs a script that calls a real nested tool and keeps its store across turns"
@@ -35051,7 +35138,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "the root conversation is created lazily in one commit with its five built-in documents",
       "comparisonScenarios": [
         "the root conversation is created lazily in one commit with its five built-in documents"
@@ -35102,7 +35189,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a compaction beforeCompact hook can decline the cut and the request goes out uncompacted",
       "comparisonScenarios": [
         "a compaction beforeCompact hook can decline the cut and the request goes out uncompacted"
@@ -35152,7 +35239,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "manual compaction with no eligible cut completes without a summary or a marker",
       "comparisonScenarios": [
         "manual compaction with no eligible cut completes without a summary or a marker"
@@ -35203,7 +35290,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "context with an entry cursor returns the same committed view a fork would start from",
       "comparisonScenarios": [
         "context with an entry cursor returns the same committed view a fork would start from"
@@ -35357,7 +35444,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "the root conversation is created lazily in one commit with its five built-in documents",
       "comparisonScenarios": [
         "the root conversation is created lazily in one commit with its five built-in documents",
@@ -35411,7 +35498,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a fork copies the transcript and agent state as of its entry and stays independent",
       "comparisonScenarios": [
         "a fork copies the transcript and agent state as of its entry and stays independent"
@@ -35463,7 +35550,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a task-created conversation records its task owner and stays addressable by ID",
       "comparisonScenarios": [
         "a task-created conversation records its task owner and stays addressable by ID"
@@ -35515,7 +35602,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "close and reopen keeps conversations, fork identity, agent choices and provider state",
       "comparisonScenarios": [
         "close and reopen keeps conversations, fork identity, agent choices and provider state"
@@ -35566,7 +35653,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "conversation watch publishes delta frames whose final view equals a fresh hydration",
       "comparisonScenarios": [
         "conversation watch publishes delta frames whose final view equals a fresh hydration"
@@ -35669,7 +35756,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "the agent event stream reports run, turn, message, tool and submission lifecycle in order",
       "comparisonScenarios": [
         "the agent event stream reports run, turn, message, tool and submission lifecycle in order"
@@ -35720,7 +35807,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a registry install after conversation creation changes the next request's tools and prompt sections",
       "comparisonScenarios": [
         "a registry install after conversation creation changes the next request's tools and prompt sections",
@@ -35825,7 +35912,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a generation onYield hook appends a user message and continues the same admitted run",
       "comparisonScenarios": [
         "a generation onYield hook appends a user message and continues the same admitted run"
@@ -35880,7 +35967,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "the root conversation is created lazily in one commit with its five built-in documents",
       "comparisonScenarios": [
         "the root conversation is created lazily in one commit with its five built-in documents",
@@ -35932,7 +36019,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a scripted model drives admission, one real injected tool, committed entries and final settlement",
       "comparisonScenarios": [
         "a scripted model drives admission, one real injected tool, committed entries and final settlement",
@@ -35984,7 +36071,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "inspect derives ready, running, waiting and blocked task states without running task code",
       "comparisonScenarios": [
         "inspect derives ready, running, waiting and blocked task states without running task code",
@@ -36036,7 +36123,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -36134,7 +36221,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -36327,7 +36414,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
       "comparisonScenarios": [
         "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
@@ -36377,7 +36464,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "inspect lists the placed submission and the generation task that owns it",
       "comparisonScenarios": [
         "inspect lists the placed submission and the generation task that owns it"
@@ -36428,7 +36515,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "inspect derives ready, running, waiting and blocked task states without running task code",
       "comparisonScenarios": [
         "inspect derives ready, running, waiting and blocked task states without running task code",
@@ -36481,7 +36568,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a task whose stored version is newer than the installed definition stays pending and blocked",
       "comparisonScenarios": [
         "a task whose stored version is newer than the installed definition stays pending and blocked",
@@ -36532,7 +36619,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a task whose stored version is newer than the installed definition stays pending and blocked",
       "comparisonScenarios": [
         "a task whose stored version is newer than the installed definition stays pending and blocked",
@@ -36582,7 +36669,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "JSONL storage writes its files and reopens the same conversation and transcript",
       "comparisonScenarios": [
         "JSONL storage writes its files and reopens the same conversation and transcript"
@@ -36633,7 +36720,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "manual compaction summarizes old context, keeps raw history, and places one summary marker at the cut",
       "comparisonScenarios": [
         "manual compaction summarizes old context, keeps raw history, and places one summary marker at the cut"
@@ -36684,7 +36771,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a scripted model drives admission, one real injected tool, committed entries and final settlement",
       "comparisonScenarios": [
         "a scripted model drives admission, one real injected tool, committed entries and final settlement",
@@ -36736,7 +36823,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -36783,7 +36870,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -36830,7 +36917,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1158",
       "scenario": "the real Node ExecutionEnv reads, appends, lists, executes split streams and reports timeout",
       "comparisonScenarios": [
         "the real Node ExecutionEnv reads, appends, lists, executes split streams and reports timeout"
@@ -36881,7 +36968,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1158",
       "scenario": "the real Node ExecutionEnv reads, appends, lists, executes split streams and reports timeout",
       "comparisonScenarios": [
         "the real Node ExecutionEnv reads, appends, lists, executes split streams and reports timeout"
@@ -36932,7 +37019,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -37031,7 +37118,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a registry install after conversation creation changes the next request's tools and prompt sections",
       "comparisonScenarios": [
         "a registry install after conversation creation changes the next request's tools and prompt sections",
@@ -37084,7 +37171,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "queue modes decide whether all follow-ups or one are placed at the final boundary",
       "comparisonScenarios": [
         "queue modes decide whether all follow-ups or one are placed at the final boundary"
@@ -37133,7 +37220,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "an EXIF-oriented JPEG is made upright before its resized diagnostic",
       "comparisonScenarios": [
         "an EXIF-oriented JPEG is made upright before its resized diagnostic",
@@ -37285,7 +37372,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
       "comparisonScenarios": [
         "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
@@ -37336,7 +37423,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a killed process after a terminal commit does not rerun the task or duplicate the submission",
       "comparisonScenarios": [
         "a killed process after a terminal commit does not rerun the task or duplicate the submission"
@@ -37437,7 +37524,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "inspect derives ready, running, waiting and blocked task states without running task code",
       "comparisonScenarios": [
         "inspect derives ready, running, waiting and blocked task states without running task code",
@@ -37489,7 +37576,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a registry install after conversation creation changes the next request's tools and prompt sections",
       "comparisonScenarios": [
         "a registry install after conversation creation changes the next request's tools and prompt sections",
@@ -37542,7 +37629,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1148",
       "scenario": "a duplicate request ID returns the existing submission without a storage write",
       "comparisonScenarios": [
         "a duplicate request ID returns the existing submission without a storage write",
@@ -37594,7 +37681,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "reset starts a new context and carries its handoff text as the first user message",
       "comparisonScenarios": [
         "reset starts a new context and carries its handoff text as the first user message"
@@ -37645,7 +37732,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a retryable provider error is appended and the same run retries to a completed answer",
       "comparisonScenarios": [
         "a retryable provider error is appended and the same run retries to a completed answer"
@@ -37696,7 +37783,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "close and reopen keeps conversations, fork identity, agent choices and provider state",
       "comparisonScenarios": [
         "close and reopen keeps conversations, fork identity, agent choices and provider state"
@@ -37790,7 +37877,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -37835,7 +37922,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -37883,7 +37970,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a storage failure at the terminal commit fails the Session and the task reruns after reopen",
       "comparisonScenarios": [
         "a storage failure at the terminal commit fails the Session and the task reruns after reopen"
@@ -37983,7 +38070,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -38031,7 +38118,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "cancelling a submission wait leaves the submission placed until it settles",
       "comparisonScenarios": [
         "cancelling a submission wait leaves the submission placed until it settles",
@@ -38082,7 +38169,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a completing owner holds its terminal outcome until ordinary owned work drains",
       "comparisonScenarios": [
         "a completing owner holds its terminal outcome until ordinary owned work drains",
@@ -38134,7 +38221,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a multi-phase task replaces checkpoint state and reports a typed terminal result",
       "comparisonScenarios": [
         "a multi-phase task replaces checkpoint state and reports a typed terminal result",
@@ -38188,7 +38275,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
       "comparisonScenarios": [
         "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
@@ -38238,7 +38325,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "the task graph follows owner edges, owned conversations, waits and completion to empty",
       "comparisonScenarios": [
         "the task graph follows owner edges, owned conversations, waits and completion to empty"
@@ -38290,7 +38377,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -38339,7 +38426,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "task hooks run in extension order and an ordinary throw is reported while the task continues",
       "comparisonScenarios": [
         "task hooks run in extension order and an ordinary throw is reported while the task continues",
@@ -38390,7 +38477,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "task lifecycle times come from the Harness clock and survive a durable wait",
       "comparisonScenarios": [
         "task lifecycle times come from the Harness clock and survive a durable wait",
@@ -38441,7 +38528,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a task memo survives checkpoint replacement and is absent from the terminal record",
       "comparisonScenarios": [
         "a task memo survives checkpoint replacement and is absent from the terminal record",
@@ -38492,7 +38579,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a multi-phase task replaces checkpoint state and reports a typed terminal result",
       "comparisonScenarios": [
         "a multi-phase task replaces checkpoint state and reports a typed terminal result",
@@ -38544,7 +38631,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -38592,7 +38679,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "inadmissible child ownership is rejected by the transaction",
       "comparisonScenarios": [
         "inadmissible child ownership is rejected by the transaction",
@@ -38643,7 +38730,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "the task graph follows owner edges, owned conversations, waits and completion to empty",
       "comparisonScenarios": [
         "the task graph follows owner edges, owned conversations, waits and completion to empty",
@@ -38697,7 +38784,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1148",
       "scenario": "a multi-phase task replaces checkpoint state and reports a typed terminal result",
       "comparisonScenarios": [
         "a multi-phase task replaces checkpoint state and reports a typed terminal result",
@@ -38749,7 +38836,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -38796,7 +38883,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1148",
       "scenario": "a multi-phase task replaces checkpoint state and reports a typed terminal result",
       "comparisonScenarios": [
         "a multi-phase task replaces checkpoint state and reports a typed terminal result",
@@ -38847,7 +38934,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -38894,7 +38981,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a blocking threshold compaction appends its summary before the request it protects",
       "comparisonScenarios": [
         "a blocking threshold compaction appends its summary before the request it protects"
@@ -38945,7 +39032,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a scripted model drives admission, one real injected tool, committed entries and final settlement",
       "comparisonScenarios": [
         "a scripted model drives admission, one real injected tool, committed entries and final settlement"
@@ -38996,7 +39083,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "tool hooks rewrite arguments before execution and observe the committed result",
       "comparisonScenarios": [
         "tool hooks rewrite arguments before execution and observe the committed result"
@@ -39047,7 +39134,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -39094,7 +39181,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
       "comparisonScenarios": [
         "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it"
@@ -39144,7 +39231,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "an unrelated tool_search query loads nothing and leaves the offered set unchanged",
       "comparisonScenarios": [
         "an unrelated tool_search query loads nothing and leaves the offered set unchanged"
@@ -39195,7 +39282,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1203",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -39242,7 +39329,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "manual compaction summarizes old context, keeps raw history, and places one summary marker at the cut",
       "comparisonScenarios": [
         "manual compaction summarizes old context, keeps raw history, and places one summary marker at the cut",
@@ -39295,7 +39382,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "reservation migrates a stored definition before running the newer version",
       "comparisonScenarios": [
         "reservation migrates a stored definition before running the newer version",
@@ -39398,7 +39485,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "an allSettled join lets surviving siblings finish and still reads ordered outcomes",
       "comparisonScenarios": [
         "an allSettled join lets surviving siblings finish and still reads ordered outcomes"
@@ -39448,7 +39535,7 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1180",
       "scenario": "a failFast join aborts live siblings and the parent reads ordered terminal outcomes",
       "comparisonScenarios": [
         "a failFast join aborts live siblings and the parent reads ordered terminal outcomes"
@@ -39498,7 +39585,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "closing while initialize is pending returns without waiting",
       "comparisonScenarios": [
         "closing while initialize is pending returns without waiting",
@@ -39551,7 +39638,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "closing while a token refresh is in flight does not wait for the refresh",
       "comparisonScenarios": [
         "closing while a token refresh is in flight does not wait for the refresh"
@@ -39724,7 +39811,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "cancellation during protected-resource discovery aborts the flow",
       "comparisonScenarios": [
         "cancellation during protected-resource discovery aborts the flow"
@@ -39774,7 +39861,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "cancellation during protected-resource discovery aborts the flow",
       "comparisonScenarios": [
         "cancellation during protected-resource discovery aborts the flow",
@@ -39896,7 +39983,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
       "comparisonScenarios": [
         "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
@@ -39948,7 +40035,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "cancellation during dynamic client registration aborts the flow",
       "comparisonScenarios": [
         "cancellation during dynamic client registration aborts the flow",
@@ -40094,7 +40181,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
       "comparisonScenarios": [
         "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
@@ -40266,7 +40353,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1202",
       "scenario": "connecting a server lists tools but not resources",
       "comparisonScenarios": [
         "connecting a server lists tools but not resources",
@@ -40318,7 +40405,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1207",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -40363,7 +40450,7 @@
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1207",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -41419,7 +41506,7 @@
         "cch_coding_agent"
       ],
       "boundary": "Box",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1220",
       "scenario": "box-set-padding-x-rerenders-dynamic-width",
       "comparisonScenarios": [
         "box-set-padding-x-rerenders-dynamic-width"
@@ -42274,7 +42361,7 @@
         "cch_tui"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1220",
       "scenario": "box-set-padding-x-rerenders-dynamic-width",
       "comparisonScenarios": [
         "box-set-padding-x-rerenders-dynamic-width"
@@ -42327,7 +42414,7 @@
         "cch_coding_agent"
       ],
       "boundary": "C++ representation: out-of-band cursor_location() metadata replaces CURSOR_MARKER/fake-cursor strings",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1209",
       "scenario": "overlay-left-of-cursor-keeps-cursor-fake",
       "comparisonScenarios": [
         "overlay-left-of-cursor-keeps-cursor-fake"
@@ -44416,7 +44503,7 @@
         "cch_coding_agent"
       ],
       "boundary": "Editor options/theme/ops",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1215",
       "scenario": "standalone-editor-fake-cursor-is-strippable",
       "comparisonScenarios": [
         "standalone-editor-fake-cursor-is-strippable"
@@ -47523,7 +47610,7 @@
         "cch_tui"
       ],
       "boundary": "Editor options/theme/ops",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1215",
       "scenario": "standalone-editor-fake-cursor-is-strippable",
       "comparisonScenarios": [
         "standalone-editor-fake-cursor-is-strippable"
@@ -50809,7 +50896,7 @@
         "cch_coding_agent"
       ],
       "boundary": "Input presentation/LF/paste",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1216",
       "scenario": "standalone-input-fake-cursor-is-strippable",
       "comparisonScenarios": [
         "standalone-input-fake-cursor-is-strippable"
@@ -52016,7 +52103,7 @@
         "cch_tui"
       ],
       "boundary": "Input presentation/LF/paste",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1216",
       "scenario": "standalone-input-fake-cursor-is-strippable",
       "comparisonScenarios": [
         "standalone-input-fake-cursor-is-strippable"
@@ -68773,7 +68860,7 @@
         "cch_coding_agent"
       ],
       "boundary": "StdinBuffer-equivalent reusable buffering",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1221",
       "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
       "comparisonScenarios": [
         "fragmented-color-reply-never-leaks-or-opens-editor"
@@ -69129,7 +69216,7 @@
         "cch_tui"
       ],
       "boundary": "StdinBuffer-equivalent reusable buffering",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1221",
       "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
       "comparisonScenarios": [
         "fragmented-color-reply-never-leaks-or-opens-editor"
@@ -69379,7 +69466,7 @@
         "cch_tui"
       ],
       "boundary": "StdinBuffer-equivalent reusable buffering",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1221",
       "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
       "comparisonScenarios": [
         "fragmented-color-reply-never-leaks-or-opens-editor"
@@ -69631,7 +69718,7 @@
         "cch_coding_agent"
       ],
       "boundary": "TUI/Container/Component/Overlay/listeners",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1209",
       "scenario": "main-screen-default-hidden",
       "comparisonScenarios": [
         "main-screen-default-hidden"
@@ -70826,7 +70913,7 @@
         "cch_tui"
       ],
       "boundary": "TUI/Container/Component/Overlay/listeners",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1209",
       "scenario": "overlay-left-of-cursor-keeps-cursor-fake",
       "comparisonScenarios": [
         "overlay-left-of-cursor-keeps-cursor-fake"
@@ -73585,7 +73672,7 @@
         "cch_coding_agent"
       ],
       "boundary": "TuiAltScreen / ViewportTUI",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1211",
       "scenario": "third-consecutive-click-selects-line-control",
       "comparisonScenarios": [
         "third-consecutive-click-selects-line-control"
@@ -74220,7 +74307,7 @@
         "cch_tui"
       ],
       "boundary": "TuiAltScreen / ViewportTUI",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1212",
       "scenario": "selection-reset-drops-selection-and-multiclick-history",
       "comparisonScenarios": [
         "selection-reset-drops-selection-and-multiclick-history"
@@ -76122,7 +76209,7 @@
         "cch_tui"
       ],
       "boundary": "TuiAltScreen / ViewportTUI",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1213",
       "scenario": "overlay-unhandled-wheel-scrolls-transcript",
       "comparisonScenarios": [
         "overlay-unhandled-wheel-scrolls-transcript"
@@ -76423,7 +76510,7 @@
         "cch_tui"
       ],
       "boundary": "TuiAltScreen / ViewportTUI",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1212",
       "scenario": "third-consecutive-click-selects-line-control",
       "comparisonScenarios": [
         "third-consecutive-click-selects-line-control"
@@ -77274,7 +77361,7 @@
         "cch_tui"
       ],
       "boundary": "TuiAltScreen / ViewportTUI",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1211",
       "scenario": "overlay-left-of-cursor-keeps-cursor-fake",
       "comparisonScenarios": [
         "overlay-left-of-cursor-keeps-cursor-fake"
@@ -77375,7 +77462,7 @@
         "cch_tui"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1212",
       "scenario": "selection-reset-drops-selection-and-multiclick-history",
       "comparisonScenarios": [
         "selection-reset-drops-selection-and-multiclick-history"
@@ -78676,7 +78763,7 @@
         "cch_tui"
       ],
       "boundary": "TuiAltScreen / ViewportTUI",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1213",
       "scenario": "overlay-unhandled-wheel-scrolls-transcript",
       "comparisonScenarios": [
         "overlay-unhandled-wheel-scrolls-transcript"
@@ -79928,7 +80015,7 @@
         "cch_coding_agent"
       ],
       "boundary": "TuiMainScreen",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1210",
       "scenario": "main-screen-focused-fake-cursor-drawn",
       "comparisonScenarios": [
         "main-screen-focused-fake-cursor-drawn"
@@ -80233,7 +80320,7 @@
         "cch_coding_agent"
       ],
       "boundary": "TuiMainScreen",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1210",
       "scenario": "main-screen-focused-fake-cursor-drawn",
       "comparisonScenarios": [
         "main-screen-focused-fake-cursor-drawn"
@@ -83040,7 +83127,7 @@
         "cch_coding_agent"
       ],
       "boundary": "detectCapabilities/encode*/dimensions/renderImage helpers",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1222",
       "scenario": "herdr-detected-before-outer-terminal",
       "comparisonScenarios": [
         "herdr-detected-before-outer-terminal"
@@ -84007,7 +84094,7 @@
         "cch_tui"
       ],
       "boundary": "Settings -> TUI renderer -> editor cursor markers",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1225",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -84152,7 +84239,7 @@
         "cch_tui"
       ],
       "boundary": "AltScreen image layers -> terminal",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1225",
       "scenario": "native differential tool-result at 100 columns",
       "comparisonScenarios": [
         "native differential tool-result at 100 columns"
@@ -84787,7 +84874,7 @@
         "cch_tui"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1221",
       "scenario": "shifted-symbol-keys-match-produced-character",
       "comparisonScenarios": [
         "shifted-symbol-keys-match-produced-character"
@@ -84839,7 +84926,7 @@
         "cch_coding_agent"
       ],
       "boundary": "Keys parse/match/printable helpers with per-terminal state",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1221",
       "scenario": "shifted-symbol-keys-match-produced-character",
       "comparisonScenarios": [
         "shifted-symbol-keys-match-produced-character"
@@ -85141,7 +85228,7 @@
         "cch_coding_agent"
       ],
       "boundary": "Keys parse/match/printable helpers with per-terminal state",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1221",
       "scenario": "shifted-symbol-keys-match-produced-character",
       "comparisonScenarios": [
         "shifted-symbol-keys-match-produced-character"
@@ -85194,7 +85281,7 @@
         "cch_tui"
       ],
       "boundary": "Terminal -> program-status writer",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1225",
       "scenario": "program status reports idle, blocked, working, done and error through the terminal contract",
       "comparisonScenarios": [
         "program status reports idle, blocked, working, done and error through the terminal contract"
@@ -85339,7 +85426,7 @@
       "consumer": "none (no C++ caller; C++ draws the cursor as raw reverse video)",
       "consumerOwners": [],
       "boundary": "C++ representation: out-of-band cursor_location() metadata; no fake-cursor marker contract",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1209",
       "scenario": "standalone-input-fake-cursor-is-strippable",
       "comparisonScenarios": [
         "standalone-input-fake-cursor-is-strippable"
@@ -85540,7 +85627,7 @@
         "cch_tui"
       ],
       "boundary": "See base row `images-placement-herdr`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1035",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -85584,7 +85671,7 @@
         "cch_tui"
       ],
       "boundary": "See base row `transcript-state-scrollback`.",
-      "implementation_ticket": null,
+      "implementation_ticket": "#831",
       "scenario": null,
       "comparisonScenarios": [],
       "evidence": {
@@ -85979,7 +86066,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1221",
       "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
       "comparisonScenarios": [
         "fragmented-color-reply-never-leaks-or-opens-editor"
@@ -86180,7 +86267,7 @@
         "cch_tui"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1222",
       "scenario": "herdr-detected-before-outer-terminal",
       "comparisonScenarios": [
         "herdr-detected-before-outer-terminal"
@@ -86231,7 +86318,7 @@
         "cch_tui"
       ],
       "boundary": "InteractiveSessionRun transcript rebuild -> AltScreen selection",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1225",
       "scenario": "native differential scrollback at 72 columns",
       "comparisonScenarios": [
         "native differential scrollback at 72 columns"
@@ -86327,7 +86414,7 @@
       "consumer": "none (C++ has no marker strings)",
       "consumerOwners": [],
       "boundary": "C++ representation: out-of-band cursor metadata",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1209",
       "scenario": "standalone-input-fake-cursor-is-strippable",
       "comparisonScenarios": [
         "standalone-input-fake-cursor-is-strippable"
@@ -86375,7 +86462,7 @@
       "consumer": "none (C++ TUI roots have no fake-cursor resolution stage)",
       "consumerOwners": [],
       "boundary": "C++ representation: out-of-band cursor metadata",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1209",
       "scenario": "truncated-line-drops-unterminated-fake-cursor",
       "comparisonScenarios": [
         "truncated-line-drops-unterminated-fake-cursor"
@@ -86425,7 +86512,7 @@
         "cch_tui"
       ],
       "boundary": "C++ representation: no zero-width APC cursor marker in text",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1220",
       "scenario": "truncated-line-drops-unterminated-fake-cursor",
       "comparisonScenarios": [
         "truncated-line-drops-unterminated-fake-cursor"
@@ -86527,7 +86614,7 @@
         "cch_tui"
       ],
       "boundary": "TUI wheel routing -> overlay/transcript",
-      "implementation_ticket": null,
+      "implementation_ticket": "#1225",
       "scenario": "native differential scrollback at 72 columns",
       "comparisonScenarios": [
         "native differential scrollback at 72 columns"
