@@ -40,6 +40,9 @@ include_guard(GLOBAL)
         tests/durable/NestedToolTaskTest.cpp
         tests/durable/HarnessToolSearchTest.cpp
         tests/durable/ImagesTest.cpp
+        tests/durable/EnvIoReadToolTest.cpp
+        tests/durable/EnvIoListingTest.cpp
+        tests/durable/EnvIoListingDifferentialTest.cpp
         tests/support/ImagePixels.cpp
 )
     target_include_directories(cch_tests_durable PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})

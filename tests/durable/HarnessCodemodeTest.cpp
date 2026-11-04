@@ -193,6 +193,10 @@ public:
     support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) override {
         return inner_->list(path, stop);
     }
+    support::Expected<TreeListing> list_files(std::string_view, TreeListingOptions, std::stop_token) override {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Workspace, "list_files is not exercised by this double"));
+    }
     support::Expected<std::string> create_temp_dir(std::string_view prefix, std::stop_token stop) override {
         auto created = inner_->create_temp_dir(prefix, stop);
         if (created) created_dirs.push_back(*created);
