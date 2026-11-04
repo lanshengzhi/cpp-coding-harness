@@ -4509,17 +4509,6 @@
         ]
       },
       {
-        "id": "TM-application-1118-withdrawn",
-        "ticket": "#1206",
-        "history": false,
-        "note": "Withdrawn by the #1202 per-claim disposition (commit a29188d3e): the #1118 receipt's three disputed application rows reverted to source-audit status. They stay with the #1206 application follow-up (the proposal's N4 pattern for #1202-disputed application rows); re-anchoring goes through #1202.",
-        "rows": [
-          "cch_coding_agent:codemode-application-namespace",
-          "cch_coding_agent:codemode-description-catalog",
-          "cch_coding_agent:codemode-description-loadout"
-        ]
-      },
-      {
         "id": "TM-application-1104-withdrawn",
         "ticket": "#1206",
         "history": false,
@@ -4545,28 +4534,6 @@
         "note": "Proposal history retarget (implemented rows): delivered by the closed #1116 summary-serialization slice. Verification unchanged.",
         "rows": [
           "cch_coding_agent:Session:compaction:summary-serialization"
-        ]
-      },
-      {
-        "id": "TM-codemode-1179-withdrawn",
-        "ticket": "#1202",
-        "history": false,
-        "note": "Withdrawn by the #1202 per-claim disposition (commit a29188d3e): #1179's four disputed rows (implemented; tickets nulled) revert to source-audit status and await re-anchoring through #1202's acceptance criteria.",
-        "rows": [
-          "cch_codemode:codemode-source-timeout-option",
-          "cch_codemode:codemode-worker-admission",
-          "cch_codemode:codemode-worker-construction-failure",
-          "cch_codemode:codemode-worker-repeated-cancellation"
-        ]
-      },
-      {
-        "id": "TM-durable-1090-withdrawn",
-        "ticket": "#1202",
-        "history": false,
-        "note": "Withdrawn by the #1202 per-claim disposition (commit a29188d3e): #1090's two disputed comparisons downgraded the rows' receipt backing; re-anchoring goes through #1202's acceptance criteria.",
-        "rows": [
-          "cch_durable:image-processor",
-          "cch_durable:read-image"
         ]
       },
       {
@@ -4725,16 +4692,12 @@
         "id": "TM-mcp-withdrawn",
         "ticket": "#1202",
         "history": false,
-        "note": "Withdrawn by the #1202 dispositions (commits a4df1a1/a29188d3e): the #1189 whole record and #1181's four disputed claims; the rows revert to source-audit status and await re-anchoring through #1202's acceptance criteria.",
+        "note": "Withdrawn by the #1202 dispositions (commits a4df1a1/a29188d3e): the #1189 whole record and #1181's four disputed claims; the rows revert to source-audit status and await re-anchoring through #1202's acceptance criteria. The #1202 re-anchor (commit 71064c7dc, 2026-11-05) returned the receipt-backed rows cch_mcp:mcp-oauth-discovery, cch_mcp:mcp-oauth-flow-cancellation, cch_mcp:mcp-oauth-registration-signin, cch_mcp:mcp-resources-list-read to their delivery-backed tickets; only the still-withdrawn rows remain mapped here.",
         "rows": [
           "cch_mcp:mcp-client-lifecycle",
           "cch_mcp:mcp-close-no-refresh",
-          "cch_mcp:mcp-oauth-discovery",
-          "cch_mcp:mcp-oauth-flow-cancellation",
           "cch_mcp:mcp-oauth-refresh",
-          "cch_mcp:mcp-oauth-registration-signin",
-          "cch_mcp:mcp-refresh-cancellation",
-          "cch_mcp:mcp-resources-list-read"
+          "cch_mcp:mcp-refresh-cancellation"
         ]
       }
     ]

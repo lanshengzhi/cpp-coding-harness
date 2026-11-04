@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
+          "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -194,7 +194,7 @@
         },
         {
           "path": "tests/coding_agent/McpHttpSessionTest.cpp",
-          "sha256": "4e9534e81484a168093ab82b8d3ce8ed13a3829388dd3cfd6bb35ec7dc394471"
+          "sha256": "de32c8cea8e5c740fd2b96b432d7e185a2b9b498413ad195e6be557da1bbac8f"
         },
         {
           "path": "tests/coding_agent/McpStructuredContentTest.cpp",
@@ -230,14 +230,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1158-registration-shared-1090-1101-1104.xml"
+          "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1101.xml"
         ],
-        "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
-        "recordedAt": "2026-11-02T15:26:49Z",
+        "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+        "recordedAt": "2026-11-04T18:49:56Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-shared-1090-1101-1104.xml",
-          "sha256": "9b34aafcc652b04156f7121f5bc2f8531b7a2c695c248740cc60f2193ba5645b"
+          "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1101.xml",
+          "sha256": "5525aab9f7a48770af43e19ec9e789215f83d9d3ee56b03a63565b3e5ccfd742"
         }
       },
       "rows": [
@@ -584,6 +584,32 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1202": {
+        "reason": "#1202 receipt-anchoring slice: the shared McpHttpSessionTest.cpp transport cases gained frozen transports.json comparisons for the #1181 re-anchor, which changes this record's pinned input; the recorded 36-case selection was rebuilt and rerun on the updated tree into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "tests/coding_agent/McpHttpSessionTest.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1158-registration-shared-1090-1101-1104.xml"
+          ],
+          "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
+          "recordedAt": "2026-11-02T15:26:49Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-shared-1090-1101-1104.xml",
+            "sha256": "9b34aafcc652b04156f7121f5bc2f8531b7a2c695c248740cc60f2193ba5645b"
+          }
+        }
       }
     },
     {
@@ -604,14 +630,14 @@
           "^(issue1090|issue1101|issue1104)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1179m.xml"
+          "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1090.xml"
         ],
-        "testedRevision": "320df81d26427a6a57f99a71e8d3b0bb0208b108",
-        "recordedAt": "2026-11-02T15:46:15Z",
+        "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+        "recordedAt": "2026-11-04T18:45:48Z",
         "selected": 36,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1179m.xml",
-          "sha256": "8f87106fd9a2f9484407a76dbc9a3474b7b0f468ae52563fa7c79689fc463d6d"
+          "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1090.xml",
+          "sha256": "12422e606a7e4ff9ec424846901a000c84ba04067fee05b2cf96f7968bfe4515"
         }
       },
       "inputs": [
@@ -677,19 +703,19 @@
         },
         {
           "path": "tests/durable/HarnessImagesTest.cpp",
-          "sha256": "44db6c58b5975311f474a04b208eac13f1c2e340903fc81829b40d2811f0ed93"
+          "sha256": "cf45cd64890c7d9880acd7a5fc166959987902cae5236e98b8598275dd4f75b1"
         },
         {
           "path": "tests/durable/ImageExpectation.hpp",
-          "sha256": "b7cc0d3f647dc617847501eb81ed61e9430e21fd49b3e3b8d8f303faf3762aae"
+          "sha256": "18c4fe6ef01b8767c85880b2bb6c4ebf52245de3fae26f69256356fbc1577e08"
         },
         {
           "path": "tests/durable/ImagesTest.cpp",
-          "sha256": "bdd8aab60815f3528605bc0f4e673af723648da4edc286eac35e047edf9bc9f2"
+          "sha256": "581ac104beafb79dac37771f20216686419d4b8b54b1865f845fe7221f75f358"
         },
         {
           "path": "tests/support/ImageFixture.hpp",
-          "sha256": "2e9e130c6b6f2cd8a24a1307e5b274d4ffb63793e2b9e2d2aaf3af7217921bdf"
+          "sha256": "0f4d7ef75a666e24931a6d79020c2626b9c22c7eecbbd9e55f2062f09b79c054"
         },
         {
           "path": "tests/support/ImagePixels.cpp",
@@ -698,6 +724,14 @@
         {
           "path": "tests/support/ImagePixels.hpp",
           "sha256": "3362ad8688dff3278a9cffe8c60e6dade5bceaac6cd66c25cae4c0ef27bf083c"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1056/environment.json",
+          "sha256": "46143667f23d728c6ee901d8d9b02fa6dda032f0748c3f49e3e28de438e71824"
+        },
+        {
+          "path": "fixtures/pi-v1.3.0/audit-1056/manifest.json",
+          "sha256": "97b9f7e760fa4183d4c8a2038476b328699911f21cce89e5286199adff7457a2"
         }
       ],
       "rows": [
@@ -1110,6 +1144,36 @@
         "changedInputs": [
           "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json"
         ]
+      },
+      "revalidation1202": {
+        "reason": "#1202 re-anchoring: the two withdrawn audit-1056/environment.json comparisons now read the registered artifact — ImagesTest drives a generated 40x20 RGBA PNG against the frozen pass-through/shrink/limit observation and HarnessImagesTest compares the frozen resized-read diagnostic text — so the re-anchored claims promote again. The touched test and helper inputs are re-pinned, the audit-1056 family the re-anchored comparisons cite is now pinned alongside the audit-1090 pins (manifest + environment.json), and the recorded 36-case selection was rebuilt and rerun on the re-anchored tree into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/audit-1056/environment.json",
+          "fixtures/pi-v1.3.0/audit-1056/manifest.json",
+          "tests/durable/HarnessImagesTest.cpp",
+          "tests/durable/ImageExpectation.hpp",
+          "tests/durable/ImagesTest.cpp",
+          "tests/support/ImageFixture.hpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "^(issue1090|issue1101|issue1104)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1179m.xml"
+          ],
+          "testedRevision": "320df81d26427a6a57f99a71e8d3b0bb0208b108",
+          "recordedAt": "2026-11-02T15:46:15Z",
+          "selected": 36,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1179m.xml",
+            "sha256": "8f87106fd9a2f9484407a76dbc9a3474b7b0f468ae52563fa7c79689fc463d6d"
+          }
+        }
       }
     },
     {
@@ -1289,7 +1353,7 @@
         },
         {
           "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-          "sha256": "f923e46e26fda8ed4b4fd674751e98bb1e5ccc3f3e9329775612fe52de60746f"
+          "sha256": "a0bc3ef9c60bc9128cb4d86a756cc2c41100c60045cf4a65136096c739a24c6e"
         },
         {
           "path": "tests/coding_agent/CodemodeParityTest.cpp",
@@ -1297,7 +1361,7 @@
         },
         {
           "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-          "sha256": "e0e03f8d53717464174a8b0a569014b125fd6c976ded60f87920e5d4efe0721e"
+          "sha256": "22bdd2971ff53daa0ae426572c7ebf043cd81690b76660cb22dc197631399d24"
         },
         {
           "path": "tests/coding_agent/McpStdioSessionTest.cpp",
@@ -1373,7 +1437,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
+          "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1397,14 +1461,14 @@
           "issue1118",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1118.xml"
+          "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1118.xml"
         ],
-        "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
-        "recordedAt": "2026-11-02T15:26:50Z",
+        "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+        "recordedAt": "2026-11-04T18:46:43Z",
         "selected": 19,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1118.xml",
-          "sha256": "7d524511f00102c486bc9fdc410f4ec9392606300acc913f54525fce3cb64b15"
+          "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1118.xml",
+          "sha256": "f3f493b06722f2087d3c106ca62c9411e63eb0ae0774727d53b32aa78ff65b6b"
         }
       },
       "rows": [
@@ -1839,6 +1903,33 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1202": {
+        "reason": "#1202 re-anchoring: the three withdrawn rows' discriminating cases in CodemodeCatalogSessionTest now read the registered audit-1053/application-catalog.json (frozen empty-catalog baseline, advertised-globals line, only-loadout hidden set), and the McpSessionIntegrationTest.cpp comparison this record also pins gained the frozen application-initialization.json comparisons for the #1181 re-anchor. The touched inputs are re-pinned and the recorded 19-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+          "tests/coding_agent/McpSessionIntegrationTest.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1118",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1118.xml"
+          ],
+          "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
+          "recordedAt": "2026-11-02T15:26:50Z",
+          "selected": 19,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1118.xml",
+            "sha256": "7d524511f00102c486bc9fdc410f4ec9392606300acc913f54525fce3cb64b15"
+          }
+        }
       }
     },
     {
@@ -2926,31 +3017,31 @@
         },
         {
           "path": "tests/coding_agent/McpHttpSessionTest.cpp",
-          "sha256": "4e9534e81484a168093ab82b8d3ce8ed13a3829388dd3cfd6bb35ec7dc394471"
+          "sha256": "de32c8cea8e5c740fd2b96b432d7e185a2b9b498413ad195e6be557da1bbac8f"
         },
         {
           "path": "tests/coding_agent/McpOAuthDiscoveryTest.cpp",
-          "sha256": "99a43bd06cdd18253d92c9778732a724eba78eb6b66c3081ae13848d34577c14"
+          "sha256": "526135eb702cfc30fc5c4a1f9a65279273f25038364e210e0da7cb0cbb785b88"
         },
         {
           "path": "tests/coding_agent/McpOAuthFlowTest.cpp",
-          "sha256": "7efa14554a8a6979b2ea7a67698b90cdfa7e877dafc26f7ae4901cb56185031d"
+          "sha256": "4ca312ddd01613f224996ee81f1477f4303e8e72c901d7341fda51845a9f9ce2"
         },
         {
           "path": "tests/coding_agent/McpOAuthSessionTest.cpp",
-          "sha256": "8942a42a8af08a5a3aaa61cf16711659dacad2aaf8826ca2936f161f5c49d46f"
+          "sha256": "3a14f1c9d8831289d8831d702a05dddc44e197cb8b0e0876928cd0d46d7ef1c0"
         },
         {
           "path": "tests/coding_agent/McpOAuthSignInTest.cpp",
-          "sha256": "cc1cf4eb1931d2df039850fe555b8b7ab26e988610a11000d89bc7d92718131e"
+          "sha256": "51e7b03578039d16fa5a2bbd896f6ba7f602bc9e383d30f0958826c47ef755bc"
         },
         {
           "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-          "sha256": "e0e03f8d53717464174a8b0a569014b125fd6c976ded60f87920e5d4efe0721e"
+          "sha256": "22bdd2971ff53daa0ae426572c7ebf043cd81690b76660cb22dc197631399d24"
         },
         {
           "path": "tests/coding_agent/McpResourceToolsTest.cpp",
-          "sha256": "32893219e69c834323ec5fa4f36bd515dedcb0cd2464bc38fd703c3341b778d1"
+          "sha256": "6ac40c0729fe18c8611cfe23eecd863d56c9b157383c1a42785c1fcb825aea04"
         },
         {
           "path": "tests/support/FakeOAuthHttpClient.hpp",
@@ -3026,7 +3117,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
+          "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
@@ -3046,14 +3137,14 @@
           "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1181.xml"
+          "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1181.xml"
         ],
-        "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
-        "recordedAt": "2026-11-02T15:26:55Z",
+        "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+        "recordedAt": "2026-11-04T18:47:07Z",
         "selected": 16,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1181.xml",
-          "sha256": "1d857fbe57e05825b29759651e4c2ff911ebb154397e90c34b214b16a1d7ef6e"
+          "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1181.xml",
+          "sha256": "d51db652ed011308bf64c6ee7efa2765499cccc395e81c0e2aa55d8daf4d79b3"
         }
       },
       "rows": [
@@ -3481,6 +3572,38 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1202": {
+        "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts — the resource-listing comparisons compare audit-1052/application-initialization.json's frozen method order, resource and failure fields, and the OAuth cancellation/sign-in/issuer cases compare audit-1052/oauth-lifecycle.json's frozen stalled paths, authorization URL shape and request accounting; the transports.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. New comparisons carry the [issue1181] tag. The touched inputs are re-pinned and the recorded 16-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "tests/coding_agent/McpHttpSessionTest.cpp",
+          "tests/coding_agent/McpOAuthDiscoveryTest.cpp",
+          "tests/coding_agent/McpOAuthFlowTest.cpp",
+          "tests/coding_agent/McpOAuthSessionTest.cpp",
+          "tests/coding_agent/McpOAuthSignInTest.cpp",
+          "tests/coding_agent/McpResourceToolsTest.cpp",
+          "tests/coding_agent/McpSessionIntegrationTest.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-R",
+            "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1181.xml"
+          ],
+          "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
+          "recordedAt": "2026-11-02T15:26:55Z",
+          "selected": 16,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1181.xml",
+            "sha256": "1d857fbe57e05825b29759651e4c2ff911ebb154397e90c34b214b16a1d7ef6e"
+          }
+        }
       }
     },
     {
@@ -4197,7 +4320,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
+          "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4281,6 +4404,12 @@
       },
       "revalidation1183rulings": {
         "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1202mappings": {
+        "reason": "The #1202 re-anchor (commit 71064c7dc, 2026-11-05) returned the thirteen re-anchored rows to their delivery-backed tickets, so the plan's withdrawn ticketMappings entries for them were dropped and TM-mcp-withdrawn was reduced to its still-withdrawn rows. The plan is a pinned input of this record; its digest is refreshed with no rows/scenarios/routing changes and no new verification claim.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
@@ -4478,7 +4607,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
+          "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4543,6 +4672,12 @@
       },
       "revalidation1183rulings": {
         "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1202mappings": {
+        "reason": "The #1202 re-anchor (commit 71064c7dc, 2026-11-05) returned the thirteen re-anchored rows to their delivery-backed tickets, so the plan's withdrawn ticketMappings entries for them were dropped and TM-mcp-withdrawn was reduced to its still-withdrawn rows. The plan is a pinned input of this record; its digest is refreshed with no rows/scenarios/routing changes and no new verification claim.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
@@ -4962,7 +5097,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
+          "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5058,6 +5193,12 @@
       },
       "revalidation1183rulings": {
         "reason": "Owner ambiguity rulings 2026-11-05 under the #1183 reconciliation: the plan's ticketMappings section gains TM-durable-abort-admission-ruling-1148 (the proposal group-2 abort-family and admission-family candidates, all mapped to #1148) and TM-session-implemented-live-verification-1180 (the seven implemented Session rows still citing #1058-draft, mapped to live verification owner #1180). The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
+      },
+      "revalidation1202mappings": {
+        "reason": "The #1202 re-anchor (commit 71064c7dc, 2026-11-05) returned the thirteen re-anchored rows to their delivery-backed tickets, so the plan's withdrawn ticketMappings entries for them were dropped and TM-mcp-withdrawn was reduced to its still-withdrawn rows. The plan is a pinned input of this record; its digest is refreshed with no rows/scenarios/routing changes and no new verification claim.",
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
@@ -5213,15 +5354,15 @@
         },
         {
           "path": "tests/codemode/CodemodeOwnerTest.cpp",
-          "sha256": "fae6f7702ab09d4eacfae75790209317cf625cddc2f527954ce816e52890d84b"
+          "sha256": "f6a343188f9bf3615e6df4915c4a76fdb318c8c9a31cc7f1515042e6f03beeda"
         },
         {
           "path": "tests/codemode/CodemodeRemoteTest.cpp",
-          "sha256": "da15328cb17189892fa332576ede0a3682741c71580dafb7bae9a8fb1a75712c"
+          "sha256": "c96afb7bcf00c7ce8407aa81c482f13fdf54948dd8cfb4b8c64486cab1bd7fad"
         },
         {
           "path": "tests/coding_agent/CodemodeSandboxTest.cpp",
-          "sha256": "1212804f227138c246ed7b6a035f3bb44ebd2f0994a9eae868545fc36f3da19a"
+          "sha256": "3b1e6212459146e01b20eae6b9077dfcd579d14b2a08fff8597628312d10576f"
         },
         {
           "path": "fixtures/codemode/quickjs/prelude.js",
@@ -5269,7 +5410,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
+          "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6203,14 +6344,14 @@
           "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1179-codemode-revalidation-main.xml"
+          "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1179.xml"
         ],
-        "testedRevision": "320df81d26427a6a57f99a71e8d3b0bb0208b108",
-        "recordedAt": "2026-11-02T15:46:15Z",
+        "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+        "recordedAt": "2026-11-04T18:47:37Z",
         "selected": 52,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-revalidation-main.xml",
-          "sha256": "d5683b47bb87e8cf6ff95135b9d5932f1da59ccde6d002480246fe498bad57b4"
+          "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1179.xml",
+          "sha256": "8eb1bb6f2e7998bf56ae478e918c4214b925c5a1bd25856253f6882fc9ea8366"
         }
       },
       "revalidation1179m": {
@@ -6232,6 +6373,34 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1202": {
+        "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts — the timeout comparison and deadline discriminating case drive audit-1053/script-execution.json's frozen deadline scenario, the script-error comparison compares its frozen name/message/stack/output, and the worker admission/settlement cases compare audit-1053/worker-lifetime.json's frozen counters and denial message; the remaining remote-exchange.json and inline-interrupt.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. The touched inputs are re-pinned and the recorded 52-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "tests/codemode/CodemodeOwnerTest.cpp",
+          "tests/codemode/CodemodeRemoteTest.cpp",
+          "tests/coding_agent/CodemodeSandboxTest.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-R",
+            "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1179-codemode-revalidation-main.xml"
+          ],
+          "testedRevision": "320df81d26427a6a57f99a71e8d3b0bb0208b108",
+          "recordedAt": "2026-11-02T15:46:15Z",
+          "selected": 52,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-revalidation-main.xml",
+            "sha256": "d5683b47bb87e8cf6ff95135b9d5932f1da59ccde6d002480246fe498bad57b4"
+          }
+        }
       }
     },
     {
@@ -6304,7 +6473,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
+          "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6429,6 +6598,12 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1202mappings": {
+        "reason": "The #1202 re-anchor (commit 71064c7dc, 2026-11-05) returned the thirteen re-anchored rows to their delivery-backed tickets, so the plan's withdrawn ticketMappings entries for them were dropped and TM-mcp-withdrawn was reduced to its still-withdrawn rows. The plan is a pinned input of this record; its digest is refreshed with no rows/scenarios/routing changes and no new verification claim.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+        ]
       }
     },
     {
@@ -6469,7 +6644,7 @@
         },
         {
           "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-          "sha256": "f923e46e26fda8ed4b4fd674751e98bb1e5ccc3f3e9329775612fe52de60746f"
+          "sha256": "a0bc3ef9c60bc9128cb4d86a756cc2c41100c60045cf4a65136096c739a24c6e"
         },
         {
           "path": "tests/coding_agent/tui/ThemeTest.cpp",
@@ -6497,7 +6672,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "841cb03db36f55e96ed5c646d4cf6cbcc944620435310590a8c2ec07e0e10aea"
+          "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6549,14 +6724,14 @@
           "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
           "--output-on-failure",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1177-app-subset.xml"
+          "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1177.xml"
         ],
-        "testedRevision": "ef3fc9b281ad15e3a3ce5f5d1866fcd037894eb6",
-        "recordedAt": "2026-11-03T03:10:00Z",
+        "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+        "recordedAt": "2026-11-04T18:50:11Z",
         "selected": 9,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1177-app-subset.xml",
-          "sha256": "0accacec69781e31740a07f982293a4072e3d51e056025adcd726bdfa4ae899a"
+          "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1177.xml",
+          "sha256": "063b9f88543fe791e7f57806147452fe17fc0068a6459d265372d22ab85926a1"
         }
       },
       "rows": [
@@ -6654,6 +6829,32 @@
         "changedInputs": [
           "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
         ]
+      },
+      "revalidation1202": {
+        "reason": "#1202 receipt-anchoring slice: the application rows' discriminating cases live in CodemodeCatalogSessionTest.cpp, which now reads the registered audit-1053/application-catalog.json for the #1118 re-anchor; this record's pinned input changed and its recorded 9-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged, and this makes no new verification claim about them. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
+        "changedInputs": [
+          "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+          "tests/coding_agent/CodemodeCatalogSessionTest.cpp"
+        ],
+        "previousValidation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-R",
+            "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1177-app-subset.xml"
+          ],
+          "testedRevision": "ef3fc9b281ad15e3a3ce5f5d1866fcd037894eb6",
+          "recordedAt": "2026-11-03T03:10:00Z",
+          "selected": 9,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1177-app-subset.xml",
+            "sha256": "0accacec69781e31740a07f982293a4072e3d51e056025adcd726bdfa4ae899a"
+          }
+        }
       }
     }
   ]

@@ -592,27 +592,32 @@ class CommittedLedgerTest(unittest.TestCase):
             self.assertEqual(applied, row["appliedCorrections"], row["id"])
 
 
-class WithdrawnLedgerTest(unittest.TestCase):
-    """The 13 rows #1202 disputed stay withdrawn in the committed ledger.
+class ReanchoredLedgerTest(unittest.TestCase):
+    """The 13 rows #1202 disputed are re-anchored and verified again.
 
-    The four receipts stay active with exactly their unaffected claims; the withdrawn claims
-    are preserved in the checked-in 1202-withdrawn-*-claims.json records.
+    The 2026-11-05 re-anchor (commit 71064c7dc) made the cited C++ comparisons and
+    discriminating cases read the registered artifact, so the four receipts
+    (1090-durable-images, 1118-codemode-catalog, 1179-codemode-comparisons,
+    1181-mcp-comparisons) pass scripts/evidence/receipt_boundary.py and the
+    per-claim withdrawal records were removed: the full claims promote again and
+    the rows are delivery-backed verified. The #1104/#1189 whole-record
+    withdrawals are unaffected and stay withdrawn.
     """
 
-    WITHDRAWN = {
-        "cch_coding_agent:codemode-application-namespace": ("partial", "upstream-captured"),
-        "cch_coding_agent:codemode-description-catalog": ("partial", "upstream-captured"),
-        "cch_coding_agent:codemode-description-loadout": ("missing", "upstream-captured"),
-        "cch_codemode:codemode-source-timeout-option": ("implemented", "unverified"),
-        "cch_codemode:codemode-worker-admission": ("implemented", "upstream-captured"),
-        "cch_codemode:codemode-worker-repeated-cancellation": ("implemented", "upstream-captured"),
-        "cch_codemode:codemode-worker-construction-failure": ("implemented", "upstream-captured"),
-        "cch_mcp:mcp-resources-list-read": ("partial", "upstream-captured"),
-        "cch_mcp:mcp-oauth-discovery": ("partial", "upstream-captured"),
-        "cch_mcp:mcp-oauth-flow-cancellation": ("missing", "upstream-captured"),
-        "cch_mcp:mcp-oauth-registration-signin": ("partial", "upstream-captured"),
-        "cch_durable:image-processor": ("implemented", "unverified"),
-        "cch_durable:read-image": ("implemented", "unverified"),
+    REANCHORED = {
+        "cch_coding_agent:codemode-application-namespace": "1118-codemode-catalog",
+        "cch_coding_agent:codemode-description-catalog": "1118-codemode-catalog",
+        "cch_coding_agent:codemode-description-loadout": "1118-codemode-catalog",
+        "cch_codemode:codemode-source-timeout-option": "1179-codemode-comparisons",
+        "cch_codemode:codemode-worker-admission": "1179-codemode-comparisons",
+        "cch_codemode:codemode-worker-repeated-cancellation": "1179-codemode-comparisons",
+        "cch_codemode:codemode-worker-construction-failure": "1179-codemode-comparisons",
+        "cch_mcp:mcp-resources-list-read": "1181-mcp-comparisons",
+        "cch_mcp:mcp-oauth-discovery": "1181-mcp-comparisons",
+        "cch_mcp:mcp-oauth-flow-cancellation": "1181-mcp-comparisons",
+        "cch_mcp:mcp-oauth-registration-signin": "1181-mcp-comparisons",
+        "cch_durable:image-processor": "1090-durable-images",
+        "cch_durable:read-image": "1090-durable-images",
     }
 
     SIBLINGS = {
@@ -631,23 +636,22 @@ class WithdrawnLedgerTest(unittest.TestCase):
             record["id"]: record for record in self.ledger["deliveries"]["records"]
         }
 
-    def test_withdrawn_rows_revert_to_source_audit_status(self) -> None:
+    def test_reanchored_rows_are_verified_by_their_receipts(self) -> None:
         plan = load(PLAN)
         mapped = {
-            row_id: entry["ticket"]
+            row_id
             for entry in consolidate.load_ticket_mappings(plan)
             for row_id in entry["rows"]
         }
-        for row_id, (implementation, verification) in self.WITHDRAWN.items():
+        for row_id, receipt in self.REANCHORED.items():
             with self.subTest(row=row_id):
                 row = self.rows[row_id]
-                self.assertEqual(row["implementation"], implementation)
-                self.assertEqual(row["verification"], verification)
-                self.assertNotIn("delivery", row)
-                # E1 gives every withdrawn row its re-anchoring reference (#1202's
-                # disposition, or the #1206 application follow-up) without touching
-                # the reverted source-audit status.
-                self.assertEqual(row["implementation_ticket"], mapped[row_id])
+                self.assertEqual(row["implementation"], "implemented")
+                self.assertEqual(row["verification"], "verified")
+                self.assertEqual(row["delivery"], receipt)
+                # The re-anchored row carries its delivery ticket again, so it
+                # must not be retargeted by a ticket mapping.
+                self.assertNotIn(row_id, mapped)
 
     def test_unaffected_siblings_stay_verified_by_their_receipts(self) -> None:
         for row_id, receipt in self.SIBLINGS.items():
@@ -656,13 +660,18 @@ class WithdrawnLedgerTest(unittest.TestCase):
                 self.assertEqual(row["verification"], "verified")
                 self.assertEqual(row["delivery"], receipt)
 
-    def test_ledger_embeds_the_effective_deliveries(self) -> None:
+    def test_ledger_embeds_the_full_reanchored_deliveries(self) -> None:
         self.assertEqual(
             [claim["id"] for claim in self.deliveries["1118-codemode-catalog"]["rows"]],
-            ["cch_coding_agent:codemode-models-description-gate"],
+            [
+                "cch_coding_agent:codemode-description-catalog",
+                "cch_coding_agent:codemode-description-loadout",
+                "cch_coding_agent:codemode-application-namespace",
+                "cch_coding_agent:codemode-models-description-gate",
+            ],
         )
-        self.assertEqual(len(self.deliveries["1179-codemode-comparisons"]["rows"]), 35)
-        self.assertEqual(len(self.deliveries["1181-mcp-comparisons"]["rows"]), 3)
+        self.assertEqual(len(self.deliveries["1179-codemode-comparisons"]["rows"]), 39)
+        self.assertEqual(len(self.deliveries["1181-mcp-comparisons"]["rows"]), 7)
         image_processor = next(
             claim
             for claim in self.deliveries["1090-durable-images"]["rows"]
@@ -670,17 +679,21 @@ class WithdrawnLedgerTest(unittest.TestCase):
         )
         self.assertEqual(
             [comparison["artifact"] for comparison in image_processor["comparisons"]],
-            ["audit-1090/images.json"],
+            ["audit-1090/images.json", "audit-1056/environment.json"],
         )
         read_image = next(
             claim
             for claim in self.deliveries["1090-durable-images"]["rows"]
             if claim["id"] == "cch_durable:read-image"
         )
-        self.assertEqual(len(read_image["comparisons"]), 3)
-        for claim in self.deliveries["1090-durable-images"]["rows"]:
-            for comparison in claim["comparisons"]:
-                self.assertNotEqual(comparison["artifact"], "audit-1056/environment.json")
+        self.assertEqual(len(read_image["comparisons"]), 4)
+
+    def test_every_verified_row_is_delivery_backed(self) -> None:
+        delivered = [row["id"] for row in self.ledger["rows"] if "delivery" in row]
+        self.assertEqual(len(delivered), 109)
+        for row in self.ledger["rows"]:
+            if row["verification"] == "verified":
+                self.assertIn(row["id"], delivered)
 
     def test_committed_receipts_keep_their_full_claims(self) -> None:
         """The deliveries file preserves the full receipts; the ledger embeds the effective set."""
@@ -695,13 +708,6 @@ class WithdrawnLedgerTest(unittest.TestCase):
             if claim["id"] == "cch_durable:image-processor"
         )
         self.assertEqual(len(image_processor["comparisons"]), 2)
-
-    def test_every_verified_row_is_delivery_backed(self) -> None:
-        delivered = [row["id"] for row in self.ledger["rows"] if "delivery" in row]
-        self.assertEqual(len(delivered), 96)
-        for row in self.ledger["rows"]:
-            if row["verification"] == "verified":
-                self.assertIn(row["id"], delivered)
 
     def test_committed_ledger_matches_a_fresh_build(self) -> None:
         plan = load(PLAN)
