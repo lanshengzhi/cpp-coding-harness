@@ -66,9 +66,9 @@ folded into membership.
 | By lane | 1047:32, 1048:30, 1049:20, 1050:954, 1051:50, 1052:31, 1053:68, 1054:111, 1055:40, 1056:70, 1057:58 |
 | By owner | cch_tui:925, cch_durable:212, cch_coding_agent:159, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
 | Membership | supported:1435, excluded:29, no-decision:0 |
-| Implementation | implemented:1094, missing:180, not-applicable:18, partial:172 |
-| Verification | not-applicable:28, unverified:1012, upstream-captured:311, verified:113 |
-| Evidence route | captured:424, related-captured:23, declared-comparison:29, cpp-regression-only:10, unobserved:50, historical-v1.0.4:858, not-audited:42, excluded:28 |
+| Implementation | implemented:1083, missing:182, not-applicable:18, partial:181 |
+| Verification | not-applicable:28, unverified:1015, upstream-captured:325, verified:96 |
+| Evidence route | captured:421, related-captured:26, declared-comparison:29, cpp-regression-only:10, unobserved:50, historical-v1.0.4:858, not-audited:42, excluded:28 |
 
 The three dimensions stay separate. A supported row can be implemented and still unverified, and a
 row with an upstream capture is not promoted because a similar row exists elsewhere: a declared
@@ -414,8 +414,29 @@ subsystem. [#1101](1101-structured-content.md) supplies the first whole-row
 comparison receipt. Other delivered slices retain their reports/tests until
 complete per-row receipts accept their broader capability obligations.
 
+The #1104 and #1189 receipts were withdrawn from `1058-deliveries.json` after
+#1202 found their cited tests never read the registered frozen artifact; both
+records are preserved in `1202-withdrawn-1104-receipt.json` and
+`1202-withdrawn-1189-receipt.json`, and their six rows carry their source-audit
+status until re-anchored through #1202 (see the
+[1202 note](1202-1104-evidence-integrity.md) and
+[decision 1 of the 2026-11-04 owner decisions](../../wiki/pi-alignment/decisions-2026-11-04.md)).
+The same #1202 disposition extends per claim to the partly disputed receipts,
+through the checked-in withdrawal records
+`1202-withdrawn-1118-codemode-catalog-claims.json`,
+`1202-withdrawn-1179-codemode-comparisons-claims.json`,
+`1202-withdrawn-1181-mcp-comparisons-claims.json` and
+`1202-withdrawn-1090-durable-images-claims.json`: eleven whole-row claims withdraw
+from #1118 (3 rows), #1179 (4) and #1181 (4), and the two comparisons citing
+`audit-1056/environment.json` drop from #1090's `image-processor` and `read-image`
+claims, whose rows revert fail-closed as well. The four receipts stay active with
+their unaffected claims (41 delivered rows across them: 1 from #1118, 35 from
+#1179, 3 from #1181 and 2 from #1090), and the thirteen
+reverted rows carry their source-audit status until each claim is re-anchored
+through #1202 (owner decision 2 in the 2026-11-04 owner decisions).
+
 The source audit ledgers are not live completion estimates. The generated ledger
-above and its `counts` are authoritative for recorded status; 1019 rows still have
+above and its `counts` are authoritative for recorded status; 1015 rows still have
 missing observations, including 858 historical-only TUI routes. Session ownership
 #1068–#1070, live consumers #1072 and application environment/tools #1073 are delivered.
 Full durable workflows beyond #1079, bidirectional continuation, remaining

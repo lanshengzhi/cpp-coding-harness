@@ -1,0 +1,72 @@
+{
+  "issue": "#1202",
+  "receipt": "1090-durable-images",
+  "withdrawnAt": "2026-11-05",
+  "reason": "Withdrawn from the active receipt per #1202: both comparisons cite audit-1056/environment.json while the cited test reads only audit-1090/images.json through tests/durable/ImageExpectation.hpp, so the environment comparison is not reproducible from the pinned evidence. The disputed comparisons drop from their claims; the two rows revert to their source-audit status, fail-closed per owner decision 2 (docs/wiki/pi-alignment/decisions-2026-11-04.md), pending re-anchoring through #1202's acceptance criteria. The sibling rows image-capability-absent and image-orientation-conversion stay claimed. See 1202-1104-evidence-integrity.md and 1177-application-reconciliation.md.",
+  "claims": [
+    {
+      "id": "cch_durable:image-processor",
+      "withdrawnComparisons": [
+        "the Photon image processor passes an upright inline image through and resizes one over the limits"
+      ],
+      "remainingBoundary": [],
+      "comparisons": [
+        {
+          "artifact": "audit-1090/images.json",
+          "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
+          "test": "The local image processor orients, resizes, and converts like the frozen processor",
+          "testSource": "tests/durable/ImagesTest.cpp"
+        },
+        {
+          "artifact": "audit-1056/environment.json",
+          "scenario": "the Photon image processor passes an upright inline image through and resizes one over the limits",
+          "test": "The local image processor passes through an upright inline image within the limits",
+          "testSource": "tests/durable/ImagesTest.cpp"
+        }
+      ],
+      "discriminatingCase": {
+        "test": "The local image processor passes through an upright inline image within the limits",
+        "testSource": "tests/durable/ImagesTest.cpp",
+        "reason": "The pass-through section keeps the exact base64, the limit section shrinks 2x2 to 1x1 with resized metadata, and the impossible limit prepares nothing; a no-op or an unconditional resizer fails."
+      }
+    },
+    {
+      "id": "cch_durable:read-image",
+      "withdrawnComparisons": [
+        "the read tool returns a resized image content block with its coordinate-mapping diagnostic"
+      ],
+      "remainingBoundary": [],
+      "comparisons": [
+        {
+          "artifact": "audit-1090/images.json",
+          "scenario": "an EXIF-oriented JPEG is made upright before its resized diagnostic",
+          "test": "Read returns a prepared image and the frozen diagnostic through the public Harness",
+          "testSource": "tests/durable/HarnessImagesTest.cpp"
+        },
+        {
+          "artifact": "audit-1090/images.json",
+          "scenario": "a BMP read through the processor converts to PNG and says so",
+          "test": "Read converts BMP to PNG through the configured processor",
+          "testSource": "tests/durable/HarnessImagesTest.cpp"
+        },
+        {
+          "artifact": "audit-1056/environment.json",
+          "scenario": "the read tool returns a resized image content block with its coordinate-mapping diagnostic",
+          "test": "Read returns a prepared image and the frozen diagnostic through the public Harness",
+          "testSource": "tests/durable/HarnessImagesTest.cpp"
+        },
+        {
+          "artifact": "audit-1090/images.json",
+          "scenario": "an inline image within the limits passes through unchanged without a processor",
+          "test": "Capability-absent image reads fail explicitly without another model turn",
+          "testSource": "tests/durable/HarnessImagesTest.cpp"
+        }
+      ],
+      "discriminatingCase": {
+        "test": "Read returns a prepared image and the frozen diagnostic through the public Harness",
+        "testSource": "tests/durable/HarnessImagesTest.cpp",
+        "reason": "The public Harness returns an image block and the exact resize diagnostic; a text-only read or an unmodified payload plus no diagnostic cannot satisfy both."
+      }
+    }
+  ]
+}

@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -727,12 +727,6 @@
                 "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
                 "test": "The local image processor orients, resizes, and converts like the frozen processor",
                 "testSource": "tests/durable/ImagesTest.cpp"
-              },
-              {
-                "artifact": "audit-1056/environment.json",
-                "scenario": "the Photon image processor passes an upright inline image through and resizes one over the limits",
-                "test": "The local image processor passes through an upright inline image within the limits",
-                "testSource": "tests/durable/ImagesTest.cpp"
               }
             ],
             "discriminatingCase": {
@@ -755,12 +749,6 @@
                 "artifact": "audit-1090/images.json",
                 "scenario": "a BMP read through the processor converts to PNG and says so",
                 "test": "Read converts BMP to PNG through the configured processor",
-                "testSource": "tests/durable/HarnessImagesTest.cpp"
-              },
-              {
-                "artifact": "audit-1056/environment.json",
-                "scenario": "the read tool returns a resized image content block with its coordinate-mapping diagnostic",
-                "test": "Read returns a prepared image and the frozen diagnostic through the public Harness",
                 "testSource": "tests/durable/HarnessImagesTest.cpp"
               },
               {
@@ -1394,7 +1382,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -1425,81 +1413,6 @@
           }
         },
         "rows": [
-          {
-            "id": "cch_coding_agent:codemode-description-catalog",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1053/application-catalog.json",
-                "scenario": "the empty codemode catalog still declares globals, discovery and the options grammar",
-                "test": "the empty codemode catalog matches the frozen pi-v1.3.0 description",
-                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
-              },
-              {
-                "artifact": "audit-1053/application-catalog.json",
-                "scenario": "a listed tool section carries its declaration, output type and guidelines",
-                "test": "a listed tool section carries its declaration, output type and guidelines",
-                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
-              },
-              {
-                "artifact": "audit-1053/application-catalog.json",
-                "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
-                "test": "namespaces group sections and the inline budget omits tools with an explicit marker",
-                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
-              },
-              {
-                "artifact": "audit-1053/application-catalog.json",
-                "scenario": "deferred tools are never listed and do not change the description",
-                "test": "deferred tools are never listed and do not change the description",
-                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "a real session's next request lists MCP tools registered late and executes them",
-              "testSource": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-              "reason": "A check that only compares the frozen empty-catalog text passes while the live catalog is stale. This case registers an MCP tool late, asserts the next request lists it, and then executes it through the nested-call seam, so a stale catalog or a listed-but-unexecutable tool fails."
-            }
-          },
-          {
-            "id": "cch_coding_agent:codemode-description-loadout",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1053/application-catalog.json",
-                "scenario": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
-                "test": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
-                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
-              },
-              {
-                "artifact": "audit-1053/application-catalog.json",
-                "scenario": "the only loadout lists every callable tool and hides direct declarations",
-                "test": "the only loadout lists every callable tool and hides direct declarations",
-                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "the only loadout hides direct declarations from the request and lists them in the catalog",
-              "testSource": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-              "reason": "The description alone cannot prove the hidden-declaration projection. This case asserts a real request omits the direct built-ins while the transcript still declares them and the catalog lists them, so a hook that only rewrites descriptions fails."
-            }
-          },
-          {
-            "id": "cch_coding_agent:codemode-application-namespace",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1053/application-catalog.json",
-                "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
-                "test": "namespaces group sections and the inline budget omits tools with an explicit marker",
-                "testSource": "tests/coding_agent/CodemodeCatalogTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "the advertised discovery globals are bound and answer over the callable loadout",
-              "testSource": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-              "reason": "A catalog-only namespace check passes while describeNamespace returns null. This case calls searchTools, describeTool and describeNamespace in a real script and asserts the namespace name, alias lookup, description and member list, so an unimplemented discovery handler fails."
-            }
-          },
           {
             "id": "cch_coding_agent:codemode-models-description-gate",
             "remainingBoundary": [],
@@ -2563,7 +2476,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3020,7 +2933,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -3140,110 +3053,6 @@
               "test": "the MCP HTTP transport attaches a credential only when the server needs one",
               "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp",
               "reason": "A server without an OAuth challenge receives no Authorization header while an OAuth-eligible server does, separating an always-attach or never-attach implementation from per-request credential resolution."
-            }
-          },
-          {
-            "id": "cch_mcp:mcp-resources-list-read",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1052/application-initialization.json",
-                "scenario": "connecting a server lists tools but not resources",
-                "test": "agent session lists MCP resources only on demand and can call tools after a resource failure",
-                "testSource": "tests/coding_agent/McpSessionIntegrationTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/application-initialization.json",
-                "scenario": "resources are listed on demand after the connection is ready",
-                "test": "agent session lists MCP resources only on demand and can call tools after a resource failure",
-                "testSource": "tests/coding_agent/McpSessionIntegrationTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/application-initialization.json",
-                "scenario": "a resources/list failure leaves the server connected and usable for tools",
-                "test": "agent session lists MCP resources only on demand and can call tools after a resource failure",
-                "testSource": "tests/coding_agent/McpSessionIntegrationTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "the real stdio fixture lists, templates, and reads over `resources/*`",
-              "testSource": "tests/coding_agent/McpResourceToolsTest.cpp",
-              "reason": "The on-demand resource operations still return the fixture resources, so a regression that merely stops every resource request (instead of deferring it) passes the startup trace but fails this case."
-            }
-          },
-          {
-            "id": "cch_mcp:mcp-oauth-discovery",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "cancellation during protected-resource discovery aborts the flow",
-                "test": "a cancelled MCP OAuth discovery stops before any registration or token request",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "protected resource discovery retries the bare origin after a path-suffixed miss",
-              "testSource": "tests/coding_agent/McpOAuthDiscoveryTest.cpp",
-              "reason": "Discovery actually runs and retries the bare origin on a path-suffixed miss; a cancellation path that never starts discovery, or that stops after the first miss, fails this case."
-            }
-          },
-          {
-            "id": "cch_mcp:mcp-oauth-flow-cancellation",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "cancellation during protected-resource discovery aborts the flow",
-                "test": "a cancelled MCP OAuth discovery stops before any registration or token request",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "cancellation during dynamic client registration aborts the flow",
-                "test": "a cancelled MCP OAuth client registration stops before any token request",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "cancellation while waiting for the browser callback stops sign-in",
-                "test": "a browser callback wait cancelled by the sign-in stop token stops sign-in",
-                "testSource": "tests/coding_agent/McpOAuthSignInTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "a pasted redirect URL completes the MCP OAuth sign-in",
-              "testSource": "tests/coding_agent/McpOAuthSignInTest.cpp",
-              "reason": "The same prompt and callback race completes normally when not cancelled and exchanges the code, separating a flow that always reports cancellation from one that only stops on the stop token."
-            }
-          },
-          {
-            "id": "cch_mcp:mcp-oauth-registration-signin",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "cancellation during dynamic client registration aborts the flow",
-                "test": "a cancelled MCP OAuth client registration stops before any token request",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "cancellation while waiting for the browser callback stops sign-in",
-                "test": "a browser callback wait cancelled by the sign-in stop token stops sign-in",
-                "testSource": "tests/coding_agent/McpOAuthSignInTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "authorization response from another issuer is rejected before token exchange",
-                "test": "an authorization code from another issuer never reaches the token endpoint",
-                "testSource": "tests/coding_agent/McpOAuthFlowTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "a pasted redirect URL completes the MCP OAuth sign-in",
-              "testSource": "tests/coding_agent/McpOAuthSignInTest.cpp",
-              "reason": "A registered client plus PKCE plus the pasted callback completes and persists the tokens, separating a sign-in path that never registers or never exchanges from the cancellation cases."
             }
           }
         ],
@@ -3469,385 +3278,6 @@
         }
       },
       {
-        "id": "1189-close-refresh",
-        "ticket": "1189",
-        "implementationCommits": [
-          "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028"
-        ],
-        "report": "docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
-        "inputs": [
-          {
-            "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
-          },
-          {
-            "path": "CMakePresets.json",
-            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
-          },
-          {
-            "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "ff7e5b4886208345ffb4ea916d797aa7a503ed5a2591851584cad1071961b25f"
-          },
-          {
-            "path": "cmake/targets/Mcp.cmake",
-            "sha256": "589e3411f006490b201b7f9f758374bd4fe96617c74c29d411f275cc28c25e04"
-          },
-          {
-            "path": "cmake/targets/Support.cmake",
-            "sha256": "536d6b8a41c3fa26de6b0f1e3ba23131e9fb70c5ac6870212752246606bba438"
-          },
-          {
-            "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
-          },
-          {
-            "path": "cmake/tests/McpTests.cmake",
-            "sha256": "ee04ce20f26bf81af1ef236c5e1bf92a9715a49c7049a2597a398f41f090a148"
-          },
-          {
-            "path": "cmake/tests/TestsSetup.cmake",
-            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
-          },
-          {
-            "path": "fixtures/pi-mcp/http_server.py",
-            "sha256": "cff24b5735395383080f7fd6e924a58024025cc35db983f854fac82104397502"
-          },
-          {
-            "path": "fixtures/pi-mcp/oauth/replay.json",
-            "sha256": "e73ce69e0e8fde80a38fc2ec73393c26ac1ca775477fac69f94523334fc2a539"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/audit-1052/application-initialization.json",
-            "sha256": "71d447812fc6fbf5c95ddc423552e8dd1fa1c879924886f6987d531876346cb8"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/audit-1052/manifest.json",
-            "sha256": "15acbbfe81dbb9a226f6e5f963953b354b5823d892868a2d134fb5418c629eb9"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-            "sha256": "21d20a43ddb027e1ce322d9632164776c7d6c8b5144ae8f01bee929a0eee2c47"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "8f7df9c0252c1777d630caf5025c13fd6f9662f2cea2929d8e03aebfd698a5ba"
-          },
-          {
-            "path": "scripts/evidence/audit_evidence.py",
-            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
-          },
-          {
-            "path": "src/coding_agent/mcp/McpAuthStore.cpp",
-            "sha256": "fe1b8afda071da8f8f5c5d3fbfb961168d79efcda47d301cd5eb2dc6b0bf354c"
-          },
-          {
-            "path": "src/coding_agent/mcp/McpAuthStore.hpp",
-            "sha256": "41460bb0f08f9872b4d2555d6f70898efc94ebacb2d9113389e93cb7b35bab35"
-          },
-          {
-            "path": "src/coding_agent/mcp/McpOAuthRefresh.cpp",
-            "sha256": "3282b55fdf31411dc196e8f96d535876a809cdcdc765055460ed1b853107f8ab"
-          },
-          {
-            "path": "src/coding_agent/mcp/McpOAuthRefresh.hpp",
-            "sha256": "98e08776aee3a78d89b8c317869cafe7479bea9b430b841a977dad6cac7296e4"
-          },
-          {
-            "path": "src/coding_agent/mcp/McpOAuthSignIn.cpp",
-            "sha256": "06d6687ff42883eaf8c7179ecf12b349880deda2a4044d5f06f77d59ad439f11"
-          },
-          {
-            "path": "src/coding_agent/mcp/McpOAuthSignIn.hpp",
-            "sha256": "451aa3462fb186be6d59e38272746c009163311a4a80e194c4a7f5b73edcccc1"
-          },
-          {
-            "path": "src/coding_agent/mcp/McpOAuthTokenResolver.cpp",
-            "sha256": "9008868c4c7d64f5fc929d8aaf463e7fb108d04e6dd3a27c4f091c9037283ce1"
-          },
-          {
-            "path": "src/coding_agent/mcp/McpOAuthTokenResolver.hpp",
-            "sha256": "05a80c262a24735ede0a46e995f8bd299bdb6b8f881460717581165df9fdd755"
-          },
-          {
-            "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "958c97fcf37088def7f015f717b049c92a3edd5ce7f6d922fc0e4c94f9e7af7c"
-          },
-          {
-            "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "ddb2f694572f6671b1ea5cd128a5377283f3e83f83b01b62e85f58b4960c348c"
-          },
-          {
-            "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "b6ecb9bf4da4c489f66729c0c44dbea840960599067b4091c34814d83b2637e4"
-          },
-          {
-            "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "0412801f6613c9bf54f43cefa3d1350d7e75d0e2ed7a8706089d86c935877948"
-          },
-          {
-            "path": "src/mcp/HttpClient.cpp",
-            "sha256": "a1572e90184c1dd7f922246c1dec2161e824ff7f0b2e3c080dabe459b4166c9f"
-          },
-          {
-            "path": "src/mcp/HttpClientImpl.hpp",
-            "sha256": "b8039b8e17a9de193f52c776e7716fd91bf24e775a8ead7dd1b3389850660c05"
-          },
-          {
-            "path": "src/mcp/StdioClient.cpp",
-            "sha256": "f3dcdc687480dd5a79e742b1d11056caeda56798d640000b44343692cfeb5f94"
-          },
-          {
-            "path": "src/mcp/StdioClientImpl.hpp",
-            "sha256": "d8432f3933ecd6d411adb8147b8402928bb36f8c2106b38bca347b7a25deb7f7"
-          },
-          {
-            "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
-            "sha256": "c7daf0d26e5c96f303119f97b354f6742f62031a5acfd4105226943825ded6c7"
-          },
-          {
-            "path": "src/mcp/include/cch/mcp/RequestAuthSource.hpp",
-            "sha256": "30e67ecd7d961733757ccdc0643bcd6c2a75b0c6df8cd53dfb04c9fd2aaff842"
-          },
-          {
-            "path": "src/mcp/include/cch/mcp/StdioClient.hpp",
-            "sha256": "9a69ee395a6ff2a45b6a1d47bac2f3edb1f4f5c5e26cf62ff79dbec97d5c0ee3"
-          },
-          {
-            "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
-          },
-          {
-            "path": "tests/coding_agent/McpOAuthSessionTest.cpp",
-            "sha256": "8942a42a8af08a5a3aaa61cf16711659dacad2aaf8826ca2936f161f5c49d46f"
-          },
-          {
-            "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "sha256": "e0e03f8d53717464174a8b0a569014b125fd6c976ded60f87920e5d4efe0721e"
-          },
-          {
-            "path": "tests/coding_agent/McpSessionManagerTest.cpp",
-            "sha256": "a867127b3bc2ca7fc8e4cd69250d0a84f276fab5578f72e3129c8970475c91ff"
-          },
-          {
-            "path": "tests/coding_agent/tui/McpManagerFlowTest.cpp",
-            "sha256": "94a1da8466c992bc680b64d0a2083f8675e9c44ed45c360effc68816c47eb488"
-          },
-          {
-            "path": "tests/coding_agent/tui/McpManagerPresenterTest.cpp",
-            "sha256": "b48622d0d12321c3d2ab36a2396caab0e5153ee9564459c6046a5cfa394ecf5a"
-          },
-          {
-            "path": "tests/support/FakeOAuthHttpClient.hpp",
-            "sha256": "8923e51713f15b95166b7a13be4cd74db3e10bfacc6001cb4bae6b91cc412bda"
-          },
-          {
-            "path": "tests/support/McpTestKit.hpp",
-            "sha256": "06ab36bb65c056096a599f696cbe416003ede98f2567f87d30f5118c33d20f1d"
-          },
-          {
-            "path": "tests/support/ReleaseGate.hpp",
-            "sha256": "c3f156d5fb4bd67ab7cc33be2ed99650e14e77e732cc6e4b362ee7561c725a07"
-          },
-          {
-            "path": "tests/support/RuntimeFixture.hpp",
-            "sha256": "bd441349fa9473da544f544b9edc451fc8fb548ea14d3b5bf11a3d3b16aba1c0"
-          },
-          {
-            "path": "tests/support/TempWorkspace.hpp",
-            "sha256": "4c3811b22c3abae96d3261a54d401899033ffb80fcc325a5ac5dd2c9f8f75140"
-          },
-          {
-            "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
-          }
-        ],
-        "validation": {
-          "command": [
-            "ctest",
-            "--preset",
-            "vcpkg",
-            "-R",
-            "^(closing while a real initialize is pending returns with pi's closed error|close during a pending connect returns promptly and drops the late connection|closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token|a cancelled MCP OAuth refresh stops before the request reaches the MCP server|a timed-out MCP OAuth request settles at the deadline while the shared refresh completes|concurrent MCP OAuth requests share one refresh|MCP OAuth refresh uses pi's 30-second skew|a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh|a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes)$",
-            "--output-on-failure",
-            "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1189.xml"
-          ],
-          "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
-          "recordedAt": "2026-11-02T15:26:56Z",
-          "selected": 9,
-          "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1189.xml",
-            "sha256": "9dfd7b21115ae5e48c2ba8b1ab7070630855380c469a44e2091eb833e8b2cb11"
-          }
-        },
-        "rows": [
-          {
-            "id": "cch_mcp:mcp-client-lifecycle",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1052/application-initialization.json",
-                "scenario": "closing while initialize is pending returns without waiting",
-                "test": "closing while a real initialize is pending returns with pi's closed error",
-                "testSource": "tests/coding_agent/McpSessionManagerTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "closing while a token refresh is in flight does not wait for the refresh",
-                "test": "closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "close during a pending connect returns promptly and drops the late connection",
-              "testSource": "tests/coding_agent/McpSessionManagerTest.cpp",
-              "reason": "A scripted factory that ignores the stop seam still returns promptly and its healthy late connection is dropped without a closed error, separating the production factory's abort path and observable closed error from the generic close/drop path."
-            }
-          },
-          {
-            "id": "cch_mcp:mcp-close-no-refresh",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "closing while a token refresh is in flight does not wait for the refresh",
-                "test": "closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "MCP OAuth refresh uses pi's 30-second skew",
-              "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp",
-              "reason": "A request-time token inside the 30-second skew does refresh, so the close path's one stalled refresh and pre-refresh DELETE token separate 'close never refreshes' from 'refresh never happens'."
-            }
-          },
-          {
-            "id": "cch_mcp:mcp-oauth-refresh",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
-                "test": "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "a tool call that times out during OAuth refresh never sends it after the refresh completes",
-                "test": "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh",
-              "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp",
-              "reason": "A second process waits on the per-server lock and reuses the grant the first process rotated with zero refresh POSTs, separating the lock plus re-check from a per-request refresh that would send a second POST with a consumed refresh token."
-            }
-          },
-          {
-            "id": "cch_mcp:mcp-refresh-cancellation",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
-                "test": "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/oauth-lifecycle.json",
-                "scenario": "a tool call that times out during OAuth refresh never sends it after the refresh completes",
-                "test": "a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes",
-                "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "a cancelled MCP OAuth refresh stops before the request reaches the MCP server",
-              "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp",
-              "reason": "The caller settles as Cancelled while the shared refresh is still in flight, its stop token stays unset, and the rotated token is persisted, separating the shared-background rule from the old caller-aborts-refresh behavior."
-            }
-          }
-        ],
-        "routingSha256": "7fc19e917b0d999a8d4188516385cf866475f6ffd56635666cbd3b718e5723f1",
-        "revalidation1190": {
-          "reason": "#1190 carried the MCP roots on the connection and installed the same ping/roots/list server-request set for stdio and HTTP, which changed the pinned MCP sources and the pi-mcp fixtures. The record's exact selection was rerun on the merged tree; rows, scenarios and routing are unchanged.",
-          "changedInputs": [
-            "fixtures/pi-mcp/http_server.py",
-            "src/mcp/HttpClient.cpp",
-            "src/mcp/StdioClient.cpp",
-            "src/mcp/StdioClientImpl.hpp",
-            "src/mcp/include/cch/mcp/HttpClient.hpp"
-          ],
-          "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
-          "selected": 9,
-          "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml",
-            "sha256": "e04694821270c9086db9a4169b998fde8b2dfe91cb5310c62ff52a592f695f2a"
-          }
-        },
-        "revalidation1190m": {
-          "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1191m": {
-          "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1186m": {
-          "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
-          ]
-        },
-        "revalidation1187m": {
-          "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1158m": {
-          "reason": "Serial merger registered audit-1158 and classified seven supplemental scenarios as explicit orphans; existing receipt rows and routing remain unchanged. This selection ran with the updated registry and plan present before and after the run.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json",
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-R",
-              "^(closing while a real initialize is pending returns with pi's closed error|close during a pending connect returns promptly and drops the late connection|closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token|a cancelled MCP OAuth refresh stops before the request reaches the MCP server|a timed-out MCP OAuth request settles at the deadline while the shared refresh completes|concurrent MCP OAuth requests share one refresh|MCP OAuth refresh uses pi's 30-second skew|a token rotated by another process under the MCP OAuth refresh lock is reused without a second refresh|a cancelled or timed-out MCP OAuth tool call never retries after the shared refresh completes)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml"
-            ],
-            "testedRevision": "6161556d0d1e41c353cc591c198d99c2d3c20278",
-            "recordedAt": "2026-11-02T06:43:10Z",
-            "selected": 9,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1190-revalidation-1189.xml",
-              "sha256": "e04694821270c9086db9a4169b998fde8b2dfe91cb5310c62ff52a592f695f2a"
-            }
-          }
-        }
-      },
-      {
         "id": "1185-chord-delta-ingestion",
         "ticket": "1185",
         "implementationCommits": [
@@ -4060,7 +3490,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4311,7 +3741,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4553,7 +3983,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4821,7 +4251,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4972,7 +4402,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -5286,7 +4716,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -5580,7 +5010,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -5669,29 +5099,6 @@
               "test": "the public codemode source parser keeps only a first-line options command",
               "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
               "reason": "A parser that rejects every option-like line passes the rejection cases but fails the accepted first-line/ordinary-comment forms."
-            }
-          },
-          {
-            "id": "cch_codemode:codemode-source-timeout-option",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1053/script-execution.json",
-                "scenario": "a script that computes past its deadline is a timeout",
-                "test": "an over-limit script is interrupted with a timeout error",
-                "testSource": "tests/coding_agent/CodemodeSandboxTest.cpp"
-              },
-              {
-                "artifact": "audit-1053/script-execution.json",
-                "scenario": "a script failure keeps prior output and reports the script error with its line",
-                "test": "a public codemode caller reports a script error with its name message stack and prior output",
-                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "a public codemode caller reports the deadline when a tool waits past it and keeps partial output",
-              "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
-              "reason": "A deadline that only stops computing scripts passes the computing case; the tool-wait deadline case proves the whole-execution deadline is independent of the VM compute path."
             }
           },
           {
@@ -6429,75 +5836,6 @@
               "testSource": "tests/codemode/CodemodeRemoteTest.cpp",
               "reason": "An arrival-order remote passes the single-answer case; the reversed case requires result 2 to wait for result 1 and the frozen idle sequence."
             }
-          },
-          {
-            "id": "cch_codemode:codemode-worker-admission",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1053/worker-lifetime.json",
-                "scenario": "admission denial rejects before a worker starts and keeps the start hook uncalled",
-                "test": "codemode worker results settle before exit while admission stays bounded",
-                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
-              },
-              {
-                "artifact": "audit-1053/worker-lifetime.json",
-                "scenario": "a wasm loading failure does not reserve admission",
-                "test": "codemode worker admission follows wasm load and releases a failed start once",
-                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
-              },
-              {
-                "artifact": "audit-1053/worker-lifetime.json",
-                "scenario": "a worker construction failure returns its reserved admission exactly once",
-                "test": "codemode worker admission follows wasm load and releases a failed start once",
-                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "codemode worker results settle before exit while admission stays bounded",
-              "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
-              "reason": "A capacity check after worker start passes the load-failure case; the settle case holds two real workers at the exit gate and requires the third denial before start."
-            }
-          },
-          {
-            "id": "cch_codemode:codemode-worker-repeated-cancellation",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1053/worker-lifetime.json",
-                "scenario": "repeated abort results settle while cancelled workers remain unreleased; exits release every admission",
-                "test": "codemode worker results settle before exit while admission stays bounded",
-                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "codemode worker admission follows wasm load and releases a failed start once",
-              "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
-              "reason": "A result-only release counter passes the first cancellation; the repeated case checks each actual exit releases exactly one admission and a later run is admitted."
-            }
-          },
-          {
-            "id": "cch_codemode:codemode-worker-construction-failure",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1053/worker-lifetime.json",
-                "scenario": "a wasm loading failure does not reserve admission",
-                "test": "codemode worker admission follows wasm load and releases a failed start once",
-                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
-              },
-              {
-                "artifact": "audit-1053/worker-lifetime.json",
-                "scenario": "a worker construction failure returns its reserved admission exactly once",
-                "test": "codemode worker admission follows wasm load and releases a failed start once",
-                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "codemode worker results settle before exit while admission stays bounded",
-              "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
-              "reason": "A start failure that leaks the reservation passes an error-only check; the probe counts one acquisition, one start attempt and exactly one release."
-            }
           }
         ],
         "routingSha256": "d32c5624f3212357fe9344514b2034403eb9db8de411eae746ee95966f5a9b1d",
@@ -6602,7 +5940,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -6782,7 +6120,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
+            "sha256": "7fc28db83cb8bc9e51757fd57e128ab726fc896e9bc2342af4162ee436110e53"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -7177,10 +6515,10 @@
         "partial": 2
       },
       "cch_coding_agent": {
-        "implemented": 90,
-        "missing": 16,
+        "implemented": 87,
+        "missing": 17,
         "not-applicable": 6,
-        "partial": 47
+        "partial": 49
       },
       "cch_durable": {
         "implemented": 6,
@@ -7189,10 +6527,10 @@
         "partial": 83
       },
       "cch_mcp": {
-        "implemented": 16,
-        "missing": 1,
+        "implemented": 8,
+        "missing": 2,
         "not-applicable": 1,
-        "partial": 1
+        "partial": 8
       },
       "cch_tui": {
         "implemented": 882,
@@ -7205,21 +6543,21 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1094,
-      "missing": 180,
+      "implemented": 1083,
+      "missing": 182,
       "not-applicable": 18,
-      "partial": 172
+      "partial": 181
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1012,
-      "upstream-captured": 311,
-      "verified": 113
+      "unverified": 1015,
+      "upstream-captured": 325,
+      "verified": 96
     },
     "evidenceRoute": {
-      "captured": 424,
+      "captured": 421,
       "artifact-only": 0,
-      "related-captured": 23,
+      "related-captured": 26,
       "declared-comparison": 29,
       "cpp-regression-only": 10,
       "unobserved": 50,
@@ -7229,7 +6567,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1012,
+    "unobservedSupported": 1015,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -7262,7 +6600,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1012,
+    "missingObservationRows": 1015,
     "scenarioCoverage": {
       "scenarios": 658,
       "scenarioNamed": 368,
@@ -21074,33 +20412,32 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "unverified",
       "owner": "cch_codemode",
       "consumer": "Application `executeCodemode`; the model-facing tool result tail; the sandbox timeout path.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "a script that computes past its deadline is a timeout",
       "comparisonScenarios": [
         "a script that computes past its deadline is a timeout",
         "a script failure keeps prior output and reports the script error with its line"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "a script that computes past its deadline is a timeout",
-          "a script failure keeps prior output and reports the script error with its line"
+          "a script that computes past its deadline is a timeout"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Add a deadline-while-tool-waits case with the exact message to the sandbox/routing tests; keep the default-infinite application rule.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -21113,26 +20450,7 @@
           "verification": "unverified",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "unverified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a script that computes past its deadline is a timeout"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Add a deadline-while-tool-waits case with the exact message to the sandbox/routing tests; keep the default-infinite application rule."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-worker-admission",
@@ -21144,14 +20462,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application `executeCodemode`; host concurrency policy; every `CodemodeSandbox.execute()`/`start()`.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "admission denial rejects before a worker starts and keeps the start hook uncalled",
       "comparisonScenarios": [
         "admission denial rejects before a worker starts and keeps the start hook uncalled",
@@ -21161,18 +20479,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "admission denial rejects before a worker starts and keeps the start hook uncalled",
-          "a wasm loading failure does not reserve admission",
-          "a worker construction failure returns its reserved admission exactly once"
+          "admission denial rejects before a worker starts and keeps the start hook uncalled"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Keep admission tied to actual worker exit, not result settlement; this is process-local thread accounting and makes no crash- or power-loss recovery claim.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -21185,26 +20501,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "admission denial rejects before a worker starts and keeps the start hook uncalled"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Keep admission tied to actual worker exit, not result settlement; this is process-local thread accounting and makes no crash- or power-loss recovery claim."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-worker-close",
@@ -21268,14 +20565,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application worker creation and sandbox error reporting.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "a wasm loading failure does not reserve admission",
       "comparisonScenarios": [
         "a wasm loading failure does not reserve admission",
@@ -21284,17 +20581,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "a wasm loading failure does not reserve admission",
-          "a worker construction failure returns its reserved admission exactly once"
+          "a wasm loading failure does not reserve admission"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Keep eager guest validation and the typed start failure path with one-shot reservation release.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -21307,26 +20603,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a wasm loading failure does not reserve admission"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Keep eager guest validation and the typed start failure path with one-shot reservation release."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-worker-lifetime",
@@ -21391,14 +20668,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application concurrency accounting and `CodemodeSandbox.close()`.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "repeated abort results settle while cancelled workers remain unreleased; exits release every admission",
       "comparisonScenarios": [
         "repeated abort results settle while cancelled workers remain unreleased; exits release every admission"
@@ -21406,16 +20683,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "repeated abort results settle while cancelled workers remain unreleased; exits release every admission"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Retain separate result and actual-exit observations and one-shot release callbacks; this is in-process accounting only.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -21428,26 +20705,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "repeated abort results settle while cancelled workers remain unreleased; exits release every admission"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Retain separate result and actual-exit observations and one-shot release callbacks; this is in-process accounting only."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_coding_agent:AgentSession:lifecycle:abort",
@@ -24603,15 +23861,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "Codemode catalog, MCP server grouping and scripts discovering MCP tools.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1118",
+      "implementation_ticket": null,
       "scenario": "namespaces group sections and the inline budget omits tools with an explicit marker",
       "comparisonScenarios": [
         "namespaces group sections and the inline budget omits tools with an explicit marker"
@@ -24619,16 +23877,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "namespaces group sections and the inline budget omits tools with an explicit marker"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1118-codemode-catalog.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1118; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1118-codemode-catalog.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Thread namespace metadata from the MCP surface into the library catalog/discovery; implement `describeNamespace` rather than returning null. Test a namespaced and an unnamespaced tool together.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -24641,26 +23899,7 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "namespaces group sections and the inline budget omits tools with an explicit marker"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Thread namespace metadata from the MCP surface into the library catalog/discovery; implement `describeNamespace` rather than returning null. Test a namespaced and an unnamespaced tool together."
-      },
-      "delivery": "1118-codemode-catalog"
+      ]
     },
     {
       "id": "cch_coding_agent:codemode-application-nested-calls",
@@ -24871,15 +24110,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "The `codemode` model-facing tool description, MCP late-registration refresh, and the loadout/prompt assembly.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1118",
+      "implementation_ticket": null,
       "scenario": "the empty codemode catalog still declares globals, discovery and the options grammar",
       "comparisonScenarios": [
         "the empty codemode catalog still declares globals, discovery and the options grammar",
@@ -24890,19 +24129,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "the empty codemode catalog still declares globals, discovery and the options grammar",
-          "a listed tool section carries its declaration, output type and guidelines",
-          "namespaces group sections and the inline budget omits tools with an explicit marker",
-          "deferred tools are never listed and do not change the description"
+          "the empty codemode catalog still declares globals, discovery and the options grammar"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1118-codemode-catalog.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1118; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1118-codemode-catalog.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Replace the bullet renderer with the v1.3.0 catalog and thread mode/inline budget/namespace/deferred metadata into the refresh path. Update the parity test only after the new differential fixture is registered.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -24915,26 +24151,7 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the empty codemode catalog still declares globals, discovery and the options grammar"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Replace the bullet renderer with the v1.3.0 catalog and thread mode/inline budget/namespace/deferred metadata into the refresh path. Update the parity test only after the new differential fixture is registered."
-      },
-      "delivery": "1118-codemode-catalog"
+      ]
     },
     {
       "id": "cch_coding_agent:codemode-description-loadout",
@@ -24945,15 +24162,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "Application loadout assembly, system-prompt catalog and direct tool descriptions.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1118",
+      "implementation_ticket": null,
       "scenario": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
       "comparisonScenarios": [
         "the on loadout lists only non-direct callable tools and adds script-call descriptions",
@@ -24962,17 +24179,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "the on loadout lists only non-direct callable tools and adds script-call descriptions",
-          "the only loadout lists every callable tool and hides direct declarations"
+          "the on loadout lists only non-direct callable tools and adds script-call descriptions"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1118-codemode-catalog.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1118; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1118-codemode-catalog.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Add the loadout seam (with exposure/namespace/deferred metadata) before porting the mode tests; keep settings parsing as the input.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -24985,26 +24201,7 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "missing",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the on loadout lists only non-direct callable tools and adds script-call descriptions"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Add the loadout seam (with exposure/namespace/deferred metadata) before porting the mode tests; keep settings parsing as the input."
-      },
-      "delivery": "1118-codemode-catalog"
+      ]
     },
     {
       "id": "cch_coding_agent:codemode-extension-registration",
@@ -37123,32 +36320,32 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "unverified",
       "owner": "cch_durable",
       "consumer": "Read tool, image input and durable callers.",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1090",
+      "implementation_ticket": null,
       "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
       "comparisonScenarios": [
         "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
         "the Photon image processor passes an upright inline image through and resizes one over the limits"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1090-durable-images.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1090; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1090-durable-images.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Implement the durable ImageProcessor contract with local Linux decoding; keep model/provider image execution limited to the retained Magpie capabilities.",
       "lane": "1056",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -37161,26 +36358,7 @@
           "verification": "verified",
           "owner": "cch_durable"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "verified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Implement the durable ImageProcessor contract with local Linux decoding; keep model/provider image execution limited to the retained Magpie capabilities."
-      },
-      "delivery": "1090-durable-images"
+      ]
     },
     {
       "id": "cch_durable:inspect-submissions",
@@ -37948,14 +37126,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "unverified",
       "owner": "cch_durable",
       "consumer": "Durable read tool and vision-capable callers.",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1090",
+      "implementation_ticket": null,
       "scenario": "an EXIF-oriented JPEG is made upright before its resized diagnostic",
       "comparisonScenarios": [
         "an EXIF-oriented JPEG is made upright before its resized diagnostic",
@@ -37964,20 +37142,18 @@
         "an inline image within the limits passes through unchanged without a processor"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "an EXIF-oriented JPEG is made upright before its resized diagnostic",
-          "a BMP read through the processor converts to PNG and says so",
-          "an inline image within the limits passes through unchanged without a processor"
+          "an EXIF-oriented JPEG is made upright before its resized diagnostic"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1090-durable-images.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1090; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1090-durable-images.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Implement the durable read image branch over the durable filesystem/processor and prove the content/diagnostic pair.",
       "lane": "1056",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -37990,26 +37166,7 @@
           "verification": "verified",
           "owner": "cch_durable"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "verified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "an EXIF-oriented JPEG is made upright before its resized diagnostic"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Implement the durable read image branch over the durable filesystem/processor and prove the content/diagnostic pair."
-      },
-      "delivery": "1090-durable-images"
+      ]
     },
     {
       "id": "cch_durable:recovery-abort-mark",
@@ -40333,15 +39490,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_mcp",
       "consumer": "Generic `McpClient` and application `McpServerConnection`/`McpSessionManager`; transport callers do not own JSON-RPC state themselves.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": "#1189",
+      "implementation_ticket": null,
       "scenario": "closing while initialize is pending returns without waiting",
       "comparisonScenarios": [
         "closing while initialize is pending returns without waiting",
@@ -40350,16 +39507,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/application-initialization.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "closing while initialize is pending returns without waiting"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1189-mcp-close-refresh.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1189; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Port the v1.3.0 `McpServerConnection` state/retry shape and make close abort a pending initialize and any refresh wait. Add a C++ test that starts a never-answering initialize, closes, and asserts prompt/creation does not block; distinguish close-during-connect from close-after-connected.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [
@@ -40374,26 +39531,7 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1052/application-initialization.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "closing while initialize is pending returns without waiting"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Port the v1.3.0 `McpServerConnection` state/retry shape and make close abort a pending initialize and any refresh wait. Add a C++ test that starts a never-answering initialize, closes, and asserts prompt/creation does not block; distinguish close-during-connect from close-after-connected."
-      },
-      "delivery": "1189-close-refresh"
+      ]
     },
     {
       "id": "cch_mcp:mcp-close-no-refresh",
@@ -40405,15 +39543,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_mcp",
       "consumer": "Application shutdown, `/mcp` disable/reconnect, and Agent session teardown.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": "#1189",
+      "implementation_ticket": null,
       "scenario": "closing while a token refresh is in flight does not wait for the refresh",
       "comparisonScenarios": [
         "closing while a token refresh is in flight does not wait for the refresh"
@@ -40421,16 +39559,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "closing while a token refresh is in flight does not wait for the refresh"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1189-mcp-close-refresh.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1189; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Add a token-provider `settled()`/in-flight tracking seam so close can skip starting a refresh while still allowing an already-answered refresh to persist. Test that close returns within a bounded time while `/token` is stalled and that DELETE carries the pre-refresh access token.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -40443,26 +39581,7 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "closing while a token refresh is in flight does not wait for the refresh"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Add a token-provider `settled()`/in-flight tracking seam so close can skip starting a refresh while still allowing an already-answered refresh to persist. Test that close returns within a bounded time while `/token` is stalled and that DELETE carries the pre-refresh access token."
-      },
-      "delivery": "1189-close-refresh"
+      ]
     },
     {
       "id": "cch_mcp:mcp-http-session-stream",
@@ -40597,15 +39716,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_mcp",
       "consumer": "Generic OAuth flow, sign-in and request-time refresh.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": "#1181",
+      "implementation_ticket": null,
       "scenario": "cancellation during protected-resource discovery aborts the flow",
       "comparisonScenarios": [
         "cancellation during protected-resource discovery aborts the flow"
@@ -40613,16 +39732,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "cancellation during protected-resource discovery aborts the flow"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1181-mcp-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1181; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1181-mcp-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Thread the sign-in/session cancellation token through discovery and flow requests. Add the captured stalled protected-resource case and assert the request socket is closed and no token/registration request follows.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -40635,26 +39754,7 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "cancellation during protected-resource discovery aborts the flow"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Thread the sign-in/session cancellation token through discovery and flow requests. Add the captured stalled protected-resource case and assert the request socket is closed and no token/registration request follows."
-      },
-      "delivery": "1181-mcp-comparisons"
+      ]
     },
     {
       "id": "cch_mcp:mcp-oauth-flow-cancellation",
@@ -40666,15 +39766,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "upstream-captured",
       "owner": "cch_mcp",
       "consumer": "`authorizeMcp`, `signInMcpServer`, `OAuthCallbackServer` and the TUI/CLI sign-in prompt.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": "#1181",
+      "implementation_ticket": null,
       "scenario": "cancellation during protected-resource discovery aborts the flow",
       "comparisonScenarios": [
         "cancellation during protected-resource discovery aborts the flow",
@@ -40684,18 +39784,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "cancellation during protected-resource discovery aborts the flow",
-          "cancellation during dynamic client registration aborts the flow",
-          "cancellation while waiting for the browser callback stops sign-in"
+          "cancellation during protected-resource discovery aborts the flow"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1181-mcp-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1181; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1181-mcp-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Thread an `AbortSignal` equivalent through the whole flow and callback wait; classify callback expiry as pi does. Add the three captured cancellation cases, asserting the stalled request is aborted and token requests remain zero.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -40708,26 +39806,7 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "missing",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "cancellation during protected-resource discovery aborts the flow"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Thread an `AbortSignal` equivalent through the whole flow and callback wait; classify callback expiry as pi does. Add the three captured cancellation cases, asserting the stalled request is aborted and token requests remain zero."
-      },
-      "delivery": "1181-mcp-comparisons"
+      ]
     },
     {
       "id": "cch_mcp:mcp-oauth-issuer",
@@ -40809,15 +39888,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_mcp",
       "consumer": "`createMcpAuthProvider` in the application integration; `McpOAuthTokenResolver` for request-time credentials.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": "#1189",
+      "implementation_ticket": null,
       "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
       "comparisonScenarios": [
         "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
@@ -40826,17 +39905,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
-          "a tool call that times out during OAuth refresh never sends it after the refresh completes"
+          "cancelling a tool call during OAuth refresh never sends it after the refresh completes"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1189-mcp-close-refresh.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1189; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Extract refresh into a per-server single-flight with pi's 30-second skew and a file lock; keep the no-loop `invalid_grant` rule. Add concurrent-401 and cross-process lock cases before claiming parity.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -40849,26 +39927,7 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "cancelling a tool call during OAuth refresh never sends it after the refresh completes"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Extract refresh into a per-server single-flight with pi's 30-second skew and a file lock; keep the no-loop `invalid_grant` rule. Add concurrent-401 and cross-process lock cases before claiming parity."
-      },
-      "delivery": "1189-close-refresh"
+      ]
     },
     {
       "id": "cch_mcp:mcp-oauth-registration-signin",
@@ -40881,15 +39940,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_mcp",
       "consumer": "`signInMcpServer`/`/mcp login`, `McpOAuthFlow`, `OAuthCallbackServer`, `McpOAuthSignIn`.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": "#1181",
+      "implementation_ticket": null,
       "scenario": "cancellation during dynamic client registration aborts the flow",
       "comparisonScenarios": [
         "cancellation during dynamic client registration aborts the flow",
@@ -40899,18 +39958,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "cancellation during dynamic client registration aborts the flow",
-          "cancellation while waiting for the browser callback stops sign-in",
-          "authorization response from another issuer is rejected before token exchange"
+          "cancellation during dynamic client registration aborts the flow"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1181-mcp-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1181; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1181-mcp-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Thread cancellation through registration and the callback wait, and classify callback expiry as pi does. Add the captured registration-stall and prompt-cancel cases; assert no token request after cancellation.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -40923,26 +39980,7 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "cancellation during dynamic client registration aborts the flow"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Thread cancellation through registration and the callback wait, and classify callback expiry as pi does. Add the captured registration-stall and prompt-cancel cases; assert no token request after cancellation."
-      },
-      "delivery": "1181-mcp-comparisons"
+      ]
     },
     {
       "id": "cch_mcp:mcp-progress",
@@ -41048,15 +40086,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_mcp",
       "consumer": "OAuth-eligible HTTP MCP calls; the application tool wrapper and Agent turn cancellation.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": "#1189",
+      "implementation_ticket": null,
       "scenario": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
       "comparisonScenarios": [
         "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
@@ -41065,17 +40103,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
-          "a tool call that times out during OAuth refresh never sends it after the refresh completes"
+          "cancelling a tool call during OAuth refresh never sends it after the refresh completes"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1189-mcp-close-refresh.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1189; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1189-mcp-close-refresh.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Make the refresh a shared background operation (per server/URL) that the request waits on only while not cancelled; on cancellation settle immediately, keep the refresh alive, and suppress dispatch. Add the captured abort and timeout cases, asserting exactly one 401 tool attempt and zero post-refresh calls.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41088,26 +40125,7 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "cancelling a tool call during OAuth refresh never sends it after the refresh completes"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Make the refresh a shared background operation (per server/URL) that the request waits on only while not cancelled; on cancellation settle immediately, keep the refresh alive, and suppress dispatch. Add the captured abort and timeout cases, asserting exactly one 401 tool attempt and zero post-refresh calls."
-      },
-      "delivery": "1189-close-refresh"
+      ]
     },
     {
       "id": "cch_mcp:mcp-request-auth",
@@ -41240,15 +40258,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_mcp",
       "consumer": "Resource tools (`list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`), management panels and codemode resource calls.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": "#1181",
+      "implementation_ticket": null,
       "scenario": "connecting a server lists tools but not resources",
       "comparisonScenarios": [
         "connecting a server lists tools but not resources",
@@ -41258,18 +40276,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/application-initialization.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "connecting a server lists tools but not resources",
-          "resources are listed on demand after the connection is ready",
-          "a resources/list failure leaves the server connected and usable for tools"
+          "connecting a server lists tools but not resources"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1181-mcp-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1181; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1181-mcp-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Remove the connect-time resource snapshot; set `hasResources` from `initialize.capabilities.resources` and use the resource tools' on-demand pages. Keep a resource-list failure local to the resource call, as captured. This is a prerequisite for a reusable `cch_mcp` connection.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41282,26 +40298,7 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1052/application-initialization.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "connecting a server lists tools but not resources"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Remove the connect-time resource snapshot; set `hasResources` from `initialize.capabilities.resources` and use the resource tools' on-demand pages. Keep a resource-list failure local to the resource call, as captured. This is a prerequisite for a reusable `cch_mcp` connection."
-      },
-      "delivery": "1181-mcp-comparisons"
+      ]
     },
     {
       "id": "cch_mcp:mcp-roots-list",

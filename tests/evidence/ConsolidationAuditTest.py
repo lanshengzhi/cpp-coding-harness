@@ -224,6 +224,151 @@ class DeliveryEvidenceTest(unittest.TestCase):
             self.check()
 
 
+class WithdrawnClaimsTest(unittest.TestCase):
+    """The #1202 per-claim withdrawal channel: exactly the named claims subtract from promotion.
+
+    The temp-root harness claims two rows in one receipt, so a withdrawal of one claim must
+    leave its sibling intact, and a withdrawn comparison must drop from its claim while the
+    claim stays validated.
+    """
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        files = {
+            "src/Example.cpp": "implementation\n",
+            "tests/ExampleTest.cpp": "public comparison and negative control\n",
+            "docs/delivery.md": "Reviewed comparison mapping\n",
+            "docs/result.xml": '<testsuite tests="2" failures="0"><testcase name="compare" status="run"/>'
+                               '<testcase name="control" status="run"/></testsuite>',
+        }
+        for relative, value in files.items():
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(value)
+        self.pin = lambda relative: {
+            "path": relative, "sha256": hashlib.sha256((self.root / relative).read_bytes()).hexdigest()
+        }
+        self.rows = [
+            {"id": "cch_mcp:example", "membership": "supported", "comparisonScenarios": ["preserves null"]},
+            {"id": "cch_mcp:sibling", "membership": "supported", "comparisonScenarios": ["keeps order"]},
+        ]
+
+        def claim(row_id: str, scenario: str) -> dict:
+            return {
+                "id": row_id, "remainingBoundary": [],
+                "comparisons": [{"artifact": f"audit-1101/{scenario.replace(' ', '-')}.json",
+                                 "scenario": scenario, "test": "compare",
+                                 "testSource": "tests/ExampleTest.cpp"}],
+                "discriminatingCase": {"test": "control", "testSource": "tests/ExampleTest.cpp",
+                                       "reason": "An absent field and a JSON null produce distinct results."},
+            }
+
+        self.delivery = {
+            "schema": "pike/pi-v1.3.0-capability-deliveries/1",
+            "baseline": "pi-v1.3.0", "revision": consolidate.REVISION,
+            "records": [{
+                "id": "example", "ticket": "1101", "implementationCommits": ["a" * 40],
+                "report": "docs/delivery.md",
+                "inputs": [self.pin("src/Example.cpp"), self.pin("tests/ExampleTest.cpp")],
+                "validation": {
+                    "command": ["ctest", "--preset", "vcpkg"], "testedRevision": "b" * 40,
+                    "recordedAt": "2026-10-25T00:00:00Z", "selected": 2,
+                    "junit": self.pin("docs/result.xml"),
+                },
+                "rows": [claim("cch_mcp:example", "preserves null"),
+                         claim("cch_mcp:sibling", "keeps order")],
+            }],
+        }
+        self.record = self.delivery["records"][0]
+        self.artifacts = {
+            "audit-1101/preserves-null.json": json.dumps({"scenarios": [{"name": "preserves null"}]}).encode(),
+            "audit-1101/keeps-order.json": json.dumps({"scenarios": [{"name": "keeps order"}]}).encode(),
+        }
+        self.record["routingSha256"] = consolidate.delivery_routing_digest(
+            self.rows, self.record["rows"], self.artifacts)
+        self.root_patch = patch.object(consolidate, "ROOT", self.root)
+        self.root_patch.start()
+        self.addCleanup(self.root_patch.stop)
+        self.verify_patch = patch.object(consolidate.audit, "verify", return_value=(
+            {"revision": consolidate.REVISION}, self.artifacts, "verified upstream"))
+        self.verify_patch.start()
+        self.addCleanup(self.verify_patch.stop)
+
+    def updates(self, withdrawn=None) -> dict:
+        return consolidate.delivery_updates(self.rows, self.delivery, withdrawn)
+
+    def test_withdrawal_of_one_claim_leaves_sibling_intact(self) -> None:
+        withdrawn = {("example", "cch_mcp:example"): []}
+        updates = self.updates(withdrawn)
+        self.assertEqual(set(updates), {"cch_mcp:sibling"})
+        self.assertEqual(updates["cch_mcp:sibling"]["verification"], "verified")
+        effective = consolidate.apply_withdrawals(self.delivery, withdrawn)
+        example = next(r for r in effective["records"] if r["id"] == "example")
+        self.assertEqual([claim["id"] for claim in example["rows"]], ["cch_mcp:sibling"])
+        self.assertEqual(len(next(r for r in self.delivery["records"] if r["id"] == "example")["rows"]), 2)
+
+    def test_withdrawn_comparison_drops_from_the_claim_and_reverts_the_row(self) -> None:
+        withdrawn = {("example", "cch_mcp:example"): ["preserves null"]}
+        updates = self.updates(withdrawn)
+        self.assertEqual(set(updates), {"cch_mcp:sibling"})
+        effective = consolidate.apply_withdrawals(self.delivery, withdrawn)
+        example = next(c for r in effective["records"] if r["id"] == "example"
+                       for c in r["rows"] if c["id"] == "cch_mcp:example")
+        self.assertEqual(example["comparisons"], [])
+        sibling = next(c for r in effective["records"] if r["id"] == "example"
+                       for c in r["rows"] if c["id"] == "cch_mcp:sibling")
+        self.assertEqual(len(sibling["comparisons"]), 1)
+
+    def test_unknown_receipt_claim_or_comparison_fails_closed(self) -> None:
+        full = {"records": self.delivery["records"]}
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "unknown receipt"):
+            consolidate.withdrawn_reference_map(
+                {"example-missing": {"claims": [{"id": "cch_mcp:example"}]}}, full)
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "unknown claim"):
+            consolidate.withdrawn_reference_map(
+                {"example": {"claims": [{"id": "cch_mcp:absent"}]}}, full)
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "unknown comparison"):
+            consolidate.withdrawn_reference_map(
+                {"example": {"claims": [{"id": "cch_mcp:example",
+                                           "withdrawnComparisons": ["not a scenario"]}]}}, full)
+
+    def test_malformed_withdrawal_records_fail_closed(self) -> None:
+        research = self.root / "docs" / "research" / "pi-v1.3.0"
+        research.mkdir(parents=True)
+        deliveries_path = research / "1058-deliveries.json"
+        path_patch = patch.object(consolidate, "DELIVERIES_PATH", deliveries_path)
+        path_patch.start()
+        self.addCleanup(path_patch.stop)
+
+        def write(name: str, record) -> None:
+            (research / name).write_text(json.dumps(record), encoding="utf-8")
+
+        write("1202-withdrawn-example-claims.json", {
+            "issue": "#1202", "receipt": "example", "withdrawnAt": "2026-11-05",
+            "reason": "withdrawn", "claims": [{"id": "cch_mcp:example"}],
+        })
+        self.assertEqual(set(consolidate.load_withdrawn_claims()), {"example"})
+        (research / "1202-withdrawn-example-claims.json").unlink()
+        for key in ("issue", "receipt", "withdrawnAt", "reason", "claims"):
+            record = {"issue": "#1202", "receipt": "example", "withdrawnAt": "2026-11-05",
+                      "reason": "withdrawn", "claims": [{"id": "cch_mcp:example"}]}
+            record.pop(key)
+            with self.subTest(missing=key):
+                write("1202-withdrawn-example-claims.json", record)
+                with self.assertRaisesRegex(consolidate.ConsolidationError, "withdrawal record"):
+                    consolidate.load_withdrawn_claims()
+                (research / "1202-withdrawn-example-claims.json").unlink()
+
+    def test_empty_withdrawals_leave_the_deliveries_unchanged(self) -> None:
+        self.assertIs(consolidate.apply_withdrawals(self.delivery, {}), self.delivery)
+        self.assertEqual(consolidate.json_bytes(consolidate.apply_withdrawals(self.delivery, {})),
+                         consolidate.json_bytes(self.delivery))
+        self.assertEqual(self.updates(), self.updates({}))
+        self.assertEqual(set(self.updates()), {"cch_mcp:example", "cch_mcp:sibling"})
+
+
 class CorrectionScopeTest(unittest.TestCase):
     def setUp(self) -> None:
         self.plan = load(PLAN)
@@ -340,6 +485,116 @@ class CommittedLedgerTest(unittest.TestCase):
             )
             self.assertEqual(corrected, row["source"], row["id"])
             self.assertEqual(applied, row["appliedCorrections"], row["id"])
+
+
+class WithdrawnLedgerTest(unittest.TestCase):
+    """The 13 rows #1202 disputed stay withdrawn in the committed ledger.
+
+    The four receipts stay active with exactly their unaffected claims; the withdrawn claims
+    are preserved in the checked-in 1202-withdrawn-*-claims.json records.
+    """
+
+    WITHDRAWN = {
+        "cch_coding_agent:codemode-application-namespace": ("partial", "upstream-captured"),
+        "cch_coding_agent:codemode-description-catalog": ("partial", "upstream-captured"),
+        "cch_coding_agent:codemode-description-loadout": ("missing", "upstream-captured"),
+        "cch_codemode:codemode-source-timeout-option": ("implemented", "unverified"),
+        "cch_codemode:codemode-worker-admission": ("implemented", "upstream-captured"),
+        "cch_codemode:codemode-worker-repeated-cancellation": ("implemented", "upstream-captured"),
+        "cch_codemode:codemode-worker-construction-failure": ("implemented", "upstream-captured"),
+        "cch_mcp:mcp-resources-list-read": ("partial", "upstream-captured"),
+        "cch_mcp:mcp-oauth-discovery": ("partial", "upstream-captured"),
+        "cch_mcp:mcp-oauth-flow-cancellation": ("missing", "upstream-captured"),
+        "cch_mcp:mcp-oauth-registration-signin": ("partial", "upstream-captured"),
+        "cch_durable:image-processor": ("implemented", "unverified"),
+        "cch_durable:read-image": ("implemented", "unverified"),
+    }
+
+    SIBLINGS = {
+        "cch_coding_agent:codemode-models-description-gate": "1118-codemode-catalog",
+        "cch_durable:image-capability-absent": "1090-durable-images",
+        "cch_durable:image-orientation-conversion": "1090-durable-images",
+        "cch_mcp:mcp-http-transport": "1181-mcp-comparisons",
+        "cch_mcp:mcp-oauth-issuer": "1181-mcp-comparisons",
+        "cch_mcp:mcp-request-auth": "1181-mcp-comparisons",
+    }
+
+    def setUp(self) -> None:
+        self.ledger = load(LEDGER)
+        self.rows = {row["id"]: row for row in self.ledger["rows"]}
+        self.deliveries = {
+            record["id"]: record for record in self.ledger["deliveries"]["records"]
+        }
+
+    def test_withdrawn_rows_revert_to_source_audit_status(self) -> None:
+        for row_id, (implementation, verification) in self.WITHDRAWN.items():
+            with self.subTest(row=row_id):
+                row = self.rows[row_id]
+                self.assertEqual(row["implementation"], implementation)
+                self.assertEqual(row["verification"], verification)
+                self.assertNotIn("delivery", row)
+                self.assertIsNone(row["implementation_ticket"])
+
+    def test_unaffected_siblings_stay_verified_by_their_receipts(self) -> None:
+        for row_id, receipt in self.SIBLINGS.items():
+            with self.subTest(row=row_id):
+                row = self.rows[row_id]
+                self.assertEqual(row["verification"], "verified")
+                self.assertEqual(row["delivery"], receipt)
+
+    def test_ledger_embeds_the_effective_deliveries(self) -> None:
+        self.assertEqual(
+            [claim["id"] for claim in self.deliveries["1118-codemode-catalog"]["rows"]],
+            ["cch_coding_agent:codemode-models-description-gate"],
+        )
+        self.assertEqual(len(self.deliveries["1179-codemode-comparisons"]["rows"]), 35)
+        self.assertEqual(len(self.deliveries["1181-mcp-comparisons"]["rows"]), 3)
+        image_processor = next(
+            claim
+            for claim in self.deliveries["1090-durable-images"]["rows"]
+            if claim["id"] == "cch_durable:image-processor"
+        )
+        self.assertEqual(
+            [comparison["artifact"] for comparison in image_processor["comparisons"]],
+            ["audit-1090/images.json"],
+        )
+        read_image = next(
+            claim
+            for claim in self.deliveries["1090-durable-images"]["rows"]
+            if claim["id"] == "cch_durable:read-image"
+        )
+        self.assertEqual(len(read_image["comparisons"]), 3)
+        for claim in self.deliveries["1090-durable-images"]["rows"]:
+            for comparison in claim["comparisons"]:
+                self.assertNotEqual(comparison["artifact"], "audit-1056/environment.json")
+
+    def test_committed_receipts_keep_their_full_claims(self) -> None:
+        """The deliveries file preserves the full receipts; the ledger embeds the effective set."""
+        full = load(ROOT / "docs" / "research" / "pi-v1.3.0" / "1058-deliveries.json")
+        full_records = {record["id"]: record for record in full["records"]}
+        self.assertEqual(len(full_records["1118-codemode-catalog"]["rows"]), 4)
+        self.assertEqual(len(full_records["1179-codemode-comparisons"]["rows"]), 39)
+        self.assertEqual(len(full_records["1181-mcp-comparisons"]["rows"]), 7)
+        image_processor = next(
+            claim
+            for claim in full_records["1090-durable-images"]["rows"]
+            if claim["id"] == "cch_durable:image-processor"
+        )
+        self.assertEqual(len(image_processor["comparisons"]), 2)
+
+    def test_every_verified_row_is_delivery_backed(self) -> None:
+        delivered = [row["id"] for row in self.ledger["rows"] if "delivery" in row]
+        self.assertEqual(len(delivered), 96)
+        for row in self.ledger["rows"]:
+            if row["verification"] == "verified":
+                self.assertIn(row["id"], delivered)
+
+    def test_committed_ledger_matches_a_fresh_build(self) -> None:
+        plan = load(PLAN)
+        bundles = consolidate.build_bundle_index()
+        scenario_index = consolidate.build_scenario_index(bundles)
+        fresh = consolidate.build_ledger(plan, bundles, scenario_index)
+        self.assertEqual(consolidate.json_bytes(fresh), LEDGER.read_bytes())
 
 
 class ScenarioCoverageTest(unittest.TestCase):
