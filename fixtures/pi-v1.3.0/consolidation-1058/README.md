@@ -58,3 +58,20 @@ revert to source-audit status, a lane-recorded `verified` downgrades fail-closed
 and the ledger embeds the effective deliveries with withdrawn claims absent and withdrawn
 comparisons dropped from their claim. With no withdrawal record present the build is byte-identical
 to a build without the channel.
+
+## Receipt artifact anchoring (#1202 boundary check)
+
+`scripts/evidence/receipt_boundary.py` closes the drift class #1202 named (issue #1202
+acceptance: a boundary test fails when a receipt cites a test that never opens the artifact its
+rows point at). For every active receipt in `1058-deliveries.json` it parses each claim into its
+comparisons (artifact plus cited test source) and discriminating case, then verifies against the
+selected `--baseline` registry that every artifact is a registered evidence artifact and that the
+cited C++ source references it in code — not in a comment, a Catch2 tag or a scenario key.
+Helper headers a test quoted-includes under `tests/` count as part of the cited source. The
+matcher is static name + path matching (the 2026-11-04 manual heuristic, minus comment matches),
+exposed as an exchangeable `SourceMatcher` layer so a stronger AST- or regex-based reader can
+replace it. Unparsable claims, unregistered artifacts, missing sources and baseline mismatches
+fail closed; any failing receipt exits non-zero. Whole-record withdrawals (#1104, #1189) are
+inactive and unchecked; per-claim withdrawals remain in the full receipts and are checked like
+every other claim. Run: `python3 scripts/evidence/receipt_boundary.py [--baseline pi-v1.3.0]
+[--receipt <id-or-ticket>]`.
