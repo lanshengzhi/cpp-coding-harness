@@ -2,6 +2,7 @@
 
 #include <cch/chord/Output.hpp>
 
+#include "TreeListing.hpp"
 #include "Utf8Text.hpp"
 
 #include "support/UniqueFd.hpp"
@@ -408,6 +409,11 @@ public:
             if (ec) return std::unexpected(failure(ec.message()));
         }
         return result;
+    }
+    support::Expected<TreeListing> list_files(
+            std::string_view path, TreeListingOptions options, std::stop_token stop) override {
+        if (stop.stop_requested()) return std::unexpected(cancelled());
+        return walk_tree_listing(resolve(path).string(), std::move(options), std::move(stop));
     }
     support::Expected<std::string> create_temp_dir(std::string_view prefix, std::stop_token stop) override {
         if (stop.stop_requested()) return std::unexpected(cancelled());

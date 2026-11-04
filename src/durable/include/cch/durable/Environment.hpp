@@ -30,6 +30,39 @@ struct ListingPage {
     bool done{};
 };
 
+/// One entry of a bounded whole-tree listing (frozen pi `FileListEntry`); the
+/// path is relative to the listing root with `/` separators, rendered from
+/// the raw name bytes the way the frozen payload renders them (invalid UTF-8
+/// becomes U+FFFD).
+struct TreeListingEntry {
+    std::string path;
+    /// The frozen payload kind byte: 'f' file, 'd' directory, 'l' symlink.
+    char kind{};
+};
+
+/// The result of one bounded tree listing (frozen pi `FileListing`).
+struct TreeListing {
+    std::vector<TreeListingEntry> entries;
+    /// An entry or byte bound, or the timeout, stopped the walk before it
+    /// finished; the entries are the frozen depth-first byte-order prefix.
+    bool truncated{};
+};
+
+/// Options of a bounded whole-tree listing (frozen pi `ListFilesOptions`).
+/// `max_bytes` is clamped to the frozen payload ceiling at listing time.
+struct TreeListingOptions {
+    /// Include names starting with `.` (whitelisted hidden names survive even
+    /// when this is false, exactly like frozen).
+    bool hidden{true};
+    /// Apply git ignore rules inside git work trees.
+    bool gitignore{true};
+    /// Names skipped with their whole subtree, in addition to `.git`.
+    std::vector<std::string> exclude;
+    std::size_t max_entries{50'000};
+    std::size_t max_bytes{4 * 1024 * 1024};
+    std::chrono::milliseconds timeout{10'000};
+};
+
 /// Pages one directory, holding it open so every page continues the same scan.
 class DirectoryReader {
 public:
@@ -108,6 +141,15 @@ public:
     /// Open a directory for paged listing; no entry is read until `next` is called.
     virtual support::Expected<std::unique_ptr<DirectoryReader>> open_directory(
             std::string_view path, std::stop_token stop) = 0;
+    /// List a whole tree depth first, siblings in byte order, with the frozen
+    /// `listFiles` bounds and filters. `.git` names and `exclude` names are
+    /// always skipped with their subtree; symlinks are listed but never
+    /// followed; FIFOs and other unsupported kinds are skipped. The walk is
+    /// bounded: it never loads an unbounded directory into memory, reports
+    /// `truncated` at the first entry beyond a bound, and fails with a
+    /// typed Validation error when the ignore-rule budget is exceeded.
+    virtual support::Expected<TreeListing> list_files(
+            std::string_view path, TreeListingOptions options, std::stop_token stop) = 0;
     virtual support::Expected<std::vector<FileInfo>> list(std::string_view path, std::stop_token stop) = 0;
     /// Create a fresh temporary directory for one run's output files. An
     /// environment without a temporary area reports that explicitly instead of

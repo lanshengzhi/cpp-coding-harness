@@ -24,6 +24,7 @@ cch_parity_declare_target(
         src/durable/EditDiff.cpp
         src/durable/Environment.cpp
         src/durable/FileMutationQueue.cpp
+        src/durable/GitIgnore.cpp
         src/durable/Images.cpp
         src/durable/Compaction.cpp
         src/durable/Harness.cpp
@@ -38,6 +39,7 @@ cch_parity_declare_target(
         src/durable/ToolContent.cpp
         src/durable/ToolTask.cpp
         src/durable/ToolSearch.cpp
+        src/durable/TreeListing.cpp
         src/durable/WorkflowRuntime.cpp
     DEPENDS
         Boost::headers@boost
