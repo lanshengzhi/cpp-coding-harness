@@ -23,7 +23,9 @@
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/Json.hpp"
 #include "support/JsonCompare.hpp"
+#include "support/McpTestKit.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -37,6 +39,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -164,11 +169,39 @@ private:
     return std::string{CCH_SOURCE_DIR} + "/fixtures/pi-mcp/" + std::string{name};
 }
 
-[[nodiscard]] coding_agent::mcp::McpStdioServerConfig echo_server_config() {
+/// The registered #1181 application-initialization observation: the stdio
+/// resource case anchors its on-demand wire order to the frozen
+/// `resourcesListedAtConnect` field.
+[[nodiscard]] std::filesystem::path initialization_artifact_path() {
+    return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1052" /
+           "application-initialization.json";
+}
+
+[[nodiscard]] support::JsonValue read_initialization_artifact() {
+    std::ifstream input(initialization_artifact_path(), std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue& initialization_scenario(
+        const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return artifact;
+}
+
+[[nodiscard]] coding_agent::mcp::McpStdioServerConfig echo_server_config(const std::string& trace = {}) {
     coding_agent::mcp::McpStdioServerConfig config;
     config.name = "echo";
     config.command = "python3";
     config.args = {fixture_path("echo_server.py")};
+    if (!trace.empty()) {
+        config.env.emplace("PIKE_MCP_TRACE", trace);
+    }
     return config;
 }
 
@@ -465,13 +498,30 @@ TEST_CASE("the connected-time snapshot re-lists when asked, so a `list_changed` 
 }
 
 TEST_CASE("the real stdio fixture lists, templates, and reads over `resources/*`",
-        "[coding_agent][mcp][issue884][spec]") {
+        "[coding_agent][mcp][issue884][issue1181][spec]") {
     tests::TempWorkspace workspace;
     const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
     tests::RuntimeFixture runtime;
 
-    auto client = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(echo_server_config()));
+    // The frozen application-initialization observation (audit-1052
+    // application-initialization.json) records that connect lists tools but
+    // not resources; the wire trace below proves the on-demand shape for the
+    // real stdio transport.
+    const auto artifact = read_initialization_artifact();
+    const auto& expected_at_connect =
+            initialization_scenario(artifact, "connecting a server lists tools but not resources")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
+    const auto trace = workspace.path() / "mcp-trace.log";
+    auto client = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(echo_server_config(trace.string())));
     REQUIRE(client.has_value());
+
+    // Connect phase: no resources/list has been sent, matching the frozen
+    // `resourcesListedAtConnect` field.
+    const auto connect_trace = tests::read_text_if_present(trace);
+    CHECK(connect_trace.find("recv resources/list") == std::string::npos);
+
     auto server = std::make_shared<coding_agent::mcp::McpConnectionResourceServer>(*client);
     auto tools = coding_agent::mcp::create_mcp_resource_tools({server});
 
@@ -481,7 +531,7 @@ TEST_CASE("the real stdio fixture lists, templates, and reads over `resources/*`
             support::detail::await_async_result(
                     coding_agent::mcp::fetch_mcp_resource_snapshot(*server, std::stop_token{})));
     REQUIRE(snapshot.has_value());
-    CHECK(snapshot->has_resources);
+    CHECK(snapshot->has_resources == expected_at_connect.at("hasResources").get_boolean());
     REQUIRE(snapshot->resources.size() == 2);
     CHECK(snapshot->resources[0].get_object().at("uri").get_string() == "file:///docs/readme.md");
     CHECK(snapshot->resources[1].get_object().at("name").get_string() == "notes://scratch");
@@ -518,6 +568,12 @@ TEST_CASE("the real stdio fixture lists, templates, and reads over `resources/*`
         INFO(*mismatch);
     }
     CHECK(tool_text(*read) == std::string{"# readme\n"});
+
+    // On demand, the resource list arrived exactly when asked: the wire trace
+    // gained one `resources/list` after the connect phase, matching the frozen
+    // on-demand listing.
+    const auto full_trace = tests::read_text_if_present(trace);
+    CHECK(full_trace.find("recv resources/list") != std::string::npos);
 }
 
 TEST_CASE("converted MCP tools declare pi's CallToolResult output schema", "[coding_agent][mcp][issue884][spec]") {

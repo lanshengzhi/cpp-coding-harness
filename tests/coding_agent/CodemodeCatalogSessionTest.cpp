@@ -58,6 +58,41 @@ namespace extensions = cch::coding_agent::extensions;
 
 [[nodiscard]] std::string fixture_dir() { return std::string{CCH_SOURCE_DIR} + "/fixtures/pi-mcp"; }
 
+/// The registered #1118 catalog observation. The session cases anchor their
+/// live-request checks to this frozen rendering instead of recomputing the
+/// expected text locally, so a frozen change moves these expectations too.
+[[nodiscard]] std::filesystem::path catalog_artifact_path() {
+    return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1053" / "application-catalog.json";
+}
+
+[[nodiscard]] support::JsonValue read_catalog_artifact() {
+    std::ifstream input(catalog_artifact_path(), std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue& catalog_scenario(const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return artifact;
+}
+
+[[nodiscard]] std::string catalog_expected_text(const support::JsonValue& artifact, std::string_view name) {
+    return catalog_scenario(artifact, name).get_object().at("expected").get_string();
+}
+
+/// The one advertised-globals line of the frozen empty-catalog rendering.
+[[nodiscard]] std::string frozen_globals_line(const std::string& frozen_empty) {
+    const auto line_start = frozen_empty.find("- `ALL_TOOLS`");
+    REQUIRE(line_start != std::string::npos);
+    const auto line_end = frozen_empty.find('\n', line_start);
+    return frozen_empty.substr(line_start, line_end == std::string::npos ? line_end : line_end - line_start);
+}
+
 /// Write a global `mcp.json` under the XDG root the test's EnvVarGuard points
 /// at, mirroring pi's `<agentDir>/mcp.json`.
 void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_view content) {
@@ -251,6 +286,15 @@ TEST_CASE("a real session's next request lists MCP tools registered late and exe
     auto provider = std::make_shared<CapturingProvider>();
     auto attempt = make_session(runtime, workspace, provider);
 
+    // The frozen empty-catalog rendering is the "catalog never refreshed"
+    // baseline (audit-1053 application-catalog.json): the first request must
+    // differ from it, and it keeps advertising the frozen discovery-globals
+    // line the frozen observation records.
+    const auto artifact = read_catalog_artifact();
+    const auto frozen_empty = catalog_expected_text(
+            artifact, "the empty codemode catalog still declares globals, discovery and the options grammar");
+    const auto globals_line = frozen_globals_line(frozen_empty);
+
     // The initial request already carries the live catalog: the codemode tool
     // is activated by the `codemode` exposure (pi `ensureDiscoveryActive`) and
     // lists the server's first tool under its namespace.
@@ -259,7 +303,8 @@ TEST_CASE("a real session's next request lists MCP tools registered late and exe
     const auto first = offered_codemode(provider->offered_tools.front());
     REQUIRE(first.has_value());
     INFO(first->description);
-    CHECK(first->description != empty_catalog_description());
+    CHECK(first->description != frozen_empty);
+    CHECK(contains(first->description, globals_line));
     CHECK(contains(first->description, "Nested tools:"));
     CHECK(contains(first->description, "## mcp__echo\nEcho fixture server"));
     CHECK(contains(first->description, "### `mcp__echo__echo`"));
@@ -406,9 +451,27 @@ TEST_CASE("the only loadout hides direct declarations from the request and lists
     REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("first request")).has_value());
     REQUIRE_FALSE(provider->offered_tools.empty());
     const auto& offered = provider->offered_tools.front();
+    const auto names = offered_names(offered);
     const auto codemode = offered_codemode(offered);
     REQUIRE(codemode.has_value());
     INFO(codemode->description);
+
+    // The frozen only-loadout observation (audit-1053 application-catalog.json)
+    // hides its direct declarations from the request and lists each hidden tool
+    // in the catalog; the live `only` loadout must treat the frozen hidden set
+    // the same way, under the frozen section-heading form.
+    const auto artifact = read_catalog_artifact();
+    const auto& frozen_only =
+            catalog_scenario(artifact, "the only loadout lists every callable tool and hides direct declarations")
+                    .get_object()
+                    .at("expected");
+    const auto& frozen_only_description = frozen_only.get_object().at("codemodeDescription").get_string();
+    for (const auto& hidden : frozen_only.get_object().at("hiddenDeclarations").get_array()) {
+        const auto& name = hidden.get_string();
+        CHECK(std::ranges::find(names, name) == names.end());
+        CHECK(contains(codemode->description, "### `" + name + "`"));
+        CHECK(contains(frozen_only_description, "### `" + name + "`"));
+    }
     // `only` lists every callable tool, including the declared built-ins, with
     // their prompt guidelines.
     CHECK(contains(codemode->description, "### `read`"));
@@ -417,7 +480,6 @@ TEST_CASE("the only loadout hides direct declarations from the request and lists
     CHECK(contains(codemode->description, "### `mcp__echo__echo`"));
     // ...and the direct declarations leave the request (pi
     // `_installHiddenDeclarationsProjection`), while codemode itself stays.
-    const auto names = offered_names(offered);
     CHECK(std::ranges::find(names, std::string{"read"}) == names.end());
     CHECK(std::ranges::find(names, std::string{"bash"}) == names.end());
     CHECK(std::ranges::find(names, std::string{"codemode"}) != names.end());
@@ -439,15 +501,19 @@ TEST_CASE("the advertised discovery globals are bound and answer over the callab
     auto provider = std::make_shared<CapturingProvider>();
     auto attempt = make_session(runtime, workspace, provider);
 
+    // The frozen empty-catalog rendering pins the exact discovery-globals line
+    // the description must advertise (audit-1053 application-catalog.json).
+    const auto artifact = read_catalog_artifact();
+    const auto globals_line = frozen_globals_line(catalog_expected_text(
+            artifact, "the empty codemode catalog still declares globals, discovery and the options grammar"));
+
     REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("first request")).has_value());
     REQUIRE_FALSE(provider->offered_tools.empty());
     const auto codemode = offered_codemode(provider->offered_tools.front());
     REQUIRE(codemode.has_value());
-    // Every global the description advertises is a real bound global.
-    CHECK(contains(codemode->description, "`ALL_TOOLS`"));
-    CHECK(contains(codemode->description, "`await searchTools("));
-    CHECK(contains(codemode->description, "`await describeTool(name)`"));
-    CHECK(contains(codemode->description, "`await describeNamespace(name)`"));
+    // Every global the frozen line advertises is advertised by the live
+    // description, and each one is a real bound global below.
+    CHECK(contains(codemode->description, globals_line));
 
     provider->arm_script("const found = await searchTools('echo');"
                          " const doc = await describeTool('mcp__echo__echo');"

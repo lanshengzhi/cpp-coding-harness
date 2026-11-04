@@ -69,6 +69,36 @@ struct SessionAttempt {
 
 [[nodiscard]] std::string fixture_dir() { return std::string{CCH_SOURCE_DIR} + "/fixtures/pi-mcp"; }
 
+/// The registered #1181 application-initialization observation: the
+/// resource-listing cases below compare the live wire order against the
+/// frozen methods, resource and error fields.
+[[nodiscard]] std::filesystem::path initialization_artifact_path() {
+    return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1052" /
+           "application-initialization.json";
+}
+
+[[nodiscard]] support::JsonValue read_initialization_artifact() {
+    std::ifstream input(initialization_artifact_path(), std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue& initialization_scenario(
+        const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return artifact;
+}
+
+/// Whether `text` contains one line exactly equal to `line`.
+[[nodiscard]] bool contains_line(const std::string& text, const std::string& line) {
+    return text.find(line + "\n") != std::string::npos;
+}
+
 /// Write a global `mcp.json` under the XDG root the test's EnvVarGuard points
 /// at, mirroring pi's `<agentDir>/mcp.json`.
 void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_view content) {
@@ -462,8 +492,28 @@ private:
 } // namespace
 
 TEST_CASE("agent session lists MCP resources only on demand and can call tools after a resource failure",
-        "[coding_agent][mcp][issue1105][spec]") {
+        "[coding_agent][mcp][issue1105][issue1181][spec]") {
     const bool fail_resources = GENERATE(false, true);
+    // The frozen application-initialization observation (audit-1052
+    // application-initialization.json) pins the connect-time methods, the
+    // on-demand resource listing, and the resource-failure outcome compared
+    // below; every frozen value is read from the artifact.
+    const auto artifact = read_initialization_artifact();
+    const auto& expected_at_connect =
+            initialization_scenario(artifact, "connecting a server lists tools but not resources")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
+    const auto& expected_on_demand =
+            initialization_scenario(artifact, "resources are listed on demand after the connection is ready")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
+    const auto& expected_failure = initialization_scenario(
+            artifact, "a resources/list failure leaves the server connected and usable for tools")
+                                           .get_object()
+                                           .at("expected")
+                                           .get_object();
     tests::TempWorkspace workspace;
     const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
     const auto trace = workspace.path() / "methods";
@@ -489,17 +539,40 @@ TEST_CASE("agent session lists MCP resources only on demand and can call tools a
     attempt.session.reset();
     runtime.close();
 
+    // Connect lists tools only: the frozen method set is present and the
+    // frozen `resourcesListedAtConnect` stays false.
     CHECK(startup_methods == "initialize\nnotifications/initialized\ntools/list\n");
+    for (const auto& method : expected_at_connect.at("methodsAtConnect").get_array()) {
+        CHECK(contains_line(startup_methods, method.get_string()));
+    }
+    CHECK_FALSE(expected_at_connect.at("resourcesListedAtConnect").get_boolean());
+    CHECK(startup_methods.find("resources/list") == std::string::npos);
     CHECK(prompted.has_value());
     CHECK(resource_error == fail_resources);
     REQUIRE(listed.has_value());
-    CHECK(listed->find(fail_resources ? "resource boom" : "docs://intro") != std::string::npos);
+    // The on-demand listing carries the frozen resource; the failure carries
+    // the frozen error message.
+    const auto& frozen_resource = expected_on_demand.at("resources").get_array().front().get_string();
+    const auto& frozen_error_message = expected_failure.at("error").get_object().at("message").get_string();
+    CHECK(listed->find(fail_resources ? frozen_error_message : frozen_resource) != std::string::npos);
+    // The frozen `toolsStillAvailable` tool stays callable after either outcome.
     CHECK(echoed == std::vector<std::string>{"echo after resources", "echo after resources"});
     REQUIRE(servers.size() == 1);
     REQUIRE(servers.front().connection.has_value());
     CHECK(servers.front().connection->state == coding_agent::runtime::McpServerState::Connected);
-    CHECK(servers.front().connection->has_resources);
-    CHECK(tests::read_text_if_present(trace) == startup_methods + "resources/list\ntools/call\ntools/call\n");
+    CHECK(servers.front().connection->has_resources == expected_at_connect.at("hasResources").get_boolean());
+    const auto full_trace = tests::read_text_if_present(trace);
+    // The wire order after the turn is the frozen `after` method set: the
+    // resource list arrived on demand, then the tool calls.
+    CHECK(full_trace == startup_methods + "resources/list\ntools/call\ntools/call\n");
+    for (const auto& method : expected_on_demand.at("after").get_array()) {
+        CHECK(contains_line(full_trace, method.get_string()));
+    }
+    if (fail_resources) {
+        for (const auto& method : expected_failure.at("methods").get_array()) {
+            CHECK(contains_line(full_trace, method.get_string()));
+        }
+    }
 }
 
 TEST_CASE("agent session binds late MCP tools and replaces their callable schemas after an idle notification",

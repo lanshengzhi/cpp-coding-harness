@@ -14,6 +14,7 @@
 #include <cch/codemode/Sandbox.hpp>
 
 #include "codemode/Prelude.hpp"
+#include "support/Json.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -72,6 +73,24 @@ using coding_agent::extensions::CodemodeToolSource;
     auto outcome = tests::run_async_result(sandbox.run(std::move(script), {}, limits));
     REQUIRE(outcome.has_value());
     return std::move(*outcome);
+}
+
+/// The registered #1179 script-execution observation: the timeout comparison
+/// drives the frozen script with its frozen deadline and compares the frozen
+/// error text instead of a locally spelled message.
+[[nodiscard]] const support::JsonValue& frozen_script_scenario(std::string_view name) {
+    static const auto document = [] {
+        const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1053" /
+                          "script-execution.json";
+        auto parsed = support::read_json(read_file(path));
+        REQUIRE(parsed.has_value());
+        return std::move(*parsed);
+    }();
+    for (const auto& candidate : document.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return document;
 }
 
 } // namespace
@@ -133,13 +152,22 @@ TEST_CASE("a script error is reported with its message and kind", "[coding_agent
 }
 
 TEST_CASE("an over-limit script is interrupted with a timeout error", "[coding_agent][codemode][issue874][spec]") {
+    // Frozen pi v1.3.0 (`audit-1053/script-execution.json`, "a script that
+    // computes past its deadline is a timeout"): drive the frozen script with
+    // its frozen deadline and compare the recorded timeout error and empty
+    // output against the registered observation.
+    const auto& frozen = frozen_script_scenario("a script that computes past its deadline is a timeout");
+    const auto& inputs = frozen.get_object().at("inputs").get_object();
+    const auto& expected = frozen.get_object().at("expected").get_object();
+    const auto timeout = std::chrono::milliseconds{static_cast<std::int64_t>(inputs.at("timeoutMs").get_number())};
     auto sandbox = make_sandbox();
 
-    auto result = run_script(*sandbox, "for (let i = 0; i < 1e18; i += 1) {}", std::chrono::milliseconds{150});
+    auto result = run_script(*sandbox, inputs.at("script").get_string(), timeout);
 
     REQUIRE(result.error.has_value());
     CHECK(result.error->kind == CodemodeError::Kind::Timeout);
-    CHECK(result.error->message == "Execution timed out after 150 ms");
+    CHECK(result.error->message == expected.at("error").get_object().at("message").get_string());
+    CHECK(result.output.empty());
 }
 
 TEST_CASE("a pre-cancelled run never starts the script", "[coding_agent][codemode][issue874][spec]") {

@@ -47,10 +47,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <expected>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -94,6 +98,60 @@ const std::string kTokenUrl = "https://auth.example.com/token";
     const auto pairs = cch::mcp::parse_query_pairs(url.substr(query_start + 1));
     const auto found = pairs.find(std::string{key});
     return found == pairs.end() ? std::string{} : found->second;
+}
+
+/// The registered #1181 OAuth-lifecycle observation: the sign-in cases anchor
+/// the shown authorization URL to the frozen scenario's `authorizationUrl`
+/// fields.
+[[nodiscard]] support::JsonValue read_oauth_lifecycle_artifact() {
+    const auto path =
+            std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1052" / "oauth-lifecycle.json";
+    std::ifstream input(path, std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue& oauth_lifecycle_scenario(
+        const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return artifact;
+}
+
+/// Compare the shown authorization URL against the frozen scenario's
+/// `authorizationUrl` object (query-key set, PKCE method, state presence,
+/// loopback redirect).
+void check_frozen_authorization_url(const std::string& url, const support::JsonValue::object_t& frozen_expected) {
+    const auto& frozen_url = frozen_expected.at("authorizationUrl").get_object();
+    std::vector<std::string> keys;
+    const auto query_start = url.find('?');
+    REQUIRE(query_start != std::string::npos);
+    for (const auto& [key, _] : cch::mcp::parse_query_pairs(std::string_view{url}.substr(query_start + 1))) {
+        keys.push_back(key);
+    }
+    std::ranges::sort(keys);
+    std::vector<std::string> frozen_keys;
+    for (const auto& key : frozen_url.at("queryKeys").get_array()) {
+        frozen_keys.push_back(key.get_string());
+    }
+    std::ranges::sort(frozen_keys);
+    // Every frozen query key is present. This port additionally merges the
+    // resource's advertised scopes into the URL (pi's `||` chain in
+    // `buildAuthorizationUrl`), so a `scope` key may appear beyond the frozen
+    // set; the frozen set is the compared contract.
+    for (const auto& key : frozen_keys) {
+        CHECK(std::ranges::find(keys, key) != keys.end());
+    }
+    CHECK(query_param(url, "code_challenge_method") == frozen_url.at("codeChallengeMethod").get_string());
+    CHECK(query_param(url, "code_challenge").empty() == !frozen_expected.at("pkceChallengePresent").get_boolean());
+    CHECK(query_param(url, "state").empty() == !frozen_url.at("hasState").get_boolean());
+    // The frozen redirect URI is the loopback callback (normalized to
+    // `<loopback>/callback` in the artifact).
+    CHECK(query_param(url, "redirect_uri").starts_with("http://127.0.0.1:"));
 }
 
 struct CallbackEndpoint {
@@ -269,7 +327,15 @@ struct SignInHarness {
 
 } // namespace
 
-TEST_CASE("a pasted redirect URL completes the MCP OAuth sign-in", "[coding_agent][mcp][issue884][spec]") {
+TEST_CASE("a pasted redirect URL completes the MCP OAuth sign-in", "[coding_agent][mcp][issue884][issue1181][spec]") {
+    // The completed flow shows the same frozen authorization URL shape the
+    // cancelled observation records (audit-1052 oauth-lifecycle.json).
+    const auto artifact = read_oauth_lifecycle_artifact();
+    const auto& frozen_expected =
+            oauth_lifecycle_scenario(artifact, "cancellation while waiting for the browser callback stops sign-in")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
     SignInHarness harness;
     harness.http->responses[kTokenUrl] = {{200, kTokenResponse}};
 
@@ -278,8 +344,9 @@ TEST_CASE("a pasted redirect URL completes the MCP OAuth sign-in", "[coding_agen
 
     // The flow registered a client, then exchanged the pasted code.
     REQUIRE(harness.authorization_url.has_value());
+    CHECK(frozen_expected.at("authorizationUrlShown").get_boolean());
+    check_frozen_authorization_url(*harness.authorization_url, frozen_expected);
     CHECK(query_param(*harness.authorization_url, "client_id") == "dyn-client-1");
-    CHECK(query_param(*harness.authorization_url, "redirect_uri").starts_with("http://127.0.0.1:"));
     CHECK(harness.prompt_called);
 
     REQUIRE(harness.http->requests.size() == 2);
@@ -319,11 +386,18 @@ TEST_CASE("the browser callback completes the MCP OAuth sign-in", "[coding_agent
 }
 
 TEST_CASE("a browser callback wait cancelled by the sign-in stop token stops sign-in",
-        "[coding_agent][mcp][issue1102][spec]") {
+        "[coding_agent][mcp][issue1102][issue1181][spec]") {
     // audit-1052 `oauth-lifecycle.json`, "cancellation while waiting for the
     // browser callback stops sign-in": the authorization URL has been shown
     // and the callback/paste wait is pending; the sign-in stop token ends the
-    // flow with no token exchange and no authorization request.
+    // flow with no token exchange and no authorization request. The shown URL
+    // and the request accounting below are the frozen scenario's own fields.
+    const auto artifact = read_oauth_lifecycle_artifact();
+    const auto& frozen_expected =
+            oauth_lifecycle_scenario(artifact, "cancellation while waiting for the browser callback stops sign-in")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
     SignInHarness harness;
     harness.paste_suffix = std::nullopt;
     std::stop_source cancel;
@@ -334,14 +408,13 @@ TEST_CASE("a browser callback wait cancelled by the sign-in stop token stops sig
     CHECK(outcome.error().code == support::ErrorCode::Cancelled);
 
     REQUIRE(harness.authorization_url.has_value());
-    CHECK(query_param(*harness.authorization_url, "response_type") == "code");
-    CHECK(query_param(*harness.authorization_url, "code_challenge_method") == "S256");
-    CHECK_FALSE(query_param(*harness.authorization_url, "code_challenge").empty());
-    CHECK_FALSE(query_param(*harness.authorization_url, "state").empty());
-    CHECK(query_param(*harness.authorization_url, "redirect_uri").starts_with("http://127.0.0.1:"));
-    CHECK_FALSE(query_param(*harness.authorization_url, "resource").empty());
+    CHECK(frozen_expected.at("authorizationUrlShown").get_boolean());
+    check_frozen_authorization_url(*harness.authorization_url, frozen_expected);
 
-    // The client registration ran; the token exchange did not.
+    // The client registration ran; the token exchange did not, and no
+    // authorization request was recorded.
+    CHECK(static_cast<std::size_t>(frozen_expected.at("tokenRequests").get_number()) == 0);
+    CHECK(static_cast<std::size_t>(frozen_expected.at("authorizationRequests").get_number()) == 0);
     REQUIRE(harness.http->requests.size() == 1);
     CHECK(harness.http->requests.front().url == kRegistrationUrl);
     CHECK(harness.http->requests.front().body.find("grant_type=") == std::string::npos);

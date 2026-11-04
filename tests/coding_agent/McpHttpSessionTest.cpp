@@ -80,6 +80,31 @@ using namespace cch;
 
 namespace {
 
+/// The registered #1181 transports observation: the transport cases below
+/// compare their wire behavior against the frozen scenario fields instead of
+/// locally spelled expectations.
+[[nodiscard]] support::JsonValue read_transports_artifact() {
+    const auto path =
+            std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1052" / "transports.json";
+    std::ifstream input(path, std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue& transports_scenario(const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return artifact;
+}
+
+} // namespace
+
+namespace {
+
 using namespace std::chrono_literals;
 
 [[nodiscard]] std::string fixture_path(std::string_view name) {
@@ -354,7 +379,17 @@ using cch::tests::wait_for;
 } // namespace
 
 TEST_CASE("connecting an MCP HTTP server lists its tools with the pi naming and schema",
-        "[coding_agent][mcp][issue873][spec]") {
+        "[coding_agent][mcp][issue873][issue1181][spec]") {
+    // The frozen trusted-certificate scenario (audit-1052 transports.json,
+    // "HTTPS transport connects when its certificate is trusted") records the
+    // connected state this case must reach; its `trust` field is this port's
+    // committed test CA carried through SSL_CERT_FILE.
+    const auto artifact = read_transports_artifact();
+    const auto& frozen_trusted =
+            transports_scenario(artifact, "HTTPS transport connects when its certificate is trusted")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
     HttpFixtureServer server;
     auto ca = trust_test_ca();
     tests::RuntimeFixture runtime;
@@ -363,6 +398,7 @@ TEST_CASE("connecting an MCP HTTP server lists its tools with the pi naming and 
             tests::run_awaitable(runtime, coding_agent::mcp::McpExtensionToolSource::connect_http(http_config(server)));
     REQUIRE(source.has_value());
     REQUIRE(source.value() != nullptr);
+    CHECK(frozen_trusted.at("connected").get_string() == "connected");
     CHECK(source.value()->server_name() == "echo");
 
     const auto& tools = source.value()->tools();
@@ -463,7 +499,7 @@ TEST_CASE("an MCP HTTP tool answered over an SSE stream is called like any other
     session->close();
 }
 
-TEST_CASE("an MCP HTTP URL must be http or https", "[coding_agent][mcp][issue873][issue1103][spec]") {
+TEST_CASE("an MCP HTTP URL must be http or https", "[coding_agent][mcp][issue873][issue1103][issue1181][spec]") {
     // pi v1.3.0 `validateMcpServerConfig` (audit-1052 `transports.json`,
     // "application config accepts http and https but rejects another scheme"):
     // both `http` and `https` URLs are accepted — the plain-HTTP connect case
@@ -478,17 +514,28 @@ TEST_CASE("an MCP HTTP URL must be http or https", "[coding_agent][mcp][issue873
     // The frozen scenario accepts both supported schemes; the plain-HTTP
     // connect below is the http half and the TLS fixture cases are the
     // https half. Validate both config shapes here too.
-    for (const auto* url : {"http://127.0.0.1:1/mcp", "https://127.0.0.1:1/mcp"}) {
+    const auto artifact = read_transports_artifact();
+    const auto& frozen_scheme =
+            transports_scenario(artifact, "application config accepts http and https but rejects another scheme")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
+    for (const auto& accepted_name : frozen_scheme.at("serverNames").get_array()) {
         coding_agent::mcp::McpHttpServerConfig accepted;
-        accepted.name = "accepted";
-        accepted.url = url;
+        accepted.name = accepted_name.get_string();
+        accepted.url = accepted_name.get_string() == "plain" ? "http://127.0.0.1:1/mcp" : "https://127.0.0.1:1/mcp";
         CHECK(cch::mcp::validate_http_server_config(accepted).has_value());
     }
 
     auto valid = cch::mcp::validate_http_server_config(rejected);
     REQUIRE_FALSE(valid.has_value());
     CHECK(valid.error().code == support::ErrorCode::Validation);
-    CHECK(valid.error().message.find("url must be an http or https URL") != std::string::npos);
+    // The frozen rejection text (its `<agent-dir>/mcp.json: server "rejected":`
+    // prefix is pi's config-file wording; this port's validator phrases the
+    // name part differently, so the compared contract is the shared suffix).
+    const auto& frozen_error = frozen_scheme.at("errors").get_array().at(0).get_string();
+    const auto frozen_detail = frozen_error.substr(frozen_error.find("url must"));
+    CHECK(valid.error().message.find(frozen_detail) != std::string::npos);
 
     tests::RuntimeFixture runtime;
     // The gate runs before any socket work, so no server is needed.
@@ -531,10 +578,18 @@ TEST_CASE("an HTTP 200 with a non-MCP body is not success", "[coding_agent][mcp]
     CHECK(response.error().detail.find("no matching id") != std::string::npos);
 }
 
-TEST_CASE("streamable HTTP transport connects over plain http", "[coding_agent][mcp][issue1103][spec]") {
+TEST_CASE("streamable HTTP transport connects over plain http", "[coding_agent][mcp][issue1103][issue1181][spec]") {
     // audit-1052 `transports.json`, same-named scenario: the frozen client
     // connects over `http`, the initialize POST is answered 200, and the
-    // `notifications/initialized` POST is answered 202.
+    // `notifications/initialized` POST is answered 202. The frozen request
+    // sequence is compared against the fixture trace in order.
+    const auto artifact = read_transports_artifact();
+    const auto& frozen_requests = transports_scenario(artifact, "streamable HTTP transport connects over plain http")
+                                          .get_object()
+                                          .at("expected")
+                                          .get_object()
+                                          .at("requests")
+                                          .get_array();
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
     HttpFixtureServer server{{.trace_path = trace, .tls = false}};
@@ -547,19 +602,37 @@ TEST_CASE("streamable HTTP transport connects over plain http", "[coding_agent][
             tests::run_awaitable(runtime, support::detail::await_async_result(client->request("tools/list")));
     REQUIRE(listed.has_value());
 
-    // The connect succeeded, which requires the initialize 200; both requests
-    // arrived at the plain-HTTP fixture in pi's order.
-    CHECK(tests::trace_contains(trace, "recv initialize id=1"));
-    CHECK(tests::trace_contains(trace, "recv notifications/initialized id=None"));
+    // The connect succeeded, which requires the initialize 200; both frozen
+    // requests arrived at the plain-HTTP fixture in the frozen order.
+    std::string::size_type position = 0;
+    bool ordered = true;
+    for (const auto& request : frozen_requests) {
+        const auto needle = "recv " + request.get_object().at("rpc").get_string() + " id=";
+        const auto found = tests::read_text_if_present(trace).find(needle, position);
+        if (found == std::string::npos) {
+            ordered = false;
+            break;
+        }
+        position = found + needle.size();
+    }
+    CHECK(ordered);
     client->close();
 }
 
-TEST_CASE("HTTPS transport rejects an untrusted certificate", "[coding_agent][mcp][issue1103][spec]") {
+TEST_CASE("HTTPS transport rejects an untrusted certificate", "[coding_agent][mcp][issue1103][issue1181][spec]") {
     // audit-1052 `transports.json`, same-named scenario: with the default
     // trust store the self-signed loopback certificate is refused and
     // certificate validation stays platform-enforced (ADR 0075). The trusted
     // half is the acceptance pair: every TLS fixture case connects only with
-    // SSL_CERT_FILE pointing at the committed test CA (`trust_test_ca`).
+    // SSL_CERT_FILE pointing at the committed test CA (`trust_test_ca`). The
+    // frozen `tlsValidationEnforced` field is the compared contract; the
+    // frozen cause code is Node's OpenSSL wording, which this transport does
+    // not surface.
+    const auto artifact = read_transports_artifact();
+    const auto& frozen_expected = transports_scenario(artifact, "HTTPS transport rejects an untrusted certificate")
+                                          .get_object()
+                                          .at("expected")
+                                          .get_object();
     tests::TempWorkspace workspace;
     const auto empty_ca = workspace.path() / "empty-ca.pem";
     {
@@ -573,14 +646,21 @@ TEST_CASE("HTTPS transport rejects an untrusted certificate", "[coding_agent][mc
             cch::mcp::HttpClient::connect(http_config(server), std::make_shared<support::BoostBeastStreamTransport>()));
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().code == support::ErrorCode::Network);
+    CHECK(frozen_expected.at("tlsValidationEnforced").get_boolean());
 }
 
 TEST_CASE("a same-origin redirect is followed and keeps the request auth header",
-        "[coding_agent][mcp][issue1103][spec]") {
+        "[coding_agent][mcp][issue1103][issue1181][spec]") {
     // audit-1052 `transports.json`, same-named scenario: the 307 is followed,
-    // the POST is re-sent to the resolved target, and `Authorization: Bearer static` is
-    // preserved. This case replaces the former refusal of every redirect
-    // (ADR 0054, superseded for MCP by ADR 0075).
+    // the POST is re-sent to the resolved target, and the caller's
+    // authorization is preserved. The forwarded credential compared below is
+    // the frozen scenario's own `authorization` input field.
+    const auto artifact = read_transports_artifact();
+    const auto& frozen_redirect =
+            transports_scenario(artifact, "same-origin redirect is followed and keeps the request auth header")
+                    .get_object();
+    const auto& frozen_inputs = frozen_redirect.at("inputs").get_object();
+    const auto& frozen_expected = frozen_redirect.at("expected").get_object();
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
     HttpFixtureServer server{{.trace_path = trace,
@@ -590,7 +670,7 @@ TEST_CASE("a same-origin redirect is followed and keeps the request auth header"
 
     auto config = http_config(server);
     config.url = url_origin(server.url()) + "/a/b";
-    config.headers["Authorization"] = "Bearer static";
+    config.headers["Authorization"] = frozen_inputs.at("authorization").get_string();
     auto client = connect_http_client(runtime, std::move(config));
 
     // The initialize followed the hop: the connection is live and the target
@@ -599,11 +679,13 @@ TEST_CASE("a same-origin redirect is followed and keeps the request auth header"
     CHECK(tests::trace_contains(trace, "request-path /a/next"));
     CHECK(tests::trace_contains(trace, "recv initialize id=1 authorization_present=true"));
 
-    // The credential arrived at the same-origin target, verbatim.
+    // The credential arrived at the same-origin target, verbatim, as the
+    // frozen `authorizationForwarded` field records.
     auto observed = tests::run_awaitable(
             runtime, support::detail::await_async_result(client->request("debug/authorization_present")));
     REQUIRE(observed.has_value());
-    CHECK(observed->at("authorization").get_string() == "Bearer static");
+    CHECK(frozen_expected.at("authorizationForwarded").get_boolean());
+    CHECK(observed->at("authorization").get_string() == frozen_inputs.at("authorization").get_string());
     client->close();
 }
 
@@ -635,11 +717,19 @@ TEST_CASE("relative redirect references resolve against the current URL", "[codi
 }
 
 TEST_CASE("cross-origin redirect is followed without Authorization and is rejected",
-        "[coding_agent][mcp][issue1103][spec]") {
+        "[coding_agent][mcp][issue1103][issue1181][spec]") {
     // audit-1052 `transports.json`, same-named scenario: the source 307 keeps
     // the caller's Authorization, the cross-origin hop strips it, the target
-    // answers 401, and the client surfaces the rejection as the re-login
-    // error (pi `McpAuthRequiredError`, "MCP server requires authentication").
+    // answers the frozen 401, and the client surfaces the rejection as the
+    // re-login error (pi `McpAuthRequiredError`; this port's text is
+    // "Authentication failed"). The stripped-credential and target-status
+    // comparisons below are the frozen scenario's own fields.
+    const auto artifact = read_transports_artifact();
+    const auto& frozen_expected =
+            transports_scenario(artifact, "cross-origin redirect is followed without Authorization and is rejected")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
     tests::TempWorkspace workspace;
     const auto target_trace = workspace.path() / "target-trace.log";
     // The frozen target answers 401 when the stripped request arrives; a
@@ -657,14 +747,19 @@ TEST_CASE("cross-origin redirect is followed without Authorization and is reject
             cch::mcp::HttpClient::connect(std::move(config), std::make_shared<support::BoostBeastStreamTransport>()));
 
     // The target's trace is the wire proof that no Authorization crossed the
-    // origin: exactly the initialize POST arrived, with the header absent.
+    // origin: exactly the initialize POST arrived, with the header absent, as
+    // the frozen `targetAuthorization` null field records.
     CHECK(tests::trace_line_count(target_trace, "recv initialize") == 1);
     CHECK(tests::trace_contains(target_trace, "recv initialize id=1 authorization_present=false"));
+    CHECK(frozen_expected.at("targetAuthorization").holds<std::nullptr_t>());
 
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().code == support::ErrorCode::OAuth);
     CHECK(refused.error().message.find("Authentication failed") != std::string::npos);
     CHECK(refused.error().detail.find("HTTP 401") != std::string::npos);
+    CHECK(refused.error().detail.find("HTTP " + std::to_string(static_cast<std::int64_t>(
+                                                        frozen_expected.at("targetStatus").get_number()))) !=
+            std::string::npos);
 }
 
 TEST_CASE("a redirect chain beyond the fetch ceiling fails explicitly", "[coding_agent][mcp][issue1103][protocol]") {

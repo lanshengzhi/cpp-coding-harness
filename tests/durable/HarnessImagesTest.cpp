@@ -155,6 +155,39 @@ TEST_CASE("Read returns a prepared image and the frozen diagnostic through the p
                 24);
     }
     CHECK(text_at(outcome, 1) == frozen_text("an EXIF-oriented JPEG is made upright before its resized diagnostic", 1));
+
+    SECTION("the frozen environment observation's resized read and diagnostic") {
+        // audit-1056 environment.json, "the read tool returns a resized image
+        // content block with its coordinate-mapping diagnostic": a 40x20 PNG
+        // read with the frozen 10x10 model image limit returns an image block
+        // and the frozen coordinate-mapping diagnostic text.
+        const auto frozen = environment_scenario(
+                "the read tool returns a resized image content block with its coordinate-mapping diagnostic");
+        const auto& frozen_content = frozen.expected().at("content").get_array();
+        workspace.write("wide.png", tests::bytes_as_string(tests::make_rgba_png(40, 20)));
+
+        auto environment_options = CodingToolOptions{};
+        environment_options.images = local_image_processor();
+        environment_options.vision = true;
+        environment_options.limits.max_width = 10;
+        environment_options.limits.max_height = 10;
+        environment_options.limits.max_base64_bytes = 1024 * 1024;
+        const auto environment_outcome =
+                run_read(local_environment(workspace.path().string()), std::move(environment_options), "wide.png");
+
+        CHECK(environment_outcome.requests == 2);
+        CHECK(environment_outcome.result.at("isError").get_boolean() == frozen.expected().at("isError").get_boolean());
+        CHECK(content_at(environment_outcome, 0).at("type").get_string() ==
+                frozen_content.at(0).get_object().at("type").get_string());
+        CHECK(content_at(environment_outcome, 0).at("mimeType").get_string() ==
+                frozen_content.at(0).get_object().at("mimeType").get_string());
+        const auto prepared_bytes = tests::decode_base64(content_at(environment_outcome, 0).at("data").get_string());
+        const auto prepared_dimensions = image_dimensions(prepared_bytes, "image/png");
+        REQUIRE(prepared_dimensions.has_value());
+        CHECK(prepared_dimensions->width == 10);
+        CHECK(prepared_dimensions->height == 5);
+        CHECK(text_at(environment_outcome, 1) == frozen_content.at(1).get_object().at("text").get_string());
+    }
 }
 
 TEST_CASE("Read converts BMP to PNG through the configured processor", "[durable][images][issue1090][spec]") {

@@ -21,6 +21,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <vector>
@@ -52,14 +55,43 @@ constexpr std::string_view kProtectedResourceDocument = R"({
     return std::move(*parsed);
 }
 
+/// The registered #1181 OAuth-lifecycle observation: the discovery cases
+/// anchor their stalled/missed path to the frozen scenario field.
+[[nodiscard]] support::JsonValue read_oauth_lifecycle_artifact() {
+    const auto path =
+            std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1052" / "oauth-lifecycle.json";
+    std::ifstream input(path, std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue& oauth_lifecycle_scenario(
+        const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return artifact;
+}
+
 } // namespace
 
 TEST_CASE("protected resource discovery retries the bare origin after a path-suffixed miss",
-        "[coding_agent][mcp][issue884][spec]") {
+        "[coding_agent][mcp][issue884][issue1181][spec]") {
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     // The path-suffixed document is a 404 miss; only the bare-origin document
     // carries the authorization server, so a discovery that skipped the retry
-    // could not produce this answer.
+    // could not produce this answer. The frozen cancellation observation
+    // stalled on the same path-suffixed document (audit-1052
+    // oauth-lifecycle.json), so the miss path is the frozen stalled path.
+    const auto artifact = read_oauth_lifecycle_artifact();
+    const auto& frozen_expected =
+            oauth_lifecycle_scenario(artifact, "cancellation during protected-resource discovery aborts the flow")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
     http->get_responses["https://mcp.example.com/.well-known/oauth-protected-resource/mcp"] = {{404, "not found"}};
     http->get_responses["https://mcp.example.com/.well-known/oauth-protected-resource"] = {
             {200, std::string{kProtectedResourceDocument}}};
@@ -76,6 +108,7 @@ TEST_CASE("protected resource discovery retries the bare origin after a path-suf
 
     REQUIRE(http->get_requests.size() == 2);
     CHECK(http->get_requests[0].url == "https://mcp.example.com/.well-known/oauth-protected-resource/mcp");
+    CHECK(http->get_requests[0].url.ends_with(frozen_expected.at("stalledPath").get_string()));
     CHECK(http->get_requests[1].url == "https://mcp.example.com/.well-known/oauth-protected-resource");
     // pi's discovery headers.
     CHECK(http->get_requests[0].headers.at("Accept") == "application/json");

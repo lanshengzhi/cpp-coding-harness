@@ -27,7 +27,10 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <future>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -51,6 +54,27 @@ template <typename T> [[nodiscard]] std::expected<T, support::Error> run_async(s
             boost::asio::use_future);
     io.run();
     return future.get();
+}
+
+/// The registered #1179 remote-exchange observation: the remote cases below
+/// compare their exchange shapes against the frozen scenario fields instead
+/// of locally spelled expectations.
+[[nodiscard]] support::JsonValue read_remote_exchange_artifact() {
+    const auto path =
+            std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1053" / "remote-exchange.json";
+    std::ifstream input(path, std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue& remote_scenario(const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return artifact;
 }
 
 /// Helper that wraps serve_codemode_remote and records message exchanges and replies.
@@ -226,25 +250,36 @@ struct DeterministicRecorder {
 
 TEST_CASE("Remote deterministic execution runs the script remotely and answers through deliver",
         "[codemode][remote][deterministic][issue1099]") {
+    // The frozen generic-exchange observation (audit-1053 remote-exchange.json)
+    // pins this script's value, output and call record; the deterministic
+    // transport below must reproduce them through `deliver`.
+    const auto artifact = read_remote_exchange_artifact();
+    const auto& frozen = remote_scenario(
+            artifact, "a generic remote runs the script and calls the caller's tools across the exchange");
+    const auto& frozen_inputs = frozen.get_object().at("inputs").get_object();
+    const auto& frozen_expected = frozen.get_object().at("expected").get_object();
+    const auto& frozen_call = frozen_expected.at("calls").get_array().at(0).get_object();
     auto sandbox = make_remote_sandbox();
     auto recorder = std::make_shared<DeterministicRecorder>();
-    auto started = sandbox->start("text('hi'); return await tools.add({ a: 1 })", recording_options(recorder));
+    auto started = sandbox->start(frozen_inputs.at("script").get_string(), recording_options(recorder));
     REQUIRE(started.has_value());
     auto run = std::move(*started);
 
     REQUIRE(recorder->wait_for_calls(1));
     const auto call = recorder->call(0);
-    CHECK(call.name == "add");
+    CHECK(call.name == frozen_call.at("name").get_string());
     CHECK_FALSE(run.deliver(1, 1768471201000.0, call.id, ok_outcome("2")).has_value());
 
     auto result = run_async(run.result());
     REQUIRE(result.has_value());
     CHECK_FALSE(result->error.has_value());
-    CHECK(result->value_json == "2");
+    CHECK(result->value_json == std::to_string(static_cast<std::int64_t>(frozen_expected.at("value").get_number())));
     REQUIRE(result->output.size() == 1);
-    CHECK(result->output.front().data == "hi");
+    CHECK(result->output.front().data ==
+            frozen_expected.at("output").get_array().at(0).get_object().at("text").get_string());
     REQUIRE(result->calls.size() == 1);
-    CHECK(result->calls.front().name == "add");
+    CHECK(result->calls.front().name == frozen_call.at("name").get_string());
+    CHECK(result->calls.front().status == codemode::CodemodeCallRecord::Status::Ok);
     CHECK_FALSE(recorder->fingerprint.empty());
     CHECK(run.finished());
 }
@@ -253,7 +288,13 @@ TEST_CASE("Remote deterministic execution applies reversed answers by result num
         "[codemode][remote][deterministic][issue1099]") {
     // Frozen pi v1.3.0 (`remote-exchange.json`, "a deterministic start over a
     // transport that reorders replies still applies results in seq order"):
-    // seq 2 arrives before seq 1 and the script still observes ["a", "b"].
+    // seq 2 arrives before seq 1 and the script still observes the frozen
+    // value, with the frozen idle pairs recorded.
+    const auto artifact = read_remote_exchange_artifact();
+    const auto& frozen = remote_scenario(artifact,
+            "a deterministic start over a transport that reorders replies still applies results in seq order");
+    const auto& frozen_expected = frozen.get_object().at("expected").get_object();
+    const auto& frozen_value = frozen_expected.at("value").get_array();
     auto sandbox = make_remote_sandbox();
     auto recorder = std::make_shared<DeterministicRecorder>();
     const std::string script = "const order = []; "
@@ -277,11 +318,21 @@ TEST_CASE("Remote deterministic execution applies reversed answers by result num
     auto result = run_async(run.result());
     REQUIRE(result.has_value());
     REQUIRE_FALSE(result->error.has_value());
-    CHECK(result->value_json == "[\"a\",\"b\"]");
+    REQUIRE(result->value_json.has_value());
+    auto parsed_value = support::read_json(*result->value_json);
+    REQUIRE(parsed_value.has_value());
+    REQUIRE(parsed_value->get_array().size() == frozen_value.size());
+    for (std::size_t index = 0; index < frozen_value.size(); ++index) {
+        CHECK(parsed_value->get_array().at(index).get_string() == frozen_value.at(index).get_string());
+    }
     const auto idles = recorder->idle_list();
-    REQUIRE(idles.size() == 2);
-    CHECK(idles[0] == std::pair<std::int64_t, std::int64_t>{0, 2});
-    CHECK(idles[1] == std::pair<std::int64_t, std::int64_t>{1, 2});
+    REQUIRE(idles.size() == frozen_expected.at("idles").get_array().size());
+    for (std::size_t index = 0; index < idles.size(); ++index) {
+        const auto& frozen_idle = frozen_expected.at("idles").get_array().at(index).get_array();
+        CHECK(idles[index] ==
+                std::pair<std::int64_t, std::int64_t>{static_cast<std::int64_t>(frozen_idle.at(0).get_number()),
+                        static_cast<std::int64_t>(frozen_idle.at(1).get_number())});
+    }
 }
 
 TEST_CASE("Remote deterministic execution rejects a reused result number and an unknown call",
@@ -376,6 +427,16 @@ TEST_CASE("Remote deterministic execution refuses a replay with a different seed
 }
 
 TEST_CASE("RemoteCodemodeSandbox runs tools in the caller and the script on the remote", "[codemode][remote]") {
+    // Frozen pi v1.3.0 (audit-1053 remote-exchange.json, "a generic remote runs
+    // the script and calls the caller's tools across the exchange"): the
+    // script, the store seed and every compared field below are the
+    // registered observation's own.
+    const auto artifact = read_remote_exchange_artifact();
+    const auto& frozen = remote_scenario(
+            artifact, "a generic remote runs the script and calls the caller's tools across the exchange");
+    const auto& frozen_inputs = frozen.get_object().at("inputs").get_object();
+    const auto& frozen_expected = frozen.get_object().at("expected").get_object();
+    const auto& frozen_call = frozen_expected.at("calls").get_array().at(0).get_object();
     auto remote = std::make_shared<RecordingRemote>();
     codemode::RemoteCodemodeSandboxOptions options;
     options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
@@ -387,7 +448,7 @@ TEST_CASE("RemoteCodemodeSandbox runs tools in the caller and the script on the 
     std::vector<std::string> seen_args;
     codemode::CodemodeToolCallHandler handler =
             [&](std::string_view name, std::string_view args, std::stop_token) -> support::AsyncResult<std::string> {
-        if (name == "add") {
+        if (name == frozen_call.at("name").get_string()) {
             seen_args.emplace_back(args);
             auto parsed = support::read_json(args);
             if (parsed && parsed->holds<support::JsonValue::object_t>()) {
@@ -403,13 +464,16 @@ TEST_CASE("RemoteCodemodeSandbox runs tools in the caller and the script on the 
                 std::unexpected(support::make_error(support::ErrorCode::Validation, "unknown tool"))}};
     };
 
-    std::vector<codemode::CodemodeToolDescriptor> tools{
-            {.name = "add", .js_name = "add", .description = "Add 1 to number"}};
+    std::vector<codemode::CodemodeToolDescriptor> tools{{.name = frozen_call.at("name").get_string(),
+            .js_name = frozen_call.at("name").get_string(),
+            .description = "Add 1 to number"}};
 
     std::map<std::string, support::JsonValue> initial_store;
-    initial_store.emplace("k", support::JsonValue{1.0});
+    for (const auto& [key, value] : frozen_inputs.at("store").get_object()) {
+        initial_store.emplace(key, value);
+    }
 
-    auto result = run_async(sandbox->run("text('hi'); return await tools.add({ a: 1 })",
+    auto result = run_async(sandbox->run(frozen_inputs.at("script").get_string(),
             std::move(tools),
             {},
             {},
@@ -418,13 +482,15 @@ TEST_CASE("RemoteCodemodeSandbox runs tools in the caller and the script on the 
 
     REQUIRE(result.has_value());
     CHECK_FALSE(result->error.has_value());
-    CHECK(result->value_json.value_or("") == "2");
+    CHECK(result->value_json.value_or("") ==
+            std::to_string(static_cast<std::int64_t>(frozen_expected.at("value").get_number())));
     REQUIRE(result->output.size() == 1);
-    CHECK(result->output[0].data == "hi");
+    CHECK(result->output[0].data ==
+            frozen_expected.at("output").get_array().at(0).get_object().at("text").get_string());
     REQUIRE(result->calls.size() == 1);
-    CHECK(result->calls[0].name == "add");
+    CHECK(result->calls[0].name == frozen_call.at("name").get_string());
     CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Ok);
-    CHECK(result->calls[0].duration_ms.has_value());
+    CHECK(result->calls[0].duration_ms.has_value() == frozen_call.at("durationPresent").get_boolean());
     // The frozen exchange reports an empty store write set for a successful
     // run; a remote that drops the terminal `writes` payload fails here.
     REQUIRE(result->store_writes.has_value());
@@ -434,22 +500,36 @@ TEST_CASE("RemoteCodemodeSandbox runs tools in the caller and the script on the 
     REQUIRE(seen_args.size() == 1);
     auto parsed_seen = support::read_json(seen_args[0]);
     REQUIRE(parsed_seen.has_value());
-    CHECK(parsed_seen->get_object().at("a").get_number() == 1.0);
+    const auto& frozen_seen = frozen_expected.at("seen").get_array().at(0).get_object();
+    CHECK(parsed_seen->get_object().at("a").get_number() == frozen_seen.at("a").get_number());
 
-    // Verify exchange sequence matches audit-1053 remote-exchange.json:
-    // Exchange 0 has ["output", "call:add"]
-    // Exchange 1 has ["done"]
-    // Replies: ["result:true", "null"]
-    REQUIRE(remote->exchange_message_kinds.size() == 2);
-    CHECK(remote->exchange_message_kinds[0] == std::vector<std::string>{"output", "call:add"});
-    CHECK(remote->exchange_message_kinds[1] == std::vector<std::string>{"done"});
-
-    REQUIRE(remote->reply_kinds.size() == 2);
-    CHECK(remote->reply_kinds[0] == "result:true");
-    CHECK(remote->reply_kinds[1] == "null");
+    // The frozen exchange sequence and replies, read from the artifact:
+    // exchange 0 carries ["output", "call:add"], exchange 1 carries ["done"],
+    // and the replies are ["result:true", "null"].
+    REQUIRE(remote->exchange_message_kinds.size() == frozen_expected.at("exchanges").get_array().size());
+    for (std::size_t index = 0; index < remote->exchange_message_kinds.size(); ++index) {
+        std::vector<std::string> kinds;
+        for (const auto& kind : frozen_expected.at("exchanges").get_array().at(index).get_array()) {
+            kinds.push_back(kind.get_string());
+        }
+        CHECK(remote->exchange_message_kinds[index] == kinds);
+    }
+    REQUIRE(remote->reply_kinds.size() == frozen_expected.at("replies").get_array().size());
+    for (std::size_t index = 0; index < remote->reply_kinds.size(); ++index) {
+        CHECK(remote->reply_kinds[index] == frozen_expected.at("replies").get_array().at(index).get_string());
+    }
 }
 
 TEST_CASE("RemoteCodemodeSandbox batches output instead of making one exchange per line", "[codemode][remote]") {
+    // Frozen pi v1.3.0 (audit-1053 remote-exchange.json, "remote output is
+    // buffered instead of one exchange per output item"): the item count and
+    // the bounded exchange shape compared below are the registered
+    // observation's own fields.
+    const auto artifact = read_remote_exchange_artifact();
+    const auto& frozen = remote_scenario(artifact, "remote output is buffered instead of one exchange per output item");
+    const auto& frozen_inputs = frozen.get_object().at("inputs").get_object();
+    const auto& frozen_expected = frozen.get_object().at("expected").get_object();
+    const auto item_count = static_cast<std::int64_t>(frozen_inputs.at("outputItems").get_number());
     auto remote = std::make_shared<RecordingRemote>();
     codemode::RemoteCodemodeSandboxOptions options;
     options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
@@ -458,18 +538,23 @@ TEST_CASE("RemoteCodemodeSandbox batches output instead of making one exchange p
     REQUIRE(created.has_value());
     auto sandbox = std::move(*created);
 
-    auto result = run_async(sandbox->run("for (let i = 0; i < 5000; i++) console.log(i); return 'ok'"));
+    auto result = run_async(
+            sandbox->run("for (let i = 0; i < " + std::to_string(item_count) + "; i++) console.log(i); return 'ok'"));
 
     REQUIRE(result.has_value());
     CHECK_FALSE(result->error.has_value());
     CHECK(result->value_json.value_or("") == "\"ok\"");
-    REQUIRE(result->output.size() == 5000);
-    CHECK(result->output[4999].data == "4999");
-    CHECK(result->output[4999].console == true);
+    REQUIRE(result->output.size() == static_cast<std::size_t>(frozen_expected.at("outputCount").get_number()));
+    const auto& frozen_last = frozen_expected.at("last").get_object();
+    CHECK(result->output[4999].data == frozen_last.at("text").get_string());
+    CHECK(result->output[4999].console == !frozen_last.at("console").holds<std::nullptr_t>());
 
-    // Bounded exchange count: 5000 lines over <= 6 exchanges (1000 per batch + terminal done)
-    CHECK(remote->exchange_sizes.size() <= 6);
-    const std::vector<std::size_t> expected_sizes{1000, 1000, 1000, 1000, 1000, 1};
+    // Bounded exchange count with the frozen batch sizes.
+    CHECK(remote->exchange_sizes.size() == static_cast<std::size_t>(frozen_expected.at("exchanges").get_number()));
+    std::vector<std::size_t> expected_sizes;
+    for (const auto& size : frozen_expected.at("exchangeSizes").get_array()) {
+        expected_sizes.push_back(static_cast<std::size_t>(size.get_number()));
+    }
     CHECK(remote->exchange_sizes == expected_sizes);
 }
 
@@ -497,14 +582,24 @@ TEST_CASE("serve_codemode_remote stops when an output batch receives a stop repl
 }
 
 TEST_CASE("RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits", "[codemode][remote]") {
+    // Frozen pi v1.3.0 (audit-1053 remote-exchange.json, "the remote caps the
+    // requested interrupt budget and memory limit"): the served caps, the
+    // requested budget and both error records compared below are the
+    // registered observation's own fields.
+    const auto artifact = read_remote_exchange_artifact();
+    const auto& frozen = remote_scenario(artifact, "the remote caps the requested interrupt budget and memory limit");
+    const auto& frozen_inputs = frozen.get_object().at("inputs").get_object();
+    const auto& frozen_expected = frozen.get_object().at("expected").get_object();
+    const auto& frozen_timeout = frozen_expected.at("timeout").get_object();
+    const auto& frozen_memory = frozen_expected.at("memory").get_object();
     codemode::CodemodeServeOptions serve_opts;
-    serve_opts.max_interrupt_budget = 1000;
-    serve_opts.max_memory_limit_bytes = 8 * 1024 * 1024; // 8 MiB
+    serve_opts.max_interrupt_budget = static_cast<std::size_t>(frozen_inputs.at("maxInterruptBudget").get_number());
+    serve_opts.max_memory_limit_bytes = static_cast<std::size_t>(frozen_inputs.at("maxMemoryLimitBytes").get_number());
 
     auto remote = std::make_shared<RecordingRemote>(serve_opts);
     codemode::RemoteCodemodeSandboxOptions options;
     options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
-    options.interrupt_budget = 1000000000; // Requested: 1 billion polls
+    options.interrupt_budget = static_cast<std::size_t>(frozen_inputs.at("requestedInterruptBudget").get_number());
 
     auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
     REQUIRE(created.has_value());
@@ -515,7 +610,7 @@ TEST_CASE("RemoteCodemodeSandbox caps the interrupt budget and memory at the rem
     REQUIRE(timeout_result.has_value());
     REQUIRE(timeout_result->error.has_value());
     CHECK(timeout_result->error->kind == codemode::CodemodeError::Kind::Timeout);
-    CHECK(timeout_result->error->message == "Execution exceeded its interrupt budget of 1000");
+    CHECK(timeout_result->error->message == frozen_timeout.at("message").get_string());
 
     // 2. Memory limit cap
     auto mem_result =
@@ -523,12 +618,22 @@ TEST_CASE("RemoteCodemodeSandbox caps the interrupt budget and memory at the rem
     REQUIRE(mem_result.has_value());
     REQUIRE(mem_result->error.has_value());
     CHECK(mem_result->error->kind == codemode::CodemodeError::Kind::Script);
-    CHECK(mem_result->error->name.value_or("") == "InternalError");
-    CHECK(mem_result->error->message == "out of memory");
+    CHECK(mem_result->error->name.value_or("") == frozen_memory.at("name").get_string());
+    CHECK(mem_result->error->message == frozen_memory.at("message").get_string());
 }
 
 TEST_CASE("RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately",
         "[codemode][remote]") {
+    // Frozen pi v1.3.0 (audit-1053 remote-exchange.json, "caller abort answers
+    // the remote's exchange with stop and settles without waiting for remote
+    // compute"): the aborted error and the cancelled hanging call compared
+    // below are the registered observation's own fields; the stop reply is
+    // the frozen reply kind.
+    const auto artifact = read_remote_exchange_artifact();
+    const auto& frozen = remote_scenario(artifact,
+            "caller abort answers the remote's exchange with stop and settles without waiting for remote compute");
+    const auto& frozen_expected = frozen.get_object().at("expected").get_object();
+    const auto& frozen_call = frozen_expected.at("calls").get_array().at(0).get_object();
     auto remote = std::make_shared<RecordingRemote>();
     auto stop_reply_received = remote->stop_reply_received.get_future();
     codemode::RemoteCodemodeSandboxOptions options;
@@ -594,11 +699,11 @@ TEST_CASE("RemoteCodemodeSandbox tells the remote to stop when caller aborts and
     REQUIRE(run_res.has_value());
     REQUIRE(run_res->error.has_value());
     CHECK(run_res->error->kind == codemode::CodemodeError::Kind::Aborted);
-    CHECK(run_res->error->message == "This operation was aborted");
+    CHECK(run_res->error->message == frozen_expected.at("error").get_object().at("message").get_string());
     REQUIRE(run_res->calls.size() == 1);
-    CHECK(run_res->calls[0].name == "hang");
+    CHECK(run_res->calls[0].name == frozen_call.at("name").get_string());
     CHECK(run_res->calls[0].status == codemode::CodemodeCallRecord::Status::Cancelled);
-    CHECK(run_res->calls[0].duration_ms.has_value());
+    CHECK(run_res->calls[0].duration_ms.has_value() == frozen_call.at("durationPresent").get_boolean());
 
     // Reply sent across exchange must be stop.
     CHECK(stop_reply_received.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
@@ -834,6 +939,16 @@ TEST_CASE("RemoteCodemodeSandbox keeps a settled result when remote cleanup fail
 
 TEST_CASE("RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason",
         "[codemode][remote]") {
+    // Frozen pi v1.3.0 (audit-1053 remote-exchange.json, "a failing, silent or
+    // unreachable remote is a sandbox error with the transport reason"): the
+    // three error records compared below are the registered observation's own
+    // fields, in the frozen order.
+    const auto artifact = read_remote_exchange_artifact();
+    const auto& frozen_expected = remote_scenario(
+            artifact, "a failing, silent or unreachable remote is a sandbox error with the transport reason")
+                                          .get_object()
+                                          .at("expected")
+                                          .get_array();
     // 1. Failing / rejecting remote
     {
         struct FailingRemote final : public codemode::CodemodeRemote {
@@ -854,7 +969,7 @@ TEST_CASE("RemoteCodemodeSandbox reports failing, silent or unreachable remote a
         REQUIRE(res.has_value());
         REQUIRE(res->error.has_value());
         CHECK(res->error->kind == codemode::CodemodeError::Kind::Sandbox);
-        CHECK(res->error->message == "Remote sandbox failed: object reset");
+        CHECK(res->error->message == frozen_expected.at(0).get_object().at("message").get_string());
     }
 
     // 2. Silent remote (returns without settling script)
@@ -876,7 +991,7 @@ TEST_CASE("RemoteCodemodeSandbox reports failing, silent or unreachable remote a
         REQUIRE(res.has_value());
         REQUIRE(res->error.has_value());
         CHECK(res->error->kind == codemode::CodemodeError::Kind::Sandbox);
-        CHECK(res->error->message == "Remote sandbox returned before the script settled");
+        CHECK(res->error->message == frozen_expected.at(1).get_object().at("message").get_string());
     }
 
     // 3. Unreachable remote
@@ -891,6 +1006,6 @@ TEST_CASE("RemoteCodemodeSandbox reports failing, silent or unreachable remote a
         REQUIRE(res.has_value());
         REQUIRE(res->error.has_value());
         CHECK(res->error->kind == codemode::CodemodeError::Kind::Sandbox);
-        CHECK(res->error->message == "Failed to reach the remote sandbox: no binding");
+        CHECK(res->error->message == frozen_expected.at(2).get_object().at("message").get_string());
     }
 }

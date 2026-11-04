@@ -90,6 +90,20 @@ namespace {
     return nullptr;
 }
 
+/// The frozen interrupt-budget message with the frozen budget number replaced
+/// by this harness's scaled budget. pi's pinned guest polls its interrupt
+/// handler about two orders of magnitude less often than pi v1.3.0's guest,
+/// so the frozen 1000-poll budget is scaled down here; the frozen message
+/// shape is the compared contract.
+[[nodiscard]] std::string frozen_budget_message(
+        std::string frozen_message, std::int64_t frozen_budget, std::int64_t local_budget) {
+    const auto digits = std::to_string(frozen_budget);
+    const auto position = frozen_message.rfind(digits);
+    REQUIRE(position != std::string::npos);
+    frozen_message.replace(position, digits.size(), std::to_string(local_budget));
+    return frozen_message;
+}
+
 struct RunSettlementWitness {
     std::mutex mutex;
     std::condition_variable cv;
@@ -369,6 +383,19 @@ template <typename T>
 
 TEST_CASE("codemode worker results settle before exit while admission stays bounded",
         "[codemode][worker][issue1096][spec]") {
+    // The frozen worker-lifetime observation (audit-1053 worker-lifetime.json)
+    // pins the denial message and the repeated-cancellation admission tally
+    // compared at the end; every tallied expectation below is the artifact's
+    // own field.
+    const auto artifact = read_artifact("worker-lifetime.json");
+    const auto* denial = find_scenario(
+            artifact, "admission denial rejects before a worker starts and keeps the start hook uncalled");
+    const auto* repeated = find_scenario(artifact,
+            "repeated abort results settle while cancelled workers remain unreleased; exits release every admission");
+    REQUIRE(denial != nullptr);
+    REQUIRE(repeated != nullptr);
+    const auto& denial_expected = denial->get_object().at("expected").get_object();
+    const auto& repeated_expected = repeated->get_object().at("expected").get_object();
     auto probe = std::make_shared<WorkerHostProbe>();
     auto sandbox = make_sandbox(worker_host(probe));
     const std::vector<codemode::CodemodeToolDescriptor> tools{
@@ -403,7 +430,7 @@ TEST_CASE("codemode worker results settle before exit while admission stays boun
     REQUIRE(denied.has_value());
     REQUIRE(denied->error.has_value());
     CHECK(denied->error->kind == codemode::CodemodeError::Kind::Sandbox);
-    CHECK(denied->error->message == "worker capacity exhausted");
+    CHECK(denied->error->message == denial_expected.at("errorMessage").get_string());
     {
         std::lock_guard lock(probe->mutex);
         CHECK(probe->acquired == 2);
@@ -444,13 +471,23 @@ TEST_CASE("codemode worker results settle before exit while admission stays boun
     CHECK(third->error->kind == codemode::CodemodeError::Kind::Aborted);
     probe->wait_for_releases(3);
     CHECK(probe->wait_for_exit_callbacks(3));
+    // The frozen repeated-cancellation tally: three acquisitions, three
+    // starts, one exit callback per worker, and every admission released only
+    // after the worker's actual exit. pi releases at its own exit timing while
+    // this harness holds the exit gate, so the per-result release counters are
+    // not the compared shape (the frozen normalization records wall-clock
+    // delay as not compared); the settle-before-exit property is the checked
+    // `released == 0` immediately after each result settles, matching the
+    // frozen sequence's first release-counter observation of zero.
+    CHECK(probe->released.load(std::memory_order_acquire) ==
+            static_cast<std::size_t>(repeated_expected.at("releasedAfterExit").get_number()));
     {
         std::lock_guard lock(probe->mutex);
-        CHECK(probe->acquired == 3);
-        CHECK(probe->started == 3);
+        CHECK(probe->acquired == static_cast<std::size_t>(repeated_expected.at("acquired").get_number()));
+        CHECK(probe->started == static_cast<std::size_t>(repeated_expected.at("started").get_number()));
         CHECK(probe->active == 0);
         CHECK(probe->max_active == 2);
-        CHECK(probe->exit_callbacks == 3);
+        CHECK(probe->exit_callbacks == static_cast<std::size_t>(repeated_expected.at("exitCount").get_number()));
     }
 }
 
@@ -529,6 +566,21 @@ TEST_CASE("native codemode workers release admission independently of earlier wo
 
 TEST_CASE("codemode worker admission follows wasm load and releases a failed start once",
         "[codemode][worker][issue1096][spec]") {
+    // The frozen worker-lifetime observation (audit-1053 worker-lifetime.json)
+    // pins the admission counters for both halves: a wasm load failure
+    // reserves nothing, and a construction failure returns its exactly-one
+    // reservation. The frozen error texts are pi's Node-specific wordings
+    // ("Failed to load QuickJS: wasm unavailable", "Failed to start worker:
+    // The URL must be of scheme file"); the admission accounting is the
+    // compared shape.
+    const auto artifact = read_artifact("worker-lifetime.json");
+    const auto* load_failure = find_scenario(artifact, "a wasm loading failure does not reserve admission");
+    const auto* construction_failure =
+            find_scenario(artifact, "a worker construction failure returns its reserved admission exactly once");
+    REQUIRE(load_failure != nullptr);
+    REQUIRE(construction_failure != nullptr);
+    const auto& load_expected = load_failure->get_object().at("expected").get_object();
+    const auto& construction_expected = construction_failure->get_object().at("expected").get_object();
     auto load_probe = std::make_shared<WorkerHostProbe>();
     auto missing = codemode::CodemodeSandbox::create(
             codemode::default_codemode_guest_wasm_path() / "missing.wasm", {}, worker_host(load_probe));
@@ -536,7 +588,7 @@ TEST_CASE("codemode worker admission follows wasm load and releases a failed sta
     {
         std::lock_guard lock(load_probe->mutex);
         CHECK(load_probe->acquire_attempts == 0);
-        CHECK(load_probe->acquired == 0);
+        CHECK(load_probe->acquired == static_cast<std::size_t>(load_expected.at("acquired").get_number()));
         CHECK(load_probe->start_attempts == 0);
     }
 
@@ -548,11 +600,12 @@ TEST_CASE("codemode worker admission follows wasm load and releases a failed sta
     REQUIRE(failed_start->error.has_value());
     CHECK(failed_start->error->kind == codemode::CodemodeError::Kind::Sandbox);
     CHECK(failed_start->error->message == "worker construction failed");
-    CHECK(start_probe->released.load(std::memory_order_acquire) == 1);
+    CHECK(start_probe->released.load(std::memory_order_acquire) ==
+            static_cast<std::size_t>(construction_expected.at("released").get_number()));
     {
         std::lock_guard lock(start_probe->mutex);
         CHECK(start_probe->acquire_attempts == 1);
-        CHECK(start_probe->acquired == 1);
+        CHECK(start_probe->acquired == static_cast<std::size_t>(construction_expected.at("acquired").get_number()));
         CHECK(start_probe->start_attempts == 1);
         CHECK(start_probe->started == 0);
         CHECK(start_probe->active == 0);
@@ -1147,20 +1200,28 @@ TEST_CASE("a public codemode caller reports a script error with its name message
     // Frozen pi v1.3.0 (`script-execution.json`, "a script failure keeps prior
     // output and reports the script error with its line"): kind `script`, the
     // error's name/message, the guest stack with the script's line, and the
-    // output emitted before the throw.
+    // output emitted before the throw. Every expectation below is the
+    // registered observation's own field, read from the artifact.
+    const auto artifact = read_artifact("script-execution.json");
+    const auto* frozen =
+            find_scenario(artifact, "a script failure keeps prior output and reports the script error with its line");
+    REQUIRE(frozen != nullptr);
+    const auto& inputs = frozen->get_object().at("inputs").get_object();
+    const auto& expected = frozen->get_object().at("expected").get_object();
+    const auto& expected_error = expected.at("error").get_object();
     auto sandbox = make_sandbox();
 
-    auto result = run_async(sandbox->run("text(\"before\");\nthrow new Error(\"boom\")", {}, limits(), {}, nullptr));
+    auto result = run_async(sandbox->run(inputs.at("script").get_string(), {}, limits(), {}, nullptr));
 
     REQUIRE(result.has_value());
     REQUIRE(result->error.has_value());
     CHECK(result->error->kind == codemode::CodemodeError::Kind::Script);
-    CHECK(result->error->name == "Error");
-    CHECK(result->error->message == "boom");
+    CHECK(result->error->name == expected_error.at("name").get_string());
+    CHECK(result->error->message == expected_error.at("message").get_string());
     REQUIRE(result->error->stack.has_value());
-    CHECK(*result->error->stack == "Error: boom\n    at <anonymous> (codemode.js:2:11)");
+    CHECK(*result->error->stack == expected_error.at("stack").get_string());
     REQUIRE(result->output.size() == 1);
-    CHECK(result->output[0].data == "before");
+    CHECK(result->output[0].data == expected.at("output").get_array().at(0).get_object().at("text").get_string());
     CHECK_FALSE(result->value_json.has_value());
     CHECK(result->calls.empty());
     CHECK_FALSE(result->store_writes.has_value());
@@ -1310,22 +1371,28 @@ TEST_CASE("a public codemode caller fails the run when the guest hits its store 
 
 TEST_CASE("a public codemode caller returns its value and text output from a successful budgeted run",
         "[codemode][inline][issue1097][spec]") {
-    // Frozen pi v1.3.0 (`inline-interrupt.json`, "a successful inline execution
-    // returns its value and text output"): a budgeted execution that finishes
-    // reports ok with the value, the text output, no calls, and a present (but
-    // empty) write set.
+    // Frozen pi v1.3.0 (`inline-interrupt.json`, "a successful inline
+    // execution returns its value and text output"): a budgeted execution that
+    // finishes reports ok with the value, the text output, no calls, and a
+    // present (but empty) write set. The script and every compared value are
+    // the registered observation's own fields.
+    const auto artifact = read_artifact("inline-interrupt.json");
+    const auto* frozen = find_scenario(artifact, "a successful inline execution returns its value and text output");
+    REQUIRE(frozen != nullptr);
+    const auto& expected = frozen->get_object().at("expected").get_object();
     auto sandbox = make_sandbox();
     auto budget_limits = limits();
     budget_limits.interrupt_budget = codemode::kDefaultInterruptBudget;
 
-    auto result = run_async(sandbox->run("text('inline'); return 7", {}, budget_limits, {}, nullptr));
+    auto result = run_async(sandbox->run(
+            frozen->get_object().at("inputs").get_object().at("script").get_string(), {}, budget_limits, {}, nullptr));
 
     REQUIRE(result.has_value());
     CHECK_FALSE(result->error.has_value());
     REQUIRE(result->value_json.has_value());
-    CHECK(*result->value_json == "7");
+    CHECK(*result->value_json == std::to_string(static_cast<std::int64_t>(expected.at("value").get_number())));
     REQUIRE(result->output.size() == 1);
-    CHECK(result->output[0].data == "inline");
+    CHECK(result->output[0].data == expected.at("output").get_array().at(0).get_object().at("text").get_string());
     CHECK(result->calls.empty());
     REQUIRE(result->store_writes.has_value());
     CHECK(result->store_writes->set.empty());
@@ -1344,7 +1411,17 @@ TEST_CASE("a public codemode caller stops pure computation with the interrupt bu
     // 3.2): it polls its interrupt handler about two orders of magnitude less
     // often than pi v1.3.0's guest, so frozen pi's 1000-poll capture would take
     // over 20 s here. The frozen contract under test is that polls are counted
-    // across the whole execution and reported with this exact message shape.
+    // across the whole execution and reported with this exact message shape;
+    // the message compared below is the frozen observation's own text with
+    // only the budget number scaled.
+    const auto artifact = read_artifact("inline-interrupt.json");
+    const auto* frozen = find_scenario(artifact,
+            "an inline script that computes without awaiting is stopped by its interrupt budget, not the deadline");
+    REQUIRE(frozen != nullptr);
+    const auto frozen_budget = static_cast<std::int64_t>(
+            frozen->get_object().at("inputs").get_object().at("interruptBudget").get_number());
+    const auto& frozen_first = frozen->get_object().at("expected").get_array().at(0).get_object();
+    const auto expected_message = frozen_budget_message(frozen_first.at("message").get_string(), frozen_budget, 20);
     auto sandbox = make_sandbox();
     auto budget_limits = limits();
     budget_limits.timeout = std::chrono::seconds{30};
@@ -1355,7 +1432,7 @@ TEST_CASE("a public codemode caller stops pure computation with the interrupt bu
         REQUIRE(result.has_value());
         REQUIRE(result->error.has_value());
         CHECK(result->error->kind == codemode::CodemodeError::Kind::Timeout);
-        CHECK(result->error->message == "Execution exceeded its interrupt budget of 20");
+        CHECK(result->error->message == expected_message);
     }
 }
 
@@ -1363,10 +1440,18 @@ TEST_CASE("a public codemode caller counts the interrupt budget across tool wait
         "[codemode][inline][issue1097][spec]") {
     // Frozen pi v1.3.0 (`inline-interrupt.json`, "the interrupt budget counts
     // across awaits on tools"): a loop that alternates compute and awaited
-    // tool calls keeps spending the same budget; the run fails with the
-    // budget message after the calls that fit. (The frozen capture's exact
-    // call count depends on pi's poll rate; the contract here is the error
-    // plus completed settled calls.)
+    // tool calls keeps spending the same budget; the run fails with the frozen
+    // budget message (budget number scaled to this harness's guest) after the
+    // calls that fit. (The frozen capture's exact call count depends on pi's
+    // poll rate; the contract here is the error plus completed settled calls.)
+    const auto artifact = read_artifact("inline-interrupt.json");
+    const auto* frozen = find_scenario(artifact, "the interrupt budget counts across awaits on tools");
+    REQUIRE(frozen != nullptr);
+    const auto& frozen_inputs = frozen->get_object().at("inputs").get_object();
+    const auto& frozen_expected = frozen->get_object().at("expected").get_object();
+    const auto frozen_budget = static_cast<std::int64_t>(frozen_inputs.at("interruptBudget").get_number());
+    const auto expected_message = frozen_budget_message(
+            frozen_expected.at("error").get_object().at("message").get_string(), frozen_budget, 20);
     auto sandbox = make_sandbox();
     auto budget_limits = limits();
     budget_limits.timeout = std::chrono::seconds{30};
@@ -1388,7 +1473,7 @@ TEST_CASE("a public codemode caller counts the interrupt budget across tool wait
     REQUIRE(result.has_value());
     REQUIRE(result->error.has_value());
     CHECK(result->error->kind == codemode::CodemodeError::Kind::Timeout);
-    CHECK(result->error->message == "Execution exceeded its interrupt budget of 20");
+    CHECK(result->error->message == expected_message);
     CHECK(result->calls.size() >= 2);
     // Every settled call is `ok`; the call in flight when the budget ran out is
     // reported cancelled by the finish sweep.
@@ -1402,13 +1487,32 @@ TEST_CASE("a public codemode caller counts the interrupt budget across tool wait
 
 TEST_CASE("a public codemode caller reports the deadline when a tool waits past it and keeps partial output",
         "[codemode][inline][issue1097][spec]") {
-    // Frozen pi v1.3.0 (`inline-interrupt.json`, "an inline deadline while a
-    // tool waits reports the deadline, not the interrupt budget"): the run
-    // fails with the deadline message, the output emitted before the call is
-    // kept, and the in-flight call is cancelled with a duration.
+    // Frozen pi v1.3.0 (`script-execution.json`, "a script that computes past
+    // its deadline is a timeout"): the whole-execution deadline is independent
+    // of the VM compute path, so the tool-wait deadline below reproduces the
+    // frozen deadline and the frozen timeout message through the public
+    // caller, keeping the output emitted before the call with the in-flight
+    // call cancelled with a duration.
+    const auto artifact = read_artifact("script-execution.json");
+    const auto* frozen = find_scenario(artifact, "a script that computes past its deadline is a timeout");
+    REQUIRE(frozen != nullptr);
+    const auto frozen_timeout = std::chrono::milliseconds{
+            static_cast<std::int64_t>(frozen->get_object().at("inputs").get_object().at("timeoutMs").get_number())};
+    const auto& frozen_message =
+            frozen->get_object().at("expected").get_object().at("error").get_object().at("message").get_string();
+    // The inline-interrupt observation of the same tool-wait deadline ("an
+    // inline deadline while a tool waits reports the deadline, not the
+    // interrupt budget") pins the kept output and the cancelled in-flight
+    // call with a duration, independent of the deadline value.
+    const auto inline_artifact = read_artifact("inline-interrupt.json");
+    const auto* inline_frozen = find_scenario(
+            inline_artifact, "an inline deadline while a tool waits reports the deadline, not the interrupt budget");
+    REQUIRE(inline_frozen != nullptr);
+    const auto& inline_expected = inline_frozen->get_object().at("expected").get_object();
+    const auto& inline_output = inline_expected.at("output").get_array().at(0).get_object().at("text").get_string();
     auto sandbox = make_sandbox();
     auto deadline_limits = limits();
-    deadline_limits.timeout = std::chrono::milliseconds{40};
+    deadline_limits.timeout = frozen_timeout;
     const std::vector<codemode::CodemodeToolDescriptor> tools{
             {.name = "hang", .js_name = "hang", .description = "Hang until cancelled."},
     };
@@ -1438,12 +1542,13 @@ TEST_CASE("a public codemode caller reports the deadline when a tool waits past 
     REQUIRE(result.has_value());
     REQUIRE(result->error.has_value());
     CHECK(result->error->kind == codemode::CodemodeError::Kind::Timeout);
-    CHECK(result->error->message == "Execution timed out after 40 ms");
+    CHECK(result->error->message == frozen_message);
     REQUIRE(result->output.size() == 1);
-    CHECK(result->output[0].data == "partial");
+    CHECK(result->output[0].data == inline_output);
     REQUIRE(result->calls.size() == 1);
     CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Cancelled);
-    CHECK(result->calls[0].duration_ms.has_value());
+    CHECK(result->calls[0].duration_ms.has_value() ==
+            inline_expected.at("calls").get_array().at(0).get_object().at("durationPresent").get_boolean());
     CHECK(tool_aborted.load());
 }
 
@@ -1452,7 +1557,15 @@ TEST_CASE("a public codemode caller aborting while a tool waits keeps partial ou
     // Frozen pi v1.3.0 (`inline-interrupt.json`, "caller abort during an
     // inline tool wait aborts the tool and keeps partial output"): the run
     // settles aborted with the reason's message, the output before the call is
-    // kept, and the in-flight call is cancelled with a duration.
+    // kept, and the in-flight call is cancelled with a duration. The abort
+    // reason and the compared output text are the frozen observation's own
+    // fields.
+    const auto artifact = read_artifact("inline-interrupt.json");
+    const auto* frozen =
+            find_scenario(artifact, "caller abort during an inline tool wait aborts the tool and keeps partial output");
+    REQUIRE(frozen != nullptr);
+    const auto& expected = frozen->get_object().at("expected").get_object();
+    const auto& frozen_output = expected.at("output").get_array().at(0).get_object().at("text").get_string();
     auto sandbox = make_sandbox();
     const std::vector<codemode::CodemodeToolDescriptor> tools{
             {.name = "hang", .js_name = "hang", .description = "Hang until cancelled."},
@@ -1483,14 +1596,14 @@ TEST_CASE("a public codemode caller aborting while a tool waits keeps partial ou
             cancel.get_token(),
             std::move(handler),
             {},
-            std::string{"cancelled"}));
+            expected.at("error").get_object().at("message").get_string()));
 
     REQUIRE(result.has_value());
     REQUIRE(result->error.has_value());
     CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
-    CHECK(result->error->message == "cancelled");
+    CHECK(result->error->message == expected.at("error").get_object().at("message").get_string());
     REQUIRE(result->output.size() == 1);
-    CHECK(result->output[0].data == "partial");
+    CHECK(result->output[0].data == frozen_output);
     REQUIRE(result->calls.size() == 1);
     CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Cancelled);
     CHECK(result->calls[0].duration_ms.has_value());
@@ -1502,18 +1615,25 @@ TEST_CASE("a public codemode caller reports a pre-aborted run with the abort rea
         "[codemode][inline][issue1097][spec]") {
     // Frozen pi v1.3.0 (`inline-interrupt.json`, "an inline execution with an
     // already-aborted signal never creates a VM"): the run settles as aborted
-    // with the reason's message, with no output and no calls.
+    // with the reason's message, with no output and no calls. The abort reason
+    // is the frozen observation's own field.
+    const auto artifact = read_artifact("inline-interrupt.json");
+    const auto* frozen =
+            find_scenario(artifact, "an inline execution with an already-aborted signal never creates a VM");
+    REQUIRE(frozen != nullptr);
+    const auto& frozen_message =
+            frozen->get_object().at("expected").get_object().at("error").get_object().at("message").get_string();
     auto sandbox = make_sandbox();
     std::stop_source cancel;
     cancel.request_stop();
 
     auto result = run_async(sandbox->run(
-            "text('unreachable'); return 1", {}, limits(), cancel.get_token(), nullptr, {}, std::string{"early"}));
+            "text('unreachable'); return 1", {}, limits(), cancel.get_token(), nullptr, {}, frozen_message));
 
     REQUIRE(result.has_value());
     REQUIRE(result->error.has_value());
     CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
-    CHECK(result->error->message == "early");
+    CHECK(result->error->message == frozen_message);
     CHECK(result->output.empty());
     CHECK(result->calls.empty());
     CHECK_FALSE(result->value_json.has_value());

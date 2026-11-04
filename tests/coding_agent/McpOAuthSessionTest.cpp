@@ -64,6 +64,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -301,6 +302,27 @@ struct LoginHarness {
 void seed_state(app_mcp::McpAuthStore& store, const cch::mcp::OAuthState& state) {
     auto stored = store.save("echo", state.server_url, state);
     REQUIRE(stored.has_value());
+}
+
+/// The registered #1181 OAuth-lifecycle observation: the staged-cancellation
+/// cases compare their stop point and request accounting against the frozen
+/// scenario fields.
+[[nodiscard]] support::JsonValue read_oauth_lifecycle_artifact() {
+    const auto path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json";
+    std::ifstream input(path, std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue& oauth_lifecycle_scenario(
+        const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return artifact;
 }
 
 [[nodiscard]] std::optional<cch::mcp::OAuthState> read_state(app_mcp::McpAuthStore& store) {
@@ -1016,7 +1038,17 @@ TEST_CASE("a cancelled or timed-out MCP OAuth tool call never retries after the 
 }
 
 TEST_CASE("a cancelled MCP OAuth discovery stops before any registration or token request",
-        "[coding_agent][mcp][issue1102][spec]") {
+        "[coding_agent][mcp][issue1102][issue1181][spec]") {
+    // Frozen pi v1.3.0 (audit-1052 oauth-lifecycle.json, "cancellation during
+    // protected-resource discovery aborts the flow"): the stalled path, the
+    // destroyed request socket and the zero registration/token request counts
+    // compared below are the registered observation's own fields.
+    const auto artifact = read_oauth_lifecycle_artifact();
+    const auto& frozen_expected =
+            oauth_lifecycle_scenario(artifact, "cancellation during protected-resource discovery aborts the flow")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
     HttpFixtureServer server{trace};
@@ -1066,17 +1098,33 @@ TEST_CASE("a cancelled MCP OAuth discovery stops before any registration or toke
     // operation; this runtime reports it as ErrorCode::Cancelled.
     CHECK(result.error().code == support::ErrorCode::Cancelled);
     // Cancellation during protected-resource discovery must be the last
-    // request: no client registration and no token request follows it.
+    // request: the stalled path matches the frozen document, the held request's
+    // stop token is the frozen destroyed request socket, and no client
+    // registration or token request follows it.
     REQUIRE(http->get_requests.size() == 1);
     CHECK(http->get_requests.front().url == kFlowResourceMetadataUrl);
-    CHECK(http->get_requests.front().stop_token.stop_requested());
+    CHECK(kFlowResourceMetadataUrl.ends_with(frozen_expected.at("stalledPath").get_string()));
+    CHECK(http->get_requests.front().stop_token.stop_requested() ==
+            frozen_expected.at("requestSocketDestroyed").get_boolean());
     CHECK(http->requests.empty());
+    CHECK(static_cast<std::size_t>(http->requests.size()) ==
+            static_cast<std::size_t>(frozen_expected.at("tokenRequests").get_number()));
     CHECK_FALSE(tests::trace_contains(trace, "recv tools/call"));
     CHECK_FALSE(tests::trace_contains(trace, "notifications/cancelled"));
 }
 
 TEST_CASE("a cancelled MCP OAuth client registration stops before any token request",
-        "[coding_agent][mcp][issue1102][spec]") {
+        "[coding_agent][mcp][issue1102][issue1181][spec]") {
+    // Frozen pi v1.3.0 (audit-1052 oauth-lifecycle.json, "cancellation during
+    // dynamic client registration aborts the flow"): the stalled path and the
+    // zero token/authorization request counts compared below are the
+    // registered observation's own fields.
+    const auto artifact = read_oauth_lifecycle_artifact();
+    const auto& frozen_expected =
+            oauth_lifecycle_scenario(artifact, "cancellation during dynamic client registration aborts the flow")
+                    .get_object()
+                    .at("expected")
+                    .get_object();
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
     HttpFixtureServer server{trace};
@@ -1126,14 +1174,21 @@ TEST_CASE("a cancelled MCP OAuth client registration stops before any token requ
     CHECK(result.error().code == support::ErrorCode::Cancelled);
     // Discovery ran to completion (the two metadata GETs); the frozen contract
     // for registration cancellation then requires the held registration
-    // request to be the last one: no token request follows it.
+    // request to be the last one: the stalled path matches the frozen
+    // document, and no token request or authorization request follows it.
     CHECK(http->get_requests.size() == 2);
     REQUIRE(http->requests.size() == 1);
     CHECK(http->requests.front().url == kFlowRegistrationUrl);
+    CHECK(kFlowRegistrationUrl.ends_with(frozen_expected.at("stalledPath").get_string()));
     CHECK(http->requests.front().stop_token.stop_requested());
     // A token grant is form-encoded ("grant_type=..."); the registration
-    // document only mentions "grant_types" metadata, which must not match.
+    // document only mentions "grant_types" metadata, which must not match —
+    // the frozen token-request count stays zero.
     CHECK(http->requests.front().body.find("grant_type=") == std::string::npos);
+    CHECK(static_cast<std::size_t>(frozen_expected.at("tokenRequests").get_number()) == 0);
+    // The frozen registration-cancellation observation holds exactly one
+    // request (the stalled registration); no authorization request follows.
+    CHECK(static_cast<std::size_t>(frozen_expected.at("authorizations").get_number()) == 0);
     // Cancellation commits no half-registered state either: the store still
     // holds exactly the pre-flow credential.
     const auto stored = read_state(*store);
@@ -1317,21 +1372,49 @@ TEST_CASE("a missing MCP OAuth credential is an explicit re-login error, never a
 }
 
 TEST_CASE("the MCP HTTP transport attaches a credential only when the server needs one",
-        "[coding_agent][mcp][issue875][spec]") {
+        "[coding_agent][mcp][issue875][issue1181][spec]") {
+    // The frozen transports observation (audit-1052 transports.json) records
+    // both authorization shapes: the same-origin redirect forwards the caller
+    // credential (`authorizationForwarded`), and the cross-origin hop strips
+    // it (`targetAuthorization` null). The attach-on-demand behavior below is
+    // compared against those frozen fields.
+    const auto transports_artifact = [] {
+        const auto path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/audit-1052/transports.json";
+        std::ifstream input(path, std::ios::binary);
+        const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+        auto parsed = support::read_json(text);
+        REQUIRE(parsed.has_value());
+        return std::move(*parsed);
+    }();
+    const auto& frozen_forwarded = oauth_lifecycle_scenario(
+            transports_artifact, "same-origin redirect is followed and keeps the request auth header")
+                                           .get_object()
+                                           .at("expected")
+                                           .get_object()
+                                           .at("authorizationForwarded")
+                                           .get_boolean();
+    const auto& frozen_stripped = oauth_lifecycle_scenario(
+            transports_artifact, "cross-origin redirect is followed without Authorization and is rejected")
+                                          .get_object()
+                                          .at("expected")
+                                          .get_object()
+                                          .at("targetAuthorization");
     HttpFixtureServer server;
     auto ca = trust_test_ca();
     tests::RuntimeFixture runtime;
 
-    // No request-auth source: no credentials are attached, and no implicit
-    // sign-in is attempted.
+    // No request-auth source: no credentials are attached, matching the
+    // frozen stripped-credential field, and no implicit sign-in is attempted.
     auto anonymous = connect_http_client(runtime, http_config(server));
-    CHECK(authorization_header(runtime, anonymous).empty());
+    CHECK(authorization_header(runtime, anonymous).empty() == frozen_stripped.holds<std::nullptr_t>());
 
-    // With a request-auth source the token is attached, and it is re-resolved
-    // for every request (never cached on the connection).
+    // With a request-auth source the token is attached, matching the frozen
+    // forwarded-credential field, and it is re-resolved for every request
+    // (never cached on the connection).
     auto stub = std::make_shared<StubRequestAuth>("dummy-access-token");
     auto authenticated = connect_http_client(runtime, http_config(server), stub);
     const int before = stub->calls();
+    CHECK(frozen_forwarded);
     CHECK(authorization_header(runtime, authenticated) == "Bearer dummy-access-token");
     CHECK(authorization_header(runtime, authenticated) == "Bearer dummy-access-token");
     CHECK(stub->calls() == before + 2);

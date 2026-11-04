@@ -26,6 +26,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -59,6 +62,27 @@ const std::string kResourceMetadataUrl = "https://mcp.example.com/.well-known/oa
 const std::string kAuthorizationServerMetadataUrl = "https://auth.example.com/.well-known/oauth-authorization-server";
 const std::string kRegistrationUrl = "https://auth.example.com/register";
 const std::string kTokenUrl = "https://auth.example.com/token";
+
+/// The registered #1181 OAuth-lifecycle observation: the issuer case drives
+/// the forged `iss` from the frozen scenario field.
+[[nodiscard]] support::JsonValue read_oauth_lifecycle_artifact() {
+    const auto path =
+            std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1052" / "oauth-lifecycle.json";
+    std::ifstream input(path, std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue& oauth_lifecycle_scenario(
+        const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return candidate;
+    }
+    REQUIRE(false);
+    return artifact;
+}
 
 struct Harness {
     std::shared_ptr<tests::FakeOAuthHttpClient> http = std::make_shared<tests::FakeOAuthHttpClient>();
@@ -402,7 +426,17 @@ TEST_CASE("cimd mode identifies through the metadata document without registerin
 }
 
 TEST_CASE("an authorization code from another issuer never reaches the token endpoint",
-        "[coding_agent][mcp][issue884][spec]") {
+        "[coding_agent][mcp][issue884][issue1181][spec]") {
+    // audit-1052 `oauth-lifecycle.json`, "authorization response from another
+    // issuer is rejected before token exchange": the forged issuer below is
+    // the frozen `receivedIssuer` field, and the zero token/authorization
+    // request counts are the frozen observation's own fields.
+    const auto artifact = read_oauth_lifecycle_artifact();
+    const auto& frozen_expected = oauth_lifecycle_scenario(
+            artifact, "authorization response from another issuer is rejected before token exchange")
+                                          .get_object()
+                                          .at("expected")
+                                          .get_object();
     Harness harness;
     tests::RuntimeFixture runtime;
     cch::mcp::OAuthState seeded;
@@ -419,15 +453,18 @@ TEST_CASE("an authorization code from another issuer never reaches the token end
 
     cch::mcp::OAuthFlowOptions options;
     options.authorization_code = "code-1";
-    options.iss = "https://attacker.example.com";
+    options.iss = frozen_expected.at("receivedIssuer").get_string();
     auto outcome = harness.run(runtime, options);
     REQUIRE_FALSE(outcome.has_value());
+    // The frozen error is pi's OAuthIssuerMismatchError; this runtime reports
+    // the same mismatch text with the frozen received issuer embedded.
     CHECK(outcome.error().message.find("OAuth issuer mismatch") != std::string::npos);
-    // The frozen observation records the expected issuer, the received
-    // issuer and the absent token request.
-    CHECK(outcome.error().message.find("https://auth.example.com") != std::string::npos);
-    CHECK(outcome.error().message.find("https://attacker.example.com") != std::string::npos);
+    CHECK(outcome.error().message.find(frozen_expected.at("receivedIssuer").get_string()) != std::string::npos);
+    // The frozen `tokenRequests` count stays zero: no request left the client.
     CHECK(harness.http->requests.empty());
+    CHECK(static_cast<std::size_t>(frozen_expected.at("tokenRequests").get_number()) == 0);
+    CHECK(static_cast<std::size_t>(frozen_expected.at("authorizationRequests").get_number()) == 0);
+    CHECK_FALSE(frozen_expected.at("issuerMatchesServer").get_boolean());
 
     // The matching `iss` is exchanged.
     options.iss = "https://auth.example.com";

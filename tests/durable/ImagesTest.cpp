@@ -140,6 +140,60 @@ TEST_CASE("The local image processor passes through an upright inline image with
         limits.max_base64_bytes = 1;
         CHECK_FALSE(local_image_processor()->prepare(png, "image/png", limits).has_value());
     }
+    SECTION("the frozen environment observation drives the pass-through and limit shapes") {
+        // audit-1056 environment.json, "the Photon image processor passes an
+        // upright inline image through and resizes one over the limits": a
+        // 40x20 RGBA PNG (generated above spec) passes through byte-identical
+        // under the default limits, shrinks to 10x5 under the frozen 10x10 /
+        // 1 MiB limits, and prepares nothing at an impossible limit. The
+        // frozen byte counts are the captured image's own lengths, which a
+        // regenerated input cannot reproduce, so the compared shape is the
+        // recorded mime type, pass-through identity and resize dimensions.
+        const auto frozen = environment_scenario(
+                "the Photon image processor passes an upright inline image through and resizes one over the limits");
+        const auto& as_is = frozen.expected().at("asIs");
+        const auto& shrunk = frozen.expected().at("shrunk");
+        const auto source = tests::make_rgba_png(
+                static_cast<std::size_t>(
+                        shrunk.at("resized").get_object().at("from").get_object().at("width").get_number()),
+                static_cast<std::size_t>(
+                        shrunk.at("resized").get_object().at("from").get_object().at("height").get_number()));
+
+        const auto prepared = local_image_processor()->prepare(source, "image/png", ImageLimits{});
+        REQUIRE(prepared.has_value());
+        CHECK(prepared->mime_type == as_is.at("mimeType").get_string());
+        CHECK(as_is.at("sameAsSource").get_boolean());
+        CHECK(prepared->data == encode_base64(source));
+        CHECK(prepared->resized.has_value() == !as_is.at("resized").holds<std::nullptr_t>());
+        CHECK(prepared->converted_from.has_value() == !as_is.at("convertedFrom").holds<std::nullptr_t>());
+
+        auto limits = ImageLimits{};
+        limits.max_width = 10;
+        limits.max_height = 10;
+        limits.max_base64_bytes = 1024 * 1024;
+        const auto squeezed = local_image_processor()->prepare(source, "image/png", limits);
+        REQUIRE(squeezed.has_value());
+        CHECK(squeezed->mime_type == shrunk.at("mimeType").get_string());
+        REQUIRE(squeezed->resized.has_value());
+        CHECK(squeezed->resized->from.width ==
+                static_cast<std::size_t>(
+                        shrunk.at("resized").get_object().at("from").get_object().at("width").get_number()));
+        CHECK(squeezed->resized->from.height ==
+                static_cast<std::size_t>(
+                        shrunk.at("resized").get_object().at("from").get_object().at("height").get_number()));
+        CHECK(squeezed->resized->to.width ==
+                static_cast<std::size_t>(
+                        shrunk.at("resized").get_object().at("to").get_object().at("width").get_number()));
+        CHECK(squeezed->resized->to.height ==
+                static_cast<std::size_t>(
+                        shrunk.at("resized").get_object().at("to").get_object().at("height").get_number()));
+
+        auto impossible = ImageLimits{};
+        impossible.max_base64_bytes = 1;
+        // The frozen impossible-limit observation prepares nothing.
+        CHECK(frozen.expected().at("invalid").holds<std::nullptr_t>());
+        CHECK_FALSE(local_image_processor()->prepare(source, "image/png", impossible).has_value());
+    }
 }
 
 TEST_CASE("The local image processor orients, resizes, and converts like the frozen processor",
