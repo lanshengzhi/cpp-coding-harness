@@ -1130,598 +1130,6 @@
         }
       },
       {
-        "id": "1104-management-during-connection",
-        "ticket": "1104",
-        "implementationCommits": [
-          "adcaaa809b163d4bf84f6208fd652b7aad8f6b9e"
-        ],
-        "report": "docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md",
-        "inputs": [
-          {
-            "path": "CMakeLists.txt",
-            "sha256": "bf9f18286f7f73f6a208690978ab0888ba5699c663281da97f40277f66ae6bbe"
-          },
-          {
-            "path": "CMakePresets.json",
-            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
-          },
-          {
-            "path": "vcpkg.json",
-            "sha256": "dc956d944cb2fcd3e88f4b305931d5b568c1164a8ec5ab9d1688f7418a5814dc"
-          },
-          {
-            "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "ff7e5b4886208345ffb4ea916d797aa7a503ed5a2591851584cad1071961b25f"
-          },
-          {
-            "path": "cmake/targets/Mcp.cmake",
-            "sha256": "589e3411f006490b201b7f9f758374bd4fe96617c74c29d411f275cc28c25e04"
-          },
-          {
-            "path": "cmake/targets/Tui.cmake",
-            "sha256": "eb37a3d846e3303f159dc7ca194982c33b403ddc178c93cbfc5b91a914d6cadb"
-          },
-          {
-            "path": "cmake/tests/TestsSetup.cmake",
-            "sha256": "6f94b2fe4520aaa3f08020bc0d0954e66a6b59bedce8944539691f7b3f40d16a"
-          },
-          {
-            "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
-          },
-          {
-            "path": "src/coding_agent/AgentSession.cpp",
-            "sha256": "a996ef76e814b4cd608c2bb5daf08e92a4d30d7172f7cf78ca2cbb659eb079e0"
-          },
-          {
-            "path": "src/coding_agent/AgentSessionExecution.cpp",
-            "sha256": "daa73ddf696abd3491bb506ac65c425de10fc4163f7a7078f02edd090938baad"
-          },
-          {
-            "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "sha256": "958c97fcf37088def7f015f717b049c92a3edd5ce7f6d922fc0e4c94f9e7af7c"
-          },
-          {
-            "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "ddb2f694572f6671b1ea5cd128a5377283f3e83f83b01b62e85f58b4960c348c"
-          },
-          {
-            "path": "src/coding_agent/runtime/McpSessionManager.cpp",
-            "sha256": "b6ecb9bf4da4c489f66729c0c44dbea840960599067b4091c34814d83b2637e4"
-          },
-          {
-            "path": "src/coding_agent/runtime/McpSessionManager.hpp",
-            "sha256": "0412801f6613c9bf54f43cefa3d1350d7e75d0e2ed7a8706089d86c935877948"
-          },
-          {
-            "path": "src/coding_agent/runtime/SessionFactory.cpp",
-            "sha256": "8f6544552c57de85d4a294b52de5ca14a382dcc0fdc200ee309aa03e2cf51b7b"
-          },
-          {
-            "path": "src/coding_agent/runtime/SessionFactory.hpp",
-            "sha256": "fd0ea220dddb44aabb9066c5c17e1cbe5142a6c72b986918e14decceeed453a9"
-          },
-          {
-            "path": "src/coding_agent/tui/McpManagerFlow.cpp",
-            "sha256": "c90577a41f51b0fa66e9236dfaed184fcf1ca578f8429d2d2027a4f88ee05d2a"
-          },
-          {
-            "path": "src/coding_agent/tui/McpManagerFlow.hpp",
-            "sha256": "de86cdeda880062f1e70735225e5ad0f0126e720886593449b6f7e1541a28247"
-          },
-          {
-            "path": "src/support/AsyncResultBridge.hpp",
-            "sha256": "a8df9d396854060a9b5f9586de2d853c97633201a3fb797a49284dbcf3d110dc"
-          },
-          {
-            "path": "tests/Catch2Main.cpp",
-            "sha256": "6203953a9244994c7c8aeeb64613b6ccef9bc24ae3ad0e54fed1f4a9212aadbd"
-          },
-          {
-            "path": "tests/support/RuntimeFixture.hpp",
-            "sha256": "bd441349fa9473da544f544b9edc451fc8fb548ea14d3b5bf11a3d3b16aba1c0"
-          },
-          {
-            "path": "tests/support/McpTestKit.hpp",
-            "sha256": "06ab36bb65c056096a599f696cbe416003ede98f2567f87d30f5118c33d20f1d"
-          },
-          {
-            "path": "tests/support/ModelsFixture.hpp",
-            "sha256": "e3a1015be6e69f31203ab7c90c48bedda450a51efb71f11666592d23f0644bd6"
-          },
-          {
-            "path": "tests/support/RuntimeLoopDriver.hpp",
-            "sha256": "d555cca1c9ea98d50c4998ebb2f43dc0b7474404c0ba176ea1a404e78c46c7fa"
-          },
-          {
-            "path": "tests/support/TempWorkspace.hpp",
-            "sha256": "4c3811b22c3abae96d3261a54d401899033ffb80fcc325a5ac5dd2c9f8f75140"
-          },
-          {
-            "path": "tests/support/JsonCompare.hpp",
-            "sha256": "54599aa9c9ed5551ddbcff2bb39dae0027f2a9b7f513313de78bcf0ccdd5a9ae"
-          },
-          {
-            "path": "tests/support/EnvVarGuard.hpp",
-            "sha256": "5eacc743ff5f28688ebb430a99353133617c0156d3fe462fced37c0f239eb945"
-          },
-          {
-            "path": "tests/coding_agent/McpFailureIsolationTest.cpp",
-            "sha256": "3509a60d835b82ba73c9e3159be17f3fc4e8ce4761b859d9249b3dc80c78e76f"
-          },
-          {
-            "path": "tests/coding_agent/McpServerManagementTest.cpp",
-            "sha256": "46ffcacd1b6bafea69bf6cce5a12c9b3611d41119476f0c9bc78a60cf09a9af8"
-          },
-          {
-            "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "sha256": "e0e03f8d53717464174a8b0a569014b125fd6c976ded60f87920e5d4efe0721e"
-          },
-          {
-            "path": "tests/coding_agent/McpSessionManagerTest.cpp",
-            "sha256": "a867127b3bc2ca7fc8e4cd69250d0a84f276fab5578f72e3129c8970475c91ff"
-          },
-          {
-            "path": "tests/coding_agent/tui/McpManagerFlowTest.cpp",
-            "sha256": "94a1da8466c992bc680b64d0a2083f8675e9c44ed45c360effc68816c47eb488"
-          },
-          {
-            "path": "tests/coding_agent/tui/McpManagerPresenterTest.cpp",
-            "sha256": "b48622d0d12321c3d2ab36a2396caab0e5153ee9564459c6046a5cfa394ecf5a"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/audit-1104/capture-1104.mts",
-            "sha256": "745601cb118b1cce404087260e1205a1e504ae5282e9c598ed751faa8be14831"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/audit-1104/fixtures.mts",
-            "sha256": "986525ff66bdfac10c5b6a91678ab26747a70cae718e0bdf481faa57605667bd"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/audit-1104/pi.mts",
-            "sha256": "5699cb2ef400ef8c070b10dcc54eea060c53846f5f1c42dd79bae6953a2abffe"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/audit-1104/scenarios.mts",
-            "sha256": "b06b3f57ba4335985a5290990ea6ee186f2e2b37cf9f5d7558ceaa8a5323758e"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/audit-1104/manifest.json",
-            "sha256": "a296b43eebec48c5c10512c4fa05e9c0e249bb3c5d74508bb5b671f7aa1d86d8"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
-            "sha256": "af4058e65f92bb637e5a48e5af5ffac42baa2f7db1f49619613a0abeadf9fa7f"
-          },
-          {
-            "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "f6beef8c96be32e5665dc1af10d6101b253552bbbe0bca635c7f377041b257dd"
-          },
-          {
-            "path": "scripts/evidence/audit_evidence.py",
-            "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
-          },
-          {
-            "path": "tests/support/ConnectionGate.hpp",
-            "sha256": "64c8501dca3a2e61f69229c68bb07a723f0641e3557776f87d969c4382ad2ebe"
-          },
-          {
-            "path": "tests/support/ReleaseGate.hpp",
-            "sha256": "c3f156d5fb4bd67ab7cc33be2ed99650e14e77e732cc6e4b362ee7561c725a07"
-          }
-        ],
-        "rows": [
-          {
-            "id": "cch_coding_agent:mcp-management-ui",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1104/management-during-connection.json",
-                "scenario": "the /mcp manager lists connecting servers and completes a sign-in while another server connects",
-                "test": "/mcp panel stays live while a server connect is pending and subcommands await the settle",
-                "testSource": "tests/coding_agent/tui/McpManagerFlowTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "sign-in completes for one server while another is still connecting",
-              "testSource": "tests/coding_agent/McpSessionManagerTest.cpp",
-              "reason": "One server's connect is held open on a gate while the OAuth server signs in: the manager reports the gated server connecting, the panel stays interactive and the sign-in completes. A design that awaited the handshakes before publishing the snapshot, or before dispatching a subcommand, fails this case."
-            }
-          },
-          {
-            "id": "cch_coding_agent:mcp-external-signin-pickup",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1104/management-during-connection.json",
-                "scenario": "a sign-in performed outside the session is picked up on the next turn",
-                "test": "on_turn_start reconnects a server signed in through another process",
-                "testSource": "tests/coding_agent/McpSessionManagerTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "on_turn_start leaves a needs-auth server alone when the stored tokens are unchanged",
-              "testSource": "tests/coding_agent/McpSessionManagerTest.cpp",
-              "reason": "The unchanged-fingerprint turn keeps the server needs-auth and reconnects zero times, while a store mutated from a second owner changes the fingerprint, reconnects exactly once and exposes the tool. An unconditional per-turn reconnect and a no-pickup design both fail this pair."
-            }
-          }
-        ],
-        "validation": {
-          "command": [
-            "ctest",
-            "--preset",
-            "vcpkg",
-            "-L",
-            "^(issue1090|issue1101|issue1104)$",
-            "--output-on-failure",
-            "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1158-registration-shared-1090-1101-1104.xml"
-          ],
-          "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
-          "recordedAt": "2026-11-02T15:26:49Z",
-          "selected": 36,
-          "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-shared-1090-1101-1104.xml",
-            "sha256": "9b34aafcc652b04156f7121f5bc2f8531b7a2c695c248740cc60f2193ba5645b"
-          }
-        },
-        "routingSha256": "3745f6e718b852bf01dec197b8a8332602af00a8cb0bd173f43ec0f886027e27",
-        "revalidation1099": {
-          "reason": "#1099 registered the audit-1099 frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json",
-            "docs/research/pi-v1.3.0/1058-implementation-frontier.json",
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
-          ]
-        },
-        "revalidation1105": {
-          "reason": "Post-review diagnostic refinement in consolidate_audits.py adds the delivery id and reconciliation pointer to digest-mismatch messages. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
-          ]
-        },
-        "revalidation1110": {
-          "reason": "#1110 makes the active tool set control the request's tool declarations, so the Session's leading system message must declare the loadout the Agent actually starts with. AgentSessionExecution.cpp now declares every initially active registered tool (pi `createInitialSystemMessage(systemPrompt, state.tools)`) instead of only the prompt-selected built-ins, which removes a spurious first-turn declaration delta. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "src/coding_agent/AgentSessionExecution.cpp"
-          ]
-        },
-        "revalidation1111": {
-          "reason": "#1111 restores the recorded tool loadout order, applies relative +name/-name tool modifiers to the fresh and resumed loadout, and stops transcript replay from re-adding a registered non-MCP tool after Agent construction. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "src/coding_agent/AgentSessionExecution.cpp",
-            "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "src/coding_agent/runtime/SessionFactory.cpp"
-          ]
-        },
-        "revalidation1118": {
-          "reason": "#1118 makes the application codemode catalog a live function of the session loadout: ExtensionTool carries the exposure/namespace metadata the catalog needs, the MCP surface and the programmatic MCP source attach it, the session applies hidden declarations and per-tool script-call descriptions at request time, and the MCP integration assertion now expects the script-call sentence on a declared direct tool. The merge with #1111 keeps the recorded-loadout restore, the relative +name/-name modifiers and the MCP replay skip intact; the catalog is applied to the post-modifier initial loadout and to the restored loadout. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on the merged tree, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "cmake/targets/CodingAgent.cmake",
-            "cmake/tests/CodingAgentTests.cmake",
-            "src/coding_agent/AgentSession.cpp",
-            "src/coding_agent/AgentSessionExecution.cpp",
-            "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "src/coding_agent/runtime/McpSessionManager.cpp",
-            "src/coding_agent/runtime/McpSessionManager.hpp",
-            "src/coding_agent/runtime/SessionFactory.cpp",
-            "tests/coding_agent/McpSessionIntegrationTest.cpp"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1111.xml"
-            ],
-            "testedRevision": "74fe2e35766f35039222ff56e4afee44c2d29827",
-            "recordedAt": "2026-10-31T12:26:00Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1111.xml",
-              "sha256": "ff64512e3fc12d4d752a3ad2a6a355ef2228161bb46b0831810d1769cfe27238"
-            }
-          }
-        },
-        "revalidation1119": {
-          "reason": "#1119 gives the application codemode tool its Session facilities: a successful script persists its store write set as a codemode-store Custom entry on the ordered commitment line, `load()` replays the active branch, and output budget/spill, image saving, nested-call records and the failure summary follow pi v1.3.0. The build declarations gain the new CodemodeExecution module and the SessionFactory wires the shared state through RuntimeServices/AgentSession. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on this tree, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "cmake/targets/CodingAgent.cmake",
-            "cmake/tests/CodingAgentTests.cmake",
-            "src/coding_agent/AgentSessionExecution.cpp",
-            "src/coding_agent/runtime/SessionFactory.cpp"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml"
-            ],
-            "testedRevision": "95ec927edf4cf90b4de8c8761a29b168c914a164",
-            "recordedAt": "2026-10-31T14:20:13Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1118-revalidation.xml",
-              "sha256": "850c14076c54db807547eb49632faba8d2593a6abbefb468d4455bc865f9785b"
-            }
-          }
-        },
-        "revalidation1107": {
-          "reason": "#1107 renames the completed-turn context to AgentTurnContext (pi `AgentTurnContext`), adds the pi-v1.3.0 prepareRequest/finishTurn loop hooks and appendable prepareNextTurn messages, and retires should_stop_after_turn. AgentSessionExecution.cpp carries the hook parameter rename on top of the #1119 changes. The delivered rows, scenarios and routing digest are unchanged; the shared selection was rerun on the merged tree into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "src/coding_agent/AgentSessionExecution.cpp"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml"
-            ],
-            "testedRevision": "a502dacd8f81137e2aa76a4026f499d127cc6027",
-            "recordedAt": "2026-11-01T06:30:00Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1101-revalidation-1119.xml",
-              "sha256": "6ff02ac7faa8982246bb6a2ab1228082e5f7246418efc519fdc1f165fe467673"
-            }
-          }
-        },
-        "revalidation1170": {
-          "reason": "#1170 added two durable sources and a test file, updated the architecture line, registered the audit-1170 nested-ToolTask family and its six orphan scenarios, and moved the codemode run state to shape version 3. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1108": {
-          "reason": "#1108 aligns the application Session's streaming prompt rejection with pi's `AgentSession.prompt` text (`Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.`) instead of the legacy busy string. AgentSessionExecution.cpp carries that diagnostic change. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact on the tree merged with #1116/#1117/#1170, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "src/coding_agent/AgentSessionExecution.cpp"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml"
-            ],
-            "testedRevision": "dc55f9b820aa974429579699b6110ca3e2069d07",
-            "recordedAt": "2026-11-01T06:36:56Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1107.xml",
-              "sha256": "a454200e6ff87c0048e32ed8240a0bb0ead4af67cf728307ef5b9322caad86df"
-            }
-          }
-        },
-        "revalidation1113": {
-          "reason": "#1113 removes the extra Agent input-queue capacity behavior: both queues are unbounded, steer/followUp return no result like frozen pi, and the AgentSession creation plumbing no longer forwards max_queued_messages/max_queued_bytes. AgentSessionExecution.cpp and SessionFactory.cpp carry that removal. The delivered rows, scenarios and routing digest are unchanged; the shared 36-case selection was rerun into a fresh JUnit artifact, and this change makes no new verification claim about those rows.",
-          "changedInputs": [
-            "src/coding_agent/AgentSessionExecution.cpp",
-            "src/coding_agent/runtime/SessionFactory.cpp"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1108.xml"
-            ],
-            "testedRevision": "70ab98d3daf47e1a70c78ddbb212d0bd75b477a8",
-            "recordedAt": "2026-11-01T11:30:35Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1104-revalidation-1108.xml",
-              "sha256": "5c8a16c2b78a1be87f73db1579263324be0789753d4fe619cc8b77f11131b124"
-            }
-          }
-        },
-        "revalidation1172": {
-          "reason": "#1172 registered the audit-1172 codemode-output frozen-evidence family, which appends a bundle record to the shared baseline registry and changes this pinned shared input. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1175r": {
-          "reason": "Serial-merger audit-1175 registration changed fixtures/pi-v1.3.0/baselines.json (7e2ccc288); these records pin the registry. Selection rerun 36/36 into deliveries/1090-revalidation-1175r.xml; only the registry digest moved, no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json"
-          ],
-          "testedRevision": "7e2ccc288",
-          "selected": 36,
-          "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1175r.xml",
-            "sha256": "e30173c322361aa0f04d9f0b30bf43f3be9054510bd7653abf5fb7f02b4f9bf8"
-          }
-        },
-        "revalidation1159": {
-          "reason": "#1159 delivers the durable edit tool's BOM/CRLF repair, per-file mutation queue and frozen diff details. It adds the `src/durable/EditDiff`/`FileMutationQueue` sources, the architecture paragraph, the durable test-shard entry and the audit-1159 frozen-evidence family with its ten captured scenarios classified as explicit orphan observations, which changes these pinned shared inputs. The delivered rows, scenarios and routing digest are unchanged, and this change makes no new verification claim about them; the exact selection was rebuilt and rerun on the merged tree into the refreshed JUnit artifact.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1112": {
-          "reason": "#1112 registers native extensions on the real Agent Session and adds the before_agent_start lifecycle, system-prompt/custom-message contributions and extension-triggered runs. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
-          "changedInputs": [
-            "cmake/targets/CodingAgent.cmake",
-            "cmake/tests/CodingAgentTests.cmake",
-            "src/coding_agent/AgentSession.cpp",
-            "src/coding_agent/AgentSessionExecution.cpp",
-            "src/coding_agent/runtime/SessionFactory.cpp"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml"
-            ],
-            "testedRevision": "706ac9a3f7cb9b9222d825290fdb3a97259e069c",
-            "recordedAt": "2026-11-01T22:03:38Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1159-revalidation-1090-1104.xml",
-              "sha256": "85890c87eeed6a17eabf8cd506aa7929cb93bdc8bc3d078132fb3f79f003f58b"
-            }
-          }
-        },
-        "revalidation1173m": {
-          "reason": "Serial-merger step registered audit-1173 in baselines.json and classified its 13 comparison scenarios as explicit orphanScenarios (whole-row receipts remain #1180). These records pin the plan and the registry; digests refreshed on this commit and the shared selection rerun on the merged tree into deliveries/1090-revalidation-1173m.xml (26 cases selected after the 1090/1101/1104 relabels, 100% passing, no rows/scenarios/routing changes).",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1115": {
-          "reason": "#1115 publishes the consumable settings schema surface, aligns the settings load and compaction-token diagnostic text with pi's failure text, keeps unknown keybinding ids in the migrated user map, and states the theme token set against a new frozen capture. The delivered rows, scenarios and routing digest are unchanged; this receipt only re-pins the touched shared inputs and reruns its recorded selection into a fresh JUnit artifact.",
-          "changedInputs": [
-            "cmake/tests/CodingAgentTests.cmake",
-            "src/coding_agent/runtime/SessionFactory.cpp"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml"
-            ],
-            "testedRevision": "8df094e1d6624a3b653c544a3c96b119f5fcf0ed",
-            "recordedAt": "2026-11-01T23:57:39Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1112-revalidation-1090-1101-1104.xml",
-              "sha256": "0125241de337ccec92ae882729c9a775a51bf2baff51c942746651aa334c86fa"
-            }
-          }
-        },
-        "revalidation1115m": {
-          "reason": "Serial-merger step registered audit-1115 and classified its 7 settings-diagnostic scenarios as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1115m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1189": {
-          "reason": "#1189 makes MCP OAuth refresh the shared background operation per server: one exchange, pi's 30-second skew, a cross-process refresh lock that reuses a grant another process rotated, cancellation/timeout settling the caller without a post-refresh dispatch, close reusing its last token and never refreshing, and a pending initialize aborted by close with pi's closed error. This record pins the touched MCP production, test and fixture inputs; its delivered rows, scenarios and routing digest are unchanged. The recorded selection was rebuilt and rerun on the code revision into a fresh JUnit artifact. The rerun is the shared 36-case #1090/#1101/#1104 selection into docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml.",
-          "changedInputs": [
-            "cmake/targets/CodingAgent.cmake",
-            "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "src/coding_agent/runtime/McpSessionManager.cpp",
-            "src/coding_agent/runtime/McpSessionManager.hpp",
-            "tests/coding_agent/McpSessionIntegrationTest.cpp",
-            "tests/coding_agent/McpSessionManagerTest.cpp",
-            "tests/coding_agent/tui/McpManagerFlowTest.cpp",
-            "tests/coding_agent/tui/McpManagerPresenterTest.cpp"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml"
-            ],
-            "testedRevision": "ba45599a1d9249b73992a5fa92aa45da1f9db05a",
-            "recordedAt": "2026-11-02T04:10:28Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1115-revalidation-1090-1101-1104.xml",
-              "sha256": "c6d6f2482af70388ddec32e417c41cdb119ddcec5e94ee507fe69adc78042244"
-            }
-          }
-        },
-        "revalidation1190m": {
-          "reason": "Serial-merger step registered audit-1190 in baselines.json and classified its 3 server-request scenarios as explicit orphanScenarios (row receipts remain #1177). The plan and registry are pinned inputs of this record; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1190m.xml, with no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1191m": {
-          "reason": "Serial-merger step registered audit-1191 and classified its 28 source-only capture scenarios (5 artifacts) as explicit orphanScenarios (whole-row application receipts remain #1177). The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1191m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1186m": {
-          "reason": "Serial-merger step registered audit-1057-typed-json (#1186) and audited its 4 typed-JSON scenarios: the worker's ledger rebuild already routes them (artifact-covered), so no orphanScenarios entries are added for them; the plan digest refresh is the only change. The shared delivery selection reran on the merged tree into deliveries/1090-revalidation-1186m.xml (26 cases, 100% passing), with no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
-          ]
-        },
-        "revalidation1187m": {
-          "reason": "Serial-merger step registered audit-1187 and added two scenarioLinks (ticket 1057, row cch_chord:output:progress) naming the audited-1187 progress scenarios. The plan and registry are pinned inputs; digests refreshed and the shared delivery selection rerun on the merged tree into deliveries/1090-revalidation-1187m.xml, with no rows/scenarios/routing changes.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "fixtures/pi-v1.3.0/baselines.json"
-          ]
-        },
-        "revalidation1158m": {
-          "reason": "Serial merger registered audit-1158 and classified seven supplemental scenarios as explicit orphans; existing receipt rows and routing remain unchanged. This selection ran with the updated registry and plan present before and after the run.",
-          "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json"
-          ],
-          "previousValidation": {
-            "command": [
-              "ctest",
-              "--preset",
-              "vcpkg",
-              "-L",
-              "^(issue1090|issue1101|issue1104)$",
-              "--output-on-failure",
-              "--output-junit",
-              "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml"
-            ],
-            "testedRevision": "6f0942cf7317a8cdab2db0fd3a5d15c6156f4028",
-            "recordedAt": "2026-11-02T05:33:19Z",
-            "selected": 36,
-            "junit": {
-              "path": "docs/research/pi-v1.3.0/deliveries/1189-revalidation-1090-1101-1104.xml",
-              "sha256": "42610b900d396ff9aaa33e2e91403b4cfcbfbfa4d02a39f8a017b6362453b2e1"
-            }
-          }
-        }
-      },
-      {
         "id": "1118-codemode-catalog",
         "ticket": "1118",
         "implementationCommits": [
@@ -7769,8 +7177,8 @@
         "partial": 2
       },
       "cch_coding_agent": {
-        "implemented": 91,
-        "missing": 15,
+        "implemented": 90,
+        "missing": 16,
         "not-applicable": 6,
         "partial": 47
       },
@@ -7797,21 +7205,21 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1095,
-      "missing": 179,
+      "implemented": 1094,
+      "missing": 180,
       "not-applicable": 18,
       "partial": 172
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1010,
+      "unverified": 1012,
       "upstream-captured": 311,
-      "verified": 115
+      "verified": 113
     },
     "evidenceRoute": {
-      "captured": 426,
+      "captured": 424,
       "artifact-only": 0,
-      "related-captured": 21,
+      "related-captured": 23,
       "declared-comparison": 29,
       "cpp-regression-only": 10,
       "unobserved": 50,
@@ -7821,7 +7229,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1010,
+    "unobservedSupported": 1012,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -7854,7 +7262,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1010,
+    "missingObservationRows": 1012,
     "scenarioCoverage": {
       "scenarios": 658,
       "scenarioNamed": 368,
@@ -27050,32 +26458,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "unverified",
       "owner": "cch_coding_agent",
       "consumer": "`createMcpExtension` `turn_start`/`reconnectSignedIn`, `McpServerConnection`, `mcp-auth.json`.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1104",
+      "implementation_ticket": null,
       "scenario": "a sign-in performed outside the session is picked up on the next turn",
       "comparisonScenarios": [
         "a sign-in performed outside the session is picked up on the next turn"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "a sign-in performed outside the session is picked up on the next turn"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1104; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Add a per-turn token fingerprint check on the manager and reconnect a server whose stored tokens changed. Test with an in-memory store mutated from a second handle.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -27088,26 +26496,7 @@
           "verification": "unverified",
           "owner": "cch_coding_agent"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "missing",
-        "verification": "unverified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a sign-in performed outside the session is picked up on the next turn"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Add a per-turn token fingerprint check on the manager and reconnect a server whose stored tokens changed. Test with an in-memory store mutated from a second handle."
-      },
-      "delivery": "1104-management-during-connection"
+      ]
     },
     {
       "id": "cch_coding_agent:mcp-management-ui",
@@ -27120,31 +26509,31 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "unverified",
       "owner": "cch_coding_agent",
       "consumer": "TUI `McpManagerFlow`/`McpManagerPresenter`; CLI `mcp` commands; the live `McpSessionManager`.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1104",
+      "implementation_ticket": null,
       "scenario": "the /mcp manager lists connecting servers and completes a sign-in while another server connects",
       "comparisonScenarios": [
         "the /mcp manager lists connecting servers and completes a sign-in while another server connects"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "the /mcp manager lists connecting servers and completes a sign-in while another server connects"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1104; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1104-mcp-management-during-connection.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Keep the panel; add differential cases for status while connecting, stale sign-in/reconnect outcomes and the `enable-project`/`disable-project` actions. Multi-candidate sign-in selection remains the known interaction gap.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [
@@ -27159,26 +26548,7 @@
           "verification": "unverified",
           "owner": "cch_coding_agent"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "unverified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1104/management-during-connection.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the /mcp manager lists connecting servers and completes a sign-in while another server connects"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Keep the panel; add differential cases for status while connecting, stale sign-in/reconnect outcomes and the `enable-project`/`disable-project` actions. Multi-candidate sign-in selection remains the known interaction gap."
-      },
-      "delivery": "1104-management-during-connection"
+      ]
     },
     {
       "id": "cch_coding_agent:mcp-oauth-persistence",
