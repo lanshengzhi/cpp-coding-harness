@@ -1985,14 +1985,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187-1188.xml"
+            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1178.xml"
           ],
-          "testedRevision": "fefc022744fadfaf6507674ca5115614600b3bdb",
-          "recordedAt": "2026-11-02T12:52:15Z",
+          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+          "recordedAt": "2026-11-04T20:01:09Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187-1188.xml",
-            "sha256": "fe7da1fc92e5518e043e83af019c0855da7d78efee1c86888996c34221e1f5da"
+            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1178.xml",
+            "sha256": "61f711e99147d23e9836250b0d6a0b22b7783f346f781578be7ccaa2c0ec893b"
           }
         },
         "rows": [
@@ -2612,23 +2612,23 @@
           },
           {
             "path": "tests/chord/ChordContextTest.cpp",
-            "sha256": "1b64dadab0ece0ad5180c27f38eb2c9b133316653bab55ab3140b9f2fc012951"
+            "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
           },
           {
             "path": "tests/chord/DeltaTest.cpp",
-            "sha256": "1f6169bf069455b9f6f3b76a742ce49c50c1240926584c2b672f1628747136c9"
+            "sha256": "ba2dfd2eb1345c0c929c78508f40c505fef17c62bb8238616803f20445c6a505"
           },
           {
             "path": "tests/chord/OutputTest.cpp",
-            "sha256": "05623d86fd04506948e150f870f026709cd7b06c92a6a21c0c9509b842e3ef07"
+            "sha256": "d053b0b90072262d2dcb736f2d44751dd469b64eb9754b1b2709484511574a51"
           },
           {
             "path": "tests/chord/ReplicatedStateTest.cpp",
-            "sha256": "58b947e60de6006e00a19ebd0951d5f786baef02d6c304e4a1d4dccc23a233de"
+            "sha256": "8d3718548057e537bf7aa635c94f2a10c07dcc7202cef65a681d33284e1f253c"
           },
           {
             "path": "tests/chord/TrackerTest.cpp",
-            "sha256": "caf97023d0a2fc6f06a6195ffeb70012688a3abf4f7b7331de33e95ebfc182ad"
+            "sha256": "57cd3361fd6febea6c9c2accba156268601d06ce24016562d6cbfb01318c9092"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -2689,6 +2689,14 @@
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1178-chord.xml",
             "sha256": "bbb09d80288727c8ed50172516e7e1d851e88bad786e2ae26d1054ce57b534cd"
+          },
+          {
+            "path": "tests/chord/StrictJsonTest.cpp",
+            "sha256": "e51ed9c5be113084c28dafbac3cc343d0e087d1578c9cf3e0f6bf3ad9c5ff150"
+          },
+          {
+            "path": "tests/support/ChordEvidence.hpp",
+            "sha256": "577210de90de0cc8afc6987aa2cb8dfbc7173a53a3cd59ddee95b46534a11468"
           }
         ],
         "revalidation1185": {
@@ -2792,6 +2800,37 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1202": {
+          "reason": "#1202 re-anchoring: the cited chord comparisons and discriminating cases now open the registered frozen artifacts (audit-1057 context-cancellation/delta-revisions/json-output-support/replicated-state, audit-1061 validation-order/prepare-replace, audit-1062 ordered-frames/review-edges/observer-delivery, audit-1054 session-transactions, audit-1057-typed-json chord-typed-json) and compare their own inputs/expected fields through the shared tests/support/ChordEvidence.hpp reader. The touched inputs are re-pinned and the recorded selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+          "changedInputs": [
+            "tests/chord/ChordContextTest.cpp",
+            "tests/chord/DeltaTest.cpp",
+            "tests/chord/OutputTest.cpp",
+            "tests/chord/ReplicatedStateTest.cpp",
+            "tests/chord/StrictJsonTest.cpp",
+            "tests/chord/TrackerTest.cpp",
+            "tests/support/ChordEvidence.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187-1188.xml"
+            ],
+            "testedRevision": "fefc022744fadfaf6507674ca5115614600b3bdb",
+            "recordedAt": "2026-11-02T12:52:15Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1178-revalidation-1187-1188.xml",
+              "sha256": "fe7da1fc92e5518e043e83af019c0855da7d78efee1c86888996c34221e1f5da"
+            }
+          }
         }
       },
       {
@@ -3653,14 +3692,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1185-chord.xml"
+            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1185.xml"
           ],
-          "testedRevision": "60b043a722f137cd89ba64d89c9caa06332c6e58",
-          "recordedAt": "2026-11-02T08:40:07Z",
-          "selected": 76,
+          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+          "recordedAt": "2026-11-04T20:01:09Z",
+          "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1185-chord.xml",
-            "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
+            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1185.xml",
+            "sha256": "257dc92d04651651ba162464642d022f1e0d8b8e371ab895c79cda3107520923"
           }
         },
         "rows": [
@@ -3817,11 +3856,11 @@
           },
           {
             "path": "tests/chord/DeltaTest.cpp",
-            "sha256": "1f6169bf069455b9f6f3b76a742ce49c50c1240926584c2b672f1628747136c9"
+            "sha256": "ba2dfd2eb1345c0c929c78508f40c505fef17c62bb8238616803f20445c6a505"
           },
           {
             "path": "tests/chord/TrackerTest.cpp",
-            "sha256": "caf97023d0a2fc6f06a6195ffeb70012688a3abf4f7b7331de33e95ebfc182ad"
+            "sha256": "57cd3361fd6febea6c9c2accba156268601d06ce24016562d6cbfb01318c9092"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1054/manifest.json",
@@ -3870,6 +3909,26 @@
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1185-chord.xml",
             "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
+          },
+          {
+            "path": "tests/chord/ChordContextTest.cpp",
+            "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
+          },
+          {
+            "path": "tests/chord/OutputTest.cpp",
+            "sha256": "d053b0b90072262d2dcb736f2d44751dd469b64eb9754b1b2709484511574a51"
+          },
+          {
+            "path": "tests/chord/ReplicatedStateTest.cpp",
+            "sha256": "8d3718548057e537bf7aa635c94f2a10c07dcc7202cef65a681d33284e1f253c"
+          },
+          {
+            "path": "tests/chord/StrictJsonTest.cpp",
+            "sha256": "e51ed9c5be113084c28dafbac3cc343d0e087d1578c9cf3e0f6bf3ad9c5ff150"
+          },
+          {
+            "path": "tests/support/ChordEvidence.hpp",
+            "sha256": "577210de90de0cc8afc6987aa2cb8dfbc7173a53a3cd59ddee95b46534a11468"
           }
         ],
         "routingSha256": "e10f486b2f341da5cfff683f179814cc61459d6b807afbce2150711e88c97d05",
@@ -3890,6 +3949,37 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1202": {
+          "reason": "#1202 re-anchoring: the cited chord comparisons and discriminating cases now open the registered frozen artifacts (audit-1057 context-cancellation/delta-revisions/json-output-support/replicated-state, audit-1061 validation-order/prepare-replace, audit-1062 ordered-frames/review-edges/observer-delivery, audit-1054 session-transactions, audit-1057-typed-json chord-typed-json) and compare their own inputs/expected fields through the shared tests/support/ChordEvidence.hpp reader. The touched inputs are re-pinned and the recorded selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+          "changedInputs": [
+            "tests/chord/ChordContextTest.cpp",
+            "tests/chord/DeltaTest.cpp",
+            "tests/chord/OutputTest.cpp",
+            "tests/chord/ReplicatedStateTest.cpp",
+            "tests/chord/StrictJsonTest.cpp",
+            "tests/chord/TrackerTest.cpp",
+            "tests/support/ChordEvidence.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1185-chord.xml"
+            ],
+            "testedRevision": "60b043a722f137cd89ba64d89c9caa06332c6e58",
+            "recordedAt": "2026-11-02T08:40:07Z",
+            "selected": 76,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1185-chord.xml",
+              "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
+            }
+          }
         }
       },
       {
@@ -3910,14 +4000,14 @@
             "issue1184",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1158-postmerge-1184.xml"
+            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1184.xml"
           ],
-          "testedRevision": "b9b7c1fb272104860b7b6b653247e2cdf5ae413a",
-          "recordedAt": "2026-11-02T14:52:45Z",
+          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+          "recordedAt": "2026-11-04T20:01:09Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1158-postmerge-1184.xml",
-            "sha256": "40e9fa5e1d6268597c6f28a3951a2f587de98c0c5b3e297e2ca599ff91352369"
+            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1184.xml",
+            "sha256": "a962dde453f2fc59d7bde12a90b813bf8e5e1942ebd1c1f475cda63df16931a4"
           }
         },
         "rows": [
@@ -4066,7 +4156,7 @@
           },
           {
             "path": "tests/chord/ChordContextTest.cpp",
-            "sha256": "1b64dadab0ece0ad5180c27f38eb2c9b133316653bab55ab3140b9f2fc012951"
+            "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
           },
           {
             "path": "tests/durable/DocumentLifecycleTest.cpp",
@@ -4115,6 +4205,10 @@
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1184-context-cancellation.xml",
             "sha256": "0d5ad2f41ea2c7cb4d24af35e99b5efb3e15c0dd3a436ed86fb0d3b4d40e164c"
+          },
+          {
+            "path": "tests/support/ChordEvidence.hpp",
+            "sha256": "577210de90de0cc8afc6987aa2cb8dfbc7173a53a3cd59ddee95b46534a11468"
           }
         ],
         "revalidation1158": {
@@ -4147,6 +4241,32 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1202": {
+          "reason": "#1202 re-anchoring: the cited chord comparisons and discriminating cases now open the registered frozen artifacts (audit-1057 context-cancellation/delta-revisions/json-output-support/replicated-state, audit-1061 validation-order/prepare-replace, audit-1062 ordered-frames/review-edges/observer-delivery, audit-1054 session-transactions, audit-1057-typed-json chord-typed-json) and compare their own inputs/expected fields through the shared tests/support/ChordEvidence.hpp reader. The touched inputs are re-pinned and the recorded selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+          "changedInputs": [
+            "tests/chord/ChordContextTest.cpp",
+            "tests/support/ChordEvidence.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1158-postmerge-1184.xml"
+            ],
+            "testedRevision": "b9b7c1fb272104860b7b6b653247e2cdf5ae413a",
+            "recordedAt": "2026-11-02T14:52:45Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1158-postmerge-1184.xml",
+              "sha256": "40e9fa5e1d6268597c6f28a3951a2f587de98c0c5b3e297e2ca599ff91352369"
+            }
+          }
         }
       },
       {
@@ -4165,14 +4285,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1158-registration-chord.xml"
+            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1186.xml"
           ],
-          "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
-          "recordedAt": "2026-11-02T15:26:58Z",
+          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+          "recordedAt": "2026-11-04T20:01:09Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-chord.xml",
-            "sha256": "197524680b23ba16d47462759ec9e1bd77a85e258306ebc0bdba09c805deedfd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1186.xml",
+            "sha256": "5afab0ad3676b9af5bbed4c9c992d43894b783f161cc7fcdf5b326f413a1544e"
           }
         },
         "rows": [
@@ -4322,7 +4442,7 @@
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "1d7b6a88a268f16f314c664ea3f1eb23b63bcf6a2550c40123c880eac3958684"
+            "sha256": "e51ed9c5be113084c28dafbac3cc343d0e087d1578c9cf3e0f6bf3ad9c5ff150"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -4371,6 +4491,30 @@
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1186-chord.xml",
             "sha256": "ca26ceb4bbb3f3106e5dabf5f6812afdd478bb33574683f669c956290fb8ce92"
+          },
+          {
+            "path": "tests/chord/ChordContextTest.cpp",
+            "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
+          },
+          {
+            "path": "tests/chord/DeltaTest.cpp",
+            "sha256": "ba2dfd2eb1345c0c929c78508f40c505fef17c62bb8238616803f20445c6a505"
+          },
+          {
+            "path": "tests/chord/TrackerTest.cpp",
+            "sha256": "57cd3361fd6febea6c9c2accba156268601d06ce24016562d6cbfb01318c9092"
+          },
+          {
+            "path": "tests/chord/OutputTest.cpp",
+            "sha256": "d053b0b90072262d2dcb736f2d44751dd469b64eb9754b1b2709484511574a51"
+          },
+          {
+            "path": "tests/chord/ReplicatedStateTest.cpp",
+            "sha256": "8d3718548057e537bf7aa635c94f2a10c07dcc7202cef65a681d33284e1f253c"
+          },
+          {
+            "path": "tests/support/ChordEvidence.hpp",
+            "sha256": "577210de90de0cc8afc6987aa2cb8dfbc7173a53a3cd59ddee95b46534a11468"
           }
         ],
         "routingSha256": "c35ce8797d3e36b7d5663d750fe29b749c84c7fb61c4b07bfe9eb722c4d2f7f8",
@@ -4443,6 +4587,37 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
+        },
+        "revalidation1202": {
+          "reason": "#1202 re-anchoring: the cited chord comparisons and discriminating cases now open the registered frozen artifacts (audit-1057 context-cancellation/delta-revisions/json-output-support/replicated-state, audit-1061 validation-order/prepare-replace, audit-1062 ordered-frames/review-edges/observer-delivery, audit-1054 session-transactions, audit-1057-typed-json chord-typed-json) and compare their own inputs/expected fields through the shared tests/support/ChordEvidence.hpp reader. The touched inputs are re-pinned and the recorded selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+          "changedInputs": [
+            "tests/chord/ChordContextTest.cpp",
+            "tests/chord/DeltaTest.cpp",
+            "tests/chord/OutputTest.cpp",
+            "tests/chord/ReplicatedStateTest.cpp",
+            "tests/chord/StrictJsonTest.cpp",
+            "tests/chord/TrackerTest.cpp",
+            "tests/support/ChordEvidence.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1158-registration-chord.xml"
+            ],
+            "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
+            "recordedAt": "2026-11-02T15:26:58Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-chord.xml",
+              "sha256": "197524680b23ba16d47462759ec9e1bd77a85e258306ebc0bdba09c805deedfd"
+            }
+          }
         }
       },
       {
@@ -4462,14 +4637,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1158-registration-chord.xml"
+            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1188.xml"
           ],
-          "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
-          "recordedAt": "2026-11-02T15:26:58Z",
+          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+          "recordedAt": "2026-11-04T20:01:09Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-chord.xml",
-            "sha256": "197524680b23ba16d47462759ec9e1bd77a85e258306ebc0bdba09c805deedfd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1188.xml",
+            "sha256": "d04b79393f69aa0c46d41bc627c3438ffb6f502d3c378ff13334d60d306de7ae"
           }
         },
         "rows": [
@@ -4609,7 +4784,7 @@
           },
           {
             "path": "tests/chord/ReplicatedStateTest.cpp",
-            "sha256": "58b947e60de6006e00a19ebd0951d5f786baef02d6c304e4a1d4dccc23a233de"
+            "sha256": "8d3718548057e537bf7aa635c94f2a10c07dcc7202cef65a681d33284e1f253c"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -4658,6 +4833,30 @@
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1188-chord.xml",
             "sha256": "d9a3e8e2f41516945070dc526d49d6fea8b288ddfe70f132161f65dd0a9bfb03"
+          },
+          {
+            "path": "tests/chord/ChordContextTest.cpp",
+            "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
+          },
+          {
+            "path": "tests/chord/DeltaTest.cpp",
+            "sha256": "ba2dfd2eb1345c0c929c78508f40c505fef17c62bb8238616803f20445c6a505"
+          },
+          {
+            "path": "tests/chord/TrackerTest.cpp",
+            "sha256": "57cd3361fd6febea6c9c2accba156268601d06ce24016562d6cbfb01318c9092"
+          },
+          {
+            "path": "tests/chord/OutputTest.cpp",
+            "sha256": "d053b0b90072262d2dcb736f2d44751dd469b64eb9754b1b2709484511574a51"
+          },
+          {
+            "path": "tests/chord/StrictJsonTest.cpp",
+            "sha256": "e51ed9c5be113084c28dafbac3cc343d0e087d1578c9cf3e0f6bf3ad9c5ff150"
+          },
+          {
+            "path": "tests/support/ChordEvidence.hpp",
+            "sha256": "577210de90de0cc8afc6987aa2cb8dfbc7173a53a3cd59ddee95b46534a11468"
           }
         ],
         "routingSha256": "e7975ba65c4a7efab08925838d63c3855cfdedc42ecd43dc4d07a08dfefd7517",
@@ -4711,6 +4910,37 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
+        },
+        "revalidation1202": {
+          "reason": "#1202 re-anchoring: the cited chord comparisons and discriminating cases now open the registered frozen artifacts (audit-1057 context-cancellation/delta-revisions/json-output-support/replicated-state, audit-1061 validation-order/prepare-replace, audit-1062 ordered-frames/review-edges/observer-delivery, audit-1054 session-transactions, audit-1057-typed-json chord-typed-json) and compare their own inputs/expected fields through the shared tests/support/ChordEvidence.hpp reader. The touched inputs are re-pinned and the recorded selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+          "changedInputs": [
+            "tests/chord/ChordContextTest.cpp",
+            "tests/chord/DeltaTest.cpp",
+            "tests/chord/OutputTest.cpp",
+            "tests/chord/ReplicatedStateTest.cpp",
+            "tests/chord/StrictJsonTest.cpp",
+            "tests/chord/TrackerTest.cpp",
+            "tests/support/ChordEvidence.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1158-registration-chord.xml"
+            ],
+            "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
+            "recordedAt": "2026-11-02T15:26:58Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-chord.xml",
+              "sha256": "197524680b23ba16d47462759ec9e1bd77a85e258306ebc0bdba09c805deedfd"
+            }
+          }
         }
       },
       {
@@ -4730,14 +4960,14 @@
             "issue1187",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1187-chord.xml"
+            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1187.xml"
           ],
-          "testedRevision": "70489aa5d05945b7485949b6581658775146a76e",
-          "recordedAt": "2026-11-02T12:45:00Z",
+          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+          "recordedAt": "2026-11-04T20:01:09Z",
           "selected": 4,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1187-chord.xml",
-            "sha256": "6d8693e2ffd3aa327527f15a1bd1a2047a026960a479364ce9f0251c07179609"
+            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1187.xml",
+            "sha256": "4b66373a8e4551c5e1a962523c961758e34f4256a6e36715fb2b2276cb7b51fc"
           }
         },
         "inputs": [
@@ -4779,7 +5009,7 @@
           },
           {
             "path": "tests/chord/OutputTest.cpp",
-            "sha256": "05623d86fd04506948e150f870f026709cd7b06c92a6a21c0c9509b842e3ef07"
+            "sha256": "d053b0b90072262d2dcb736f2d44751dd469b64eb9754b1b2709484511574a51"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -4828,6 +5058,10 @@
           {
             "path": "docs/research/pi-v1.3.0/deliveries/1187-chord.xml",
             "sha256": "6d8693e2ffd3aa327527f15a1bd1a2047a026960a479364ce9f0251c07179609"
+          },
+          {
+            "path": "tests/support/ChordEvidence.hpp",
+            "sha256": "577210de90de0cc8afc6987aa2cb8dfbc7173a53a3cd59ddee95b46534a11468"
           }
         ],
         "routingSha256": "d73e0d86ee3b9f43f22010d835278a5bce412290233d79bf3f64719dd7994edc",
@@ -4855,6 +5089,32 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1202": {
+          "reason": "#1202 re-anchoring: the cited chord comparisons and discriminating cases now open the registered frozen artifacts (audit-1057 context-cancellation/delta-revisions/json-output-support/replicated-state, audit-1061 validation-order/prepare-replace, audit-1062 ordered-frames/review-edges/observer-delivery, audit-1054 session-transactions, audit-1057-typed-json chord-typed-json) and compare their own inputs/expected fields through the shared tests/support/ChordEvidence.hpp reader. The touched inputs are re-pinned and the recorded selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+          "changedInputs": [
+            "tests/chord/OutputTest.cpp",
+            "tests/support/ChordEvidence.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1187",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1187-chord.xml"
+            ],
+            "testedRevision": "70489aa5d05945b7485949b6581658775146a76e",
+            "recordedAt": "2026-11-02T12:45:00Z",
+            "selected": 4,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1187-chord.xml",
+              "sha256": "6d8693e2ffd3aa327527f15a1bd1a2047a026960a479364ce9f0251c07179609"
+            }
+          }
         }
       },
       {
@@ -4873,14 +5133,14 @@
             "issue1182",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1182.xml"
+            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1182.xml"
           ],
-          "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
-          "recordedAt": "2026-11-02T15:26:58Z",
+          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+          "recordedAt": "2026-11-04T20:01:09Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1182.xml",
-            "sha256": "b385926b4873d7a60cefb3aa700f6f69516c444dc4880446875205924b644ac5"
+            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1182.xml",
+            "sha256": "5ab2f026c4a12539d654e91911a96688f2686b59e8ef0bb717c16f7ffc63eead"
           }
         },
         "rows": [
@@ -5087,7 +5347,7 @@
           },
           {
             "path": "tests/tui/ITuiTest.cpp",
-            "sha256": "01dc9a4e9333dd27881c60acee17e92037aa57af30092eb19b612574d1c29635"
+            "sha256": "3de7be8ccfaeeeed17e6bfaf749aa4638da41c2ad549af08da54836bf592d381"
           },
           {
             "path": "tests/tui/ProgramStatusTest.cpp",
@@ -5232,6 +5492,31 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
+        },
+        "revalidation1202": {
+          "reason": "#1202 re-anchoring: the ITuiTest hardware-cursor discriminating case now opens the registered audit-1050/hardware-cursor.json and compares its frozen preference defaults, toggle transitions and IME cursor positions. The touched input is re-pinned and the recorded selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+          "changedInputs": [
+            "tests/tui/ITuiTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1182.xml"
+            ],
+            "testedRevision": "1059713cafb0627f0d028d9fc56dd63169cb7b2e",
+            "recordedAt": "2026-11-02T15:26:58Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1182.xml",
+              "sha256": "b385926b4873d7a60cefb3aa700f6f69516c444dc4880446875205924b644ac5"
+            }
+          }
         }
       },
       {
