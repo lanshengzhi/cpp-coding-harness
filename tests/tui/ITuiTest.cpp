@@ -7,6 +7,8 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/PiTuiEvidence.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <functional>
@@ -230,16 +232,36 @@ TEST_CASE("ITui clear_children does not dispatch to detached children", "[tui][i
 
 TEST_CASE("ITui roots support hardware-cursor preference and IME positioning",
         "[tui][hardware-cursor][issue1037][issue1182][spec]") {
+    // The frozen #1182 hardware-cursor observation (audit-1050/hardware-cursor.json) is the
+    // contract for the preference defaults, the toggle transitions and the IME cursor positions
+    // compared in each section below.
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "hardware-cursor.json");
+    REQUIRE(bundle.has_value());
+    const auto& frozen_main_default = cch::tests::find_scenario(*bundle, "main-screen-default-hidden");
+    const auto& frozen_main_toggle = cch::tests::find_scenario(*bundle, "main-screen-toggle");
+    const auto& frozen_alt_default = cch::tests::find_scenario(*bundle, "alt-screen-default-hidden");
+    const auto& frozen_alt_toggle = cch::tests::find_scenario(*bundle, "alt-screen-toggle");
+    const auto& main_default_step = frozen_main_default.at("expected").at("steps").get_array().at(0);
+    const auto& main_toggle_steps = frozen_main_toggle.at("expected").at("steps").get_array();
+    const auto& alt_default_step = frozen_alt_default.at("expected").at("steps").get_array().at(0);
+    const auto& alt_toggle_steps = frozen_alt_toggle.at("expected").at("steps").get_array();
+    CHECK(alt_toggle_steps.size() == 3);
+    const auto frozen_main_col = static_cast<std::size_t>(main_default_step.at("cursor").at("col").get_number());
+    const auto frozen_main_row = static_cast<std::size_t>(main_default_step.at("cursor").at("row").get_number());
+    const auto frozen_alt_col = static_cast<std::size_t>(alt_default_step.at("cursor").at("col").get_number());
+    const auto frozen_alt_row = static_cast<std::size_t>(alt_default_step.at("cursor").at("row").get_number());
+
     SECTION("defaults to false on both roots") {
         cch::tui::VirtualTerminal term_main({.columns = 20, .rows = 5});
         cch::tui::MainScreen main_screen{term_main};
         CHECK_FALSE(main_screen.show_hardware_cursor());
-        CHECK_FALSE(main_screen.get_show_hardware_cursor());
+        // The frozen default-hidden step records the preference and the hidden terminal cursor.
+        CHECK(main_screen.get_show_hardware_cursor() == main_default_step.at("showHardwareCursor").get_boolean());
 
         cch::tui::VirtualTerminal term_alt({.columns = 20, .rows = 5});
         cch::tui::AltScreen alt_screen{term_alt};
         CHECK_FALSE(alt_screen.show_hardware_cursor());
-        CHECK_FALSE(alt_screen.get_show_hardware_cursor());
+        CHECK(alt_screen.get_show_hardware_cursor() == alt_default_step.at("showHardwareCursor").get_boolean());
     }
 
     SECTION("preference survives stop and restart on ITui") {
@@ -248,7 +270,9 @@ TEST_CASE("ITui roots support hardware-cursor preference and IME positioning",
         cch::tui::ITui& tui = main_screen;
 
         tui.set_show_hardware_cursor(true);
-        CHECK(tui.show_hardware_cursor());
+        // The frozen toggle-true step records the enabled preference and the visible cursor.
+        CHECK(tui.show_hardware_cursor() == main_toggle_steps.at(1).at("showHardwareCursor").get_boolean());
+        CHECK(main_toggle_steps.at(1).at("showHardwareCursor").get_boolean());
         REQUIRE(tui.start());
         CHECK(tui.show_hardware_cursor());
         REQUIRE(tui.stop());
@@ -256,6 +280,9 @@ TEST_CASE("ITui roots support hardware-cursor preference and IME positioning",
         REQUIRE(tui.start());
         CHECK(tui.show_hardware_cursor());
         REQUIRE(tui.stop());
+        // The frozen toggle sequence names three transitions: default-false, toggle-true,
+        // toggle-false.
+        CHECK(main_toggle_steps.size() == 3);
     }
 
     SECTION("MainScreen positions cursor for IME with visibility disabled by default") {
@@ -270,15 +297,16 @@ TEST_CASE("ITui roots support hardware-cursor preference and IME positioning",
         REQUIRE(main_screen.render());
 
         CHECK_FALSE(terminal.modes().cursor_visible);
-        CHECK(terminal.cursor().column == 4);
-        CHECK(terminal.cursor().row == 0);
+        // The frozen main-screen IME observation places the cursor at the frozen marker position.
+        CHECK(terminal.cursor().column == frozen_main_col);
+        CHECK(terminal.cursor().row == frozen_main_row);
 
         // When preference enabled, cursor becomes visible at same position
         main_screen.set_show_hardware_cursor(true);
         REQUIRE(main_screen.render());
         CHECK(terminal.modes().cursor_visible);
-        CHECK(terminal.cursor().column == 4);
-        CHECK(terminal.cursor().row == 0);
+        CHECK(terminal.cursor().column == frozen_main_col);
+        CHECK(terminal.cursor().row == frozen_main_row);
 
         // When cursor is invalid/nullopt, cursor hides even if preference enabled
         input_pointer->set_cursor(std::nullopt);
@@ -300,15 +328,16 @@ TEST_CASE("ITui roots support hardware-cursor preference and IME positioning",
         REQUIRE(alt_screen.render());
 
         CHECK_FALSE(terminal.modes().cursor_visible);
-        CHECK(terminal.cursor().column == 6);
-        CHECK(terminal.cursor().row == 1);
+        // The frozen alt-screen IME observation places the cursor at the frozen marker position.
+        CHECK(terminal.cursor().column == frozen_alt_col);
+        CHECK(terminal.cursor().row == frozen_alt_row);
 
         // When preference enabled, cursor becomes visible at same position
         alt_screen.set_show_hardware_cursor(true);
         REQUIRE(alt_screen.render());
         CHECK(terminal.modes().cursor_visible);
-        CHECK(terminal.cursor().column == 6);
-        CHECK(terminal.cursor().row == 1);
+        CHECK(terminal.cursor().column == frozen_alt_col);
+        CHECK(terminal.cursor().row == frozen_alt_row);
 
         // When preference toggled off while running, terminal cursor is immediately hidden
         alt_screen.set_show_hardware_cursor(false);

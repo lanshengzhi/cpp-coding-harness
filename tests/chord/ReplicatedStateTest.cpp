@@ -1,5 +1,8 @@
 #include <cch/chord/ReplicatedState.hpp>
 
+#include <cch/support/JsonAccess.hpp>
+
+#include "support/ChordEvidence.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -16,6 +19,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -26,6 +30,72 @@ using namespace cch;
 using namespace cch::chord;
 
 namespace {
+
+/// The frozen #1057 replicated-state observation the receipts register.
+[[nodiscard]] cch::tests::FrozenChordScenario replicated_state_scenario(std::string_view name) {
+    auto scenario = cch::tests::FrozenChordScenario::load("audit-1057", "replicated-state.json", name);
+    REQUIRE(scenario.has_value());
+    return *scenario;
+}
+
+/// The frozen #1062 ordered-frames observation.
+[[nodiscard]] cch::tests::FrozenChordScenario ordered_frames_scenario(std::string_view name) {
+    auto scenario = cch::tests::FrozenChordScenario::load("audit-1062", "ordered-frames.json", name);
+    REQUIRE(scenario.has_value());
+    return *scenario;
+}
+
+/// The frozen #1062 review-edges observation.
+[[nodiscard]] cch::tests::FrozenChordScenario review_edges_scenario(std::string_view name) {
+    auto scenario = cch::tests::FrozenChordScenario::load("audit-1062", "review-edges.json", name);
+    REQUIRE(scenario.has_value());
+    return *scenario;
+}
+
+/// The frozen #1062 observer-delivery observation.
+[[nodiscard]] cch::tests::FrozenChordScenario observer_delivery_scenario(std::string_view name) {
+    auto scenario = cch::tests::FrozenChordScenario::load("audit-1062", "observer-delivery.json", name);
+    REQUIRE(scenario.has_value());
+    return *scenario;
+}
+
+/// Compare one recorded message list with a frozen `errors`/`reportedErrors` array whose entries
+/// are either `{name, message}` objects or plain message strings.
+void check_frozen_error_messages(const std::vector<std::string>& actual, const support::JsonValue::array_t& frozen) {
+    REQUIRE(actual.size() == frozen.size());
+    for (std::size_t index = 0; index < actual.size(); ++index) {
+        const auto* record = frozen.at(index).get_if<support::JsonValue::object_t>();
+        if (record != nullptr) {
+            const auto message = support::json_string_member(*record, "message");
+            REQUIRE(message.has_value());
+            CHECK(actual[index] == *message);
+        } else {
+            const auto* message = frozen.at(index).get_if<std::string>();
+            REQUIRE(message != nullptr);
+            CHECK(actual[index] == *message);
+        }
+    }
+}
+
+/// Compare one recorded number list with a frozen array of numbers.
+void check_frozen_numbers(const std::vector<double>& actual, const support::JsonValue::array_t& frozen) {
+    REQUIRE(actual.size() == frozen.size());
+    for (std::size_t index = 0; index < actual.size(); ++index) {
+        const auto* number = frozen.at(index).get_if<double>();
+        REQUIRE(number != nullptr);
+        CHECK(actual[index] == *number);
+    }
+}
+
+/// Compare one recorded event string list with a frozen array of strings.
+void check_frozen_strings(const std::vector<std::string>& actual, const support::JsonValue::array_t& frozen) {
+    REQUIRE(actual.size() == frozen.size());
+    for (std::size_t index = 0; index < actual.size(); ++index) {
+        const auto* text = frozen.at(index).get_if<std::string>();
+        REQUIRE(text != nullptr);
+        CHECK(actual[index] == *text);
+    }
+}
 
 struct DeliveryEvent {
     ReplicatedStateDeliveryKind kind;
@@ -38,6 +108,49 @@ struct DeliveryEvent {
 [[nodiscard]] Json revision(double value) { return Json{Json::Object{{"value", Json{value}}}}; }
 
 [[nodiscard]] double number_of(const Json& value) { return *value.as_object()->at("value").as_number(); }
+
+/// The `{value: N}` revision value of one frozen delivery record.
+[[nodiscard]] double frozen_delivery_number(const support::JsonValue& record) {
+    const auto* object = record.get_if<support::JsonValue::object_t>();
+    if (object == nullptr) {
+        const auto* number = record.get_if<double>();
+        REQUIRE(number != nullptr);
+        return *number;
+    }
+    const auto value = support::json_number_member(*object, "value");
+    REQUIRE(value.has_value());
+    return *value;
+}
+
+/// The bare value numbers of one frozen delivery-record array.
+[[nodiscard]] std::vector<double> frozen_values_as_numbers(const support::JsonValue::array_t& frozen) {
+    std::vector<double> numbers;
+    for (const auto& record : frozen) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto* value = support::json_member(*object, "value");
+        REQUIRE(value != nullptr);
+        numbers.push_back(frozen_delivery_number(*value));
+    }
+    return numbers;
+}
+
+/// Compare one recorded delivery event list with a frozen `deliveries` array.
+void check_frozen_deliveries(const std::vector<DeliveryEvent>& actual, const support::JsonValue::array_t& frozen) {
+    REQUIRE(actual.size() == frozen.size());
+    for (std::size_t index = 0; index < actual.size(); ++index) {
+        const auto* record = frozen.at(index).get_if<support::JsonValue::object_t>();
+        REQUIRE(record != nullptr);
+        const auto kind = support::json_string_member(*record, "kind");
+        const auto sequence = support::json_integer_member(*record, "sequence");
+        REQUIRE(kind.has_value());
+        REQUIRE(sequence.has_value());
+        CHECK(actual[index].kind ==
+                (*kind == "hydrate" ? ReplicatedStateDeliveryKind::Hydrate : ReplicatedStateDeliveryKind::Update));
+        CHECK(actual[index].sequence == *sequence);
+        CHECK(actual[index].value == frozen_delivery_number((*record).at("value")));
+    }
+}
 
 [[nodiscard]] support::AsyncResult<void> ready() {
     return support::AsyncResult<void>{std::expected<void, support::Error>{}};
@@ -236,11 +349,31 @@ void record_delivery(
 } // namespace
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
-// "an attached state restores the latest committed revision when subscribing after existing commits".
+// "an attached state restores the latest committed revision when subscribing after existing
+// commits". The frozen snapshot cursor and the commit before attach drive the source; the frozen
+// attachmentActivated flag, the hydrate delivery and the final value are compared exactly.
 TEST_CASE("attached state restores the latest committed revision when subscribing after existing commits",
         "[chord][replicated_state][issue1062][spec]") {
-    TestSource source{revision(0), 40};
-    source.commit_at(revision(1), 41);
+    const auto frozen = ordered_frames_scenario(
+            "an attached state restores the latest committed revision when subscribing after existing commits");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    REQUIRE(snapshot != nullptr);
+    const auto snapshot_cursor =
+            support::json_integer_member(*snapshot->get_if<support::JsonValue::object_t>(), "cursor");
+    REQUIRE(snapshot_cursor.has_value());
+    TestSource source{revision(0), *snapshot_cursor};
+    const auto* commits_before = frozen.inputs_member("commitsBeforeAttach");
+    REQUIRE(commits_before != nullptr);
+    const auto* commit_records = commits_before->get_if<support::JsonValue::array_t>();
+    REQUIRE(commit_records != nullptr);
+    REQUIRE(commit_records->size() == 1);
+    const auto commit_cursor =
+            support::json_integer_member(*commit_records->at(0).get_if<support::JsonValue::object_t>(), "cursor");
+    const auto commit_value =
+            support::json_number_member(*commit_records->at(0).get_if<support::JsonValue::object_t>(), "value");
+    REQUIRE(commit_cursor.has_value());
+    REQUIRE(commit_value.has_value());
+    source.commit_at(revision(*commit_value), *commit_cursor);
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
 
@@ -250,24 +383,53 @@ TEST_CASE("attached state restores the latest committed revision when subscribin
         return ready();
     });
 
+    const auto attachment_activated = frozen.boolean_member("attachmentActivated");
+    REQUIRE(attachment_activated.has_value());
     CHECK(source.attachment_count() == 1);
-    CHECK(source.attachment_activated());
-    REQUIRE(deliveries.size() == 1);
-    CHECK(deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
-    CHECK(deliveries[0].sequence == 0);
-    CHECK(deliveries[0].value == 1.0);
-    CHECK(number_of(attached->value()) == 1.0);
+    CHECK(source.attachment_activated() == *attachment_activated);
+    const auto* frozen_deliveries = frozen.array_member("deliveries");
+    REQUIRE(frozen_deliveries != nullptr);
+    check_frozen_deliveries(deliveries, *frozen_deliveries);
+    auto final_value = Json::from_support(*frozen.member("finalValue"));
+    REQUIRE(final_value.has_value());
+    CHECK(number_of(attached->value()) == number_of(*final_value));
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
-// "attachment captures the snapshot before activation and drains buffered frames in commit order".
+// "attachment captures the snapshot before activation and drains buffered frames in commit
+// order". The frozen snapshot and the two commits during attach drive the source; the frozen
+// hydrate delivery and final value are compared exactly.
 TEST_CASE("attachment captures the snapshot before activation and drains buffered frames in commit order",
         "[chord][replicated_state][issue1062][spec]") {
-    TestSource source{revision(0), 10};
-    source.on_attach = [&source] {
-        source.commit(revision(1));
-        source.commit(revision(2));
+    const auto frozen = ordered_frames_scenario(
+            "attachment captures the snapshot before activation and drains buffered frames in commit order");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    REQUIRE(snapshot != nullptr);
+    const auto snapshot_cursor =
+            support::json_integer_member(*snapshot->get_if<support::JsonValue::object_t>(), "cursor");
+    REQUIRE(snapshot_cursor.has_value());
+    TestSource source{revision(0), *snapshot_cursor};
+    const auto* commits_during = frozen.inputs_member("commitsDuringAttach");
+    REQUIRE(commits_during != nullptr);
+    const auto* commit_records = commits_during->get_if<support::JsonValue::array_t>();
+    REQUIRE(commit_records != nullptr);
+    REQUIRE(commit_records->size() == 2);
+    std::vector<std::int64_t> commit_cursors;
+    std::vector<double> commit_values;
+    for (const auto& record : *commit_records) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto cursor = support::json_integer_member(*object, "cursor");
+        const auto value = support::json_number_member(*object, "value");
+        REQUIRE(cursor.has_value());
+        REQUIRE(value.has_value());
+        commit_cursors.push_back(*cursor);
+        commit_values.push_back(*value);
+    }
+    source.on_attach = [&source, &commit_cursors, &commit_values] {
+        source.commit_at(revision(commit_values[0]), commit_cursors[0]);
+        source.commit_at(revision(commit_values[1]), commit_cursors[1]);
     };
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -278,42 +440,96 @@ TEST_CASE("attachment captures the snapshot before activation and drains buffere
         return ready();
     });
 
-    REQUIRE(deliveries.size() == 1);
-    CHECK(deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
-    CHECK(deliveries[0].sequence == 2);
-    CHECK(deliveries[0].value == 2.0);
-    CHECK(number_of(attached->value()) == 2.0);
+    const auto* frozen_deliveries = frozen.array_member("deliveries");
+    REQUIRE(frozen_deliveries != nullptr);
+    check_frozen_deliveries(deliveries, *frozen_deliveries);
+    auto final_value = Json::from_support(*frozen.member("finalValue"));
+    REQUIRE(final_value.has_value());
+    CHECK(number_of(attached->value()) == number_of(*final_value));
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
-// "exact source values are published without applying or re-diffing the frame operations".
+// "exact source values are published without applying or re-diffing the frame operations". The
+// frozen snapshot and committed frame drive the source; the frozen publishedValue and the update
+// delivery are compared exactly.
 TEST_CASE("exact source values are published without applying or re-diffing frame operations",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = ordered_frames_scenario(
+            "exact source values are published without applying or re-diffing the frame operations");
+    const auto* committed = frozen.inputs_member("committed");
+    REQUIRE(committed != nullptr);
+    const auto* committed_object = committed->get_if<support::JsonValue::object_t>();
+    REQUIRE(committed_object != nullptr);
+    const auto committed_cursor = support::json_integer_member(*committed_object, "cursor");
+    const auto committed_value = support::json_number_member(*committed_object, "value");
+    REQUIRE(committed_cursor.has_value());
+    REQUIRE(committed_value.has_value());
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
 
-    std::vector<double> published;
+    std::vector<DeliveryEvent> published;
     auto unsubscribe = attached->subscribe([&published](Json value, Context, ReplicatedStateDelivery delivery) {
-        if (delivery.kind == ReplicatedStateDeliveryKind::Update) published.push_back(number_of(value));
+        if (delivery.kind == ReplicatedStateDeliveryKind::Update)
+            record_delivery(published, delivery.kind, delivery.sequence, number_of(value));
         return ready();
     });
-    // The committed value deliberately disagrees with the frame's operation:
-    // re-applying or re-diffing `ops` would publish 7 instead of 1.
-    source.commit_at(
-            revision(1), 1, background_context(), OpBatch{SetOp{.path = {path_key("value")}, .value = Json{7}}});
+    // The committed value deliberately disagrees with the frame's frozen operation:
+    // re-applying or re-diffing `ops` would publish 7 instead of the frozen 1.
+    const auto* committed_ops = support::json_array_member(*committed_object, "ops");
+    REQUIRE(committed_ops != nullptr);
+    auto ops_json = Json::from_support(support::JsonValue{*committed_ops});
+    REQUIRE(ops_json.has_value());
+    auto decoded = decode_ops(*ops_json);
+    REQUIRE(decoded.has_value());
+    source.commit_at(revision(*committed_value), *committed_cursor, background_context(), *decoded);
 
+    const auto* frozen_published = frozen.object_member("publishedDelivery");
+    REQUIRE(frozen_published != nullptr);
+    const auto* frozen_published_value = frozen.member("publishedValue");
+    REQUIRE(frozen_published_value != nullptr);
+    const auto published_value = frozen_delivery_number(*frozen_published_value);
+    const auto published_sequence = support::json_integer_member(*frozen_published, "sequence");
+    const auto published_kind = support::json_string_member(*frozen_published, "kind");
+    REQUIRE(published_sequence.has_value());
+    REQUIRE(published_kind.has_value());
     REQUIRE(published.size() == 1);
-    CHECK(published[0] == 1.0);
-    CHECK(number_of(attached->value()) == 1.0);
+    CHECK(published[0].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(published[0].sequence == *published_sequence);
+    CHECK(published[0].value == published_value);
+    auto final_value = Json::from_support(*frozen.member("finalValue"));
+    REQUIRE(final_value.has_value());
+    CHECK(number_of(attached->value()) == number_of(*final_value));
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
-// "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence".
+// "reentrant commits buffer in order and a late subscriber hydrates past them at the latest
+// sequence". The frozen reentrant frame chain drives the source; the frozen early-subscriber
+// updates, the late hydrate delivery and the final value are compared exactly.
 TEST_CASE("reentrant commits buffer in order and a late subscriber hydrates at the latest sequence",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = ordered_frames_scenario(
+            "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence");
+    const auto* frames = frozen.inputs_member("frames");
+    REQUIRE(frames != nullptr);
+    const auto* frame_records = frames->get_if<support::JsonValue::array_t>();
+    REQUIRE(frame_records != nullptr);
+    REQUIRE(frame_records->size() == 2);
+    const auto first_cursor =
+            support::json_integer_member(*frame_records->at(0).get_if<support::JsonValue::object_t>(), "cursor");
+    const auto first_value =
+            support::json_number_member(*frame_records->at(0).get_if<support::JsonValue::object_t>(), "value");
+    const auto second_cursor =
+            support::json_integer_member(*frame_records->at(1).get_if<support::JsonValue::object_t>(), "cursor");
+    const auto second_value =
+            support::json_number_member(*frame_records->at(1).get_if<support::JsonValue::object_t>(), "value");
+    REQUIRE(first_cursor.has_value());
+    REQUIRE(first_value.has_value());
+    REQUIRE(second_cursor.has_value());
+    REQUIRE(second_value.has_value());
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -323,9 +539,10 @@ TEST_CASE("reentrant commits buffer in order and a late subscriber hydrates at t
     bool nested = false;
     ReplicatedStateUnsubscribeHook late_unsubscribe;
     auto early_unsubscribe = attached->subscribe([&](Json, Context, ReplicatedStateDelivery delivery) {
-        if (delivery.kind != ReplicatedStateDeliveryKind::Update || delivery.sequence != 1 || nested) return ready();
+        if (delivery.kind != ReplicatedStateDeliveryKind::Update || delivery.sequence != *first_cursor || nested)
+            return ready();
         nested = true;
-        source.commit(revision(2));
+        source.commit_at(revision(*second_value), *second_cursor);
         late_unsubscribe = attached->subscribe(
                 [&late_deliveries](Json late_value, Context, ReplicatedStateDelivery late_delivery) {
                     record_delivery(late_deliveries, late_delivery.kind, late_delivery.sequence, number_of(late_value));
@@ -339,14 +556,17 @@ TEST_CASE("reentrant commits buffer in order and a late subscriber hydrates at t
                 return ready();
             });
 
-    source.commit(revision(1));
+    source.commit_at(revision(*first_value), *first_cursor);
 
-    CHECK((early_updates == std::vector<double>{1.0, 2.0}));
-    REQUIRE(late_deliveries.size() == 1);
-    CHECK(late_deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
-    CHECK(late_deliveries[0].sequence == 2);
-    CHECK(late_deliveries[0].value == 2.0);
-    CHECK(number_of(attached->value()) == 2.0);
+    const auto* frozen_early = frozen.array_member("earlySubscriberUpdates");
+    REQUIRE(frozen_early != nullptr);
+    check_frozen_numbers(early_updates, *frozen_early);
+    const auto* frozen_late = frozen.array_member("lateSubscriberDeliveries");
+    REQUIRE(frozen_late != nullptr);
+    check_frozen_deliveries(late_deliveries, *frozen_late);
+    auto final_value = Json::from_support(*frozen.member("finalValue"));
+    REQUIRE(final_value.has_value());
+    CHECK(number_of(attached->value()) == number_of(*final_value));
     early_unsubscribe();
     update_unsubscribe();
     late_unsubscribe();
@@ -354,8 +574,15 @@ TEST_CASE("reentrant commits buffer in order and a late subscriber hydrates at t
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
 // "one subscription serializes reentrant hydration and update callbacks in publication order".
+// The frozen reentrant chain end drives the commit loop; the frozen event order is compared
+// exactly.
 TEST_CASE("one subscription serializes reentrant hydration and update callbacks in publication order",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = ordered_frames_scenario(
+            "one subscription serializes reentrant hydration and update callbacks in publication order");
+    const auto chain_until = frozen.inputs_number("reentrantChainUntil");
+    REQUIRE(chain_until.has_value());
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -364,25 +591,56 @@ TEST_CASE("one subscription serializes reentrant hydration and update callbacks 
     auto unsubscribe = attached->subscribe([&](Json value, Context, ReplicatedStateDelivery) {
         const double current = number_of(value);
         events.push_back("start:" + std::to_string(static_cast<int>(current)));
-        if (current < 2) source.commit(revision(current + 1));
+        if (current < *chain_until) source.commit(revision(current + 1));
         events.push_back("end:" + std::to_string(static_cast<int>(current)));
         return ready();
     });
 
-    CHECK((events == std::vector<std::string>{"start:0", "end:0", "start:1", "end:1", "start:2", "end:2"}));
+    const auto* frozen_events = frozen.array_member("events");
+    REQUIRE(frozen_events != nullptr);
+    check_frozen_strings(events, *frozen_events);
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
-// "independent attachments converge separately and dispose idempotently without affecting each other".
+// "independent attachments converge separately and dispose idempotently without affecting each
+// other". The frozen commits drive the source; the frozen attachment counts, the first attachment's
+// retained value after dispose and a later commit, and the second attachment's converged value and
+// deliveries are compared exactly.
 TEST_CASE("independent attachments converge separately and dispose idempotently",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = ordered_frames_scenario(
+            "independent attachments converge separately and dispose idempotently without affecting each other");
+    const auto* commits = frozen.inputs_member("commits");
+    REQUIRE(commits != nullptr);
+    const auto* commit_records = commits->get_if<support::JsonValue::array_t>();
+    REQUIRE(commit_records != nullptr);
+    REQUIRE(commit_records->size() == 2);
+    std::vector<std::int64_t> commit_cursors;
+    std::vector<double> commit_values;
+    for (const auto& record : *commit_records) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto cursor = support::json_integer_member(*object, "cursor");
+        const auto value = support::json_number_member(*object, "value");
+        REQUIRE(cursor.has_value());
+        REQUIRE(value.has_value());
+        commit_cursors.push_back(*cursor);
+        commit_values.push_back(*value);
+    }
+    const auto count_after_attach = frozen.number_member("attachmentCountAfterAttach");
+    const auto count_after_first_dispose = frozen.number_member("attachmentCountAfterFirstDispose");
+    const auto count_after_second_dispose = frozen.number_member("attachmentCountAfterSecondDispose");
+    REQUIRE(count_after_attach.has_value());
+    REQUIRE(count_after_first_dispose.has_value());
+    REQUIRE(count_after_second_dispose.has_value());
+
     TestSource source{revision(0)};
     auto first = AttachedReplicatedState::attach(source);
     auto second = AttachedReplicatedState::attach(source);
     REQUIRE(first.has_value());
     REQUIRE(second.has_value());
-    CHECK(source.attachment_count() == 2);
+    CHECK(source.attachment_count() == static_cast<std::size_t>(*count_after_attach));
 
     std::vector<DeliveryEvent> second_deliveries;
     auto second_unsubscribe =
@@ -391,38 +649,65 @@ TEST_CASE("independent attachments converge separately and dispose idempotently"
                 return ready();
             });
 
-    source.commit(revision(1));
-    CHECK(number_of(first->value()) == 1.0);
-    CHECK(number_of(second->value()) == 1.0);
+    source.commit_at(revision(commit_values[0]), commit_cursors[0]);
+    auto first_after_dispose = Json::from_support(*frozen.member("firstValueAfterDisposeAndLaterCommit"));
+    REQUIRE(first_after_dispose.has_value());
+    auto second_after_commit = Json::from_support(*frozen.member("secondValueAfterLaterCommit"));
+    REQUIRE(second_after_commit.has_value());
+    CHECK(number_of(first->value()) == number_of(*first_after_dispose));
+    CHECK(number_of(second->value()) == number_of(*first_after_dispose));
 
     first->dispose();
     first->dispose();
-    CHECK(source.attachment_count() == 1);
+    CHECK(source.attachment_count() == static_cast<std::size_t>(*count_after_first_dispose));
 
-    source.commit(revision(2));
-    CHECK(number_of(first->value()) == 1.0);
-    CHECK(number_of(second->value()) == 2.0);
-    REQUIRE(second_deliveries.size() == 3);
-    CHECK(second_deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
-    CHECK(second_deliveries[0].sequence == 0);
-    CHECK(second_deliveries[1].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(second_deliveries[1].sequence == 1);
-    CHECK(second_deliveries[2].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(second_deliveries[2].sequence == 2);
+    source.commit_at(revision(commit_values[1]), commit_cursors[1]);
+    CHECK(number_of(first->value()) == number_of(*first_after_dispose));
+    CHECK(number_of(second->value()) == number_of(*second_after_commit));
+    const auto* frozen_second = frozen.array_member("secondDeliveries");
+    if (frozen_second != nullptr) {
+        check_frozen_deliveries(second_deliveries, *frozen_second);
+    } else {
+        REQUIRE(second_deliveries.size() == 3);
+        CHECK(second_deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
+        CHECK(second_deliveries[0].sequence == 0);
+        CHECK(second_deliveries[1].kind == ReplicatedStateDeliveryKind::Update);
+        CHECK(second_deliveries[1].sequence == 1);
+        CHECK(second_deliveries[2].kind == ReplicatedStateDeliveryKind::Update);
+        CHECK(second_deliveries[2].sequence == 2);
+    }
 
     second->dispose();
-    CHECK(source.attachment_count() == 0);
-    CHECK(number_of(first->value()) == 1.0);
+    CHECK(source.attachment_count() == static_cast<std::size_t>(*count_after_second_dispose));
+    CHECK(number_of(first->value()) == number_of(*first_after_dispose));
     second_unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json
-// "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order".
-// The frozen record pins both deliveries (kind, sequence, value, absent abort signal), no errors and
-// one disposal, so a view that hydrates only, reorders the two deliveries, or never disposes fails.
+// "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence
+// order". The frozen snapshot and update drive the source; the frozen deliveries (kind, sequence,
+// value, absent abort signal), the empty error list and the one disposal are compared exactly, so
+// a view that hydrates only, reorders the two deliveries, or never disposes fails.
 TEST_CASE("attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
         "[chord][replicated_state][issue1062][spec]") {
-    TestSource source{revision(1), 0};
+    const auto frozen = replicated_state_scenario(
+            "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    const auto* update = frozen.inputs_member("update");
+    REQUIRE(snapshot != nullptr);
+    REQUIRE(update != nullptr);
+    const auto snapshot_cursor =
+            support::json_integer_member(*snapshot->get_if<support::JsonValue::object_t>(), "cursor");
+    const auto snapshot_value = support::json_number_member(*snapshot->get_if<support::JsonValue::object_t>(), "value");
+    const auto update_value = support::json_number_member(*update->get_if<support::JsonValue::object_t>(), "value");
+    const auto update_sequence =
+            support::json_integer_member(*update->get_if<support::JsonValue::object_t>(), "sequence");
+    REQUIRE(snapshot_cursor.has_value());
+    REQUIRE(snapshot_value.has_value());
+    REQUIRE(update_value.has_value());
+    REQUIRE(update_sequence.has_value());
+
+    TestSource source{revision(*snapshot_value), *snapshot_cursor};
     std::vector<std::string> errors;
     auto attached = AttachedReplicatedState::attach(source,
             ReplicatedStateSourceOptions{
@@ -437,31 +722,57 @@ TEST_CASE("attached replicated state hydrates at cursor zero and then delivers e
                 .signal_present = context.stop_token().stop_possible()});
         return ready();
     });
-    source.commit(revision(2));
+    source.commit_at(revision(*update_value), *update_sequence);
 
-    REQUIRE(observed.size() == 2);
-    CHECK(observed[0].kind == ReplicatedStateDeliveryKind::Hydrate);
-    CHECK(observed[0].sequence == 0);
-    CHECK(observed[0].value == 1.0);
-    CHECK_FALSE(observed[0].signal_present);
-    CHECK(observed[1].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(observed[1].sequence == 1);
-    CHECK(observed[1].value == 2.0);
-    CHECK_FALSE(observed[1].signal_present);
-    CHECK(errors.empty());
+    const auto* frozen_deliveries = frozen.array_member("deliveries");
+    REQUIRE(frozen_deliveries != nullptr);
+    REQUIRE(observed.size() == frozen_deliveries->size());
+    for (std::size_t index = 0; index < frozen_deliveries->size(); ++index) {
+        const auto* record = frozen_deliveries->at(index).get_if<support::JsonValue::object_t>();
+        REQUIRE(record != nullptr);
+        const auto kind = support::json_string_member(*record, "kind");
+        const auto sequence = support::json_integer_member(*record, "sequence");
+        const auto* frozen_signal = support::json_member(*record, "abortSignal");
+        REQUIRE(kind.has_value());
+        REQUIRE(sequence.has_value());
+        REQUIRE(frozen_signal != nullptr);
+        CHECK(observed[index].kind ==
+                (*kind == "hydrate" ? ReplicatedStateDeliveryKind::Hydrate : ReplicatedStateDeliveryKind::Update));
+        CHECK(observed[index].sequence == *sequence);
+        CHECK(observed[index].value == frozen_delivery_number((*record).at("value")));
+        // Frozen `abortSignal: null`: the delivery context carries no abort signal.
+        REQUIRE(frozen_signal->holds<std::nullptr_t>());
+        CHECK_FALSE(observed[index].signal_present);
+    }
+    const auto* frozen_errors = frozen.array_member("errors");
+    REQUIRE(frozen_errors != nullptr);
+    check_frozen_error_messages(errors, *frozen_errors);
 
     unsubscribe();
     attached->dispose();
-    CHECK(source.dispose_calls() == 1);
+    const auto dispose_calls = frozen.number_member("disposeCalls");
+    REQUIRE(dispose_calls.has_value());
+    CHECK(source.dispose_calls() == static_cast<int>(*dispose_calls));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json
-// "a cursor gap is reported once and leaves the last good replicated value".
-// Negative control: an implementation that reordered or skipped the cursor
-// check would deliver the gap frame and converge on 9 instead of retaining 1.
+// "a cursor gap is reported once and leaves the last good replicated value". The frozen snapshot
+// cursor, skipped sequence and later sequence drive the source; the frozen error message, the
+// delivered sequences, the last value and the disposal count are compared exactly. Negative
+// control: an implementation that reordered or skipped the cursor check would deliver the gap
+// frame and converge on 9 instead of retaining the frozen last value.
 TEST_CASE("a cursor gap is reported once and leaves the last good replicated value",
         "[chord][replicated_state][issue1062][spec]") {
-    TestSource source{revision(1), 0};
+    const auto frozen =
+            replicated_state_scenario("a cursor gap is reported once and leaves the last good replicated value");
+    const auto snapshot_cursor = frozen.inputs_number("snapshotCursor");
+    const auto skipped_sequence = frozen.inputs_number("skippedSequence");
+    const auto later_sequence = frozen.inputs_number("laterSequence");
+    REQUIRE(snapshot_cursor.has_value());
+    REQUIRE(skipped_sequence.has_value());
+    REQUIRE(later_sequence.has_value());
+
+    TestSource source{revision(1), static_cast<std::int64_t>(*snapshot_cursor)};
     std::vector<std::string> errors;
     auto attached = AttachedReplicatedState::attach(source,
             ReplicatedStateSourceOptions{
@@ -475,25 +786,56 @@ TEST_CASE("a cursor gap is reported once and leaves the last good replicated val
     });
     CHECK(deliveries.size() == 1);
 
-    source.commit_at(revision(9), 2);
-    CHECK((errors == std::vector<std::string>{"Replicated state source cursor has a gap: expected 1, received 2"}));
-    CHECK(number_of(attached->value()) == 1.0);
-    CHECK(source.dispose_calls() == 1);
+    source.commit_at(revision(9), static_cast<std::int64_t>(*skipped_sequence));
+    const auto* frozen_errors = frozen.array_member("errors");
+    REQUIRE(frozen_errors != nullptr);
+    check_frozen_error_messages(errors, *frozen_errors);
+    auto last_value = Json::from_support(*frozen.member("lastValue"));
+    REQUIRE(last_value.has_value());
+    CHECK(number_of(attached->value()) == number_of(*last_value));
+    const auto dispose_calls = frozen.number_member("disposeCalls");
+    REQUIRE(dispose_calls.has_value());
+    CHECK(source.dispose_calls() == static_cast<int>(*dispose_calls));
 
-    source.commit_at(revision(10), 3);
-    CHECK(errors.size() == 1);
-    CHECK(number_of(attached->value()) == 1.0);
-    REQUIRE(deliveries.size() == 1);
-    CHECK(deliveries[0].value == 1.0);
+    source.commit_at(revision(10), static_cast<std::int64_t>(*later_sequence));
+    const auto* frozen_sequences = frozen.array_member("deliveredSequences");
+    REQUIRE(frozen_sequences != nullptr);
+    std::vector<double> delivered_sequences;
+    for (const auto& delivery : deliveries)
+        delivered_sequences.push_back(static_cast<double>(delivery.sequence));
+    check_frozen_numbers(delivered_sequences, *frozen_sequences);
+    CHECK(errors.size() == frozen_errors->size());
+    CHECK(number_of(attached->value()) == number_of(*last_value));
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
-// "a repeated cursor is reported once as a gap and keeps the last good value".
-// Negative control for out-of-order delivery: the backward cursor is rejected by
-// the same cursor check that rejects a skipped one.
+// "a repeated cursor is reported once as a gap and keeps the last good value". The frozen commits
+// drive the source; the frozen error message, delivered sequences, last good value and the
+// attachment disposition after the gap are compared exactly. Negative control for out-of-order
+// delivery: the backward cursor is rejected by the same cursor check that rejects a skipped one.
 TEST_CASE("a repeated cursor is reported once as a gap and keeps the last good value",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen =
+            ordered_frames_scenario("a repeated cursor is reported once as a gap and keeps the last good value");
+    const auto* commits = frozen.inputs_member("commits");
+    REQUIRE(commits != nullptr);
+    const auto* commit_records = commits->get_if<support::JsonValue::array_t>();
+    REQUIRE(commit_records != nullptr);
+    REQUIRE(commit_records->size() == 3);
+    std::vector<std::int64_t> commit_cursors;
+    std::vector<double> commit_values;
+    for (const auto& record : *commit_records) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto cursor = support::json_integer_member(*object, "cursor");
+        const auto value = support::json_number_member(*object, "value");
+        REQUIRE(cursor.has_value());
+        REQUIRE(value.has_value());
+        commit_cursors.push_back(*cursor);
+        commit_values.push_back(*value);
+    }
+
     TestSource source{revision(1), 0};
     std::vector<std::string> errors;
     auto attached = AttachedReplicatedState::attach(source,
@@ -506,27 +848,48 @@ TEST_CASE("a repeated cursor is reported once as a gap and keeps the last good v
         record_delivery(deliveries, delivery.kind, delivery.sequence, number_of(value));
         return ready();
     });
-    source.commit_at(revision(2), 1);
-    source.commit_at(revision(3), 1);
+    source.commit_at(revision(commit_values[0]), commit_cursors[0]);
+    source.commit_at(revision(commit_values[1]), commit_cursors[1]);
 
-    CHECK((errors == std::vector<std::string>{"Replicated state source cursor has a gap: expected 2, received 1"}));
-    REQUIRE(deliveries.size() == 2);
-    CHECK(deliveries[1].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(deliveries[1].sequence == 1);
-    CHECK(deliveries[1].value == 2.0);
-    CHECK(number_of(attached->value()) == 2.0);
-    CHECK(source.attachment_count() == 0);
+    const auto* frozen_errors = frozen.array_member("reportedErrors");
+    REQUIRE(frozen_errors != nullptr);
+    check_frozen_error_messages(errors, *frozen_errors);
+    const auto* frozen_sequences = frozen.array_member("deliveredSequences");
+    REQUIRE(frozen_sequences != nullptr);
+    std::vector<double> delivered_sequences;
+    for (const auto& delivery : deliveries)
+        delivered_sequences.push_back(static_cast<double>(delivery.sequence));
+    check_frozen_numbers(delivered_sequences, *frozen_sequences);
+    auto last_good = Json::from_support(*frozen.member("lastGoodValue"));
+    REQUIRE(last_good.has_value());
+    CHECK(number_of(attached->value()) == number_of(*last_good));
+    const auto attachments_after_gap = frozen.number_member("attachmentCountAfterGap");
+    REQUIRE(attachments_after_gap.has_value());
+    CHECK(source.attachment_count() == static_cast<std::size_t>(*attachments_after_gap));
 
-    source.commit_at(revision(4), 2);
-    CHECK(errors.size() == 1);
-    CHECK(number_of(attached->value()) == 2.0);
+    source.commit_at(revision(commit_values[2]), commit_cursors[2]);
+    CHECK(errors.size() == frozen_errors->size());
+    auto last_good_after = Json::from_support(*frozen.member("lastGoodValueAfterLaterFrame"));
+    REQUIRE(last_good_after.has_value());
+    CHECK(number_of(attached->value()) == number_of(*last_good_after));
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
-// A strictly backward cursor after a good frame must fail just like a skipped cursor.
+// "a repeated cursor is reported once as a gap and keeps the last good value": a strictly backward
+// cursor after a good frame must fail with the same frozen gap message and retain the frozen last
+// good value.
 TEST_CASE("a backward cursor reports one ordering gap and retains the last good value",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen =
+            ordered_frames_scenario("a repeated cursor is reported once as a gap and keeps the last good value");
+    const auto* frozen_errors = frozen.array_member("reportedErrors");
+    auto last_good = Json::from_support(*frozen.member("lastGoodValue"));
+    auto last_good_after = Json::from_support(*frozen.member("lastGoodValueAfterLaterFrame"));
+    REQUIRE(frozen_errors != nullptr);
+    REQUIRE(last_good.has_value());
+    REQUIRE(last_good_after.has_value());
+
     TestSource source{revision(1), 0};
     std::vector<std::string> errors;
     auto attached = AttachedReplicatedState::attach(source,
@@ -543,22 +906,30 @@ TEST_CASE("a backward cursor reports one ordering gap and retains the last good 
     source.commit_at(revision(3), 0);
     source.commit_at(revision(4), 2);
 
+    // A strictly backward cursor fails with the same frozen gap message shape as the repeated
+    // cursor, naming the received cursor.
     CHECK((errors == std::vector<std::string>{"Replicated state source cursor has a gap: expected 2, received 0"}));
-    REQUIRE(deliveries.size() == 2);
-    CHECK(deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
-    CHECK(deliveries[0].value == 1.0);
-    CHECK(deliveries[1].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(deliveries[1].sequence == 1);
-    CHECK(deliveries[1].value == 2.0);
-    CHECK(number_of(attached->value()) == 2.0);
-    CHECK(source.dispose_calls() == 1);
+    const auto* frozen_sequences = frozen.array_member("deliveredSequences");
+    REQUIRE(frozen_sequences != nullptr);
+    std::vector<double> delivered_sequences;
+    for (const auto& delivery : deliveries)
+        delivered_sequences.push_back(static_cast<double>(delivery.sequence));
+    check_frozen_numbers(delivered_sequences, *frozen_sequences);
+    CHECK(number_of(attached->value()) == number_of(*last_good_after));
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)".
+// "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100
+// commits)". The frozen commit count drives the source; the frozen received sequence is compared
+// exactly.
 TEST_CASE("at most 100 deliveries pend behind one held listener while a commit fits the bound",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = observer_delivery_scenario(
+            "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)");
+    const auto commits = frozen.inputs_number("commits");
+    REQUIRE(commits.has_value());
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -570,23 +941,28 @@ TEST_CASE("at most 100 deliveries pend behind one held listener while a commit f
         if (number_of(value) == 0) return hold(hydration);
         return ready();
     });
-    for (int value = 1; value <= 100; value += 1)
+    for (int value = 1; value <= static_cast<int>(*commits); value += 1)
         source.commit(revision(value));
 
-    CHECK(received == std::vector<double>{0.0});
+    const auto* frozen_received = frozen.array_member("received");
+    REQUIRE(frozen_received != nullptr);
+    check_frozen_numbers(std::vector<double>{received[0]}, std::vector<support::JsonValue>{frozen_received->at(0)});
     settle(hydration);
-    REQUIRE(received.size() == 101);
-    for (int value = 1; value <= 100; value += 1)
-        CHECK(received[static_cast<std::size_t>(value)] == value);
+    check_frozen_numbers(received, *frozen_received);
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)".
-// Negative control: an unbounded queue would also deliver 1 and 100; the
+// "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102
+// commits)". Negative control: an unbounded queue would also deliver 1 and 100; the frozen
 // coalesced-sequence assertion distinguishes the 100-pending bound.
 TEST_CASE("overflow at the 100-pending bound keeps the newest pending delivery",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = observer_delivery_scenario(
+            "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)");
+    const auto commits = frozen.inputs_number("commits");
+    REQUIRE(commits.has_value());
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -598,19 +974,27 @@ TEST_CASE("overflow at the 100-pending bound keeps the newest pending delivery",
         if (number_of(value) == 0) return hold(hydration);
         return ready();
     });
-    for (int value = 1; value <= 102; value += 1)
+    for (int value = 1; value <= static_cast<int>(*commits); value += 1)
         source.commit(revision(value));
 
-    CHECK(received == std::vector<double>{0.0});
+    const auto* frozen_received = frozen.array_member("received");
+    REQUIRE(frozen_received != nullptr);
+    check_frozen_numbers(std::vector<double>{received[0]}, std::vector<support::JsonValue>{frozen_received->at(0)});
     settle(hydration);
-    CHECK((received == std::vector<double>{0.0, 101.0, 102.0}));
+    check_frozen_numbers(received, *frozen_received);
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)".
+// "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202
+// commits)". The frozen received sequence distinguishes repeated overflow from a single one.
 TEST_CASE("repeated overflow at the 100-pending bound keeps the newest pending delivery",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = observer_delivery_scenario(
+            "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)");
+    const auto commits = frozen.inputs_number("commits");
+    REQUIRE(commits.has_value());
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -622,22 +1006,45 @@ TEST_CASE("repeated overflow at the 100-pending bound keeps the newest pending d
         if (number_of(value) == 0) return hold(hydration);
         return ready();
     });
-    for (int value = 1; value <= 202; value += 1)
+    for (int value = 1; value <= static_cast<int>(*commits); value += 1)
         source.commit(revision(value));
 
-    CHECK(received == std::vector<double>{0.0});
+    const auto* frozen_received = frozen.array_member("received");
+    REQUIRE(frozen_received != nullptr);
+    check_frozen_numbers(std::vector<double>{received[0]}, std::vector<support::JsonValue>{frozen_received->at(0)});
     settle(hydration);
-    CHECK((received == std::vector<double>{0.0, 201.0, 202.0}));
+    check_frozen_numbers(received, *frozen_received);
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "overflow keeps only the newest pending delivery with its exact value context and delivery".
-// The frozen newest pending delivery carries the exact context published with frame 102 — a
-// `withCancel` layer over the background root, so its abort signal is present and un-aborted —
-// and the adopted revision at the overflow point is frame 102, before the trailing commit.
+// "overflow keeps only the newest pending delivery with its exact value context and delivery". The
+// frozen newest pending frame carries the exact context published with frame 102 — a `withCancel`
+// layer over the background root, so its abort signal is present and un-aborted — and the frozen
+// adopted revision at the overflow point is frame 102, before the trailing commit. The frozen
+// receivedValues and newestDelivery records are compared exactly.
 TEST_CASE("overflow keeps only the newest pending delivery with its exact value context and delivery",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = observer_delivery_scenario(
+            "overflow keeps only the newest pending delivery with its exact value context and delivery");
+    const auto held_value = frozen.inputs_number("heldValue");
+    REQUIRE(held_value.has_value());
+    const auto* newest_pending = frozen.inputs_member("newestPending");
+    REQUIRE(newest_pending != nullptr);
+    const auto* newest_object = newest_pending->get_if<support::JsonValue::object_t>();
+    REQUIRE(newest_object != nullptr);
+    const auto newest_cursor = support::json_integer_member(*newest_object, "cursor");
+    const auto newest_value = support::json_number_member(*newest_object, "value");
+    REQUIRE(newest_cursor.has_value());
+    REQUIRE(newest_value.has_value());
+    const auto* trailing = frozen.inputs_member("trailingCommit");
+    REQUIRE(trailing != nullptr);
+    const auto trailing_cursor =
+            support::json_integer_member(*trailing->get_if<support::JsonValue::object_t>(), "cursor");
+    const auto trailing_value = support::json_number_member(*trailing->get_if<support::JsonValue::object_t>(), "value");
+    REQUIRE(trailing_cursor.has_value());
+    REQUIRE(trailing_value.has_value());
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -652,85 +1059,107 @@ TEST_CASE("overflow keeps only the newest pending delivery with its exact value 
                 .value = number_of(value),
                 .signal_present = context.stop_token().stop_possible(),
                 .signal_aborted = context.aborted()});
-        if (number_of(value) == 1) return hold(held);
+        if (number_of(value) == *held_value) return hold(held);
         return ready();
     });
-    for (int value = 1; value < 102; value += 1)
+    for (int value = 1; value < static_cast<int>(*newest_value); value += 1)
         source.commit(revision(value));
-    source.commit(revision(102), marked);
+    source.commit_at(revision(*newest_value), *newest_cursor, marked);
     // Frozen adoptedValueAtOverflow: the newest published revision is frame 102 here.
-    CHECK(number_of(attached->value()) == 102.0);
-    source.commit(revision(103));
+    auto adopted_at_overflow = Json::from_support(*frozen.member("adoptedValueAtOverflow"));
+    REQUIRE(adopted_at_overflow.has_value());
+    CHECK(number_of(attached->value()) == number_of(*adopted_at_overflow));
+    source.commit_at(revision(*trailing_value), *trailing_cursor);
 
-    REQUIRE(observed.size() == 2);
-    CHECK(observed[0].value == 0.0);
-    CHECK(observed[1].value == 1.0);
+    const auto* frozen_received = frozen.array_member("receivedValues");
+    REQUIRE(frozen_received != nullptr);
+    std::vector<double> received_values;
+    for (const auto& event : observed)
+        received_values.push_back(event.value);
+    check_frozen_numbers(std::vector<double>{received_values[0], received_values[1]},
+            std::vector<support::JsonValue>{frozen_received->at(0), frozen_received->at(1)});
     settle(held);
-    REQUIRE(observed.size() == 4);
-    CHECK(observed[2].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(observed[2].sequence == 102);
-    CHECK(observed[2].value == 102.0);
-    CHECK(observed[2].signal_present);
-    CHECK_FALSE(observed[2].signal_aborted);
-    CHECK(observed[3].value == 103.0);
-    CHECK_FALSE(observed[0].signal_present);
-    CHECK_FALSE(observed[3].signal_present);
+    received_values.clear();
+    for (const auto& event : observed)
+        received_values.push_back(event.value);
+    check_frozen_numbers(received_values, *frozen_received);
+
+    const auto* frozen_newest = frozen.object_member("newestDelivery");
+    REQUIRE(frozen_newest != nullptr);
+    REQUIRE(observed.size() == frozen_received->size());
+    const auto& newest = observed[2];
+    CHECK(newest.kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(newest.sequence == *newest_cursor);
+    CHECK(newest.value == *newest_value);
+    const auto frozen_signal_present = support::json_bool_member(*frozen_newest, "signalPresent");
+    const auto frozen_signal_aborted = support::json_bool_member(*frozen_newest, "signalAborted");
+    REQUIRE(frozen_signal_present.has_value());
+    REQUIRE(frozen_signal_aborted.has_value());
+    CHECK(newest.signal_present == *frozen_signal_present);
+    CHECK(newest.signal_aborted == *frozen_signal_aborted);
+    const auto* frozen_delivery = support::json_object_member(*frozen_newest, "delivery");
+    REQUIRE(frozen_delivery != nullptr);
+    const auto frozen_kind = support::json_string_member(*frozen_delivery, "kind");
+    const auto frozen_sequence = support::json_integer_member(*frozen_delivery, "sequence");
+    REQUIRE(frozen_kind.has_value());
+    REQUIRE(frozen_sequence.has_value());
+    CHECK(newest.kind ==
+            (*frozen_kind == "update" ? ReplicatedStateDeliveryKind::Update : ReplicatedStateDeliveryKind::Hydrate));
+    CHECK(newest.sequence == *frozen_sequence);
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "overflow keeps only the newest pending delivery with its exact value context and delivery" and
-// "a held listener serializes its own updates while another subscription converges independently".
+// "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102
+// commits)": the frozen received sequence is the held observer's contract. The fast observer's
+// full publication-order sequence is this harness's witness that the held subscription alone
+// coalesces.
 TEST_CASE("pending overflow keeps the newest frame while fast observers follow every publication",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = observer_delivery_scenario(
+            "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)");
+    const auto commits = frozen.inputs_number("commits");
+    REQUIRE(commits.has_value());
+    const auto* frozen_received = frozen.array_member("received");
+    REQUIRE(frozen_received != nullptr);
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
 
-    std::optional<Completion> held_update;
-    std::vector<DeliveryEvent> held_deliveries;
+    std::optional<Completion> held_hydration;
+    std::vector<double> held_values;
     std::vector<DeliveryEvent> fast_deliveries;
-    auto held_unsubscribe = attached->subscribe(
-            [&held_deliveries, &held_update](Json value, Context, ReplicatedStateDelivery delivery) {
-                record_delivery(held_deliveries, delivery.kind, delivery.sequence, number_of(value));
-                if (delivery.kind == ReplicatedStateDeliveryKind::Update && delivery.sequence == 1)
-                    return hold(held_update);
-                return ready();
-            });
+    auto held_unsubscribe = attached->subscribe([&](Json value, Context, ReplicatedStateDelivery) {
+        held_values.push_back(number_of(value));
+        if (number_of(value) == 0) return hold(held_hydration);
+        return ready();
+    });
     auto fast_unsubscribe =
             attached->subscribe([&fast_deliveries](Json value, Context, ReplicatedStateDelivery delivery) {
                 record_delivery(fast_deliveries, delivery.kind, delivery.sequence, number_of(value));
                 return ready();
             });
 
-    source.commit(revision(1));
-    for (int value = 2; value <= 102; value += 1)
+    for (int value = 1; value <= static_cast<int>(*commits); value += 1)
         source.commit(revision(value));
-    source.commit(revision(103));
 
-    REQUIRE(held_deliveries.size() == 2);
-    CHECK(held_deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
-    CHECK(held_deliveries[0].sequence == 0);
-    CHECK(held_deliveries[1].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(held_deliveries[1].sequence == 1);
-    REQUIRE(fast_deliveries.size() == 104);
+    // While the held listener is pending, the frozen contract holds: only the hydration arrived.
+    check_frozen_numbers(held_values, std::vector<support::JsonValue>{frozen_received->at(0)});
+    REQUIRE(fast_deliveries.size() == static_cast<std::size_t>(*commits) + 1);
     for (std::size_t index = 0; index < fast_deliveries.size(); index += 1) {
         CHECK(fast_deliveries[index].sequence == static_cast<std::int64_t>(index));
         CHECK(fast_deliveries[index].value == static_cast<double>(index));
         CHECK(fast_deliveries[index].kind ==
                 (index == 0 ? ReplicatedStateDeliveryKind::Hydrate : ReplicatedStateDeliveryKind::Update));
     }
-    CHECK(number_of(attached->value()) == 103.0);
+    CHECK(number_of(attached->value()) == *commits);
 
-    settle(held_update);
-    REQUIRE(held_deliveries.size() == 4);
-    CHECK(held_deliveries[2].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(held_deliveries[2].sequence == 102);
-    CHECK(held_deliveries[2].value == 102.0);
-    CHECK(held_deliveries[3].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(held_deliveries[3].sequence == 103);
-    CHECK(held_deliveries[3].value == 103.0);
-    CHECK(number_of(attached->value()) == 103.0);
+    settle(held_hydration);
+    // The held observer converges to the frozen received sequence: the hydration plus the two
+    // newest pending frames only.
+    check_frozen_numbers(held_values, *frozen_received);
+    CHECK(number_of(attached->value()) == *commits);
 
     held_unsubscribe();
     fast_unsubscribe();
@@ -738,12 +1167,19 @@ TEST_CASE("pending overflow keeps the newest frame while fast observers follow e
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json
 // "a failing state listener is reported through onError without stopping another subscription".
-// The frozen record observes two `listener failed` reports from the one failing subscription and the
-// other subscription's hydrate/update pair, so a state that drops a failing subscription or that
-// rethrows into the source fails this case.
+// The frozen hydration and update values drive the source; the frozen two `listener failed`
+// reports and the other subscription's hydrate/update pair are compared exactly, so a state that
+// drops a failing subscription or that rethrows into the source fails this case.
 TEST_CASE("a failing state listener is reported through onError without stopping another subscription",
         "[chord][replicated_state][issue1062][spec]") {
-    TestSource source{revision(7), 0};
+    const auto frozen = replicated_state_scenario(
+            "a failing state listener is reported through onError without stopping another subscription");
+    const auto hydration_value = frozen.inputs_number("hydrationValue");
+    const auto update_value = frozen.inputs_number("updateValue");
+    REQUIRE(hydration_value.has_value());
+    REQUIRE(update_value.has_value());
+
+    TestSource source{revision(*hydration_value), 0};
     std::vector<std::string> errors;
     auto attached = AttachedReplicatedState::attach(source,
             ReplicatedStateSourceOptions{
@@ -761,25 +1197,53 @@ TEST_CASE("a failing state listener is reported through onError without stopping
                 record_delivery(other_deliveries, delivery.kind, delivery.sequence, number_of(value));
                 return ready();
             });
-    source.commit(revision(8));
+    source.commit_at(revision(*update_value), 1);
 
-    CHECK((errors == std::vector<std::string>{"listener failed", "listener failed"}));
-    CHECK((failing_received == std::vector<double>{7.0, 8.0}));
-    REQUIRE(other_deliveries.size() == 2);
-    CHECK(other_deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
-    CHECK(other_deliveries[0].sequence == 0);
-    CHECK(other_deliveries[0].value == 7.0);
-    CHECK(other_deliveries[1].kind == ReplicatedStateDeliveryKind::Update);
-    CHECK(other_deliveries[1].sequence == 1);
-    CHECK(other_deliveries[1].value == 8.0);
+    const auto* frozen_errors = frozen.array_member("errors");
+    REQUIRE(frozen_errors != nullptr);
+    check_frozen_error_messages(errors, *frozen_errors);
+    const auto* frozen_received = frozen.array_member("received");
+    REQUIRE(frozen_received != nullptr);
+    std::vector<double> frozen_values;
+    for (const auto& record : *frozen_received) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto* value = support::json_member(*object, "value");
+        REQUIRE(value != nullptr);
+        frozen_values.push_back(frozen_delivery_number(*value));
+    }
+    CHECK(failing_received == frozen_values_as_numbers(*frozen_received));
+    check_frozen_deliveries(other_deliveries, *frozen_received);
     failing_unsubscribe();
     other_unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "a failing listener is reported through onError in isolation and keeps receiving later deliveries".
+// "a failing listener is reported through onError in isolation and keeps receiving later
+// deliveries". The frozen per-delivery failure modes and commit chain drive the test; the frozen
+// received sequences and the three reported errors are compared exactly.
 TEST_CASE("a failing listener is reported in isolation and keeps receiving later deliveries",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = observer_delivery_scenario(
+            "a failing listener is reported through onError in isolation and keeps receiving later deliveries");
+    const auto* listener_failures = frozen.inputs_member("listenerFailures");
+    const auto* commits = frozen.inputs_member("commits");
+    REQUIRE(listener_failures != nullptr);
+    REQUIRE(commits != nullptr);
+    const auto* failure_object = listener_failures->get_if<support::JsonValue::object_t>();
+    const auto* commit_records = commits->get_if<support::JsonValue::array_t>();
+    REQUIRE(failure_object != nullptr);
+    REQUIRE(commit_records != nullptr);
+    const auto hydration_failure = support::json_string_member(*failure_object, "0");
+    const auto update_failure = support::json_string_member(*failure_object, "1");
+    const auto late_failure = support::json_string_member(*failure_object, "2");
+    REQUIRE(hydration_failure.has_value());
+    REQUIRE(update_failure.has_value());
+    REQUIRE(late_failure.has_value());
+    REQUIRE(hydration_failure->starts_with("reject:"));
+    REQUIRE(update_failure->starts_with("throw:"));
+    REQUIRE(late_failure->starts_with("reject:"));
+
     TestSource source{revision(0)};
     std::vector<std::string> errors;
     auto attached = AttachedReplicatedState::attach(source,
@@ -795,7 +1259,7 @@ TEST_CASE("a failing listener is reported in isolation and keeps receiving later
         const double current = number_of(value);
         failing_received.push_back(current);
         if (current == 0) return hold(hydration);
-        if (current == 1) return ready_failure("sync update");
+        if (current == 1) return ready_failure(std::string{update_failure->substr(6)});
         if (current == 2) return hold(update);
         return ready();
     });
@@ -803,26 +1267,49 @@ TEST_CASE("a failing listener is reported in isolation and keeps receiving later
         fast_received.push_back(number_of(value));
         return ready();
     });
-    for (int value = 1; value <= 3; value += 1)
-        source.commit(revision(value));
+    for (std::size_t index = 0; index < commit_records->size(); ++index) {
+        const auto* record = commit_records->at(index).get_if<support::JsonValue::object_t>();
+        REQUIRE(record != nullptr);
+        const auto cursor = support::json_integer_member(*record, "cursor");
+        const auto value = support::json_number_member(*record, "value");
+        REQUIRE(cursor.has_value());
+        REQUIRE(value.has_value());
+        source.commit_at(revision(*value), *cursor);
+    }
     // The failing subscription is still held on its hydration: the other
     // subscriber has already converged in publication order.
-    CHECK((fast_received == std::vector<double>{0.0, 1.0, 2.0, 3.0}));
-    settle_failure(hydration, "async hydration");
-    CHECK((failing_received == std::vector<double>{0.0, 1.0, 2.0}));
-    settle_failure(update, "async update");
+    const auto* frozen_other = frozen.array_member("otherSubscriberReceived");
+    REQUIRE(frozen_other != nullptr);
+    check_frozen_numbers(fast_received, *frozen_other);
+    settle_failure(hydration, std::string{hydration_failure->substr(7)});
+    check_frozen_numbers(std::vector<double>{failing_received[0], failing_received[1], failing_received[2]},
+            std::vector<support::JsonValue>{frozen_other->at(0), frozen_other->at(1), frozen_other->at(2)});
+    settle_failure(update, std::string{late_failure->substr(7)});
 
-    CHECK((failing_received == std::vector<double>{0.0, 1.0, 2.0, 3.0}));
-    CHECK((errors == std::vector<std::string>{"async hydration", "sync update", "async update"}));
-    CHECK((fast_received == std::vector<double>{0.0, 1.0, 2.0, 3.0}));
+    const auto* frozen_failing = frozen.array_member("failingListenerReceived");
+    REQUIRE(frozen_failing != nullptr);
+    check_frozen_numbers(failing_received, *frozen_failing);
+    const auto* frozen_errors = frozen.array_member("reportedErrors");
+    REQUIRE(frozen_errors != nullptr);
+    check_frozen_error_messages(errors, *frozen_errors);
+    check_frozen_numbers(fast_received, *frozen_other);
     failing_unsubscribe();
     fast_unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "a synchronous hydration failure is reported without removing the subscription".
+// "a synchronous hydration failure is reported without removing the subscription". The frozen
+// hydration failure drives the listener; the frozen received sequence and the single reported
+// error are compared exactly.
 TEST_CASE("a synchronous hydration failure is reported without removing the subscription",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen =
+            observer_delivery_scenario("a synchronous hydration failure is reported without removing the subscription");
+    const auto hydration_failure = frozen.inputs_string("hydrationFailure");
+    REQUIRE(hydration_failure.has_value());
+    REQUIRE(hydration_failure->starts_with("throw:"));
+    const auto failure_message = hydration_failure->substr(6);
+
     TestSource source{revision(0)};
     std::vector<std::string> errors;
     auto attached = AttachedReplicatedState::attach(source,
@@ -831,24 +1318,57 @@ TEST_CASE("a synchronous hydration failure is reported without removing the subs
     REQUIRE(attached.has_value());
 
     std::vector<double> received;
-    auto unsubscribe = attached->subscribe([&received](Json value, Context, ReplicatedStateDelivery) {
+    auto unsubscribe = attached->subscribe([&received, &failure_message](Json value, Context, ReplicatedStateDelivery) {
         received.push_back(number_of(value));
-        if (number_of(value) == 0) return ready_failure("sync hydration");
+        if (number_of(value) == 0) return ready_failure(failure_message);
         return ready();
     });
     source.commit(revision(1));
 
-    CHECK((errors == std::vector<std::string>{"sync hydration"}));
-    CHECK((received == std::vector<double>{0.0, 1.0}));
+    const auto* frozen_errors = frozen.array_member("reportedErrors");
+    REQUIRE(frozen_errors != nullptr);
+    check_frozen_error_messages(errors, *frozen_errors);
+    const auto* frozen_received = frozen.array_member("received");
+    REQUIRE(frozen_received != nullptr);
+    check_frozen_numbers(received, *frozen_received);
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "unsubscribe discards queued deliveries without aborting or joining the running callback".
-// The C++ mapping settles the pending listener through its AsyncResult
+// "unsubscribe discards queued deliveries without aborting or joining the running callback". The
+// frozen held value, the queued frame and the post-unsubscribe commit drive the source; the
+// frozen received sequence, the completed-after-release flag and the un-aborted context are
+// compared exactly. The C++ mapping settles the pending listener through its AsyncResult
 // completion; the callback retains no post-await body to join.
 TEST_CASE("unsubscribe discards queued deliveries without aborting the running callback",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = observer_delivery_scenario(
+            "unsubscribe discards queued deliveries without aborting or joining the running callback");
+    const auto held_value = frozen.inputs_number("heldValue");
+    REQUIRE(held_value.has_value());
+    const auto* queued = frozen.inputs_member("queuedDuringHold");
+    const auto* after = frozen.inputs_member("commitsAfterUnsubscribe");
+    REQUIRE(queued != nullptr);
+    REQUIRE(after != nullptr);
+    const auto* queued_records = queued->get_if<support::JsonValue::array_t>();
+    const auto* after_records = after->get_if<support::JsonValue::array_t>();
+    REQUIRE(queued_records != nullptr);
+    REQUIRE(after_records != nullptr);
+    REQUIRE(queued_records->size() == 1);
+    REQUIRE(after_records->size() == 1);
+    const auto queued_cursor =
+            support::json_integer_member(*queued_records->at(0).get_if<support::JsonValue::object_t>(), "cursor");
+    const auto queued_value =
+            support::json_number_member(*queued_records->at(0).get_if<support::JsonValue::object_t>(), "value");
+    const auto after_cursor =
+            support::json_integer_member(*after_records->at(0).get_if<support::JsonValue::object_t>(), "cursor");
+    const auto after_value =
+            support::json_number_member(*after_records->at(0).get_if<support::JsonValue::object_t>(), "value");
+    REQUIRE(queued_cursor.has_value());
+    REQUIRE(queued_value.has_value());
+    REQUIRE(after_cursor.has_value());
+    REQUIRE(after_value.has_value());
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -859,24 +1379,38 @@ TEST_CASE("unsubscribe discards queued deliveries without aborting the running c
     std::vector<double> received;
     auto unsubscribe = attached->subscribe([&](Json value, Context, ReplicatedStateDelivery) {
         received.push_back(number_of(value));
-        if (number_of(value) == 1) return hold(held);
+        if (number_of(value) == *held_value) return hold(held);
         return ready();
     });
-    source.commit(revision(1), cancellable);
-    source.commit(revision(2), cancellable);
+    source.commit_at(revision(*held_value), *held_value, cancellable);
+    source.commit_at(revision(*queued_value), *queued_cursor, cancellable);
     unsubscribe();
-    source.commit(revision(3), cancellable);
+    source.commit_at(revision(*after_value), *after_cursor, cancellable);
 
-    CHECK_FALSE(cancellable.aborted());
-    CHECK((received == std::vector<double>{0.0, 1.0}));
+    const auto frozen_aborted = frozen.boolean_member("aborted");
+    const auto completed_after_release = frozen.boolean_member("completedAfterRelease");
+    REQUIRE(frozen_aborted.has_value());
+    REQUIRE(completed_after_release.has_value());
+    CHECK(cancellable.aborted() == *frozen_aborted);
+    const auto* frozen_received = frozen.array_member("received");
+    REQUIRE(frozen_received != nullptr);
+    check_frozen_numbers(received, *frozen_received);
     settle(held);
-    CHECK((received == std::vector<double>{0.0, 1.0}));
+    check_frozen_numbers(received, *frozen_received);
+    CHECK(completed_after_release);
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "a callback rejection that settles after unsubscribe is still reported".
+// "a callback rejection that settles after unsubscribe is still reported". The frozen late
+// rejection message drives the settlement; the frozen received sequence and the single reported
+// error are compared exactly.
 TEST_CASE("a callback rejection that settles after unsubscribe is still reported",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen =
+            observer_delivery_scenario("a callback rejection that settles after unsubscribe is still reported");
+    const auto late_rejection = frozen.inputs_string("lateRejection");
+    REQUIRE(late_rejection.has_value());
+
     TestSource source{revision(0)};
     std::vector<std::string> errors;
     auto attached = AttachedReplicatedState::attach(source,
@@ -892,10 +1426,14 @@ TEST_CASE("a callback rejection that settles after unsubscribe is still reported
     });
     source.commit(revision(1));
     unsubscribe();
-    settle_failure(hydration, "stopped callback");
+    settle_failure(hydration, *late_rejection);
 
-    CHECK((errors == std::vector<std::string>{"stopped callback"}));
-    CHECK(received == std::vector<double>{0.0});
+    const auto* frozen_errors = frozen.array_member("reportedErrors");
+    REQUIRE(frozen_errors != nullptr);
+    check_frozen_error_messages(errors, *frozen_errors);
+    const auto* frozen_received = frozen.array_member("received");
+    REQUIRE(frozen_received != nullptr);
+    check_frozen_numbers(received, *frozen_received);
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/replicated-state.json
@@ -915,6 +1453,15 @@ TEST_CASE("a callback rejection that settles after unsubscribe is still reported
 // callback is running never reaches [1,2].
 TEST_CASE("a watch acquired before start buffers frames and serializes callbacks",
         "[chord][replicated_state][issue1188][spec]") {
+    const auto frozen =
+            replicated_state_scenario("a watch acquired before start buffers frames and serializes callbacks");
+    const auto* commits_before = frozen.array_member("valuesBeforeRelease");
+    const auto* commits_after = frozen.array_member("valuesAfterRelease");
+    const auto max_concurrent = frozen.number_member("maxConcurrentCallbacks");
+    REQUIRE(commits_before != nullptr);
+    REQUIRE(commits_after != nullptr);
+    REQUIRE(max_concurrent.has_value());
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -969,15 +1516,15 @@ TEST_CASE("a watch acquired before start buffers frames and serializes callbacks
     CHECK(observed[1].value == 1.0);
     CHECK_FALSE(observed[1].signal_present);
     CHECK(active == 1);
-    CHECK((update_values() == std::vector<double>{1.0}));
+    check_frozen_numbers(update_values(), *commits_before);
 
     // The second committed frame buffers behind the in-flight delivery instead
     // of being delivered concurrently (frozen `valuesBeforeRelease`).
     source.commit(revision(2));
     REQUIRE(observed.size() == 2);
     CHECK(active == 1);
-    CHECK(max_active == 1);
-    CHECK((update_values() == std::vector<double>{1.0}));
+    CHECK(max_active == static_cast<int>(*max_concurrent));
+    check_frozen_numbers(update_values(), *commits_before);
 
     settle(in_flight);
     REQUIRE(observed.size() == 3);
@@ -986,19 +1533,51 @@ TEST_CASE("a watch acquired before start buffers frames and serializes callbacks
     CHECK(observed[2].value == 2.0);
     CHECK_FALSE(observed[2].signal_present);
     CHECK(active == 0);
-    CHECK(max_active == 1);
-    CHECK((update_values() == std::vector<double>{1.0, 2.0}));
-    CHECK(attached->value() == revision(2));
+    CHECK(max_active == static_cast<int>(*max_concurrent));
+    check_frozen_numbers(update_values(), *commits_after);
+    auto final_value = Json::from_support(*frozen.member("finalValue"));
+    REQUIRE(final_value.has_value());
+    CHECK(number_of(attached->value()) == number_of(*final_value));
     unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
 // "a held listener serializes its own updates while another subscription converges independently".
+// The frozen held delivery points and commits drive the test; the frozen held-listener event
+// order, the pre-release fast state and the other subscriber's sequence are compared exactly.
 // Negative control for ordering/isolation: a Chord implementation that let the
 // held subscription gate the publisher would not show the other subscriber at
 // 1 and 2 before the held deliveries settle.
 TEST_CASE("a held listener serializes its own updates while another subscription converges independently",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen = observer_delivery_scenario(
+            "a held listener serializes its own updates while another subscription converges independently");
+    const auto* commits = frozen.inputs_member("commits");
+    REQUIRE(commits != nullptr);
+    const auto* commit_records = commits->get_if<support::JsonValue::array_t>();
+    REQUIRE(commit_records != nullptr);
+    REQUIRE(commit_records->size() == 2);
+    std::vector<std::int64_t> commit_cursors;
+    std::vector<double> commit_values;
+    for (const auto& record : *commit_records) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto cursor = support::json_integer_member(*object, "cursor");
+        const auto value = support::json_number_member(*object, "value");
+        REQUIRE(cursor.has_value());
+        REQUIRE(value.has_value());
+        commit_cursors.push_back(*cursor);
+        commit_values.push_back(*value);
+    }
+    const auto* frozen_events = frozen.array_member("heldListenerEvents");
+    const auto* before_release = frozen.object_member("beforeHydrationRelease");
+    const auto* after_release = frozen.array_member("afterHydrationRelease");
+    const auto* frozen_other = frozen.array_member("otherSubscriberReceived");
+    REQUIRE(frozen_events != nullptr);
+    REQUIRE(before_release != nullptr);
+    REQUIRE(after_release != nullptr);
+    REQUIRE(frozen_other != nullptr);
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -1023,26 +1602,42 @@ TEST_CASE("a held listener serializes its own updates while another subscription
         fast.push_back(number_of(value));
         return ready();
     });
-    source.commit(revision(1));
-    source.commit(revision(2));
+    source.commit_at(revision(commit_values[0]), commit_cursors[0]);
+    source.commit_at(revision(commit_values[1]), commit_cursors[1]);
 
-    CHECK((events == std::vector<std::string>{"start:0"}));
-    CHECK((fast == std::vector<double>{0.0, 1.0, 2.0}));
-    CHECK(number_of(attached->value()) == 2.0);
+    const auto* frozen_before_events = support::json_array_member(*before_release, "events");
+    const auto* frozen_before_fast = support::json_array_member(*before_release, "fast");
+    const auto* frozen_before_value = support::json_member(*before_release, "value");
+    REQUIRE(frozen_before_events != nullptr);
+    REQUIRE(frozen_before_fast != nullptr);
+    REQUIRE(frozen_before_value != nullptr);
+    check_frozen_strings(events, *frozen_before_events);
+    check_frozen_numbers(fast, *frozen_before_fast);
+    auto before_value = Json::from_support(*frozen_before_value);
+    REQUIRE(before_value.has_value());
+    CHECK(number_of(attached->value()) == number_of(*before_value));
     record_end(0);
     settle(hydration);
-    CHECK((events == std::vector<std::string>{"start:0", "end:0", "start:1"}));
+    check_frozen_strings(events, *after_release);
     record_end(1);
     settle(update);
-    CHECK((events == std::vector<std::string>{"start:0", "end:0", "start:1", "end:1", "start:2", "end:2"}));
+    check_frozen_strings(events, *frozen_events);
+    check_frozen_numbers(fast, *frozen_other);
     held_unsubscribe();
     fast_unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
-// "two subscriptions of the same listener are delivered independently".
+// "two subscriptions of the same listener are delivered independently". The frozen double
+// subscription and double unsubscribe drive the test; the frozen received sequence is compared
+// exactly.
 TEST_CASE("two subscriptions of the same listener behavior are delivered independently",
         "[chord][replicated_state][issue1062][spec]") {
+    const auto frozen =
+            observer_delivery_scenario("two subscriptions of the same listener are delivered independently");
+    const auto* frozen_received = frozen.array_member("received");
+    REQUIRE(frozen_received != nullptr);
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -1066,48 +1661,125 @@ TEST_CASE("two subscriptions of the same listener behavior are delivered indepen
     settle(first_hydration);
     settle(second_hydration);
 
-    CHECK((received == std::vector<double>{0.0, 0.0, 1.0}));
+    check_frozen_numbers(received, *frozen_received);
     second_subscribe();
 }
 
 // Review edge: fixtures/pi-v1.3.0/audit-1062/review-edges.json
-// "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once".
+// "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed
+// once". The frozen snapshot cursor drives the source; the frozen message, the one disposal and
+// the attachment disposition are compared exactly.
 TEST_CASE("a snapshot cursor outside the safe integer range fails attach and disposes the attachment once",
         "[chord][replicated_state][issue1062][review]") {
-    TestSource source{revision(0), 9007199254740992LL};
+    const auto frozen = review_edges_scenario(
+            "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    REQUIRE(snapshot != nullptr);
+    const auto snapshot_cursor =
+            support::json_integer_member(*snapshot->get_if<support::JsonValue::object_t>(), "cursor");
+    REQUIRE(snapshot_cursor.has_value());
+
+    TestSource source{revision(0), *snapshot_cursor};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE_FALSE(attached.has_value());
-    CHECK(attached.error().message == "Replicated state source snapshot cursor must be a safe integer");
-    CHECK(source.dispose_calls() == 1);
-    CHECK(source.attachment_count() == 0);
+    const auto message = frozen.string_member("message");
+    REQUIRE(message.has_value());
+    CHECK(attached.error().message == *message);
+    const auto dispose_calls = frozen.number_member("disposeCalls");
+    const auto attachments_after = frozen.number_member("attachmentCountAfterFailure");
+    REQUIRE(dispose_calls.has_value());
+    REQUIRE(attachments_after.has_value());
+    CHECK(source.dispose_calls() == static_cast<int>(*dispose_calls));
+    CHECK(source.attachment_count() == static_cast<std::size_t>(*attachments_after));
 }
 
-// "a frame cursor outside the safe integer range fails the attachment and keeps the last good value".
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1062/review-edges.json
+// "a frame cursor outside the safe integer range fails the attachment and keeps the last good
+// value". The frozen commits drive the source; the frozen error message, disposal count and last
+// good values are compared exactly.
 TEST_CASE("a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
         "[chord][replicated_state][issue1062][review]") {
-    TestSource source{revision(1), 9007199254740991LL};
+    const auto frozen = review_edges_scenario(
+            "a frame cursor outside the safe integer range fails the attachment and keeps the last good value");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    const auto* commits = frozen.inputs_member("commits");
+    REQUIRE(snapshot != nullptr);
+    REQUIRE(commits != nullptr);
+    const auto snapshot_cursor =
+            support::json_integer_member(*snapshot->get_if<support::JsonValue::object_t>(), "cursor");
+    const auto snapshot_value = support::json_number_member(*snapshot->get_if<support::JsonValue::object_t>(), "value");
+    REQUIRE(snapshot_cursor.has_value());
+    REQUIRE(snapshot_value.has_value());
+    const auto* commit_records = commits->get_if<support::JsonValue::array_t>();
+    REQUIRE(commit_records != nullptr);
+    REQUIRE(commit_records->size() == 2);
+    std::vector<std::int64_t> commit_cursors;
+    std::vector<double> commit_values;
+    for (const auto& record : *commit_records) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto cursor = support::json_integer_member(*object, "cursor");
+        const auto value = support::json_number_member(*object, "value");
+        REQUIRE(cursor.has_value());
+        REQUIRE(value.has_value());
+        commit_cursors.push_back(*cursor);
+        commit_values.push_back(*value);
+    }
+
+    TestSource source{revision(*snapshot_value), *snapshot_cursor};
     std::vector<std::string> errors;
     auto attached = AttachedReplicatedState::attach(source,
             ReplicatedStateSourceOptions{
                     .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
     REQUIRE(attached.has_value());
 
-    source.commit_at(revision(2), 9007199254740992LL);
-    CHECK((errors == std::vector<std::string>{"Replicated state source frame cursor must be a safe integer"}));
-    CHECK(number_of(attached->value()) == 1.0);
-    CHECK(source.dispose_calls() == 1);
-    CHECK(source.attachment_count() == 0);
+    source.commit_at(revision(commit_values[0]), commit_cursors[0]);
+    const auto* frozen_errors = frozen.array_member("reportedErrors");
+    REQUIRE(frozen_errors != nullptr);
+    check_frozen_error_messages(errors, *frozen_errors);
+    auto last_good = Json::from_support(*frozen.member("lastGoodValue"));
+    REQUIRE(last_good.has_value());
+    CHECK(number_of(attached->value()) == number_of(*last_good));
+    const auto dispose_calls = frozen.number_member("disposeCalls");
+    REQUIRE(dispose_calls.has_value());
+    CHECK(source.dispose_calls() == static_cast<int>(*dispose_calls));
+    const auto attachments_after = frozen.number_member("attachmentCountAfterFailure");
+    if (attachments_after.has_value()) CHECK(source.attachment_count() == static_cast<std::size_t>(*attachments_after));
 
-    source.commit_at(revision(3), 9007199254740993LL);
-    CHECK(errors.size() == 1);
-    CHECK(number_of(attached->value()) == 1.0);
-    CHECK(source.dispose_calls() == 1);
+    source.commit_at(revision(commit_values[1]), commit_cursors[1]);
+    CHECK(errors.size() == frozen_errors->size());
+    auto last_good_after = Json::from_support(*frozen.member("lastGoodValueAfterLaterFrame"));
+    REQUIRE(last_good_after.has_value());
+    CHECK(number_of(attached->value()) == number_of(*last_good_after));
 }
 
-// "negative safe integer cursors are accepted for the snapshot and later frames".
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1062/review-edges.json
+// "negative safe integer cursors are accepted for the snapshot and later frames". The frozen
+// snapshot cursor and commit drive the source; the frozen final value is compared exactly.
 TEST_CASE("negative safe integer cursors are accepted for the snapshot and later frames",
         "[chord][replicated_state][issue1062][review]") {
-    TestSource source{revision(0), -5};
+    const auto frozen =
+            review_edges_scenario("negative safe integer cursors are accepted for the snapshot and later frames");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    const auto* commit = frozen.inputs_member("commit");
+    REQUIRE(snapshot != nullptr);
+    REQUIRE(commit != nullptr);
+    // The frozen cursors are negative safe integers; `json_integer_member` validates
+    // non-negative, so the cursors are read as numbers and narrowed.
+    const auto snapshot_cursor_number =
+            support::json_number_member(*snapshot->get_if<support::JsonValue::object_t>(), "cursor");
+    const auto snapshot_value = support::json_number_member(*snapshot->get_if<support::JsonValue::object_t>(), "value");
+    const auto commit_cursor_number =
+            support::json_number_member(*commit->get_if<support::JsonValue::object_t>(), "cursor");
+    const auto commit_value = support::json_number_member(*commit->get_if<support::JsonValue::object_t>(), "value");
+    REQUIRE(snapshot_cursor_number.has_value());
+    REQUIRE(snapshot_value.has_value());
+    REQUIRE(commit_cursor_number.has_value());
+    REQUIRE(commit_value.has_value());
+    const auto snapshot_cursor = static_cast<std::int64_t>(*snapshot_cursor_number);
+    const auto commit_cursor = static_cast<std::int64_t>(*commit_cursor_number);
+
+    TestSource source{revision(*snapshot_value), snapshot_cursor};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
     std::vector<double> received;
@@ -1116,31 +1788,71 @@ TEST_CASE("negative safe integer cursors are accepted for the snapshot and later
         return ready();
     });
 
-    source.commit_at(revision(1), -4);
-    CHECK((received == std::vector<double>{0.0, 1.0}));
-    CHECK(number_of(attached->value()) == 1.0);
+    source.commit_at(revision(*commit_value), commit_cursor);
+    CHECK((received == std::vector<double>{*snapshot_value, *commit_value}));
+    auto final_value = Json::from_support(*frozen.member("finalValue"));
+    REQUIRE(final_value.has_value());
+    CHECK(number_of(attached->value()) == number_of(*final_value));
     CHECK(source.attachment_count() == 1);
     unsubscribe();
 }
 
-// "a source contract failure without an onError hook is observable asynchronously and keeps the last good value".
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1062/review-edges.json
+// "a source contract failure without an onError hook is observable asynchronously and keeps the
+// last good value". The frozen commits drive the source; the frozen failure message, disposal
+// count and last good values are compared exactly. The C++ mapping writes the default diagnostic
+// to stderr, captured here.
 TEST_CASE("a source gap without an onError hook writes the exact default diagnostic once and keeps the last good value",
         "[chord][replicated_state][issue1062][review]") {
-    TestSource source{revision(1), 0};
+    const auto frozen = review_edges_scenario("a source contract failure without an onError hook is observable "
+                                              "asynchronously and keeps the last good value");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    const auto* commits = frozen.inputs_member("commits");
+    REQUIRE(snapshot != nullptr);
+    REQUIRE(commits != nullptr);
+    const auto snapshot_cursor =
+            support::json_integer_member(*snapshot->get_if<support::JsonValue::object_t>(), "cursor");
+    const auto snapshot_value = support::json_number_member(*snapshot->get_if<support::JsonValue::object_t>(), "value");
+    REQUIRE(snapshot_cursor.has_value());
+    REQUIRE(snapshot_value.has_value());
+    const auto* commit_records = commits->get_if<support::JsonValue::array_t>();
+    REQUIRE(commit_records != nullptr);
+    REQUIRE(commit_records->size() == 3);
+    std::vector<std::int64_t> commit_cursors;
+    std::vector<double> commit_values;
+    for (const auto& record : *commit_records) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto cursor = support::json_integer_member(*object, "cursor");
+        const auto value = support::json_number_member(*object, "value");
+        REQUIRE(cursor.has_value());
+        REQUIRE(value.has_value());
+        commit_cursors.push_back(*cursor);
+        commit_values.push_back(*value);
+    }
+    const auto observed_failure = frozen.string_member("observedAsynchronousFailure");
+    REQUIRE(observed_failure.has_value());
+
+    TestSource source{revision(*snapshot_value), *snapshot_cursor};
     std::string diagnostics;
     {
         StderrCapture capture;
         auto attached = AttachedReplicatedState::attach(source);
         REQUIRE(attached.has_value());
-        source.commit_at(revision(2), 1);
-        source.commit_at(revision(3), 3);
-        source.commit_at(revision(4), 4);
-        CHECK(number_of(attached->value()) == 2.0);
+        source.commit_at(revision(commit_values[0]), commit_cursors[0]);
+        source.commit_at(revision(commit_values[1]), commit_cursors[1]);
+        source.commit_at(revision(commit_values[2]), commit_cursors[2]);
+        auto last_good = Json::from_support(*frozen.member("lastGoodValue"));
+        REQUIRE(last_good.has_value());
+        CHECK(number_of(attached->value()) == number_of(*last_good));
         diagnostics = capture.finish();
     }
-    CHECK(diagnostics == "Replicated state source cursor has a gap: expected 2, received 3\n");
-    CHECK(source.dispose_calls() == 1);
-    CHECK(source.attachment_count() == 0);
+    CHECK(diagnostics == *observed_failure + "\n");
+    const auto dispose_calls = frozen.number_member("disposeCalls");
+    REQUIRE(dispose_calls.has_value());
+    CHECK(source.dispose_calls() == static_cast<int>(*dispose_calls));
+    const auto attachments_after = frozen.number_member("attachmentCountAfterFailure");
+    if (attachments_after.has_value()) CHECK(source.attachment_count() == static_cast<std::size_t>(*attachments_after));
 }
 
 TEST_CASE("a listener failure without an onError hook writes the exact default diagnostic and delivery continues",
@@ -1184,24 +1896,61 @@ TEST_CASE(
     CHECK(diagnostics.empty());
 }
 
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1062/review-edges.json
 // "a gap while draining a buffered activation ignores later buffered frames and disposes once".
+// The frozen buffered commits drive the source; the frozen error message, last good value, one
+// disposal and attachment disposition are compared exactly.
 TEST_CASE("a gap while draining buffered activation stops dispatch without touching a disposed listener",
         "[chord][replicated_state][issue1062][review]") {
-    TestSource source{revision(0), 0};
+    const auto frozen = review_edges_scenario(
+            "a gap while draining a buffered activation ignores later buffered frames and disposes once");
+    const auto* snapshot = frozen.inputs_member("snapshot");
+    const auto* buffered = frozen.inputs_member("bufferedCommits");
+    REQUIRE(snapshot != nullptr);
+    REQUIRE(buffered != nullptr);
+    const auto snapshot_cursor =
+            support::json_integer_member(*snapshot->get_if<support::JsonValue::object_t>(), "cursor");
+    const auto snapshot_value = support::json_number_member(*snapshot->get_if<support::JsonValue::object_t>(), "value");
+    REQUIRE(snapshot_cursor.has_value());
+    REQUIRE(snapshot_value.has_value());
+    const auto* buffered_records = buffered->get_if<support::JsonValue::array_t>();
+    REQUIRE(buffered_records != nullptr);
+    REQUIRE(buffered_records->size() == 3);
+    std::vector<std::int64_t> buffered_cursors;
+    std::vector<double> buffered_values;
+    for (const auto& record : *buffered_records) {
+        const auto* object = record.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto cursor = support::json_integer_member(*object, "cursor");
+        const auto value = support::json_number_member(*object, "value");
+        REQUIRE(cursor.has_value());
+        REQUIRE(value.has_value());
+        buffered_cursors.push_back(*cursor);
+        buffered_values.push_back(*value);
+    }
+
+    TestSource source{revision(*snapshot_value), *snapshot_cursor};
     std::vector<std::string> errors;
-    source.on_attach = [&source] {
-        source.commit_at(revision(1), 1);
-        source.commit_at(revision(2), 3);
-        source.commit_at(revision(3), 4);
+    source.on_attach = [&source, &buffered_cursors, &buffered_values] {
+        for (std::size_t index = 0; index < buffered_cursors.size(); ++index)
+            source.commit_at(revision(buffered_values[index]), buffered_cursors[index]);
     };
     auto attached = AttachedReplicatedState::attach(source,
             ReplicatedStateSourceOptions{
                     .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
     REQUIRE(attached.has_value());
-    CHECK((errors == std::vector<std::string>{"Replicated state source cursor has a gap: expected 2, received 3"}));
-    CHECK(number_of(attached->value()) == 1.0);
-    CHECK(source.dispose_calls() == 1);
-    CHECK(source.attachment_count() == 0);
+    const auto* frozen_errors = frozen.array_member("reportedErrors");
+    REQUIRE(frozen_errors != nullptr);
+    check_frozen_error_messages(errors, *frozen_errors);
+    auto last_good = Json::from_support(*frozen.member("lastGoodValue"));
+    REQUIRE(last_good.has_value());
+    CHECK(number_of(attached->value()) == number_of(*last_good));
+    const auto dispose_calls = frozen.number_member("disposeCalls");
+    REQUIRE(dispose_calls.has_value());
+    CHECK(source.dispose_calls() == static_cast<int>(*dispose_calls));
+    const auto attachments_after = frozen.number_member("attachmentCountAfterFailure");
+    REQUIRE(attachments_after.has_value());
+    CHECK(source.attachment_count() == static_cast<std::size_t>(*attachments_after));
 }
 
 TEST_CASE("a subscriber destroying its own attached state inside a callback does not disturb other subscribers",
@@ -1234,9 +1983,27 @@ TEST_CASE("a subscriber destroying its own attached state inside a callback does
     other();
 }
 
-// "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication".
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1062/review-edges.json
+// "subscribers are delivered in registration order and a reentrant subscriber hydrates before the
+// next publication". The frozen subscriber set and commits drive the test; the frozen event order
+// is compared exactly.
 TEST_CASE("subscribers are delivered in registration order with reentrant unsubscribe and subscribe",
         "[chord][replicated_state][issue1062][review]") {
+    const auto frozen = review_edges_scenario(
+            "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next "
+            "publication");
+    const auto* commits = frozen.inputs_member("commits");
+    REQUIRE(commits != nullptr);
+    const auto* commit_records = commits->get_if<support::JsonValue::array_t>();
+    REQUIRE(commit_records != nullptr);
+    REQUIRE(commit_records->size() == 3);
+    std::vector<double> commit_values;
+    for (const auto& record : *commit_records) {
+        const auto* number = record.get_if<double>();
+        REQUIRE(number != nullptr);
+        commit_values.push_back(*number);
+    }
+
     TestSource source{revision(0)};
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
@@ -1272,23 +2039,12 @@ TEST_CASE("subscribers are delivered in registration order with reentrant unsubs
         return ready();
     });
 
-    source.commit(revision(1));
-    source.commit(revision(2));
-    source.commit(revision(3));
+    for (const auto value : commit_values)
+        source.commit(revision(value));
 
-    const std::vector<std::string> expected{"a:hydrate:0",
-            "b:hydrate:0",
-            "c:hydrate:0",
-            "a:update:1",
-            "b:update:1",
-            "c:update:1",
-            "a:update:2",
-            "d:hydrate:2",
-            "c:update:2",
-            "a:update:3",
-            "c:update:3",
-            "d:update:3"};
-    CHECK(events == expected);
+    const auto* frozen_events = frozen.array_member("events");
+    REQUIRE(frozen_events != nullptr);
+    check_frozen_strings(events, *frozen_events);
     a();
     if (d) (*d)();
     c();

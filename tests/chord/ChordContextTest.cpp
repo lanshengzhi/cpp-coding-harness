@@ -1,12 +1,49 @@
 #include <cch/chord/ChordContext.hpp>
 
+#include <cch/support/JsonAccess.hpp>
+
+#include "support/ChordEvidence.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
+#include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 
 using namespace cch;
 using namespace cch::chord;
+
+namespace {
+
+/// The frozen #1057 context-cancellation observation the receipts register.
+[[nodiscard]] cch::tests::FrozenChordScenario context_cancellation_scenario(std::string_view name) {
+    auto scenario = cch::tests::FrozenChordScenario::load("audit-1057", "context-cancellation.json", name);
+    REQUIRE(scenario.has_value());
+    return *scenario;
+}
+
+/// Compare one frozen `{value?, present, aborted, reason}` context state with
+/// the live context's own observation.
+void check_frozen_state(
+        const support::JsonValue::object_t& frozen, const Context& context, const ContextKey<std::string>& key) {
+    if (const auto value = support::json_string_member(frozen, "value"); value.has_value()) {
+        REQUIRE(context.value(key).has_value());
+        CHECK(*context.value(key) == *value);
+    }
+    const auto present = support::json_bool_member(frozen, "present");
+    REQUIRE(present.has_value());
+    CHECK(context.stop_token().stop_possible() == *present);
+    const auto aborted = support::json_bool_member(frozen, "aborted");
+    REQUIRE(aborted.has_value());
+    CHECK(context.aborted() == *aborted);
+    const auto reason = support::json_string_member(frozen, "reason");
+    const std::optional<std::string> frozen_reason =
+            reason.has_value() ? std::optional<std::string>{std::string{*reason}} : std::nullopt;
+    CHECK(context.abort_reason() == frozen_reason);
+}
+
+} // namespace
 
 TEST_CASE("background and todo contexts are distinct empty roots", "[chord][context][issue1060][spec]") {
     const auto key = create_context_key<std::string>("value");
@@ -47,125 +84,216 @@ TEST_CASE("context values layer without modifying their parents", "[chord][conte
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/context-cancellation.json
 // "a child cancellation is isolated while parent cancellation reaches an already-created context".
 // The frozen record observes `value` and the abort-signal presence/aborted/reason of the root, both
-// children, the inheritor and three ordered observations; every one of those is asserted here.
+// children, the inheritor and three ordered observations; the inputs (root value, child reason,
+// parent reason) and every one of those expected fields are read from the artifact below.
 TEST_CASE("a child cancellation is isolated while parent cancellation reaches an already-created context",
         "[chord][context][cancellation][issue1060][spec]") {
+    const auto frozen = context_cancellation_scenario(
+            "a child cancellation is isolated while parent cancellation reaches an already-created child context");
+    const auto root_value = frozen.inputs_string("rootValue");
+    const auto child_reason = frozen.inputs_string("childReason");
+    const auto parent_reason = frozen.inputs_string("parentReason");
+    REQUIRE(root_value.has_value());
+    REQUIRE(child_reason.has_value());
+    REQUIRE(parent_reason.has_value());
+    const auto* frozen_root = frozen.object_member("root");
+    const auto* frozen_child = frozen.object_member("child");
+    const auto* frozen_sibling = frozen.object_member("sibling");
+    const auto* frozen_inheritor = frozen.object_member("inheritor");
+    const auto* frozen_observations = frozen.array_member("observations");
+    REQUIRE(frozen_root != nullptr);
+    REQUIRE(frozen_child != nullptr);
+    REQUIRE(frozen_sibling != nullptr);
+    REQUIRE(frozen_inheritor != nullptr);
+    REQUIRE(frozen_observations != nullptr);
+    REQUIRE(frozen_observations->size() == 3);
+
     const auto key = create_context_key<std::string>("audit-1057-context");
-    const auto root = with_context_value(key, std::string{"root"}, background_context());
+    const auto root = with_context_value(key, *root_value, background_context());
 
     auto child = with_cancel(root);
     auto sibling = with_cancel(root);
 
-    // Frozen root: value "root", no abort signal, not aborted, no reason.
-    REQUIRE(root.value(key).has_value());
-    CHECK(*root.value(key) == "root");
-    CHECK_FALSE(root.stop_token().stop_possible());
-    CHECK_FALSE(root.aborted());
-    CHECK_FALSE(root.abort_reason().has_value());
+    // Frozen root: the typed value, no abort signal, not aborted, no reason.
+    check_frozen_state(*frozen_root, root, key);
 
-    child.cancel("child-only");
-    // Frozen observation "child": aborted with "child-only" while the root stays un-aborted.
-    CHECK(child.context().stop_token().stop_possible());
-    CHECK(child.context().aborted());
-    CHECK(child.context().abort_reason() == std::optional<std::string>{"child-only"});
-    CHECK_FALSE(root.aborted());
+    struct Observation {
+        std::string observer;
+        bool aborted;
+        std::optional<std::string> reason;
+        bool root_aborted;
+    };
+    std::vector<Observation> observations;
+    const auto record = [&observations, &root](std::string_view observer, const Context& context) {
+        observations.push_back(Observation{.observer = std::string{observer},
+                .aborted = context.aborted(),
+                .reason = context.abort_reason(),
+                .root_aborted = root.aborted()});
+    };
+
+    child.cancel(*child_reason);
+    // Frozen observation "child": aborted with the frozen child reason while the root stays
+    // un-aborted; the frozen "child" state holds the root value.
+    record("child", child.context());
+    check_frozen_state(*frozen_child, child.context(), key);
+    check_frozen_state(*frozen_root, root, key);
     // Frozen observation "sibling" before its own cancellation: present value, un-aborted.
-    REQUIRE(sibling.context().value(key).has_value());
-    CHECK(*sibling.context().value(key) == "root");
-    CHECK(sibling.context().stop_token().stop_possible());
-    CHECK_FALSE(sibling.context().aborted());
-    REQUIRE(child.context().value(key).has_value());
-    CHECK(*child.context().value(key) == "root");
+    record("sibling", sibling.context());
+    check_frozen_state(*frozen_child, child.context(), key);
 
-    sibling.cancel("sibling-only");
+    const auto sibling_reason = support::json_string_member(*frozen_sibling, "reason");
+    REQUIRE(sibling_reason.has_value());
+    sibling.cancel(std::string{*sibling_reason});
     // Frozen observation "sibling-after-cancel".
-    CHECK(sibling.context().aborted());
-    CHECK(sibling.context().abort_reason() == std::optional<std::string>{"sibling-only"});
-    CHECK_FALSE(root.aborted());
+    record("sibling-after-cancel", sibling.context());
+    check_frozen_state(*frozen_sibling, sibling.context(), key);
+    check_frozen_state(*frozen_root, root, key);
 
+    const auto inheritor_value = support::json_string_member(*frozen_inheritor, "value");
+    REQUIRE(inheritor_value.has_value());
     auto parent = with_cancel(background_context());
     auto inheritor = with_abort_signal(parent.context().stop_token(),
-            "parent-reason",
-            with_context_value(key, std::string{"child"}, background_context()));
+            *parent_reason,
+            with_context_value(key, std::string{*inheritor_value}, background_context()));
+    check_frozen_state(*frozen_root, root, key);
+    // The frozen inheritor starts un-aborted with a live parent signal.
     CHECK(inheritor.stop_token().stop_possible());
     CHECK_FALSE(inheritor.aborted());
 
-    parent.cancel("parent-reason");
-    // Frozen inheritor: parent reason reaches it while its own value survives.
-    CHECK(inheritor.aborted());
-    CHECK(inheritor.abort_reason() == std::optional<std::string>{"parent-reason"});
-    REQUIRE(inheritor.value(key).has_value());
-    CHECK(*inheritor.value(key) == "child");
+    parent.cancel(*parent_reason);
+    // Frozen inheritor: the frozen parent reason reaches it while its own frozen value survives.
+    record("inheritor", inheritor);
+    check_frozen_state(*frozen_inheritor, inheritor, key);
+
+    // The frozen ordered observations are compared exactly: observer, aborted, reason, rootAborted.
+    for (std::size_t index = 0; index < frozen_observations->size(); ++index) {
+        const auto* observation = frozen_observations->at(index).get_if<support::JsonValue::object_t>();
+        REQUIRE(observation != nullptr);
+        REQUIRE(index < observations.size());
+        const auto observer = support::json_string_member(*observation, "observer");
+        const auto aborted = support::json_bool_member(*observation, "aborted");
+        const auto reason = support::json_string_member(*observation, "reason");
+        const auto root_aborted = support::json_bool_member(*observation, "rootAborted");
+        REQUIRE(observer.has_value());
+        REQUIRE(aborted.has_value());
+        CHECK(observations[index].observer == *observer);
+        CHECK(observations[index].aborted == *aborted);
+        const std::optional<std::string> frozen_reason =
+                reason.has_value() ? std::optional<std::string>{std::string{*reason}} : std::nullopt;
+        CHECK(observations[index].reason == frozen_reason);
+        // The third frozen observation records no rootAborted; where the field is present it
+        // is compared exactly.
+        if (root_aborted.has_value()) CHECK(observations[index].root_aborted == *root_aborted);
+    }
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/context-cancellation.json
-// "withoutAbortSignal removes cancellation while preserving typed values".
+// "withoutAbortSignal removes cancellation while preserving typed values". The frozen input value
+// and the masked/plain-background/with-undefined-signal expected states are the artifact's own
+// fields.
 TEST_CASE("without abort signal masks cancellation while preserving typed values",
         "[chord][context][cancellation][issue1060][spec]") {
+    const auto frozen =
+            context_cancellation_scenario("withoutAbortSignal removes cancellation while preserving typed values");
+    const auto* frozen_masked = frozen.object_member("masked");
+    const auto* frozen_plain_background = frozen.object_member("plainBackground");
+    const auto* frozen_with_signal = frozen.object_member("withUndefinedSignal");
+    REQUIRE(frozen_masked != nullptr);
+    REQUIRE(frozen_plain_background != nullptr);
+    REQUIRE(frozen_with_signal != nullptr);
+    const auto value = frozen.inputs_string("value");
+    REQUIRE(value.has_value());
+
     const auto key = create_context_key<std::string>("value");
     auto parent = with_cancel(background_context());
-    const auto context = with_context_value(key, std::string{"cleanup"}, parent.context());
+    const auto context = with_context_value(key, *value, parent.context());
 
     parent.cancel("cleanup-cancel");
     CHECK(context.aborted());
 
-    // Frozen masked: value "cleanup", no abort signal, not aborted, no reason.
+    // Frozen masked: the frozen typed value survives with no signal, no abort, no reason.
     const auto masked = without_abort_signal(context);
-    CHECK_FALSE(masked.aborted());
-    CHECK_FALSE(masked.abort_reason().has_value());
-    CHECK_FALSE(masked.stop_token().stop_possible());
-    REQUIRE(masked.value(key).has_value());
-    CHECK(*masked.value(key) == "cleanup");
+    check_frozen_state(*frozen_masked, masked, key);
 
     // Frozen plainBackground: no abort signal, not aborted, no reason.
-    CHECK_FALSE(background_context().stop_token().stop_possible());
-    CHECK_FALSE(background_context().aborted());
-    CHECK_FALSE(background_context().abort_reason().has_value());
+    check_frozen_state(*frozen_plain_background, background_context(), key);
 
     // Frozen withUndefinedSignal: an un-aborted signal is present.
     const auto visible = with_abort_signal(std::stop_token{}, std::string{"unused"}, background_context());
-    CHECK_FALSE(visible.aborted());
-    CHECK_FALSE(visible.abort_reason().has_value());
-    CHECK(visible.stop_token().stop_possible());
+    check_frozen_state(*frozen_with_signal, visible, key);
 }
 
+// The discriminating case for the frozen child/parent cancellation rows
+// (fixtures/pi-v1.3.0/audit-1057/context-cancellation.json): the frozen child keeps its own
+// first reason after a competing external stop, and the frozen parent reason reaches an
+// already-created child. The reasons under test are the frozen inputs' own values.
 TEST_CASE("combined cancellation keeps the first reason and reaches existing children",
         "[chord][context][cancellation][ordering][issue1060][spec]") {
+    const auto frozen = context_cancellation_scenario(
+            "a child cancellation is isolated while parent cancellation reaches an already-created child context");
+    const auto child_reason = frozen.inputs_string("childReason");
+    const auto parent_reason = frozen.inputs_string("parentReason");
+    REQUIRE(child_reason.has_value());
+    REQUIRE(parent_reason.has_value());
+
     std::stop_source external;
     const auto combined = with_abort_signal(external.get_token(), std::string{"external"}, background_context());
     auto child = with_cancel(combined);
 
-    child.cancel("child");
+    child.cancel(*child_reason);
     external.request_stop();
-    CHECK(child.context().abort_reason() == std::optional<std::string>{"child"});
+    // First reason wins: the frozen child reason, not the later external one.
+    CHECK(child.context().abort_reason() == std::optional<std::string>{*child_reason});
 
+    // The frozen parent reason reaches an already-created child context (the frozen inheritor).
     auto cancelled_parent = with_cancel(background_context());
-    cancelled_parent.cancel("first");
+    const auto key = create_context_key<std::string>("audit-1057-context");
+    auto inheritor = with_abort_signal(cancelled_parent.context().stop_token(),
+            *parent_reason,
+            with_context_value(key, std::string{"child"}, background_context()));
+    cancelled_parent.cancel(*parent_reason);
+    CHECK(inheritor.aborted());
+    CHECK(inheritor.abort_reason() == std::optional<std::string>{*parent_reason});
+
+    // A late combination over an already-cancelled parent reports the frozen first reason.
     const auto late_combination =
             with_abort_signal(std::stop_token{}, std::string{"later"}, cancelled_parent.context());
     CHECK(late_combination.aborted());
-    CHECK(late_combination.abort_reason() == std::optional<std::string>{"first"});
+    CHECK(late_combination.abort_reason() == std::optional<std::string>{*parent_reason});
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/context-cancellation.json
 // "a context wait rejects with the caller abort reason while the underlying
-// work still completes". The frozen `expected` object records the wait error
-// (AbortError / "The operation was aborted" / ABORT_ERR 20), the work result
-// and that the work resolved after the wait rejected; every one of those is
-// asserted here.
+// work still completes". The frozen `inputs` (abort reason, work result) and the frozen
+// `expected` object (wait error AbortError/"The operation was aborted"/ABORT_ERR 20, the work
+// result, and the work resolving after the wait rejected) drive every assertion below.
 TEST_CASE("a context wait rejects with the caller abort reason while the underlying work still completes",
         "[chord][context][cancellation][issue1184][spec]") {
+    const auto frozen = context_cancellation_scenario(
+            "a context wait rejects with the caller abort reason while the underlying work still completes");
+    const auto abort_reason = frozen.inputs_string("abortReason");
+    const auto work_result = frozen.inputs_string("workResult");
+    const auto* frozen_wait_error = frozen.object_member("waitError");
+    REQUIRE(abort_reason.has_value());
+    REQUIRE(work_result.has_value());
+    REQUIRE(frozen_wait_error != nullptr);
+    const auto frozen_wait_message = support::json_string_member(*frozen_wait_error, "message");
+    const auto frozen_wait_code = support::json_number_member(*frozen_wait_error, "code");
+    REQUIRE(frozen_wait_message.has_value());
+    REQUIRE(frozen_wait_code.has_value());
+
     std::stop_source caller;
-    const auto waiting_context = with_abort_signal(caller.get_token(), "stop waiting", background_context());
+    const auto waiting_context = with_abort_signal(caller.get_token(), *abort_reason, background_context());
 
     // The gated work: settled only after the wait has rejected.
-    std::optional<std::string> work_result;
+    std::optional<std::string> work_result_observed;
     std::optional<support::AsyncCompletion<std::string, support::Error>> settle_work;
     auto work = support::AsyncResult<std::string>{support::AsyncProducer<std::string, support::Error>{
-            [&settle_work, &work_result](support::AsyncCompletion<std::string, support::Error> completion) noexcept {
-                settle_work.emplace([&work_result, completion = std::move(completion)](
+            [&settle_work, &work_result_observed](
+                    support::AsyncCompletion<std::string, support::Error> completion) noexcept {
+                settle_work.emplace([&work_result_observed, completion = std::move(completion)](
                                             std::expected<std::string, support::Error> outcome) mutable noexcept {
-                    if (outcome) work_result = *outcome;
+                    if (outcome) work_result_observed = *outcome;
                     completion(std::move(outcome));
                 });
             }}};
@@ -181,24 +309,35 @@ TEST_CASE("a context wait rejects with the caller abort reason while the underly
     caller.request_stop();
     REQUIRE(wait_outcome.has_value());
     REQUIRE_FALSE(wait_outcome->has_value());
-    // Frozen `waitError`: AbortError with the frozen message and ABORT_ERR.
+    // Frozen `waitError`: the frozen message, the DOM ABORT_ERR 20 mapping to
+    // this runtime's Cancelled code, and the frozen caller reason as detail.
+    CHECK(wait_outcome->error().message == *frozen_wait_message);
+    CHECK(*frozen_wait_code == 20.0);
     CHECK(wait_outcome->error().code == support::ErrorCode::Cancelled);
-    CHECK(wait_outcome->error().message == "The operation was aborted");
-    CHECK(wait_outcome->error().detail == "stop waiting");
+    CHECK(wait_outcome->error().detail == *abort_reason);
 
     // Frozen `workResult` and `workResolvedAfterWaitRejected`: the work was
     // still running when the wait rejected and it completes afterwards.
-    CHECK_FALSE(work_result.has_value());
-    (*settle_work)(std::string{"work finished"});
-    CHECK(work_result == std::optional<std::string>{"work finished"});
+    CHECK_FALSE(work_result_observed.has_value());
+    (*settle_work)(std::string{*work_result});
+    CHECK(work_result_observed == std::optional<std::string>{*work_result});
 }
 
 // Discriminating case for the row above: a waiter that cancelled its producer
 // would never start or never settle the underlying operation. An already
 // cancelled caller must still start the work, and the work must still complete
-// after the wait rejected.
+// after the wait rejected. The wait error's message and the caller-reason
+// detail are the frozen waitError/inputs fields of
+// fixtures/pi-v1.3.0/audit-1057/context-cancellation.json.
 TEST_CASE("an already cancelled context wait still starts and completes the underlying work",
         "[chord][context][cancellation][issue1184][discriminating]") {
+    const auto frozen = context_cancellation_scenario(
+            "a context wait rejects with the caller abort reason while the underlying work still completes");
+    const auto* frozen_wait_error = frozen.object_member("waitError");
+    REQUIRE(frozen_wait_error != nullptr);
+    const auto frozen_wait_message = support::json_string_member(*frozen_wait_error, "message");
+    REQUIRE(frozen_wait_message.has_value());
+
     auto cancelled = with_cancel(background_context());
     cancelled.cancel("already stopped");
 
@@ -217,6 +356,8 @@ TEST_CASE("an already cancelled context wait still starts and completes the unde
 
     REQUIRE(wait_outcome.has_value());
     REQUIRE_FALSE(wait_outcome->has_value());
+    // The settled wait carries the frozen AbortError message and the caller reason.
+    CHECK(wait_outcome->error().message == *frozen_wait_message);
     CHECK(wait_outcome->error().code == support::ErrorCode::Cancelled);
     CHECK(wait_outcome->error().detail == "already stopped");
     CHECK(work_started);
