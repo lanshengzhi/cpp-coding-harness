@@ -1,0 +1,1321 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-04T22:11:12.051Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/env/daemon/src/list.rs:list,Options",
+    "packages/durable/src/env/index.ts:ListFilesOptions,FileListEntry,FileListing"
+  ],
+  "scenarios": [
+    {
+      "name": "comments and blank lines carry no rules",
+      "inputs": {
+        "gitignore": "# nothing\n\n   \nkeep.txt\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "drop.txt": "",
+          ".gitignore": "# nothing\n\n   \nkeep.txt\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "drop.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "escaped hash and bang are literal patterns",
+      "inputs": {
+        "gitignore": "\\#weird\n\\!odd\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "#weird": "",
+          "!odd": "",
+          "other": "",
+          ".gitignore": "\\#weird\n\\!odd\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "other",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "trailing spaces are stripped unless escaped",
+      "inputs": {
+        "gitignore": "spaced.txt\nescaped\\ .txt\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "spaced.txt": "",
+          "escaped .txt": "",
+          "other": "",
+          ".gitignore": "spaced.txt\nescaped\\ .txt\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "other",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a negation whitelists a matching name",
+      "inputs": {
+        "gitignore": "*.log\n!keep.log\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "drop.log": "",
+          "keep.log": "",
+          ".gitignore": "*.log\n!keep.log\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.log",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a leading slash anchors to the rules directory",
+      "inputs": {
+        "gitignore": "/root.txt\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "root.txt": "",
+          "sub/root.txt": "",
+          ".gitignore": "/root.txt\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "sub",
+            "kind": "directory"
+          },
+          {
+            "path": "sub/root.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a trailing slash matches directories only",
+      "inputs": {
+        "gitignore": "build/\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "build/x": "",
+          "builder": "",
+          ".gitignore": "build/\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "builder",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "star does not cross a slash",
+      "inputs": {
+        "gitignore": "a*b\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "axb": "",
+          "a/x/b": "",
+          "a/xb": "",
+          ".gitignore": "a*b\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "a",
+            "kind": "directory"
+          },
+          {
+            "path": "a/x",
+            "kind": "directory"
+          },
+          {
+            "path": "a/x/b",
+            "kind": "file"
+          },
+          {
+            "path": "a/xb",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a star-star prefix matches at any depth",
+      "inputs": {
+        "gitignore": "**/deep.txt\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "deep.txt": "",
+          "sub/deep.txt": "",
+          "sub/mid/deep.txt": "",
+          ".gitignore": "**/deep.txt\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "sub",
+            "kind": "directory"
+          },
+          {
+            "path": "sub/mid",
+            "kind": "directory"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a question mark matches one non-slash character",
+      "inputs": {
+        "gitignore": "f?o.txt\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "foo.txt": "",
+          "fo.txt": "",
+          "f/o.txt": "",
+          ".gitignore": "f?o.txt\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "f",
+            "kind": "directory"
+          },
+          {
+            "path": "f/o.txt",
+            "kind": "file"
+          },
+          {
+            "path": "fo.txt",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "character classes and ranges match one character",
+      "inputs": {
+        "gitignore": "c[a]t.txt\nc[a-z]t2.txt\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "cat.txt": "",
+          "cat2.txt": "",
+          "ct.txt": "",
+          ".gitignore": "c[a]t.txt\nc[a-z]t2.txt\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "ct.txt",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a negated class matches outside the class",
+      "inputs": {
+        "gitignore": "n[!o].txt\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "nix.txt": "",
+          "no.txt": "",
+          ".gitignore": "n[!o].txt\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "nix.txt",
+            "kind": "file"
+          },
+          {
+            "path": "no.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a middle star-star crosses directories",
+      "inputs": {
+        "gitignore": "mid/**/end.txt\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "mid/end.txt": "",
+          "mid/a/end.txt": "",
+          "mid/a/b/end.txt": "",
+          "midx/a/end.txt": "",
+          ".gitignore": "mid/**/end.txt\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "mid",
+            "kind": "directory"
+          },
+          {
+            "path": "mid/a",
+            "kind": "directory"
+          },
+          {
+            "path": "mid/a/b",
+            "kind": "directory"
+          },
+          {
+            "path": "midx",
+            "kind": "directory"
+          },
+          {
+            "path": "midx/a",
+            "kind": "directory"
+          },
+          {
+            "path": "midx/a/end.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a trailing star-star matches everything inside only",
+      "inputs": {
+        "gitignore": "inside/**\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "inside/x": "",
+          "inside/a/b": "",
+          "outsidex": "",
+          ".gitignore": "inside/**\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "inside",
+            "kind": "directory"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "outsidex",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "brace alternation is a globset extension over git",
+      "inputs": {
+        "gitignore": "alt.{txt,log}\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "alt.txt": "",
+          "alt.log": "",
+          "alt.md": "",
+          ".gitignore": "alt.{txt,log}\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "alt.md",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "rules are case sensitive on Linux bytes",
+      "inputs": {
+        "gitignore": "*.LOG\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "x.log": "",
+          "x.LOG": "",
+          ".gitignore": "*.LOG\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "x.log",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the last matching rule in one file wins",
+      "inputs": {
+        "gitignore": "*.log\n!keep.log\ndrop.log\n",
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "keep.txt": "",
+          "keep.log": "",
+          "drop.log": "",
+          ".gitignore": "*.log\n!keep.log\ndrop.log\n"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.log",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the nearest gitignore overrides the parent in either direction",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          ".gitignore": "*.log\n!keep.log\n",
+          "sub/.gitignore": "keep.log\n",
+          "sub/drop.log": "",
+          "sub/keep.log": "",
+          "top.log": "",
+          "keep.log": ""
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.log",
+            "kind": "file"
+          },
+          {
+            "path": "sub",
+            "kind": "directory"
+          },
+          {
+            "path": "sub/.gitignore",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "gitignore beats info-exclude and the global file",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          ".gitignore": "from-ignore\nfrom-both\n",
+          ".git/info/exclude": "from-exclude\nfrom-both\n",
+          "from-ignore": "",
+          "from-exclude": "",
+          "from-both": "",
+          "from-global": "",
+          "from-global-extra": ""
+        },
+        "globalIgnore": "from-global\nfrom-global-extra\n",
+        "globalSource": "$XDG_CONFIG_HOME/git/ignore (the default path)",
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a whitelist in gitignore suppresses the exclude file",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          ".gitignore": "*.log\n!keep.log\n",
+          ".git/info/exclude": "keep.log\n",
+          "keep.log": "",
+          "drop.log": ""
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.log",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "an ignored directory prunes its subtree and a negation below cannot revive it",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          ".gitignore": "build/\n!build/keep.txt\n",
+          "build/keep.txt": "",
+          "build/drop.txt": "",
+          "src/keep.txt": ""
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "src",
+            "kind": "directory"
+          },
+          {
+            "path": "src/keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "hidden false drops dot names unless a rule whitelists them",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          ".gitignore": "!.secret-keep\n",
+          ".secret-keep": "",
+          ".secret-drop": "",
+          "plain": ""
+        },
+        "options": {
+          "gitignore": true,
+          "hidden": false
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".secret-keep",
+            "kind": "file"
+          },
+          {
+            "path": "plain",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "gitignore false disables the rules while hidden filtering stays",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          ".gitignore": "drop.txt\n",
+          ".hidden/x": "",
+          "drop.txt": "",
+          "keep.txt": ""
+        },
+        "optionsOff": {
+          "gitignore": false
+        },
+        "optionsOn": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "off": {
+          "entries": [
+            {
+              "path": ".gitignore",
+              "kind": "file"
+            },
+            {
+              "path": ".hidden",
+              "kind": "directory"
+            },
+            {
+              "path": ".hidden/x",
+              "kind": "file"
+            },
+            {
+              "path": "drop.txt",
+              "kind": "file"
+            },
+            {
+              "path": "keep.txt",
+              "kind": "file"
+            }
+          ],
+          "truncated": false
+        },
+        "on": {
+          "entries": [
+            {
+              "path": ".gitignore",
+              "kind": "file"
+            },
+            {
+              "path": ".hidden",
+              "kind": "directory"
+            },
+            {
+              "path": ".hidden/x",
+              "kind": "file"
+            },
+            {
+              "path": "keep.txt",
+              "kind": "file"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "symlinks list as links and a fifo is skipped",
+      "inputs": {
+        "files": {
+          "target.txt": "",
+          "dir/inner.txt": "",
+          ".gitignore": ""
+        },
+        "links": [
+          "link -> target.txt",
+          "dangling -> missing"
+        ],
+        "fifo": "pipe",
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "dangling",
+            "kind": "symlink"
+          },
+          {
+            "path": "dir",
+            "kind": "directory"
+          },
+          {
+            "path": "dir/inner.txt",
+            "kind": "file"
+          },
+          {
+            "path": "link",
+            "kind": "symlink"
+          },
+          {
+            "path": "target.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a non-utf8 name lists with replacement characters",
+      "inputs": {
+        "files": {
+          "ok.txt": "",
+          ".gitignore": "",
+          "<bytes 62 61 64 ff 2e 74 78 74>": ""
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "bad�.txt",
+            "kind": "file"
+          },
+          {
+            "path": "ok.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": [
+        "the payload path is the lossy UTF-8 rendering (U+FFFD for byte 0xff), not the raw name"
+      ]
+    },
+    {
+      "name": "zero exact and over bounds report truncated exactly",
+      "inputs": {
+        "files": [
+          "a",
+          "b",
+          "c"
+        ],
+        "gitignore": false,
+        "exactBytes": 9
+      },
+      "expected": {
+        "cases": [
+          {
+            "options": {
+              "maxEntries": 0
+            },
+            "listing": {
+              "entries": [],
+              "truncated": true
+            }
+          },
+          {
+            "options": {
+              "maxEntries": 2
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                },
+                {
+                  "path": "b",
+                  "kind": "file"
+                }
+              ],
+              "truncated": true
+            }
+          },
+          {
+            "options": {
+              "maxEntries": 3
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                },
+                {
+                  "path": "b",
+                  "kind": "file"
+                },
+                {
+                  "path": "c",
+                  "kind": "file"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          {
+            "options": {
+              "maxEntries": 4
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                },
+                {
+                  "path": "b",
+                  "kind": "file"
+                },
+                {
+                  "path": "c",
+                  "kind": "file"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          {
+            "options": {
+              "maxBytes": 0
+            },
+            "listing": {
+              "entries": [],
+              "truncated": true
+            }
+          },
+          {
+            "options": {
+              "maxBytes": 9
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                },
+                {
+                  "path": "b",
+                  "kind": "file"
+                },
+                {
+                  "path": "c",
+                  "kind": "file"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          {
+            "options": {
+              "maxBytes": 10
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                },
+                {
+                  "path": "b",
+                  "kind": "file"
+                },
+                {
+                  "path": "c",
+                  "kind": "file"
+                }
+              ],
+              "truncated": false
+            }
+          },
+          {
+            "options": {
+              "timeoutMs": 0
+            },
+            "listing": {
+              "entries": [],
+              "truncated": true
+            }
+          },
+          {
+            "options": {
+              "timeoutMs": 60000
+            },
+            "listing": {
+              "entries": [
+                {
+                  "path": "a",
+                  "kind": "file"
+                },
+                {
+                  "path": "b",
+                  "kind": "file"
+                },
+                {
+                  "path": "c",
+                  "kind": "file"
+                }
+              ],
+              "truncated": false
+            }
+          }
+        ]
+      },
+      "normalizations": [
+        "each entry costs its UTF-8 path plus two bytes; a timeout of zero expires before the first entry"
+      ]
+    },
+    {
+      "name": "depth-first byte-order traversal with an empty directory",
+      "inputs": {
+        "files": [
+          "w00",
+          "w01",
+          "w02",
+          "w03",
+          "w04",
+          "w05",
+          "w06",
+          "w07",
+          "w08",
+          "w09",
+          "w10",
+          "w11",
+          "w12",
+          "w13",
+          "w14",
+          "w15",
+          "w16",
+          "w17",
+          "w18",
+          "w19",
+          "w20",
+          "w21",
+          "w22",
+          "w23",
+          "w24",
+          "w25",
+          "w26",
+          "w27",
+          "w28",
+          "w29",
+          "deep/a/b/c/leaf.txt",
+          "B.txt",
+          "a.txt",
+          "empty/",
+          "deep/z/last.txt"
+        ],
+        "options": {
+          "gitignore": false
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": "B.txt",
+            "kind": "file"
+          },
+          {
+            "path": "a.txt",
+            "kind": "file"
+          },
+          {
+            "path": "deep",
+            "kind": "directory"
+          },
+          {
+            "path": "deep/a",
+            "kind": "directory"
+          },
+          {
+            "path": "deep/a/b",
+            "kind": "directory"
+          },
+          {
+            "path": "deep/a/b/c",
+            "kind": "directory"
+          },
+          {
+            "path": "deep/a/b/c/leaf.txt",
+            "kind": "file"
+          },
+          {
+            "path": "deep/z",
+            "kind": "directory"
+          },
+          {
+            "path": "deep/z/last.txt",
+            "kind": "file"
+          },
+          {
+            "path": "empty",
+            "kind": "directory"
+          },
+          {
+            "path": "w00",
+            "kind": "file"
+          },
+          {
+            "path": "w01",
+            "kind": "file"
+          },
+          {
+            "path": "w02",
+            "kind": "file"
+          },
+          {
+            "path": "w03",
+            "kind": "file"
+          },
+          {
+            "path": "w04",
+            "kind": "file"
+          },
+          {
+            "path": "w05",
+            "kind": "file"
+          },
+          {
+            "path": "w06",
+            "kind": "file"
+          },
+          {
+            "path": "w07",
+            "kind": "file"
+          },
+          {
+            "path": "w08",
+            "kind": "file"
+          },
+          {
+            "path": "w09",
+            "kind": "file"
+          },
+          {
+            "path": "w10",
+            "kind": "file"
+          },
+          {
+            "path": "w11",
+            "kind": "file"
+          },
+          {
+            "path": "w12",
+            "kind": "file"
+          },
+          {
+            "path": "w13",
+            "kind": "file"
+          },
+          {
+            "path": "w14",
+            "kind": "file"
+          },
+          {
+            "path": "w15",
+            "kind": "file"
+          },
+          {
+            "path": "w16",
+            "kind": "file"
+          },
+          {
+            "path": "w17",
+            "kind": "file"
+          },
+          {
+            "path": "w18",
+            "kind": "file"
+          },
+          {
+            "path": "w19",
+            "kind": "file"
+          },
+          {
+            "path": "w20",
+            "kind": "file"
+          },
+          {
+            "path": "w21",
+            "kind": "file"
+          },
+          {
+            "path": "w22",
+            "kind": "file"
+          },
+          {
+            "path": "w23",
+            "kind": "file"
+          },
+          {
+            "path": "w24",
+            "kind": "file"
+          },
+          {
+            "path": "w25",
+            "kind": "file"
+          },
+          {
+            "path": "w26",
+            "kind": "file"
+          },
+          {
+            "path": "w27",
+            "kind": "file"
+          },
+          {
+            "path": "w28",
+            "kind": "file"
+          },
+          {
+            "path": "w29",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": [
+        "siblings sort by raw name bytes: B.txt before a.txt before w00"
+      ]
+    }
+  ]
+}

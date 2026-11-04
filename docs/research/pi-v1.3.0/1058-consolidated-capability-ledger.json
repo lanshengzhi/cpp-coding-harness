@@ -660,24 +660,24 @@
             "^(issue1090|issue1101|issue1104)$",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1090.xml"
+            "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1090.xml"
           ],
-          "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
-          "recordedAt": "2026-11-04T18:45:48Z",
+          "testedRevision": "e362f453fa21ea1b5fceb20a2aa39a23348cd871",
+          "recordedAt": "2026-11-04T22:39:50Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1090.xml",
-            "sha256": "12422e606a7e4ff9ec424846901a000c84ba04067fee05b2cf96f7968bfe4515"
+            "path": "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1090.xml",
+            "sha256": "69481c11a2d3832f39246df15ba72619f26867f1c80a723b700ae642fc19986e"
           }
         },
         "inputs": [
           {
             "path": "cmake/targets/Durable.cmake",
-            "sha256": "35ad925b149e51b49a2e1162252e84f451b325292a451db0651a405e95e3496d"
+            "sha256": "9feff05ddef3c098ea115e9e34558271b9d68b448721404a3c2fa07129eeac44"
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "f6840104c20daa76cc8b46d43f7b8c7290d0855941aab09a0a6096da903d5b23"
+            "sha256": "06ea3896730627f717e7e2eee9a1dfda15b0d3233c84546d35051f76867e4934"
           },
           {
             "path": "docs/agents/architecture.md",
@@ -717,7 +717,7 @@
           },
           {
             "path": "src/durable/CodingTools.cpp",
-            "sha256": "90ae4ec7d27b25b2e8fb80a8851fa8c604bf90a7d7d4b1b50b45bdc478dd643e"
+            "sha256": "4bb2c56bdaa9a5e3cf44a15401bf30faa3e46ded1f1f117c132a3d268eefb26d"
           },
           {
             "path": "src/durable/Images.cpp",
@@ -725,7 +725,7 @@
           },
           {
             "path": "src/durable/include/cch/durable/Environment.hpp",
-            "sha256": "e2399dc05e75d9bdf8eec297a72b4b4a196f2b04d05cc00424c006e1df1dbcc5"
+            "sha256": "57b00bbd1e1c02614b9ee9f6c885a2ffb7eb454efcfcb1e603c1acbdeb8df774"
           },
           {
             "path": "src/durable/include/cch/durable/Images.hpp",
@@ -1202,6 +1202,34 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1090-revalidation-1179m.xml",
               "sha256": "8f87106fd9a2f9484407a76dbc9a3474b7b0f468ae52563fa7c79689fc463d6d"
+            }
+          }
+        },
+        "revalidation1197": {
+          "reason": "#1197/#1158/#1198/#1199 add the frozen read-tool line semantics and the bounded tree listing to the durable owner: the read tool's CodingTools.cpp gains offset/limit, truncation and diagnostics; the Environment Owner Interface gains the listFiles surface (Environment.hpp) with its walker and ignore engine, registered in the durable target; the test shard registers the three EnvIO comparison files. The delivered image rows, scenarios and routing digest are unchanged. The exact 36-case selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made.",
+          "changedInputs": [
+            "cmake/targets/Durable.cmake",
+            "cmake/tests/DurableTests.cmake",
+            "src/durable/CodingTools.cpp",
+            "src/durable/include/cch/durable/Environment.hpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1090.xml"
+            ],
+            "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+            "recordedAt": "2026-11-04T18:45:48Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1090.xml",
+              "sha256": "12422e606a7e4ff9ec424846901a000c84ba04067fee05b2cf96f7968bfe4515"
             }
           }
         }
@@ -4000,14 +4028,14 @@
             "issue1184",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1184.xml"
+            "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1184.xml"
           ],
-          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
-          "recordedAt": "2026-11-04T20:01:09Z",
+          "testedRevision": "e362f453fa21ea1b5fceb20a2aa39a23348cd871",
+          "recordedAt": "2026-11-04T22:39:50Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1184.xml",
-            "sha256": "a962dde453f2fc59d7bde12a90b813bf8e5e1942ebd1c1f475cda63df16931a4"
+            "path": "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1184.xml",
+            "sha256": "99ed09b1c1737e0e649697f659c62423529778d50fcd48bc82837570e5cdbf33"
           }
         },
         "rows": [
@@ -4100,7 +4128,7 @@
           },
           {
             "path": "cmake/targets/Durable.cmake",
-            "sha256": "35ad925b149e51b49a2e1162252e84f451b325292a451db0651a405e95e3496d"
+            "sha256": "9feff05ddef3c098ea115e9e34558271b9d68b448721404a3c2fa07129eeac44"
           },
           {
             "path": "cmake/tests/ChordTests.cmake",
@@ -4108,7 +4136,7 @@
           },
           {
             "path": "cmake/tests/DurableTests.cmake",
-            "sha256": "f6840104c20daa76cc8b46d43f7b8c7290d0855941aab09a0a6096da903d5b23"
+            "sha256": "06ea3896730627f717e7e2eee9a1dfda15b0d3233c84546d35051f76867e4934"
           },
           {
             "path": "cmake/tests/TestsSetup.cmake",
@@ -4176,7 +4204,7 @@
           },
           {
             "path": "tests/durable/HarnessWorkflowTest.cpp",
-            "sha256": "a1cc5045b7f47e3ddb485ce9d73aea37f76872a69f6d922a7cf044e61afe6f74"
+            "sha256": "d209173dd27df70d46cc252494e5439231311cbeaad11f84acf3e48974b2f68f"
           },
           {
             "path": "tests/durable/Outcome.hpp",
@@ -4265,6 +4293,33 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1158-postmerge-1184.xml",
               "sha256": "40e9fa5e1d6268597c6f28a3951a2f587de98c0c5b3e297e2ca599ff91352369"
+            }
+          }
+        },
+        "revalidation1197": {
+          "reason": "#1197/#1158/#1198/#1199 extend the durable Environment Owner Interface with list_files, so the FailingWriteEnvironment double in HarnessWorkflowTest.cpp implements the new pure member; no chord behavior, scenario or routing changes. The exact 10-case selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made.",
+          "changedInputs": [
+            "cmake/targets/Durable.cmake",
+            "cmake/tests/DurableTests.cmake",
+            "tests/durable/HarnessWorkflowTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1184.xml"
+            ],
+            "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+            "recordedAt": "2026-11-04T20:01:09Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1184.xml",
+              "sha256": "a962dde453f2fc59d7bde12a90b813bf8e5e1942ebd1c1f475cda63df16931a4"
             }
           }
         }

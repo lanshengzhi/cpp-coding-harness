@@ -1,0 +1,529 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-04T22:16:42.974Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/env/daemon/src/list.rs:list,Options",
+    "packages/env/daemon/src/frame.rs:MAX_PAYLOAD"
+  ],
+  "scenarios": [
+    {
+      "name": "a root outside any work tree applies no repository rules",
+      "inputs": {
+        "files": {
+          ".gitignore": "drop.txt\n",
+          "drop.txt": "",
+          "keep.txt": ""
+        },
+        "hasDotGit": false,
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "drop.txt",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a git directory enables the repository rules",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          ".gitignore": "drop.txt\n",
+          "drop.txt": "",
+          "keep.txt": ""
+        },
+        "hasDotGit": true,
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "parent gitignores apply up to the work-tree root and no further",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          ".gitignore": "from-outer.txt\nleak.txt\n",
+          "from-outer.txt": "",
+          "wt/.git/HEAD": "ref: refs/heads/main\n",
+          "wt/.gitignore": "from-wt.txt\n",
+          "wt/from-wt.txt": "",
+          "wt/sub/from-wt.txt": "",
+          "wt/sub/leak.txt": "",
+          "wt/sub/keep.txt": ""
+        },
+        "listingRoot": "wt/sub",
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "leak.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": [
+        "the fixture is listed from its wt/sub directory; entry paths stay relative to that root"
+      ]
+    },
+    {
+      "name": "a git file worktree reads info-exclude from the commondir",
+      "inputs": {
+        "files": {
+          "linked/.git": "gitdir: /tmp/cch-audit-1199-JDYwtw/case-linked/main/.git/worktrees/linked\n",
+          "linked/.gitignore": "dropped.txt\n",
+          "linked/dropped.txt": "",
+          "linked/excluded-by-common.txt": "",
+          "linked/keep.txt": ""
+        },
+        "gitdir": "<absolute, written into linked/.git>",
+        "commondir": "<gitdir>/commondir -> ../..",
+        "exclude": "excluded-by-common.txt\n",
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": [
+        "the .git gitdir path is absolute; the exclude file is read through the commondir"
+      ]
+    },
+    {
+      "name": "a nested repository applies its own rules and blocks the outer ones",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          ".gitignore": "root-only.txt\nshared.txt\n",
+          "root-only.txt": "",
+          "shared.txt": "",
+          "inner/.git/HEAD": "ref: refs/heads/main\n",
+          "inner/.gitignore": "!shared.txt\ninner-only.txt\n",
+          "inner/shared.txt": "",
+          "inner/inner-only.txt": "",
+          "inner/root-only.txt": "",
+          "inner/keep.txt": ""
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "inner",
+            "kind": "directory"
+          },
+          {
+            "path": "inner/.gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "inner/keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "inner/root-only.txt",
+            "kind": "file"
+          },
+          {
+            "path": "inner/shared.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "GIT_DIR and GIT_WORK_TREE do not enable repository rules",
+      "inputs": {
+        "files": {
+          ".gitignore": "drop.txt\n",
+          "drop.txt": "",
+          "keep.txt": ""
+        },
+        "environment": {
+          "GIT_DIR": "<a real repository>",
+          "GIT_WORK_TREE": "<its work tree>"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "drop.txt",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": [
+        "the frozen walker keys on .git in the tree; the environment variables are not consulted"
+      ]
+    },
+    {
+      "name": "a bare repository layout applies no repository rules",
+      "inputs": {
+        "files": {
+          ".gitignore": "drop.txt\n",
+          "HEAD": "ref: refs/heads/main\n",
+          "config": "[core]\n\tbare = true\n",
+          "objects/info": "",
+          "drop.txt": "",
+          "keep.txt": ""
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "HEAD",
+            "kind": "file"
+          },
+          {
+            "path": "config",
+            "kind": "file"
+          },
+          {
+            "path": "drop.txt",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "objects",
+            "kind": "directory"
+          },
+          {
+            "path": "objects/info",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a git symlink to a directory is a repository marker",
+      "inputs": {
+        "files": {
+          ".gitignore": "dropped.txt\n",
+          "dropped.txt": "",
+          "excluded-by-link.txt": "",
+          "keep.txt": ""
+        },
+        "gitSymlink": "real.git",
+        "exclude": "excluded-by-link.txt\n",
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          },
+          {
+            "path": "real.git",
+            "kind": "directory"
+          },
+          {
+            "path": "real.git/HEAD",
+            "kind": "file"
+          },
+          {
+            "path": "real.git/info",
+            "kind": "directory"
+          },
+          {
+            "path": "real.git/info/exclude",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "an unreadable gitignore degrades to no rules",
+      "inputs": {
+        "files": {
+          ".gitignore": "drop.txt\n (mode 000)",
+          "drop.txt": "",
+          "keep.txt": ""
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": ".gitignore",
+            "kind": "file"
+          },
+          {
+            "path": "drop.txt",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": [
+        "the ignore file exists but cannot be opened; the walker applies no rules from it"
+      ]
+    },
+    {
+      "name": "GIT_CONFIG_GLOBAL wins over home xdg and system config",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "from-global-config.txt": "",
+          "from-home-config.txt": "",
+          "from-xdg-config.txt": "",
+          "from-system-config.txt": "",
+          "keep.txt": ""
+        },
+        "config": {
+          "GIT_CONFIG_GLOBAL": "/tmp/cch-audit-1199-JDYwtw/cfg-global.txt",
+          "$HOME/.gitconfig": "/tmp/cch-audit-1199-JDYwtw/cfg-home.txt",
+          "$XDG_CONFIG_HOME/git/config": "/tmp/cch-audit-1199-JDYwtw/cfg-xdg.txt",
+          "GIT_CONFIG_SYSTEM": "/tmp/cch-audit-1199-JDYwtw/cfg-sys.txt"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": "from-home-config.txt",
+            "kind": "file"
+          },
+          {
+            "path": "from-system-config.txt",
+            "kind": "file"
+          },
+          {
+            "path": "from-xdg-config.txt",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "home gitconfig wins over xdg and system config",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "from-home-config.txt": "",
+          "from-xdg-config.txt": "",
+          "from-system-config.txt": "",
+          "keep.txt": ""
+        },
+        "config": {
+          "$HOME/.gitconfig": "/tmp/cch-audit-1199-JDYwtw/cfg-home.txt",
+          "$XDG_CONFIG_HOME/git/config": "/tmp/cch-audit-1199-JDYwtw/cfg-xdg.txt",
+          "GIT_CONFIG_SYSTEM": "/tmp/cch-audit-1199-JDYwtw/cfg-sys.txt"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": "from-system-config.txt",
+            "kind": "file"
+          },
+          {
+            "path": "from-xdg-config.txt",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the system config names the excludes file last",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "from-system-config.txt": "",
+          "keep.txt": ""
+        },
+        "config": {
+          "GIT_CONFIG_SYSTEM": "/tmp/cch-audit-1199-JDYwtw/cfg-sys.txt"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": "from-system-config.txt",
+            "kind": "file"
+          },
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a quoted excludesFile with tilde expands against home",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "from-tilde.txt": "",
+          "keep.txt": ""
+        },
+        "config": {
+          "GIT_CONFIG_GLOBAL": "excludesFile = \"~/my-excludes.txt\" (quoted)"
+        },
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the xdg default ignore file applies without any config",
+      "inputs": {
+        "files": {
+          ".git/HEAD": "ref: refs/heads/main\n",
+          "from-xdg-default.txt": "",
+          "keep.txt": ""
+        },
+        "config": "none names core.excludesFile",
+        "options": {
+          "gitignore": true
+        }
+      },
+      "expected": {
+        "entries": [
+          {
+            "path": "keep.txt",
+            "kind": "file"
+          }
+        ],
+        "truncated": false
+      },
+      "normalizations": []
+    }
+  ]
+}
