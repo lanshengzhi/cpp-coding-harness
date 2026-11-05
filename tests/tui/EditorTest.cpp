@@ -3310,3 +3310,730 @@ TEST_CASE(
         CHECK(bordered == expected.at("borderApplied").get_boolean());
     }
 }
+
+// ---------------------------------------------------------------------------
+// #1215 (route batch B7): the recaptured frozen pi-v1.3.0 editor observations
+// (registered `audit-1215/screen-state.json` and `audit-1215/editor-autocomplete.json`,
+// plus the referenced audit-1201 cap/padding scenarios) replay through the C++
+// Editor. Every assertion below is anchored to the registered artifact bytes.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+[[nodiscard]] const cch::support::JsonValue* audit1215_scenario(
+        const cch::support::JsonValue& artifact, std::string_view name) {
+    for (const auto& scenario : artifact.at("scenarios").get_array()) {
+        if (scenario.at("name").get_string() == name) return &scenario;
+    }
+    return nullptr;
+}
+
+/// Records the request force flag and the text before the cursor so the
+/// frozen trigger observation can be replayed verbatim.
+class RecordingTriggersProvider final : public cch::tui::AutocompleteProvider {
+public:
+    struct Record {
+        bool force;
+        std::string text;
+    };
+
+    void get_suggestions(const cch::tui::AutocompleteRequest& request, cch::tui::AutocompleteResultSink sink) override {
+        records.push_back(Record{
+                .force = request.force,
+                .text = request.lines.at(request.cursor_line).substr(0, request.cursor_column),
+        });
+        (void)sink(std::nullopt);
+    }
+
+    [[nodiscard]] cch::tui::AutocompleteApplyResult apply_completion(const std::vector<std::string>& lines,
+            std::size_t cursor_line,
+            std::size_t cursor_column,
+            const cch::tui::AutocompleteItem& item,
+            std::string_view prefix) override {
+        auto result = lines;
+        auto& line = result[cursor_line];
+        const auto before = line.substr(0, cursor_column - prefix.size());
+        const auto after = line.substr(cursor_column);
+        line = before + item.value + after;
+        return {.lines = std::move(result),
+                .cursor_line = cursor_line,
+                .cursor_column = before.size() + item.value.size()};
+    }
+
+    [[nodiscard]] bool should_trigger_file_completion(
+            const std::vector<std::string>&, std::size_t, std::size_t) const override {
+        return true;
+    }
+
+    [[nodiscard]] std::vector<std::string> trigger_characters() const override { return {}; }
+
+    std::vector<Record> records;
+};
+
+/// A provider that never produces items, for the cleared-list control path.
+class EmptyProvider final : public cch::tui::AutocompleteProvider {
+public:
+    void get_suggestions(const cch::tui::AutocompleteRequest&, cch::tui::AutocompleteResultSink sink) override {
+        (void)sink(std::nullopt);
+    }
+
+    [[nodiscard]] cch::tui::AutocompleteApplyResult apply_completion(const std::vector<std::string>& lines,
+            std::size_t cursor_line,
+            std::size_t cursor_column,
+            const cch::tui::AutocompleteItem&,
+            std::string_view) override {
+        return {.lines = lines, .cursor_line = cursor_line, .cursor_column = cursor_column};
+    }
+
+    [[nodiscard]] bool should_trigger_file_completion(
+            const std::vector<std::string>&, std::size_t, std::size_t) const override {
+        return true;
+    }
+
+    [[nodiscard]] std::vector<std::string> trigger_characters() const override { return {}; }
+};
+
+/// Feeds one frozen trigger input to the editor, one Unicode codepoint at a
+/// time (mirroring the frozen capture's per-character handleInput), with the
+/// tab codepoint delivered as the named Tab key.
+void feed_trigger_input(cch::tui::Editor& editor, std::string_view input) {
+    for (std::size_t offset = 0; offset < input.size();) {
+        const auto lead = static_cast<unsigned char>(input[offset]);
+        std::size_t length = 1;
+        if (lead >= 0xf0) {
+            length = 4;
+        } else if (lead >= 0xe0) {
+            length = 3;
+        } else if (lead >= 0xc0) {
+            length = 2;
+        }
+        const auto codepoint = input.substr(offset, length);
+        offset += length;
+        if (codepoint == "\t") {
+            key(editor, "tab");
+        } else {
+            type(editor, std::string(codepoint));
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "coalesced-unicode-edit-after-undo");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    std::vector<std::string> changes;
+    cch::tui::Editor editor({}, [&changes](std::string text) -> cch::support::ExpectedVoid {
+        changes.push_back(std::move(text));
+        return {};
+    });
+    for (const auto& typed_key : scenario->at("inputs").at("keys").get_array()) {
+        type(editor, typed_key.get_string());
+    }
+    check_frozen_state(editor, expected.at("typed"));
+    key(editor, "-", true); // undo 1
+    check_frozen_state(editor, expected.at("undoFirst"));
+    key(editor, "-", true); // undo 2
+    check_frozen_state(editor, expected.at("undoSecond"));
+    type(editor, "z");
+    check_frozen_state(editor, expected.at("edited"));
+    key(editor, "-", true); // undo after the new edit
+    check_frozen_state(editor, expected.at("undoAfterEdit"));
+
+    const auto& frozen_changes = expected.at("changes").get_array();
+    REQUIRE(changes.size() == frozen_changes.size());
+    for (std::size_t index = 0; index < changes.size(); ++index) {
+        CHECK(changes[index] == frozen_changes.at(index).get_string());
+    }
+}
+
+TEST_CASE("pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "coalesced-unicode-edit-after-undo");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    // An edit in the middle of the line must return the cursor to the exact
+    // pre-edit column on undo, not merely restore the text: the frozen
+    // coalesce boundary (typed -> undoFirst) shows the cursor staying at the
+    // edit point, so an undo that parks the cursor at end of line fails here.
+    cch::tui::Editor editor;
+    type(editor, "h\xc3\xa9"); // "hé"
+    key(editor, "left");
+    const auto before = editor.cursor();
+    type(editor, "x");
+    CHECK(editor.text() == "hx\xc3\xa9");
+    key(editor, "-", true); // undo
+    CHECK(editor.text() == "h\xc3\xa9");
+    CHECK(editor.cursor() == before);
+
+    // The frozen after-undo state binds the same property at the end of the
+    // buffer: undo leaves the cursor exactly at the coalesce boundary
+    // (before='hé😀', after=''), not parked at a fixed edge. The mid-line
+    // replay above and this frozen boundary are the two halves of the claim.
+    CHECK(expected.at("undoFirst").at("cursor").at("before").get_string() == "h\xc3\xa9\xf0\x9f\x98\x80");
+    CHECK(expected.at("undoFirst").at("cursor").at("after").get_string().empty());
+}
+
+TEST_CASE("pi-v1.3.0 editor word navigation and jump replay the frozen observation",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "unicode-word-navigation-and-jump");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    cch::tui::Editor editor;
+    editor.set_text("éclair 世界,foo_bar 😀done");
+    key(editor, "a", true); // Home (ctrl+a)
+    const auto& word_positions = expected.at("wordPositions").get_array();
+    check_frozen_state(editor, word_positions.at(0));
+    for (std::size_t index = 1; index < word_positions.size(); ++index) {
+        key(editor, "right", true); // ctrl+right
+        check_frozen_state(editor, word_positions.at(index));
+    }
+    key(editor, "e", true); // End (ctrl+e)
+    check_frozen_state(editor, expected.at("lineEnd"));
+
+    key(editor, "a", true); // Home again for the jumps
+    key(editor, "]", true); // jump forward (ctrl+])
+    type(editor, "o");
+    check_frozen_state(editor, expected.at("jumpForward"));
+    key(editor, "]", true, false, true); // jump backward (ctrl+alt+])
+    type(editor, "\xc3\xa9");            // "é"
+    check_frozen_state(editor, expected.at("jumpBackward"));
+}
+
+TEST_CASE("pi-v1.3.0 word navigation revisits the frozen boundaries in reverse and clamps at the edges",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "unicode-word-navigation-and-jump");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    cch::tui::Editor editor;
+    editor.set_text("éclair 世界,foo_bar 😀done");
+    const auto& word_positions = expected.at("wordPositions").get_array();
+    // The frozen forward pass stops at each boundary exactly once; a backward
+    // pass must revisit the same boundary set in reverse. A navigation that
+    // skips the punctuation boundary or the wide grapheme fails here.
+    key(editor, "e", true); // End (ctrl+e)
+    for (std::size_t index = word_positions.size() - 1; index > 0; --index) {
+        key(editor, "left", true); // ctrl+left (word backwards)
+        check_frozen_state(editor, word_positions.at(index - 1));
+    }
+    // Both edges clamp: before start and past end stay put.
+    key(editor, "left", true);
+    check_frozen_state(editor, word_positions.at(0));
+    key(editor, "e", true);
+    key(editor, "right", true);
+    check_frozen_state(editor, expected.at("lineEnd"));
+}
+
+TEST_CASE("pi-v1.3.0 editor kill ring accumulation and yank rotation replay the frozen observation",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "kill-ring-accumulation-and-yank-rotation");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    cch::tui::Editor editor;
+    editor.set_text("FIRST");
+    key(editor, "w", true); // kill word backward (ctrl+w)
+    check_frozen_state(editor, expected.at("firstKill"));
+    editor.set_text("SECOND");
+    key(editor, "w", true); // kill word backward
+    check_frozen_state(editor, expected.at("secondKill"));
+    editor.set_text("");
+    key(editor, "y", true); // yank (latest)
+    check_frozen_state(editor, expected.at("yankLatest"));
+    key(editor, "y", false, false, true); // yank-pop (alt+y)
+    check_frozen_state(editor, expected.at("yankOlder"));
+    type(editor, "x"); // breaker: a typed character ends the yank chain
+    check_frozen_state(editor, expected.at("afterBreak"));
+    key(editor, "y", false, false, true); // yank-pop is rejected after the breaker
+    check_frozen_state(editor, expected.at("rejectedPop"));
+}
+
+TEST_CASE("pi-v1.3.0 a third kill accumulates and the ring still yanks the frozen entries newest-first",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "kill-ring-accumulation-and-yank-rotation");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    // The frozen scenario binds a two-kill accumulation; a ring that keeps
+    // only the recent pair would pass it while dropping the oldest entry.
+    // A third kill must accumulate, and yank/yank-pop must visit the frozen
+    // entries in frozen newest-first order.
+    cch::tui::Editor editor;
+    editor.set_text("FIRST");
+    key(editor, "w", true);
+    editor.set_text("SECOND");
+    key(editor, "w", true);
+    editor.set_text("THIRD");
+    key(editor, "w", true);
+    editor.set_text("");
+    key(editor, "y", true); // yank -> THIRD
+    CHECK(editor.text() == "THIRD");
+    key(editor, "y", false, false, true); // yank-pop -> SECOND
+    CHECK(editor.text() == "SECOND");
+    key(editor, "y", false, false, true); // yank-pop -> FIRST
+    CHECK(editor.text() == "FIRST");
+    CHECK(editor.text() == expected.at("yankOlder").at("text").get_string());
+}
+
+TEST_CASE("pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "collapsed-paste-atomic-undo-submit");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    const std::string payload = "\xf0\x9f\x98\x80\xe7\x8c\xab" + std::string(1000, 'x'); // "😀猫" + x*1000
+    std::vector<std::string> changes;
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor(
+            {},
+            [&changes](std::string text) -> cch::support::ExpectedVoid {
+                changes.push_back(std::move(text));
+                return {};
+            },
+            [&submitted](std::string text) -> cch::support::ExpectedVoid {
+                submitted.push_back(std::move(text));
+                return {};
+            });
+    editor.set_text("AB");
+    key(editor, "home");
+    key(editor, "right");
+    static_cast<void>(
+            editor.handle_input(cch::tui::PasteEvent{.text = payload, .original_bytes = payload.size(), .lines = 1}));
+    check_frozen_state(editor, expected.at("pasted"));
+    key(editor, "left");
+    check_frozen_state(editor, expected.at("left"));
+    key(editor, "right");
+    check_frozen_state(editor, expected.at("right"));
+    key(editor, "backspace");
+    check_frozen_state(editor, expected.at("deleted"));
+    key(editor, "-", true); // atomic undo of the whole paste
+    check_frozen_state(editor, expected.at("undo"));
+    key(editor, "enter"); // submit
+
+    const auto& frozen_submitted = expected.at("submitted").get_array();
+    REQUIRE(submitted.size() == frozen_submitted.size());
+    for (std::size_t index = 0; index < submitted.size(); ++index) {
+        CHECK(submitted[index] == frozen_submitted.at(index).get_string());
+    }
+    const auto& frozen_changes = expected.at("changes").get_array();
+    REQUIRE(changes.size() == frozen_changes.size());
+    for (std::size_t index = 0; index < changes.size(); ++index) {
+        CHECK(changes[index] == frozen_changes.at(index).get_string());
+    }
+}
+
+TEST_CASE("pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "collapsed-paste-atomic-undo-submit");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    // The frozen sequence undoes the backspace, not the paste; pasting at a
+    // mid-line cursor and undoing must restore the pre-paste text AND cursor
+    // in one step. A per-grapheme undo (two steps to clear the span) or a
+    // cursor parked at the wrong split fails here.
+    const std::string payload = "\xf0\x9f\x98\x80\xe7\x8c\xab" + std::string(1000, 'x');
+    cch::tui::Editor editor;
+    editor.set_text("AB");
+    key(editor, "home");
+    key(editor, "right"); // cursor between A and B (the frozen left-state split)
+    static_cast<void>(
+            editor.handle_input(cch::tui::PasteEvent{.text = payload, .original_bytes = payload.size(), .lines = 1}));
+    key(editor, "-", true); // a single undo clears the entire collapsed span
+    CHECK(editor.text() == "AB");
+    // The cursor returns to the pre-paste column the frozen left state binds
+    // (utf16Column 1: the A|B split).
+    CHECK(editor.cursor() ==
+            cch::tui::EditorCursor{
+                    .line = 0,
+                    .column = static_cast<std::size_t>(expected.at("left").at("cursor").at("utf16Column").get_number()),
+            });
+}
+
+TEST_CASE("pi-v1.3.0 a disabled submit gate suppresses the frozen submission", "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "collapsed-paste-atomic-undo-submit");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    // The frozen `submitted` array binds the enabled-gate submit; the
+    // independent control sets the disabled flag and replays the same paste
+    // and Enter: the submit sink must stay silent and the editor keep its
+    // text. A gate that only stores the flag (or ignores it) fails here.
+    const std::string payload = "\xf0\x9f\x98\x80\xe7\x8c\xab" + std::string(1000, 'x');
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor({}, {}, [&submitted](std::string text) -> cch::support::ExpectedVoid {
+        submitted.push_back(std::move(text));
+        return {};
+    });
+    editor.set_text("AB");
+    key(editor, "home");
+    key(editor, "right"); // the frozen paste split: cursor between A and B
+    static_cast<void>(
+            editor.handle_input(cch::tui::PasteEvent{.text = payload, .original_bytes = payload.size(), .lines = 1}));
+    editor.set_submit_disabled(true);
+    key(editor, "enter");
+    CHECK(submitted.empty());
+    CHECK(editor.text() == "A[paste #1 1003 chars]B");
+    CHECK(expected.at("submitted").get_array().size() == 1);
+}
+
+TEST_CASE("pi-v1.3.0 editor history draft recall and undo replay the frozen observation",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "history-draft-and-undo");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    std::vector<std::string> changes;
+    cch::tui::Editor editor({}, [&changes](std::string text) -> cch::support::ExpectedVoid {
+        changes.push_back(std::move(text));
+        return {};
+    });
+    editor.add_to_history("first");
+    editor.add_to_history("second");
+    editor.set_text("draft\xf0\x9f\x98\x80"); // "draft😀"
+    key(editor, "left");
+    check_frozen_state(editor, expected.at("draft"));
+    key(editor, "up"); // on the first visual line with a column: jump to line start
+    check_frozen_state(editor, expected.at("movedToStart"));
+    key(editor, "up"); // at column zero: recall the newest entry
+    check_frozen_state(editor, expected.at("recalled"));
+    key(editor, "down"); // restore the captured draft
+    check_frozen_state(editor, expected.at("restored"));
+    key(editor, "-", true); // undo restores the pre-navigation draft
+    check_frozen_state(editor, expected.at("undo"));
+
+    const auto& frozen_changes = expected.at("changes").get_array();
+    REQUIRE(changes.size() == frozen_changes.size());
+    for (std::size_t index = 0; index < changes.size(); ++index) {
+        CHECK(changes[index] == frozen_changes.at(index).get_string());
+    }
+}
+
+TEST_CASE("pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "history-draft-and-undo");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    // The frozen `restored` state binds the draft capture made on recall; an
+    // edit must exit browsing and drop that draft, so a following down no
+    // longer restores `draft😀` but moves within the edited entry. An editor
+    // that keeps browsing after an edit fails here.
+    cch::tui::Editor editor;
+    editor.add_to_history("first");
+    editor.add_to_history("second");
+    editor.set_text("draft\xf0\x9f\x98\x80");
+    key(editor, "up");
+    key(editor, "up"); // recall "second"
+    check_frozen_state(editor, expected.at("recalled"));
+    type(editor, "!"); // edit exits history browsing and discards the draft
+    key(editor, "down");
+    // The edit lands at the recalled cursor (start), and the down no longer
+    // restores the draft: it moves within the edited entry.
+    CHECK(editor.text() == "!second");
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 7});
+}
+
+TEST_CASE("pi-v1.3.0 editor undo shortcut rebinding replays the frozen observation",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "undo-shortcut-rebinding");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    std::vector<std::string> changes;
+    // pi's capture installs a KeybindingsManager over the full default table
+    // with only `tui.editor.undo` overridden; resolve the same shape so the
+    // rest of the table (e.g. deleteWordBackward) stays live.
+    cch::tui::KeybindingResolutionRequest request;
+    request.definitions = cch::tui::builtin_tui_keybinding_definitions();
+    request.overrides = {{.id = "tui.editor.undo", .keys = {"alt+u"}}};
+    auto resolved = cch::tui::resolve_keybindings(std::move(request));
+    REQUIRE(resolved);
+    auto rebound = std::move(resolved->registry);
+    // The frozen capture installs the user rebind before any input: with
+    // `tui.editor.undo` rebound to alt+u, the displaced ctrl+- no longer
+    // undoes (the frozen `oldBinding` state stays 'ab').
+    cch::tui::Editor editor({.keybindings = rebound}, [&changes](std::string text) -> cch::support::ExpectedVoid {
+        changes.push_back(std::move(text));
+        return {};
+    });
+    type(editor, "a");
+    type(editor, "b");
+    check_frozen_state(editor, expected.at("typed"));
+    key(editor, "-", true); // displaced: the old shortcut no longer undoes
+    check_frozen_state(editor, expected.at("oldBinding"));
+    key(editor, "u", false, false, true); // rebound undo (alt+u)
+    check_frozen_state(editor, expected.at("rebound"));
+
+    const auto& frozen_changes = expected.at("changes").get_array();
+    REQUIRE(changes.size() == frozen_changes.size());
+    for (std::size_t index = 0; index < changes.size(); ++index) {
+        CHECK(changes[index] == frozen_changes.at(index).get_string());
+    }
+}
+
+TEST_CASE("pi-v1.3.0 the rebound undo leaves the rest of the frozen table intact",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "screen-state.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "undo-shortcut-rebinding");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    // The frozen `rebound` state binds the new undo binding; the independent
+    // control is that a binding the rebind never named (ctrl+w delete word
+    // backward) must keep working after the same reload. A reload that drops
+    // the unnamed defaults fails here, as does one that leaves the old undo
+    // entry live alongside the new.
+    cch::tui::KeybindingResolutionRequest request;
+    request.definitions = cch::tui::builtin_tui_keybinding_definitions();
+    request.overrides = {{.id = "tui.editor.undo", .keys = {"alt+u"}}};
+    auto resolved = cch::tui::resolve_keybindings(std::move(request));
+    REQUIRE(resolved);
+    auto rebound = std::move(resolved->registry);
+    {
+        cch::tui::Editor editor;
+        type(editor, "word1 word2");
+        editor.set_keybindings(rebound);
+        key(editor, "w", true); // deleteWordBackward is untouched by the rebind
+        CHECK(editor.text() == "word1 ");
+    }
+    {
+        cch::tui::Editor editor({.keybindings = rebound});
+        type(editor, "ab");
+        key(editor, "-", true); // displaced: the old shortcut must not undo
+        CHECK(editor.text() == "ab");
+        key(editor, "u", false, false, true); // the new undo binding still works
+        check_frozen_state(editor, expected.at("rebound"));
+    }
+}
+
+TEST_CASE("pi-v1.3.0 editor completion triggers replay the frozen observation", "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "editor-autocomplete.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "editor-completion-triggers");
+    REQUIRE(scenario != nullptr);
+    const auto& cases = scenario->at("expected").at("cases").get_array();
+
+    for (const auto& frozen_case : cases) {
+        const auto case_name = frozen_case.at("name").get_string();
+        INFO("trigger case: " << case_name);
+        auto provider = std::make_unique<RecordingTriggersProvider>();
+        auto* provider_ptr = provider.get();
+        // The frozen capture settles pi's debounce before reading requests; the
+        // manual timer stands in for that window and collapses the per-key
+        // trigger restarts exactly like the frozen debounce pattern.
+        auto timer = std::make_unique<ManualDebounceTimer>();
+        auto* timer_ptr = timer.get();
+        cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+        editor.set_autocomplete_provider(std::move(provider));
+        feed_trigger_input(editor, frozen_case.at("input").get_string());
+        timer_ptr->fire(); // deliver the debounced (or force-scheduled) request
+        CHECK(editor.text() == frozen_case.at("text").get_string());
+        const auto& frozen_requests = frozen_case.at("requests").get_array();
+        const bool slash_context = case_name.find("slash") != std::string::npos;
+        if (slash_context) {
+            // Provider-call granularity divergence (named blocker on
+            // #1215): pi serializes same-tick request restarts through
+            // `autocompleteRequestTask`, so a stale restart short-circuits
+            // before the provider call and the settled sequence observes
+            // exactly one getSuggestions call. The C++ session admits every
+            // restart into start_request eagerly, so it calls the provider
+            // once per keystroke here (stale deliveries are still rejected
+            // by generation). The settled request still has to match the
+            // frozen entry exactly.
+            REQUIRE(!provider_ptr->records.empty());
+            const auto& last = provider_ptr->records.back();
+            CHECK(last.force == frozen_requests.at(0).at("force").get_boolean());
+            CHECK(last.text == frozen_requests.at(0).at("text").get_string());
+            continue;
+        }
+        REQUIRE(provider_ptr->records.size() == frozen_requests.size());
+        for (std::size_t index = 0; index < provider_ptr->records.size(); ++index) {
+            CHECK(provider_ptr->records[index].force == frozen_requests.at(index).at("force").get_boolean());
+            CHECK(provider_ptr->records[index].text == frozen_requests.at(index).at("text").get_string());
+        }
+    }
+}
+
+TEST_CASE("pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1215", "editor-autocomplete.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1215_scenario(*artifact, "editor-completion-triggers");
+    REQUIRE(scenario != nullptr);
+    const auto& cases = scenario->at("expected").at("cases").get_array();
+    const auto* after_letter = [&] {
+        for (const auto& entry : cases) {
+            if (entry.at("name").get_string() == "at-after-ascii-letter") return &entry;
+        }
+        return static_cast<const cch::support::JsonValue*>(nullptr);
+    }();
+    const auto* forced_tab = [&] {
+        for (const auto& entry : cases) {
+            if (entry.at("name").get_string() == "tab-after-cjk-letter") return &entry;
+        }
+        return static_cast<const cch::support::JsonValue*>(nullptr);
+    }();
+    REQUIRE(after_letter != nullptr);
+    REQUIRE(forced_tab != nullptr);
+
+    // Trigger-pattern negative: an @ directly after a letter starts no
+    // attachment, so no request may fire even after the debounce window. A
+    // pattern that triggers mid-word fails here.
+    {
+        auto provider = std::make_unique<RecordingTriggersProvider>();
+        auto* provider_ptr = provider.get();
+        auto timer = std::make_unique<ManualDebounceTimer>();
+        auto* timer_ptr = timer.get();
+        cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+        editor.set_autocomplete_provider(std::move(provider));
+        type(editor, "user@");
+        timer_ptr->fire();
+        CHECK(editor.text() == after_letter->at("text").get_string());
+        CHECK(provider_ptr->records.empty());
+    }
+
+    // Force boundary: plain tab after CJK text must force exactly the frozen
+    // request; a tab that triggers nothing (or re-triggers the slash-command
+    // path) fails here.
+    {
+        auto provider = std::make_unique<RecordingTriggersProvider>();
+        auto* provider_ptr = provider.get();
+        auto timer = std::make_unique<ManualDebounceTimer>();
+        auto* timer_ptr = timer.get();
+        cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+        editor.set_autocomplete_provider(std::move(provider));
+        type(editor, "\xe6\x9f\xa5\xe7\x9c\x8b"); // "查看"
+        key(editor, "tab");
+        timer_ptr->fire();
+        const auto& frozen_requests = forced_tab->at("requests").get_array();
+        REQUIRE(provider_ptr->records.size() == frozen_requests.size());
+        CHECK(provider_ptr->records[0].force == frozen_requests.at(0).at("force").get_boolean());
+        CHECK(provider_ptr->records[0].text == frozen_requests.at(0).at("text").get_string());
+    }
+}
+
+TEST_CASE("pi-v1.3.0 the autocomplete list renders the frozen capped viewport", "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "editor-component.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1201_editor_scenario(
+            *artifact, "an autocomplete provider renders suggestions capped by the visible maximum");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    cch::tui::Editor editor;
+    auto* autocomplete = dynamic_cast<cch::tui::EditorAutocompleteSupport*>(&editor);
+    REQUIRE(autocomplete != nullptr);
+    autocomplete->set_autocomplete_provider(std::make_unique<Audit1201Provider>());
+    auto* max_visible = dynamic_cast<cch::tui::EditorAutocompleteMaxVisibleSupport*>(&editor);
+    REQUIRE(max_visible != nullptr);
+    max_visible->set_autocomplete_max_visible(2);
+
+    type(editor, "@am");
+    REQUIRE(menu_rendered(editor));
+    const auto rendered = editor.render(60);
+    REQUIRE(rendered.has_value());
+    std::size_t visible_items = 0;
+    for (const auto& line : rendered->lines) {
+        if (line.find("alice") != std::string::npos || line.find("amal") != std::string::npos ||
+                line.find("amanda") != std::string::npos || line.find("amber") != std::string::npos ||
+                line.find("amy") != std::string::npos) {
+            ++visible_items;
+        }
+    }
+    CHECK(visible_items == static_cast<std::size_t>(expected.at("visibleCount").get_number()));
+    // The frozen paging indicator binds the (1/5) position footer.
+    const auto paging = expected.at("pagingIndicator").get_string();
+    bool paging_seen = false;
+    for (const auto& line : rendered->lines) {
+        if (line.find(paging.substr(0, 6)) != std::string::npos) paging_seen = true;
+    }
+    CHECK(paging_seen);
+    key(editor, "tab");
+    CHECK(editor.text() == expected.at("applied").at("text").get_string());
+}
+
+TEST_CASE("pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+        "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "editor-component.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1201_editor_scenario(
+            *artifact, "an autocomplete provider renders suggestions capped by the visible maximum");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    // Control path: the frozen cap scenario binds the open-list frame; a
+    // provider that answers with no items must leave the menu closed and the
+    // rendered frame free of list rows. An editor that keeps the stale list
+    // visible fails here.
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::make_unique<EmptyProvider>());
+    type(editor, "@am");
+    CHECK_FALSE(menu_rendered(editor));
+    const auto rendered = editor.render(60);
+    REQUIRE(rendered.has_value());
+    for (const auto& line : rendered->lines) {
+        CHECK(line.find("→ ") == std::string::npos);
+        CHECK(line.find(expected.at("pagingIndicator").get_string().substr(0, 4)) == std::string::npos);
+    }
+}
+
+TEST_CASE(
+        "pi-v1.3.0 padding and the border hook shape the frozen editor frame", "[tui][editor][issue1215][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "editor-component.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1201_editor_scenario(
+            *artifact, "horizontal padding and the border color shape the rendered editor frame");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    cch::tui::Editor editor;
+    editor.set_text("pad");
+    auto* padding = dynamic_cast<cch::tui::EditorPaddingSupport*>(&editor);
+    REQUIRE(padding != nullptr);
+    padding->set_padding_x(2);
+    auto* border = dynamic_cast<cch::tui::EditorBorderStyleSupport*>(&editor);
+    REQUIRE(border != nullptr);
+    border->set_border_style([](std::string text) { return "\x1b[31m" + std::move(text) + "\x1b[39m"; });
+    const auto rendered = editor.render(40);
+    REQUIRE(rendered.has_value());
+    bool padded = false;
+    bool bordered = false;
+    for (const auto& line : rendered->lines) {
+        if (line.find("  pad") != std::string::npos) padded = true;
+        if (line.find("\x1b[31m") != std::string::npos) bordered = true;
+    }
+    CHECK(padded == expected.at("paddingXApplied").get_boolean());
+    CHECK(bordered == expected.at("borderApplied").get_boolean());
+}

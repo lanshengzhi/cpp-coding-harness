@@ -5467,7 +5467,7 @@
    "evidence": {
     "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
     "scenario": "standalone-editor-fake-cursor-is-strippable",
-    "result": "frozen Editor.render wraps the drawn cursor in zero-width APC markers and the TUI draws reverse video or omits a focused fake cursor when showHardwareCursor is enabled; C++ EditorLayout inserts raw ESC[7m/ESC[27m and has no marker contract",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1215 (route batch B7), not duplicated",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
@@ -5605,14 +5605,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "coalesced-unicode-edit-after-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -5636,7 +5635,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -5646,7 +5645,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "coalesced-unicode-edit-after-undo"
   },
   {
    "id": "Editor.tui",
@@ -5712,14 +5711,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "standalone-editor-fake-cursor-is-strippable",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
+    "scenario": "standalone-editor-fake-cursor-is-strippable",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -5743,7 +5741,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -5753,7 +5751,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "standalone-editor-fake-cursor-is-strippable"
   },
   {
    "id": "Editor.paddingX",
@@ -5769,14 +5767,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1212/mouse-components.json",
+    "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1212; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -5800,7 +5797,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -5810,7 +5807,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-click-bounds-wrapped-segments-and-wide-graphemes"
   },
   {
    "id": "Editor.autocompleteTriggerPattern",
@@ -5826,14 +5823,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -5857,7 +5853,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -5867,7 +5863,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.autocompleteDebouncePattern",
@@ -5883,14 +5879,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -5914,7 +5909,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -5924,7 +5919,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.autocompleteList",
@@ -5940,14 +5935,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -5971,7 +5965,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -5981,7 +5975,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "Editor.autocompleteState",
@@ -5997,14 +5991,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6028,7 +6021,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6038,7 +6031,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.autocompletePrefix",
@@ -6054,14 +6047,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6085,7 +6077,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6095,7 +6087,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.autocompleteMaxVisible",
@@ -6111,14 +6103,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6142,7 +6133,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6152,7 +6143,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "Editor.autocompleteAbort",
@@ -6168,14 +6159,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6199,7 +6189,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6209,7 +6199,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.autocompleteDebounceTimer",
@@ -6225,14 +6215,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6256,7 +6245,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6266,7 +6255,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.autocompleteRequestTask",
@@ -6282,14 +6271,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6313,7 +6301,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6323,7 +6311,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.autocompleteStartToken",
@@ -6339,14 +6327,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6370,7 +6357,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6380,7 +6367,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.autocompleteRequestId",
@@ -6396,14 +6383,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6427,7 +6413,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6437,7 +6423,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.pasteCounter",
@@ -6453,14 +6439,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "collapsed-paste-atomic-undo-submit",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "collapsed-paste-atomic-undo-submit",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6484,7 +6469,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6494,7 +6479,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "collapsed-paste-atomic-undo-submit"
   },
   {
    "id": "Editor.isInPaste",
@@ -6510,14 +6495,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "collapsed-paste-atomic-undo-submit",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "collapsed-paste-atomic-undo-submit",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6541,7 +6525,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6551,7 +6535,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "collapsed-paste-atomic-undo-submit"
   },
   {
    "id": "Editor.historyIndex",
@@ -6567,14 +6551,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "history-draft-and-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "history-draft-and-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6598,7 +6581,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6608,7 +6591,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "history-draft-and-undo"
   },
   {
    "id": "Editor.lastAction",
@@ -6624,14 +6607,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "coalesced-unicode-edit-after-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6655,7 +6637,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6665,7 +6647,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "coalesced-unicode-edit-after-undo"
   },
   {
    "id": "Editor.onSubmit",
@@ -6681,14 +6663,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "collapsed-paste-atomic-undo-submit",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "collapsed-paste-atomic-undo-submit",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6712,7 +6693,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6722,7 +6703,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "collapsed-paste-atomic-undo-submit"
   },
   {
    "id": "Editor.onChange",
@@ -6738,14 +6719,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "coalesced-unicode-edit-after-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6769,7 +6749,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6779,7 +6759,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "coalesced-unicode-edit-after-undo"
   },
   {
    "id": "Editor.disableSubmit",
@@ -6795,14 +6775,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "collapsed-paste-atomic-undo-submit",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "collapsed-paste-atomic-undo-submit",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6826,7 +6805,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6836,7 +6815,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "collapsed-paste-atomic-undo-submit"
   },
   {
    "id": "Editor.constructor",
@@ -6852,14 +6831,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "standalone-editor-fake-cursor-is-strippable",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
+    "scenario": "standalone-editor-fake-cursor-is-strippable",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6883,7 +6861,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6893,7 +6871,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "standalone-editor-fake-cursor-is-strippable"
   },
   {
    "id": "Editor.getPaddingX",
@@ -6909,14 +6887,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1212/mouse-components.json",
+    "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1212; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6940,7 +6917,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -6950,7 +6927,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-click-bounds-wrapped-segments-and-wide-graphemes"
   },
   {
    "id": "Editor.setPaddingX",
@@ -6966,14 +6943,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1212/mouse-components.json",
+    "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1212; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -6997,7 +6973,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7007,7 +6983,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-click-bounds-wrapped-segments-and-wide-graphemes"
   },
   {
    "id": "Editor.getAutocompleteMaxVisible",
@@ -7023,14 +6999,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7054,7 +7029,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7064,7 +7039,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "Editor.setAutocompleteMaxVisible",
@@ -7080,14 +7055,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7111,7 +7085,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7121,7 +7095,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "Editor.setAutocompleteProvider",
@@ -7137,14 +7111,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7168,7 +7141,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7178,7 +7151,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.isEditorEmpty",
@@ -7194,14 +7167,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "history-draft-and-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "history-draft-and-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7225,7 +7197,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7235,7 +7207,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "history-draft-and-undo"
   },
   {
    "id": "Editor.isOnFirstVisualLine",
@@ -7251,14 +7223,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "history-draft-and-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "history-draft-and-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7282,7 +7253,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7292,7 +7263,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "history-draft-and-undo"
   },
   {
    "id": "Editor.isOnLastVisualLine",
@@ -7308,14 +7279,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "history-draft-and-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "history-draft-and-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7339,7 +7309,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7349,7 +7319,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "history-draft-and-undo"
   },
   {
    "id": "Editor.navigateHistory",
@@ -7365,14 +7335,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "history-draft-and-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "history-draft-and-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7396,7 +7365,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7406,7 +7375,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "history-draft-and-undo"
   },
   {
    "id": "Editor.exitHistoryBrowsing",
@@ -7422,14 +7391,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "history-draft-and-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "history-draft-and-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7453,7 +7421,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7463,7 +7431,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "history-draft-and-undo"
   },
   {
    "id": "Editor.invalidate",
@@ -7536,14 +7504,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "standalone-editor-fake-cursor-is-strippable",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
+    "scenario": "standalone-editor-fake-cursor-is-strippable",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7567,7 +7534,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7577,7 +7544,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "standalone-editor-fake-cursor-is-strippable"
   },
   {
    "id": "Editor.renderBottomBorder",
@@ -7593,14 +7560,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "standalone-editor-fake-cursor-is-strippable",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
+    "scenario": "standalone-editor-fake-cursor-is-strippable",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7624,7 +7590,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7634,7 +7600,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "standalone-editor-fake-cursor-is-strippable"
   },
   {
    "id": "Editor.render",
@@ -7654,7 +7620,7 @@
    "evidence": {
     "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
     "scenario": "standalone-editor-fake-cursor-is-strippable",
-    "result": "frozen Editor.render wraps the drawn cursor in zero-width APC markers and the TUI draws reverse video or omits a focused fake cursor when showHardwareCursor is enabled; C++ EditorLayout inserts raw ESC[7m/ESC[27m and has no marker contract",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1215 (route batch B7), not duplicated",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
@@ -7707,14 +7673,17 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": [
+    "editor-alternate-screen-click-positions-cursor",
+    "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+    "editor-drag-selects-and-copies-instead-of-moving-the-cursor"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1212/mouse-components.json",
+    "scenario": "editor-alternate-screen-click-positions-cursor",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1212; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7738,7 +7707,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7748,7 +7717,11 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": [
+    "editor-alternate-screen-click-positions-cursor",
+    "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+    "editor-drag-selects-and-copies-instead-of-moving-the-cursor"
+   ]
   },
   {
    "id": "Editor.handleInput",
@@ -7764,14 +7737,16 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": [
+    "coalesced-unicode-edit-after-undo",
+    "undo-shortcut-rebinding"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7795,7 +7770,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7805,7 +7780,10 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": [
+    "coalesced-unicode-edit-after-undo",
+    "undo-shortcut-rebinding"
+   ]
   },
   {
    "id": "Editor.layoutText",
@@ -7821,14 +7799,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1212/mouse-components.json",
+    "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1212; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7852,7 +7829,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7862,7 +7839,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-click-bounds-wrapped-segments-and-wide-graphemes"
   },
   {
    "id": "Editor.getText",
@@ -7878,14 +7855,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "coalesced-unicode-edit-after-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7909,7 +7885,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7919,7 +7895,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "coalesced-unicode-edit-after-undo"
   },
   {
    "id": "Editor.expandPasteMarkers",
@@ -7935,14 +7911,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "collapsed-paste-atomic-undo-submit",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "collapsed-paste-atomic-undo-submit",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -7966,7 +7941,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -7976,7 +7951,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "collapsed-paste-atomic-undo-submit"
   },
   {
    "id": "Editor.getLines",
@@ -7992,14 +7967,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "coalesced-unicode-edit-after-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8023,7 +7997,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8033,7 +8007,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "coalesced-unicode-edit-after-undo"
   },
   {
    "id": "Editor.getCursor",
@@ -8049,14 +8023,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "coalesced-unicode-edit-after-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8080,7 +8053,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8090,7 +8063,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "coalesced-unicode-edit-after-undo"
   },
   {
    "id": "Editor.setText",
@@ -8106,14 +8079,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "unicode-word-navigation-and-jump",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "unicode-word-navigation-and-jump",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8137,7 +8109,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8147,7 +8119,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "unicode-word-navigation-and-jump"
   },
   {
    "id": "Editor.handlePaste",
@@ -8163,14 +8135,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "collapsed-paste-atomic-undo-submit",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "collapsed-paste-atomic-undo-submit",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8194,7 +8165,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8204,7 +8175,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "collapsed-paste-atomic-undo-submit"
   },
   {
    "id": "Editor.addNewLine",
@@ -8334,14 +8305,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "collapsed-paste-atomic-undo-submit",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "collapsed-paste-atomic-undo-submit",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8365,7 +8335,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8375,7 +8345,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "collapsed-paste-atomic-undo-submit"
   },
   {
    "id": "Editor.handleBackspace",
@@ -8391,14 +8361,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "collapsed-paste-atomic-undo-submit",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "collapsed-paste-atomic-undo-submit",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8422,7 +8391,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8432,7 +8401,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "collapsed-paste-atomic-undo-submit"
   },
   {
    "id": "Editor.moveToLineStart",
@@ -8448,14 +8417,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "unicode-word-navigation-and-jump",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "unicode-word-navigation-and-jump",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8479,7 +8447,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8489,7 +8457,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "unicode-word-navigation-and-jump"
   },
   {
    "id": "Editor.moveToLineEnd",
@@ -8505,14 +8473,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "unicode-word-navigation-and-jump",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "unicode-word-navigation-and-jump",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8536,7 +8503,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8546,7 +8513,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "unicode-word-navigation-and-jump"
   },
   {
    "id": "Editor.deleteToStartOfLine",
@@ -8676,14 +8643,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "kill-ring-accumulation-and-yank-rotation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "kill-ring-accumulation-and-yank-rotation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8707,7 +8673,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8717,7 +8683,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "kill-ring-accumulation-and-yank-rotation"
   },
   {
    "id": "Editor.deleteWordForward",
@@ -8847,14 +8813,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "collapsed-paste-atomic-undo-submit",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "collapsed-paste-atomic-undo-submit",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8878,7 +8843,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8888,7 +8853,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "collapsed-paste-atomic-undo-submit"
   },
   {
    "id": "Editor.moveWordBackwards",
@@ -8904,14 +8869,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "unicode-word-navigation-and-jump",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "unicode-word-navigation-and-jump",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8935,7 +8899,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -8945,7 +8909,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "unicode-word-navigation-and-jump"
   },
   {
    "id": "Editor.pushUndoSnapshot",
@@ -8961,14 +8925,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "coalesced-unicode-edit-after-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -8992,7 +8955,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9002,7 +8965,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "coalesced-unicode-edit-after-undo"
   },
   {
    "id": "Editor.undo",
@@ -9018,14 +8981,16 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": [
+    "coalesced-unicode-edit-after-undo",
+    "undo-shortcut-rebinding"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9049,7 +9014,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9059,7 +9024,10 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": [
+    "coalesced-unicode-edit-after-undo",
+    "undo-shortcut-rebinding"
+   ]
   },
   {
    "id": "Editor.moveWordForwards",
@@ -9075,14 +9043,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "unicode-word-navigation-and-jump",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "unicode-word-navigation-and-jump",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9106,7 +9073,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9116,7 +9083,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "unicode-word-navigation-and-jump"
   },
   {
    "id": "Editor.isInSlashCommandContext",
@@ -9189,14 +9156,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9220,7 +9186,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9230,7 +9196,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "Editor.tryTriggerAutocomplete",
@@ -9246,14 +9212,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9277,7 +9242,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9287,7 +9252,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.handleTabCompletion",
@@ -9303,14 +9268,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9334,7 +9298,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9344,7 +9308,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.handleSlashCommandCompletion",
@@ -9417,14 +9381,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9448,7 +9411,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9458,7 +9421,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.requestAutocomplete",
@@ -9474,14 +9437,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9505,7 +9467,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9515,7 +9477,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.startAutocompleteRequest",
@@ -9531,14 +9493,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9562,7 +9523,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9572,7 +9533,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.setAutocompleteTriggerCharacters",
@@ -9588,14 +9549,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9619,7 +9579,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9629,7 +9589,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.getAutocompleteDebounceMs",
@@ -9645,14 +9605,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9676,7 +9635,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9686,7 +9645,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.runAutocompleteRequest",
@@ -9702,14 +9661,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9733,7 +9691,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9743,7 +9701,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.isAutocompleteRequestCurrent",
@@ -9759,14 +9717,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9790,7 +9747,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9800,7 +9757,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.applyAutocompleteSuggestions",
@@ -9816,14 +9773,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9847,7 +9803,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9857,7 +9813,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "Editor.cancelAutocompleteRequest",
@@ -9873,14 +9829,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9904,7 +9859,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9914,7 +9869,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.clearAutocompleteUi",
@@ -9930,14 +9885,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -9961,7 +9915,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -9971,7 +9925,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "Editor.cancelAutocomplete",
@@ -9987,14 +9941,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-completion-triggers",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+    "scenario": "editor-completion-triggers",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -10018,7 +9971,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -10028,7 +9981,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-completion-triggers"
   },
   {
    "id": "Editor.isShowingAutocomplete",
@@ -10044,14 +9997,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -10075,7 +10027,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -10085,7 +10037,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "Editor.updateAutocomplete",
@@ -10101,14 +10053,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -10132,7 +10083,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -10142,7 +10093,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "EditorOptions",
@@ -10158,14 +10109,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -10193,7 +10143,7 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -10203,7 +10153,7 @@
      "tests/tui/OverlayTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "EditorOptions.paddingX",
@@ -10219,14 +10169,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1212/mouse-components.json",
+    "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1212; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -10250,7 +10199,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -10260,7 +10209,7 @@
      "tests/tui/OverlayTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "editor-click-bounds-wrapped-segments-and-wide-graphemes"
   },
   {
    "id": "EditorOptions.autocompleteMaxVisible",
@@ -10276,14 +10225,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -10307,7 +10255,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -10317,7 +10265,7 @@
      "tests/tui/OverlayTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "EditorTheme",
@@ -10333,14 +10281,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "standalone-editor-fake-cursor-is-strippable",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
+    "scenario": "standalone-editor-fake-cursor-is-strippable",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -10368,7 +10315,7 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -10378,7 +10325,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "standalone-editor-fake-cursor-is-strippable"
   },
   {
    "id": "EditorTheme.borderColor",
@@ -10394,14 +10341,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "horizontal padding and the border color shape the rendered editor frame",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "horizontal padding and the border color shape the rendered editor frame",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -10425,7 +10371,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -10435,7 +10381,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "horizontal padding and the border color shape the rendered editor frame"
   },
   {
    "id": "EditorTheme.selectList",
@@ -10451,14 +10397,13 @@
    "consumer": "Native TUI editor host",
    "boundary": "Editor options/theme/ops",
    "implementation_ticket": null,
-   "scenario": "E03/E06 editor",
+   "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E03/E06 editor",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+    "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1201; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -10482,7 +10427,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Editor options/theme/ops",
     "consumer": "Native TUI editor host",
@@ -10492,7 +10437,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E03/E06 editor"
+   "comparisonCase": "an autocomplete provider renders suggestions capped by the visible maximum"
   },
   {
    "id": "HStack",
@@ -49847,14 +49792,13 @@
    "consumer": "TuiAltScreen search API",
    "boundary": "covered by fullscreen search public operations",
    "implementation_ticket": null,
-   "scenario": "E15 search/navigation",
+   "scenario": "search-index-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E15 search/navigation",
-    "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
+    "scenario": "search-index-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1211; referenced by #1215 (route batch B7), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -49869,13 +49813,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "covered by fullscreen search public operations",
     "consumer": "TuiAltScreen search API",
     "tests": []
    },
-   "comparisonCase": "E15 search/navigation"
+   "comparisonCase": "search-index-cache"
   },
   {
    "id": "internal.layout",
@@ -49935,14 +49879,13 @@
    "consumer": "Editor kill/yank",
    "boundary": "covered by Editor kill/yank operations",
    "implementation_ticket": null,
-   "scenario": "E06 kill/yank",
+   "scenario": "kill-ring-accumulation-and-yank-rotation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 kill/yank",
-    "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "kill-ring-accumulation-and-yank-rotation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -49957,13 +49900,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "covered by Editor kill/yank operations",
     "consumer": "Editor kill/yank",
     "tests": []
    },
-   "comparisonCase": "E06 kill/yank"
+   "comparisonCase": "kill-ring-accumulation-and-yank-rotation"
   },
   {
    "id": "internal.undo-stack",
@@ -49979,14 +49922,13 @@
    "consumer": "Editor undo",
    "boundary": "covered by Editor undo operations",
    "implementation_ticket": null,
-   "scenario": "E06 undo",
+   "scenario": "coalesced-unicode-edit-after-undo",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 undo",
-    "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+    "scenario": "coalesced-unicode-edit-after-undo",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1215",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -50001,13 +49943,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "covered by Editor undo operations",
     "consumer": "Editor undo",
     "tests": []
    },
-   "comparisonCase": "E06 undo"
+   "comparisonCase": "coalesced-unicode-edit-after-undo"
   },
   {
    "id": "internal.native-modifiers",

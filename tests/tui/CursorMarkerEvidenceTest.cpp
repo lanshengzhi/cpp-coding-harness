@@ -242,7 +242,7 @@ private:
 } // namespace
 
 TEST_CASE("the standalone editor draws a strippable fake cursor marker",
-        "[tui][cursor-marker][issue1120][compat-pi][spec]") {
+        "[tui][cursor-marker][issue1120][issue1215][compat-pi][spec]") {
     const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "cursor-composition.json");
     REQUIRE(bundle.has_value());
     CHECK(bundle->at("schema").get_string() == kFrozenSchema);
@@ -649,4 +649,40 @@ TEST_CASE("the cursor marker is stripped before the column is measured",
     CHECK_FALSE(contains(output, cch::tui::kCursorMarker));
     // The prompt is followed by the value, with no marker between them.
     CHECK(contains(output, "> abc"));
+}
+
+TEST_CASE("pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame",
+        "[tui][cursor-marker][issue1215][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "cursor-composition.json");
+    REQUIRE(bundle.has_value());
+    const auto& scenario = cch::tests::find_scenario(*bundle, "standalone-editor-fake-cursor-is-strippable");
+    const auto& expected = scenario.at("expected");
+    const auto& frozen_stripped = expected.at("strippedLines").get_array();
+
+    cch::tui::Editor editor;
+    editor.set_text("hi");
+    // The frozen capture used pi's default editor theme: a dim border hook and
+    // an empty text style.
+    editor.set_border_style([](std::string text) { return "\x1b[2m" + text + "\x1b[22m"; });
+
+    const auto rendered = editor.render(10);
+    REQUIRE(rendered.has_value());
+    REQUIRE(rendered->lines.size() == frozen_stripped.size());
+    std::size_t marked_lines = 0;
+    for (std::size_t index = 0; index < rendered->lines.size(); ++index) {
+        const auto& line = rendered->lines[index];
+        INFO("editor line " << index);
+        // Stripping the zero-width pair leaves exactly the frozen visible
+        // frame; the raw reverse-video bytes belong to the resolution stage,
+        // not to the component line.
+        CHECK(cch::tui::strip_terminal_sequences(line) == frozen_stripped[index].get_string());
+        CHECK_FALSE(contains(line, kReverseVideoOn));
+        CHECK_FALSE(contains(line, kReverseVideoOff));
+        if (count_occurrences(line, cch::tui::kFakeCursorStart) == 0) continue;
+        // The content line carries exactly one pair, start before end.
+        ++marked_lines;
+        CHECK(count_occurrences(line, cch::tui::kFakeCursorEnd) == 1);
+        CHECK(line.find(cch::tui::kFakeCursorStart) < line.find(cch::tui::kFakeCursorEnd));
+    }
+    CHECK(marked_lines == 1);
 }

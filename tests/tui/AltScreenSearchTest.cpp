@@ -204,7 +204,8 @@ TEST_CASE("fullscreen search index reuses cached matches until its inputs change
     check_fullscreen_search_index_reuses_cached_matches_until_its_inpu(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change", "[tui][alt-screen-search][issue1211][compat-pi]") {
+TEST_CASE("pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change",
+        "[tui][alt-screen-search][issue1211][issue1215][compat-pi]") {
     const auto bundle = audit1211_search_bundle();
     REQUIRE(bundle);
     check_fullscreen_search_index_reuses_cached_matches_until_its_inpu(*bundle);
@@ -356,12 +357,12 @@ TEST_CASE("fullscreen search next and previous shortcuts wrap through frozen mat
     check_fullscreen_search_next_and_previous_shortcuts_wrap_through_f(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches", "[tui][alt-screen-search][issue1211][compat-pi]") {
+TEST_CASE("pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches",
+        "[tui][alt-screen-search][issue1211][issue1215][compat-pi]") {
     const auto bundle = audit1211_search_bundle();
     REQUIRE(bundle);
     check_fullscreen_search_next_and_previous_shortcuts_wrap_through_f(*bundle);
 }
-
 
 void check_fullscreen_search_close_restores_previous_overlay_focus_and_(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "search-close-restores-focus");

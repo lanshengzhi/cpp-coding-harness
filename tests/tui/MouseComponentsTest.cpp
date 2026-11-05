@@ -1092,12 +1092,12 @@ TEST_CASE("an alternate-screen click positions and focuses the editor cursor",
     check_an_alternate_screen_click_positions_and_focuses_the_editor_c(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor", "[tui][mouse][components][issue1212][compat-pi]") {
+TEST_CASE("pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor",
+        "[tui][mouse][components][issue1212][issue1215][compat-pi]") {
     const auto bundle = audit1212_mouse_components_bundle();
     REQUIRE(bundle);
     check_an_alternate_screen_click_positions_and_focuses_the_editor_c(*bundle);
 }
-
 
 void check_an_editor_click_respects_the_borders_the_wrapped_segments_an(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "editor-click-bounds-wrapped-segments-and-wide-graphemes");
@@ -1143,12 +1143,12 @@ TEST_CASE("an editor click respects the borders, the wrapped segments and the wi
     check_an_editor_click_respects_the_borders_the_wrapped_segments_an(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes", "[tui][mouse][components][issue1212][compat-pi]") {
+TEST_CASE("pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes",
+        "[tui][mouse][components][issue1212][issue1215][compat-pi]") {
     const auto bundle = audit1212_mouse_components_bundle();
     REQUIRE(bundle);
     check_an_editor_click_respects_the_borders_the_wrapped_segments_an(*bundle);
 }
-
 
 void check_an_editor_drag_selects_and_copies_instead_of_moving_the_curs(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "editor-drag-selects-and-copies-instead-of-moving-the-cursor");
@@ -1196,9 +1196,73 @@ TEST_CASE("an editor drag selects and copies instead of moving the cursor",
     check_an_editor_drag_selects_and_copies_instead_of_moving_the_curs(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 an editor drag selects and copies instead of moving the cursor", "[tui][mouse][components][issue1212][compat-pi]") {
+TEST_CASE("pi-v1.3.0 an editor drag selects and copies instead of moving the cursor",
+        "[tui][mouse][components][issue1212][issue1215][compat-pi]") {
     const auto bundle = audit1212_mouse_components_bundle();
     REQUIRE(bundle);
     check_an_editor_drag_selects_and_copies_instead_of_moving_the_curs(*bundle);
 }
 
+TEST_CASE("pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previous one",
+        "[tui][mouse][components][issue1215][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "editor-click-bounds-wrapped-segments-and-wide-graphemes");
+    const auto& frozen = scenario.at("expected");
+
+    // The frozen cases bind the target grapheme for clicks at and past the
+    // segment ends; the independent boundary path clicks one cell further
+    // past (and both half-cells of the wide grapheme) and must land on the
+    // same frozen target. A wrapped click that maps to the previous grapheme,
+    // or that bleeds into the next segment, fails here.
+    const auto click =
+            [](cch::tui::Editor& editor, std::size_t x, std::size_t y, std::size_t width, std::size_t height) {
+                return editor.handle_mouse(cch::tui::MouseEvent{.type = cch::tui::MouseEventType::Click,
+                        .button = cch::tui::MouseButton::Left,
+                        .x = static_cast<int>(x),
+                        .y = static_cast<int>(y),
+                        .screen_x = static_cast<int>(x),
+                        .screen_y = static_cast<int>(y),
+                        .width = width,
+                        .height = height,
+                        .click_count = 1});
+            };
+    for (const auto& expected : frozen.at("cases").get_array()) {
+        const auto label = expected.at("label").get_string();
+        const auto& target = expected.at("cursorAfterClick");
+        const auto frozen_x = size_of(expected.at("x"));
+        const auto frozen_y = size_of(expected.at("y"));
+        const auto width = size_of(expected.at("width"));
+
+        auto fresh = [&] {
+            cch::tui::Editor editor;
+            use_frozen_border(editor);
+            editor.set_padding_x(size_of(expected.at("paddingX")));
+            editor.set_text(expected.at("text").get_string());
+            return editor;
+        };
+
+        if (label == "wrapped-first-segment-past-end" || label == "cjk-past-end" || label == "past-content-end") {
+            INFO(label << " one cell past the frozen click");
+            auto editor = fresh();
+            const auto rendered = editor.render(width);
+            REQUIRE(rendered);
+            static_cast<void>(click(editor, frozen_x + 1, frozen_y, width, rendered->lines.size()));
+            CHECK(editor.cursor().line == size_of(target.at("line")));
+            CHECK(editor.cursor().column == size_of(target.at("col")));
+        }
+        if (label == "cjk-wide-grapheme") {
+            // Both half-cells of the wide grapheme must select the grapheme
+            // itself, never the previous one.
+            for (const auto half : {frozen_x - 1, frozen_x}) {
+                INFO(label << " half-cell " << half);
+                auto editor = fresh();
+                const auto rendered = editor.render(width);
+                REQUIRE(rendered);
+                static_cast<void>(click(editor, half, frozen_y, width, rendered->lines.size()));
+                CHECK(editor.cursor().line == size_of(target.at("line")));
+                CHECK(editor.cursor().column == size_of(target.at("col")));
+            }
+        }
+    }
+}
