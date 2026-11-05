@@ -30,6 +30,10 @@ using cch::support::JsonValue;
     return cch::tests::read_pi_tui_evidence("alt-screen-nav.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1211_nav_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1211", "alt-screen-nav.json");
+}
+
 [[nodiscard]] const JsonValue& nav_scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
         if (scenario.at("name").get_string() == name) return scenario;
@@ -78,10 +82,8 @@ private:
 
 } // namespace
 
-TEST_CASE("AltScreen navigates raw OSC 133 prompt rows and consumes releases", "[tui][alt-screen][issue1011]") {
-    const auto bundle = nav_evidence();
-    REQUIRE(bundle);
-    const auto& scenario = nav_scenario_of(*bundle, "prompt-navigation-uses-raw-osc-133-and-ignores-releases");
+void check_prompt_navigation_scenarios(const JsonValue& bundle) {
+    const auto& scenario = nav_scenario_of(bundle, "prompt-navigation-uses-raw-osc-133-and-ignores-releases");
     const auto& navigation = scenario.at("expected").at("navigation").get_array();
     REQUIRE(navigation.size() == 6);
     const auto prompt = [](std::string_view terminator, int message) {
@@ -132,7 +134,7 @@ TEST_CASE("AltScreen navigates raw OSC 133 prompt rows and consumes releases", "
     check_navigation(5);
     REQUIRE(tui.stop());
 
-    const auto& no_prompt_scenario = nav_scenario_of(*bundle, "prompt-navigation-leaves-view-when-no-prompt-matches");
+    const auto& no_prompt_scenario = nav_scenario_of(bundle, "prompt-navigation-leaves-view-when-no-prompt-matches");
     const auto& no_prompt_navigation = no_prompt_scenario.at("expected").at("navigation").get_array();
     REQUIRE(no_prompt_navigation.size() == 3);
     cch::tui::VirtualTerminal no_prompt_terminal({.columns = 20, .rows = 3});
@@ -163,10 +165,22 @@ TEST_CASE("AltScreen navigates raw OSC 133 prompt rows and consumes releases", "
     REQUIRE(no_prompt_tui.stop());
 }
 
-TEST_CASE("AltScreen flash replacement matches frozen top-row replay", "[tui][alt-screen][issue1011][compat-pi]") {
+TEST_CASE("AltScreen navigates raw OSC 133 prompt rows and consumes releases",
+        "[tui][alt-screen][issue1011]") {
     const auto bundle = nav_evidence();
     REQUIRE(bundle);
-    const auto& scenario = nav_scenario_of(*bundle, "flash-replaces-top-rows-oldest-first");
+    check_prompt_navigation_scenarios(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 AltScreen navigates raw OSC 133 prompt rows and consumes releases", "[tui][alt-screen][issue1211][compat-pi]") {
+    const auto bundle = audit1211_nav_bundle();
+    REQUIRE(bundle);
+    check_prompt_navigation_scenarios(*bundle);
+}
+
+
+void check_flash_replacement_scenarios(const JsonValue& bundle) {
+    const auto& scenario = nav_scenario_of(bundle, "flash-replaces-top-rows-oldest-first");
     const auto& dimensions = scenario.at("dimensions");
     const auto& inputs = scenario.at("inputs");
     cch::tui::VirtualTerminal terminal({.columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
@@ -202,7 +216,7 @@ TEST_CASE("AltScreen flash replacement matches frozen top-row replay", "[tui][al
     CHECK(lines[2].find("three") != std::string::npos);
     REQUIRE(tui.stop());
 
-    const auto& overflow_scenario = nav_scenario_of(*bundle, "flash-overflow-keeps-newest-rows-in-original-order");
+    const auto& overflow_scenario = nav_scenario_of(bundle, "flash-overflow-keeps-newest-rows-in-original-order");
     cch::tui::VirtualTerminal overflow_terminal({.columns = 20, .rows = 4});
     cch::tui::AltScreen overflow_tui(overflow_terminal);
     REQUIRE(overflow_tui.add_child(std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour", 0, 0)));
@@ -221,6 +235,20 @@ TEST_CASE("AltScreen flash replacement matches frozen top-row replay", "[tui][al
     CHECK(overflow_screen == nav_lines_of(overflow_scenario.at("expected").at("screen")));
     REQUIRE(overflow_tui.stop());
 }
+
+TEST_CASE("AltScreen flash replacement matches frozen top-row replay",
+        "[tui][alt-screen][issue1011][compat-pi]") {
+    const auto bundle = nav_evidence();
+    REQUIRE(bundle);
+    check_flash_replacement_scenarios(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 AltScreen flash replacement matches top-row replay", "[tui][alt-screen][issue1211][compat-pi]") {
+    const auto bundle = audit1211_nav_bundle();
+    REQUIRE(bundle);
+    check_flash_replacement_scenarios(*bundle);
+}
+
 
 TEST_CASE("AltScreen flash timers expire independently and dispose safely", "[tui][alt-screen][issue1011]") {
     class Handle final : public cch::tui::TuiScheduledHandle {
@@ -310,10 +338,8 @@ TEST_CASE("AltScreen flash timers expire independently and dispose safely", "[tu
     CHECK(terminal.screen()[0].find("Second") == std::string::npos);
 }
 
-TEST_CASE("AltScreen indicator follows follow-end gating and click-to-end", "[tui][alt-screen][issue1011]") {
-    const auto bundle = nav_evidence();
-    REQUIRE(bundle);
-    const auto& scenario = nav_scenario_of(*bundle, "indicator-shown-when-scrolled");
+void check_indicator_follow_end_scenarios(const JsonValue& bundle) {
+    const auto& scenario = nav_scenario_of(bundle, "indicator-shown-when-scrolled");
     cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 3});
     cch::tui::AltScreen tui(
             terminal, cch::tui::AltScreenOptions{.scroll_to_end_indicator = [] { return " ↓ Jump to end "; }});
@@ -344,7 +370,7 @@ TEST_CASE("AltScreen indicator follows follow-end gating and click-to-end", "[tu
     CHECK(scroll_view->following_end());
     REQUIRE(tui.stop());
 
-    const auto& no_follow_scenario = nav_scenario_of(*bundle, "indicator-hidden-without-follow-end");
+    const auto& no_follow_scenario = nav_scenario_of(bundle, "indicator-hidden-without-follow-end");
     CHECK_FALSE(no_follow_scenario.at("expected").at("indicatorShown").get_boolean());
     cch::tui::VirtualTerminal no_follow_terminal({.columns = 30, .rows = 3});
     cch::tui::AltScreen no_follow_tui(no_follow_terminal,
@@ -364,6 +390,20 @@ TEST_CASE("AltScreen indicator follows follow-end gating and click-to-end", "[tu
     }));
     REQUIRE(no_follow_tui.stop());
 }
+
+TEST_CASE("AltScreen indicator follows follow-end gating and click-to-end",
+        "[tui][alt-screen][issue1011]") {
+    const auto bundle = nav_evidence();
+    REQUIRE(bundle);
+    check_indicator_follow_end_scenarios(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 AltScreen indicator follows follow-end gating and click-to-end", "[tui][alt-screen][issue1211][compat-pi]") {
+    const auto bundle = audit1211_nav_bundle();
+    REQUIRE(bundle);
+    check_indicator_follow_end_scenarios(*bundle);
+}
+
 
 TEST_CASE("AltScreen wheel policy matches fixed counts, velocity acceleration, resets, and Alt multiplier",
         "[tui][alt-screen][scroll][issue1004]") {

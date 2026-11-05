@@ -31,6 +31,10 @@ using cch::support::JsonValue;
     return cch::tests::read_pi_tui_evidence("alt-screen-search.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1211_search_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1211", "alt-screen-search.json");
+}
+
 [[nodiscard]] const JsonValue& scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
         if (scenario.at("name").get_string() == name) return scenario;
@@ -104,12 +108,8 @@ private:
 
 } // namespace
 
-TEST_CASE("fullscreen search normalizes multiline queries and maps ANSI "
-          "Unicode columns",
-        "[tui][alt-screen-search][issue1010][compat-pi]") {
-    const auto bundle = search_evidence();
-    REQUIRE(bundle);
-    const auto& normalized = scenario_of(*bundle, "search-normalized-multirow");
+void check_search_normalizes_multiline_queries_and_maps_ansi_unicode_columns(const JsonValue& bundle) {
+    const auto& normalized = scenario_of(bundle, "search-normalized-multirow");
     const auto expected = normalized.at("expected").get_array().front().at("segments").get_array();
     const auto matches = cch::tui::find_alt_screen_search_matches(
             lines_of(normalized.at("inputs").at("lines")), normalized.at("inputs").at("query").get_string());
@@ -123,7 +123,7 @@ TEST_CASE("fullscreen search normalizes multiline queries and maps ANSI "
                 static_cast<std::size_t>(expected[index].at("endCol").get_number()));
     }
 
-    const auto& unicode = scenario_of(*bundle, "search-ansi-cjk-columns");
+    const auto& unicode = scenario_of(bundle, "search-ansi-cjk-columns");
     const auto unicode_expected = unicode.at("expected").get_array().front().at("segments").get_array();
     const auto unicode_matches = cch::tui::find_alt_screen_search_matches(
             lines_of(unicode.at("inputs").at("lines")), unicode.at("inputs").at("query").get_string());
@@ -140,6 +140,22 @@ TEST_CASE("fullscreen search normalizes multiline queries and maps ANSI "
     CHECK(cch::tui::alt_screen_search_match_key(matches.front()) == "0:6:1:5");
 }
 
+TEST_CASE("fullscreen search normalizes multiline queries and maps ANSI "
+          "Unicode columns",
+        "[tui][alt-screen-search][issue1010][compat-pi]") {
+    const auto bundle = search_evidence();
+    REQUIRE(bundle);
+    check_search_normalizes_multiline_queries_and_maps_ansi_unicode_columns(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 search normalizes multiline queries and maps ANSI Unicode columns",
+        "[tui][alt-screen-search][issue1211][compat-pi]") {
+    const auto bundle = audit1211_search_bundle();
+    REQUIRE(bundle);
+    check_search_normalizes_multiline_queries_and_maps_ansi_unicode_columns(*bundle);
+}
+
+
 TEST_CASE("fullscreen search uses frozen JavaScript whitespace for grapheme clusters and NEL",
         "[tui][alt-screen-search][issue1010][compat-pi]") {
     const auto combining_match = cch::tui::find_alt_screen_search_matches({" \xcc\x81"
@@ -153,11 +169,8 @@ TEST_CASE("fullscreen search uses frozen JavaScript whitespace for grapheme clus
     CHECK(nel_query.empty());
 }
 
-TEST_CASE("fullscreen search index reuses cached matches until its inputs change",
-        "[tui][alt-screen-search][issue1010][compat-pi]") {
-    const auto bundle = search_evidence();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "search-index-cache");
+void check_fullscreen_search_index_reuses_cached_matches_until_its_inpu(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "search-index-cache");
     cch::tui::SearchIndex index;
     const auto& inputs = scenario.at("inputs").get_array();
     const auto& expected = scenario.at("expected").get_array();
@@ -184,8 +197,21 @@ TEST_CASE("fullscreen search index reuses cached matches until its inputs change
     }
 }
 
-TEST_CASE("fullscreen search renders input before applying truncated result width",
-        "[tui][alt-screen-search][issue1010]") {
+TEST_CASE("fullscreen search index reuses cached matches until its inputs change",
+        "[tui][alt-screen-search][issue1010][compat-pi]") {
+    const auto bundle = search_evidence();
+    REQUIRE(bundle);
+    check_fullscreen_search_index_reuses_cached_matches_until_its_inpu(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change", "[tui][alt-screen-search][issue1211][compat-pi]") {
+    const auto bundle = audit1211_search_bundle();
+    REQUIRE(bundle);
+    check_fullscreen_search_index_reuses_cached_matches_until_its_inpu(*bundle);
+}
+
+
+void check_fullscreen_search_renders_input_before_applying_truncated_re(const JsonValue& bundle) {
     const auto registry = cch::tests::fullscreen_registry();
     cch::tui::AltScreenSearchComponent component([](std::string) {}, *registry);
     for (const char value : std::string{"abcdefghij"}) {
@@ -202,11 +228,22 @@ TEST_CASE("fullscreen search renders input before applying truncated result widt
     CHECK(rendered->lines[1].find("j") != std::string::npos);
 }
 
-TEST_CASE("fullscreen search opens and renders its frozen navigation controls",
-        "[tui][alt-screen-search][issue1010][compat-pi]") {
+TEST_CASE("fullscreen search renders input before applying truncated result width",
+        "[tui][alt-screen-search][issue1010]") {
     const auto bundle = search_evidence();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "search-render-controls");
+    check_fullscreen_search_renders_input_before_applying_truncated_re(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 fullscreen search renders input before applying truncated result width", "[tui][alt-screen-search][issue1211][compat-pi]") {
+    const auto bundle = audit1211_search_bundle();
+    REQUIRE(bundle);
+    check_fullscreen_search_renders_input_before_applying_truncated_re(*bundle);
+}
+
+
+void check_search_render_controls(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "search-render-controls");
     const auto& inputs = scenario.at("inputs");
     const auto& dimensions = scenario.at("dimensions");
     cch::tui::VirtualTerminal terminal({.columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
@@ -233,11 +270,22 @@ TEST_CASE("fullscreen search opens and renders its frozen navigation controls",
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("fullscreen search next and previous shortcuts wrap through frozen matches",
+TEST_CASE("fullscreen search opens and renders its frozen navigation controls",
         "[tui][alt-screen-search][issue1010][compat-pi]") {
     const auto bundle = search_evidence();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "search-navigate-wrap");
+    check_search_render_controls(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 search opens and renders its frozen navigation controls", "[tui][alt-screen-search][issue1211][issue1213][compat-pi]") {
+    const auto bundle = audit1211_search_bundle();
+    REQUIRE(bundle);
+    check_search_render_controls(*bundle);
+}
+
+
+void check_fullscreen_search_next_and_previous_shortcuts_wrap_through_f(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "search-navigate-wrap");
     const auto& inputs = scenario.at("inputs");
     const auto& dimensions = scenario.at("dimensions");
     cch::tui::VirtualTerminal terminal({.columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
@@ -299,11 +347,22 @@ TEST_CASE("fullscreen search next and previous shortcuts wrap through frozen mat
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("fullscreen search close restores previous overlay focus and resumes overlay input",
+TEST_CASE("fullscreen search next and previous shortcuts wrap through frozen matches",
         "[tui][alt-screen-search][issue1010][compat-pi]") {
     const auto bundle = search_evidence();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "search-close-restores-focus");
+    check_fullscreen_search_next_and_previous_shortcuts_wrap_through_f(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches", "[tui][alt-screen-search][issue1211][compat-pi]") {
+    const auto bundle = audit1211_search_bundle();
+    REQUIRE(bundle);
+    check_fullscreen_search_next_and_previous_shortcuts_wrap_through_f(*bundle);
+}
+
+
+void check_fullscreen_search_close_restores_previous_overlay_focus_and_(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "search-close-restores-focus");
     const auto& inputs = scenario.at("inputs");
     const auto& dimensions = scenario.at("dimensions");
     cch::tui::VirtualTerminal terminal({.columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
@@ -369,8 +428,22 @@ TEST_CASE("fullscreen search close restores previous overlay focus and resumes o
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("fullscreen search ignores box drawing clicks as navigation controls",
+TEST_CASE("fullscreen search close restores previous overlay focus and resumes overlay input",
         "[tui][alt-screen-search][issue1010][compat-pi]") {
+    const auto bundle = search_evidence();
+    REQUIRE(bundle);
+    check_fullscreen_search_close_restores_previous_overlay_focus_and_(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 fullscreen search close restores previous overlay focus and resumes overlay input", "[tui][alt-screen-search][issue1211][compat-pi]") {
+    const auto bundle = audit1211_search_bundle();
+    REQUIRE(bundle);
+    check_fullscreen_search_close_restores_previous_overlay_focus_and_(*bundle);
+}
+
+
+TEST_CASE("fullscreen search ignores box drawing clicks as navigation controls",
+        "[tui][alt-screen-search][issue1010][issue1213][compat-pi]") {
     const auto bundle = search_evidence();
     REQUIRE(bundle);
     const auto& scenario = scenario_of(*bundle, "search-boxdrawing-not-buttons");
@@ -400,11 +473,8 @@ TEST_CASE("fullscreen search ignores box drawing clicks as navigation controls",
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("fullscreen search preserves current and non-current highlight styles",
-        "[tui][alt-screen-search][issue1010][compat-pi]") {
-    const auto bundle = search_evidence();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "search-styled-highlights");
+void check_fullscreen_search_preserves_current_and_non_current_highligh(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "search-styled-highlights");
     const auto& dimensions = scenario.at("dimensions");
     cch::tui::VirtualTerminal terminal({.columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
             .rows = static_cast<std::size_t>(dimensions.at("rows").get_number()),
@@ -429,11 +499,22 @@ TEST_CASE("fullscreen search preserves current and non-current highlight styles"
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("fullscreen search refreshes streamed transcript rows and resized overlays",
+TEST_CASE("fullscreen search preserves current and non-current highlight styles",
         "[tui][alt-screen-search][issue1010][compat-pi]") {
     const auto bundle = search_evidence();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "search-streaming-resize");
+    check_fullscreen_search_preserves_current_and_non_current_highligh(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 fullscreen search preserves current and non-current highlight styles", "[tui][alt-screen-search][issue1211][compat-pi]") {
+    const auto bundle = audit1211_search_bundle();
+    REQUIRE(bundle);
+    check_fullscreen_search_preserves_current_and_non_current_highligh(*bundle);
+}
+
+
+void check_fullscreen_search_refreshes_streamed_transcript_rows_and_res(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "search-streaming-resize");
     const auto& dimensions = scenario.at("dimensions");
     cch::tui::VirtualTerminal terminal({.columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
             .rows = static_cast<std::size_t>(dimensions.at("rows").get_number()),
@@ -460,6 +541,20 @@ TEST_CASE("fullscreen search refreshes streamed transcript rows and resized over
     CHECK(visible_lines(terminal) == lines_of(phases[2].at("screen")));
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("fullscreen search refreshes streamed transcript rows and resized overlays",
+        "[tui][alt-screen-search][issue1010][compat-pi]") {
+    const auto bundle = search_evidence();
+    REQUIRE(bundle);
+    check_fullscreen_search_refreshes_streamed_transcript_rows_and_res(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 fullscreen search refreshes streamed transcript rows and resized overlays", "[tui][alt-screen-search][issue1211][compat-pi]") {
+    const auto bundle = audit1211_search_bundle();
+    REQUIRE(bundle);
+    check_fullscreen_search_refreshes_streamed_transcript_rows_and_res(*bundle);
+}
+
 
 TEST_CASE("fullscreen search component renders the three-row frozen panel", "[tui][alt-screen-search][issue1010]") {
     const auto registry = cch::tests::fullscreen_registry();

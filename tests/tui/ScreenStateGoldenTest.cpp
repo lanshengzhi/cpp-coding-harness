@@ -45,6 +45,10 @@ using namespace cch;
 
 namespace {
 
+[[nodiscard]] support::Expected<support::JsonValue> audit1209_screen_state_bundle() {
+    return tests::read_pi_v130_audit_evidence("audit-1209", "screen-state.json");
+}
+
 [[nodiscard]] support::Expected<support::JsonValue> read_historical_screen_state() {
     const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-tui/screen-state.json";
     std::ifstream input{path, std::ios::binary};
@@ -631,11 +635,8 @@ void check_evidence_frame(const tui::VirtualTerminal& terminal, const support::J
 
 } // namespace
 
-TEST_CASE("Named pi-v1.0.4 screen evidence replays all styled cells and focused cursor",
-        "[tui][differential][issue947][compat-pi]") {
-    const auto fixture = tests::read_pi_tui_evidence("screen-state.json");
-    REQUIRE(fixture);
-    const auto& scenario = fixture->at("scenarios").get_array().front();
+void check_named_screen_evidence_styled_cells_and_focused_cursor(const support::JsonValue& fixture) {
+    const auto& scenario = fixture.at("scenarios").get_array().front();
     const auto& dimensions = scenario.at("dimensions");
     tui::VirtualTerminal terminal({
             .columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
@@ -662,8 +663,22 @@ TEST_CASE("Named pi-v1.0.4 screen evidence replays all styled cells and focused 
     REQUIRE(host.stop());
 }
 
-TEST_CASE("Named pi-v1.0.4 common lifecycle replays component removal focus input and stop",
-        "[tui][differential][issue977][compat-pi]") {
+TEST_CASE("Named pi-v1.0.4 screen evidence replays all styled cells and focused cursor",
+        "[tui][differential][issue947][compat-pi]") {
+    const auto fixture = tests::read_pi_tui_evidence("screen-state.json");
+    REQUIRE(fixture);
+    check_named_screen_evidence_styled_cells_and_focused_cursor(*fixture);
+}
+
+TEST_CASE("pi-v1.3.0 screen evidence replays all styled cells and focused cursor",
+        "[tui][differential][issue1209][compat-pi]") {
+    const auto fixture = audit1209_screen_state_bundle();
+    REQUIRE(fixture);
+    check_named_screen_evidence_styled_cells_and_focused_cursor(*fixture);
+}
+
+
+void check_named_common_lifecycle_removal_focus_input_and_stop(const support::JsonValue& fixture) {
     class LifecycleInput final : public tui::Component, public tui::Focusable, public tui::InputHandler {
     public:
         LifecycleInput(std::string line, tui::CursorPosition cursor, std::vector<std::string>& events)
@@ -694,9 +709,7 @@ TEST_CASE("Named pi-v1.0.4 common lifecycle replays component removal focus inpu
         bool focused_{false};
     };
 
-    const auto fixture = tests::read_pi_tui_evidence("screen-state.json");
-    REQUIRE(fixture);
-    const auto& scenarios = fixture->at("scenarios").get_array();
+    const auto& scenarios = fixture.at("scenarios").get_array();
     const auto found = std::ranges::find_if(scenarios,
             [](const auto& scenario) { return scenario.at("name").get_string() == "common-root-lifecycle"; });
     REQUIRE(found != scenarios.end());
@@ -738,3 +751,18 @@ TEST_CASE("Named pi-v1.0.4 common lifecycle replays component removal focus inpu
     check_evidence_frame(terminal, expected.at("stopped"));
     CHECK(events == evidence_strings(expected.at("events")));
 }
+
+TEST_CASE("Named pi-v1.0.4 common lifecycle replays component removal focus input and stop",
+        "[tui][differential][issue977][compat-pi]") {
+    const auto fixture = tests::read_pi_tui_evidence("screen-state.json");
+    REQUIRE(fixture);
+    check_named_common_lifecycle_removal_focus_input_and_stop(*fixture);
+}
+
+TEST_CASE("pi-v1.3.0 common lifecycle replays component removal focus input and stop",
+        "[tui][differential][issue1209][compat-pi]") {
+    const auto fixture = audit1209_screen_state_bundle();
+    REQUIRE(fixture);
+    check_named_common_lifecycle_removal_focus_input_and_stop(*fixture);
+}
+

@@ -116,6 +116,10 @@ private:
     return cch::tests::read_pi_tui_evidence("scroll-view.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1213_scroll_view_for_selection_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1213", "scroll-view.json");
+}
+
 [[nodiscard]] const JsonValue& scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
         if (scenario.at("name").get_string() == name) return scenario;
@@ -219,11 +223,8 @@ void run_implicit_trace(cch::tui::AltScreen& tui, ManualScheduler& scheduler, co
 
 } // namespace
 
-TEST_CASE("AltScreen replays frozen edge auto-scroll ticks and OSC 52 copy bytes",
-        "[tui][alt-screen][selection][issue1008][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "alt-screen-auto-scroll-edge");
+void check_AltScreen_replays_frozen_edge_auto_scroll_ticks_and_OSC_52_c(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "alt-screen-auto-scroll-edge");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
     const auto& traces = expected.at("trace").get_array();
@@ -256,11 +257,22 @@ TEST_CASE("AltScreen replays frozen edge auto-scroll ticks and OSC 52 copy bytes
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("AltScreen replays frozen release and direction cancellation traces",
+TEST_CASE("AltScreen replays frozen edge auto-scroll ticks and OSC 52 copy bytes",
         "[tui][alt-screen][selection][issue1008][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "alt-screen-auto-scroll-cancel");
+    check_AltScreen_replays_frozen_edge_auto_scroll_ticks_and_OSC_52_c(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 AltScreen replays edge auto-scroll ticks and OSC 52 copy bytes", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_for_selection_bundle();
+    REQUIRE(bundle);
+    check_AltScreen_replays_frozen_edge_auto_scroll_ticks_and_OSC_52_c(*bundle);
+}
+
+
+void check_AltScreen_replays_frozen_release_and_direction_cancellation_(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "alt-screen-auto-scroll-cancel");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
     const auto& traces = expected.at("trace").get_array();
@@ -303,11 +315,22 @@ TEST_CASE("AltScreen replays frozen release and direction cancellation traces",
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("AltScreen replays frozen auto-scroll top and bottom limits",
+TEST_CASE("AltScreen replays frozen release and direction cancellation traces",
         "[tui][alt-screen][selection][issue1008][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "alt-screen-auto-scroll-limit");
+    check_AltScreen_replays_frozen_release_and_direction_cancellation_(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 AltScreen replays release and direction cancellation traces", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_for_selection_bundle();
+    REQUIRE(bundle);
+    check_AltScreen_replays_frozen_release_and_direction_cancellation_(*bundle);
+}
+
+
+void check_AltScreen_replays_frozen_auto_scroll_top_and_bottom_limits(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "alt-screen-auto-scroll-limit");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
 
@@ -345,15 +368,26 @@ TEST_CASE("AltScreen replays frozen auto-scroll top and bottom limits",
     };
 
     replay(inputs, expected, false);
-    const auto& bottom = scenario_of(*bundle, "alt-screen-auto-scroll-limit-bottom");
+    const auto& bottom = scenario_of(bundle, "alt-screen-auto-scroll-limit-bottom");
     replay(bottom.at("inputs"), bottom.at("expected"), true);
 }
 
-TEST_CASE("AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout",
+TEST_CASE("AltScreen replays frozen auto-scroll top and bottom limits",
         "[tui][alt-screen][selection][issue1008][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "alt-screen-auto-scroll-nested");
+    check_AltScreen_replays_frozen_auto_scroll_top_and_bottom_limits(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 AltScreen replays auto-scroll top and bottom limits", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_for_selection_bundle();
+    REQUIRE(bundle);
+    check_AltScreen_replays_frozen_auto_scroll_top_and_bottom_limits(*bundle);
+}
+
+
+void check_AltScreen_auto_scroll_ticks_follow_the_selection_anchor_view(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "alt-screen-auto-scroll-nested");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
     const auto& traces = expected.at("trace").get_array();
@@ -404,11 +438,22 @@ TEST_CASE("AltScreen auto-scroll ticks follow the selection anchor viewport in a
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("AltScreen keeps selection coordinates valid as auto-scrolled content grows",
+TEST_CASE("AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout",
         "[tui][alt-screen][selection][issue1008][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "alt-screen-auto-scroll-content-growth");
+    check_AltScreen_auto_scroll_ticks_follow_the_selection_anchor_view(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_for_selection_bundle();
+    REQUIRE(bundle);
+    check_AltScreen_auto_scroll_ticks_follow_the_selection_anchor_view(*bundle);
+}
+
+
+void check_AltScreen_keeps_selection_coordinates_valid_as_auto_scrolled(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "alt-screen-auto-scroll-content-growth");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
     const auto& traces = expected.at("trace").get_array();
@@ -452,8 +497,21 @@ TEST_CASE("AltScreen keeps selection coordinates valid as auto-scrolled content 
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("AltScreen discards a queued auto-scroll tick after a new selection is armed",
-        "[tui][alt-screen][selection][issue1008]") {
+TEST_CASE("AltScreen keeps selection coordinates valid as auto-scrolled content grows",
+        "[tui][alt-screen][selection][issue1008][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_AltScreen_keeps_selection_coordinates_valid_as_auto_scrolled(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 AltScreen keeps selection coordinates valid as auto-scrolled content grows", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_for_selection_bundle();
+    REQUIRE(bundle);
+    check_AltScreen_keeps_selection_coordinates_valid_as_auto_scrolled(*bundle);
+}
+
+
+void check_AltScreen_discards_a_queued_auto_scroll_tick_after_a_new_sel(const JsonValue& bundle) {
     cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
     cch::tui::AltScreen tui(terminal);
     ManualScheduler scheduler;
@@ -501,3 +559,17 @@ TEST_CASE("AltScreen discards a queued auto-scroll tick after a new selection is
     CHECK_FALSE(scheduler.has_scheduled());
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("AltScreen discards a queued auto-scroll tick after a new selection is armed",
+        "[tui][alt-screen][selection][issue1008]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_AltScreen_discards_a_queued_auto_scroll_tick_after_a_new_sel(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 AltScreen discards a queued auto-scroll tick after a new selection is armed", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_for_selection_bundle();
+    REQUIRE(bundle);
+    check_AltScreen_discards_a_queued_auto_scroll_tick_after_a_new_sel(*bundle);
+}
+

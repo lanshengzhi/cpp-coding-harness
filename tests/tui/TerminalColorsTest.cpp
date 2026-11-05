@@ -550,7 +550,7 @@ namespace {
 
 } // namespace
 
-TEST_CASE("frozen audit-1201 OSC color replies replay through the C++ parser", "[tui][theme][issue1201]") {
+TEST_CASE("frozen audit-1201 OSC color replies replay through the C++ parser", "[tui][theme][issue1201][issue1209]") {
     const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "terminal-colors.json");
     REQUIRE(artifact);
     const auto* scenario =

@@ -99,6 +99,28 @@ using cch::tui::MouseEventType;
     return cch::tui::visible_width(row.substr(0, marker));
 }
 
+
+/// Compare the rendered row and cursor column against the frozen observation.
+/// pi-v1.3.0 records the focused fake cursor as the inline marker pair with
+/// `cursorColumn: -1` (the cursor cell is the pair's cell); earlier frozen
+/// rows recorded an out-of-band column and no markers. Both spellings compare
+/// here: the visible row on both sides, and the cursor cell either from the
+/// pair or from the recorded column.
+void check_frozen_cursor_row(const std::string& actual_row,
+        const std::size_t actual_cursor,
+        const JsonValue& frozen_row,
+        const JsonValue& frozen_cursor) {
+    const auto& frozen_text = frozen_row.get_string();
+    CHECK(drawn_row(actual_row) == drawn_row(frozen_text));
+    if (frozen_cursor.get_number() < 0) {
+        const auto marker = frozen_text.find("\x1b_pi:fc\x07");
+        REQUIRE(marker != std::string::npos);
+        CHECK(actual_cursor == cch::tui::visible_width(std::string_view{frozen_text}.substr(0, marker)));
+    } else {
+        CHECK(actual_cursor == size_of(frozen_cursor));
+    }
+}
+
 /// Drop settings hint rows from a screen comparison. Frozen pi hardcodes the
 /// hint text (`components/settings-list.ts:319-322`: `Enter/Space to change ·
 /// Esc to cancel`), while the toolkit builds the same line from the keybinding
@@ -125,7 +147,12 @@ using cch::tui::MouseEventType;
 
 void check_screen(const std::vector<std::string>& actual, const JsonValue& frozen, std::string_view label) {
     INFO(label);
-    const auto expected = string_lines(frozen);
+    // The frozen rows are resolved through the same stripping the toolkit rows
+    // went through: pi-v1.3.0 draws the focused fake cursor as the inline
+    // marker pair, which `drawn_row` removes on both sides.
+    std::vector<std::string> expected;
+    for (const auto& row : frozen.get_array())
+        expected.push_back(drawn_row(row.get_string()));
     CHECK(without_settings_hint(actual) == without_settings_hint(expected));
     // The hint row itself stays evidence: it must exist on both sides, only its
     // keybinding spelling differs.
@@ -202,6 +229,10 @@ void check_answer(const std::optional<MouseEventResult>& actual, const JsonValue
 
 [[nodiscard]] cch::support::Expected<JsonValue> mouse_components_bundle() {
     return cch::tests::read_pi_tui_evidence("mouse-components.json");
+}
+
+[[nodiscard]] cch::support::Expected<JsonValue> audit1212_mouse_components_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1212", "mouse-components.json");
 }
 
 [[nodiscard]] const JsonValue& scenario_of(const JsonValue& bundle, std::string_view name) {
@@ -350,11 +381,8 @@ private:
 
 } // namespace
 
-TEST_CASE("an input press positions the cursor and later gestures stay unhandled",
-        "[tui][mouse-components][issue1003][compat-pi]") {
-    const auto bundle = mouse_components_bundle();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "input-press-cursor-and-unhandled-gestures");
+void check_an_input_press_positions_the_cursor_and_later_gestures_stay_(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "input-press-cursor-and-unhandled-gestures");
     const auto& frozen = scenario.at("expected");
     const auto typed = scenario.at("inputs").at("typed").get_string();
 
@@ -374,19 +402,30 @@ TEST_CASE("an input press positions the cursor and later gestures stay unhandled
         const auto after = input.render(width);
         REQUIRE(after);
         REQUIRE(after->lines.size() == 1);
-        CHECK(drawn_row(after->lines.front()) == expected.at("row").get_string());
-        CHECK(cursor_column_of(after->lines.front()) == size_of(expected.at("cursorColumn")));
+        check_frozen_cursor_row(
+                after->lines.front(), cursor_column_of(after->lines.front()), expected.at("row"), expected.at("cursorColumn"));
 
         type_key(input, typed);
         CHECK(input.value() == expected.at("valueAfterType").get_string());
     }
 }
 
-TEST_CASE("an input press maps grapheme widths and the scrolled window's start column",
+TEST_CASE("an input press positions the cursor and later gestures stay unhandled",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "input-press-maps-grapheme-widths-and-scrolled-columns");
+    check_an_input_press_positions_the_cursor_and_later_gestures_stay_(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 an input press positions the cursor and later gestures stay unhandled", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_an_input_press_positions_the_cursor_and_later_gestures_stay_(*bundle);
+}
+
+
+void check_an_input_press_maps_grapheme_widths_and_the_scrolled_windows(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "input-press-maps-grapheme-widths-and-scrolled-columns");
     const auto& frozen = scenario.at("expected");
     const auto typed = scenario.at("inputs").at("typed").get_string();
 
@@ -414,19 +453,29 @@ TEST_CASE("an input press maps grapheme widths and the scrolled window's start c
             REQUIRE(after);
             REQUIRE(after->lines.size() == 1);
             INFO("press at " << int_of(step.at("x")));
-            CHECK(drawn_row(after->lines.front()) == step.at("row").get_string());
-            CHECK(cursor_column_of(after->lines.front()) == size_of(step.at("cursorColumn")));
+            check_frozen_cursor_row(after->lines.front(), cursor_column_of(after->lines.front()), step.at("row"), step.at("cursorColumn"));
         }
         type_key(input, typed);
         CHECK(input.value() == expected.at("valueAfterType").get_string());
     }
 }
 
-TEST_CASE("a select-list press selects the rendered row and a click activates it",
+TEST_CASE("an input press maps grapheme widths and the scrolled window's start column",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "select-list-press-selects-and-click-activates");
+    check_an_input_press_maps_grapheme_widths_and_the_scrolled_windows(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 an input press maps grapheme widths and the scrolled window's start column", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_an_input_press_maps_grapheme_widths_and_the_scrolled_windows(*bundle);
+}
+
+
+void check_a_select_list_press_selects_the_rendered_row_and_a_click_act(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "select-list-press-selects-and-click-activates");
     const auto& frozen = scenario.at("expected").at("pressClick");
 
     std::optional<std::string> activated;
@@ -451,11 +500,22 @@ TEST_CASE("a select-list press selects the rendered row and a click activates it
     CHECK(*activated == click.at("selected").get_string());
 }
 
-TEST_CASE("a select-list wheel moves one row per notch and hover never moves the selection",
+TEST_CASE("a select-list press selects the rendered row and a click activates it",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "select-list-wheel-hover-and-scrolled-rows");
+    check_a_select_list_press_selects_the_rendered_row_and_a_click_act(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a select-list press selects the rendered row and a click activates it", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_a_select_list_press_selects_the_rendered_row_and_a_click_act(*bundle);
+}
+
+
+void check_a_select_list_wheel_moves_one_row_per_notch_and_hover_never_(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "select-list-wheel-hover-and-scrolled-rows");
     const auto& inputs = scenario.at("inputs");
     const auto& frozen = scenario.at("expected");
 
@@ -541,11 +601,22 @@ TEST_CASE("a select-list wheel moves one row per notch and hover never moves the
     }
 }
 
-TEST_CASE("a settings-list press selects the rendered row and a click activates it",
+TEST_CASE("a select-list wheel moves one row per notch and hover never moves the selection",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "settings-list-press-selects-and-click-activates");
+    check_a_select_list_wheel_moves_one_row_per_notch_and_hover_never_(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a select-list wheel moves one row per notch and hover never moves the selection", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_a_select_list_wheel_moves_one_row_per_notch_and_hover_never_(*bundle);
+}
+
+
+void check_a_settings_list_press_selects_the_rendered_row_and_a_click_a(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "settings-list-press-selects-and-click-activates");
     const auto& frozen = scenario.at("expected").at("pressClick");
 
     std::vector<std::pair<std::string, std::string>> changes;
@@ -587,11 +658,22 @@ TEST_CASE("a settings-list press selects the rendered row and a click activates 
     CHECK(changes == expected_changes);
 }
 
-TEST_CASE("a settings-list wheel moves one row per notch and hover never moves the selection",
+TEST_CASE("a settings-list press selects the rendered row and a click activates it",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "settings-list-wheel-hover-and-scrolled-rows");
+    check_a_settings_list_press_selects_the_rendered_row_and_a_click_a(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a settings-list press selects the rendered row and a click activates it", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_a_settings_list_press_selects_the_rendered_row_and_a_click_a(*bundle);
+}
+
+
+void check_a_settings_list_wheel_moves_one_row_per_notch_and_hover_neve(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "settings-list-wheel-hover-and-scrolled-rows");
     const auto& inputs = scenario.at("inputs");
     const auto& frozen = scenario.at("expected");
 
@@ -688,11 +770,22 @@ TEST_CASE("a settings-list wheel moves one row per notch and hover never moves t
     }
 }
 
-TEST_CASE("the settings search row forwards clicks and the separator row stays inert",
+TEST_CASE("a settings-list wheel moves one row per notch and hover never moves the selection",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "settings-list-search-row-forwards-and-separator-is-inert");
+    check_a_settings_list_wheel_moves_one_row_per_notch_and_hover_neve(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a settings-list wheel moves one row per notch and hover never moves the selection", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_a_settings_list_wheel_moves_one_row_per_notch_and_hover_neve(*bundle);
+}
+
+
+void check_the_settings_search_row_forwards_clicks_and_the_separator_ro(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "settings-list-search-row-forwards-and-separator-is-inert");
     const auto& inputs = scenario.at("inputs");
     const auto& frozen = scenario.at("expected").at("search");
 
@@ -721,14 +814,21 @@ TEST_CASE("the settings search row forwards clicks and the separator row stays i
     // after the press: the forwarded press moves the search input's cursor.
     const auto before_click = list.render(size_of(press.at("width")));
     REQUIRE(before_click);
-    CHECK(cursor_column_of(before_click->lines.front()) == size_of(press.at("cursorColumnBeforeClick")));
+    // The frozen search row before the press carries the focused input's
+    // fake-cursor pair in `rows[0]` (v1.3.0) or an out-of-band column (v1.0.4).
+    check_frozen_cursor_row(before_click->lines.front(),
+            cursor_column_of(before_click->lines.front()),
+            frozen.at("rows").get_array().front(),
+            press.at("cursorColumnBeforeClick"));
 
     check_answer(list.handle_mouse(event_of(press, MouseEventType::Press)), press.at("result"), "search row");
 
     const auto after_click = list.render(size_of(press.at("width")));
     REQUIRE(after_click);
-    CHECK(drawn_row(after_click->lines.front()) == press.at("afterClick").get_string());
-    CHECK(cursor_column_of(after_click->lines.front()) == size_of(press.at("cursorColumnAfterClick")));
+    check_frozen_cursor_row(after_click->lines.front(),
+            cursor_column_of(after_click->lines.front()),
+            press.at("afterClick"),
+            press.at("cursorColumnAfterClick"));
 
     check_answer(
             list.handle_mouse(event_of(separator, MouseEventType::Press)), separator.at("result"), "separator row");
@@ -754,8 +854,21 @@ TEST_CASE("the settings search row forwards clicks and the separator row stays i
     CHECK(list.search_query() == press.at("queryAfterType").get_string());
 }
 
-TEST_CASE("a delegating host keeps the focus when its nested input is clicked",
+TEST_CASE("the settings search row forwards clicks and the separator row stays inert",
         "[tui][mouse-components][issue1003][compat-pi]") {
+    const auto bundle = mouse_components_bundle();
+    REQUIRE(bundle);
+    check_the_settings_search_row_forwards_clicks_and_the_separator_ro(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 the settings search row forwards clicks and the separator row stays inert", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_the_settings_search_row_forwards_clicks_and_the_separator_ro(*bundle);
+}
+
+
+void check_a_delegating_host_keeps_the_focus_when_its_nested_input_is_c(const JsonValue& bundle) {
     // Criterion 3: the focus inheritance rule of `dispatch_mouse_event`
     // (`Mouse.cpp:13-31`, pi `tui.ts:81-105`). The frozen end-to-end case
     // (`mouse-components.test.ts:195-215`) shows the same property through the
@@ -791,11 +904,22 @@ TEST_CASE("a delegating host keeps the focus when its nested input is clicked",
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("an alternate-screen click in an overlay keeps its delegating host focused",
+TEST_CASE("a delegating host keeps the focus when its nested input is clicked",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "alternate-screen-nested-input-click-keeps-host-focus");
+    check_a_delegating_host_keeps_the_focus_when_its_nested_input_is_c(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a delegating host keeps the focus when its nested input is clicked", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_a_delegating_host_keeps_the_focus_when_its_nested_input_is_c(*bundle);
+}
+
+
+void check_an_alternate_screen_click_in_an_overlay_keeps_its_delegating(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "alternate-screen-nested-input-click-keeps-host-focus");
     const auto& inputs = scenario.at("inputs");
     const auto& overlays = scenario.at("expected").at("overlays").get_array();
 
@@ -836,11 +960,22 @@ TEST_CASE("an alternate-screen click in an overlay keeps its delegating host foc
     }
 }
 
-TEST_CASE("a settings submenu click closes it and keys still reach the visible list",
+TEST_CASE("an alternate-screen click in an overlay keeps its delegating host focused",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "settings-submenu-click-closes-and-keeps-host-focus");
+    check_an_alternate_screen_click_in_an_overlay_keeps_its_delegating(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 an alternate-screen click in an overlay keeps its delegating host focused", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_an_alternate_screen_click_in_an_overlay_keeps_its_delegating(*bundle);
+}
+
+
+void check_a_settings_submenu_click_closes_it_and_keys_still_reach_the_(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "settings-submenu-click-closes-and-keeps-host-focus");
     const auto& frozen = scenario.at("expected").at("submenu");
 
     cch::tui::VirtualTerminal terminal({.columns = size_of(scenario.at("dimensions").at("columns")),
@@ -904,11 +1039,22 @@ TEST_CASE("a settings submenu click closes it and keys still reach the visible l
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("an alternate-screen click positions and focuses the editor cursor",
+TEST_CASE("a settings submenu click closes it and keys still reach the visible list",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "editor-alternate-screen-click-positions-cursor");
+    check_a_settings_submenu_click_closes_it_and_keys_still_reach_the_(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a settings submenu click closes it and keys still reach the visible list", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_a_settings_submenu_click_closes_it_and_keys_still_reach_the_(*bundle);
+}
+
+
+void check_an_alternate_screen_click_positions_and_focuses_the_editor_c(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "editor-alternate-screen-click-positions-cursor");
     const auto& frozen = scenario.at("expected").at("editor");
 
     cch::tui::VirtualTerminal terminal({.columns = size_of(frozen.at("columns")), .rows = size_of(frozen.at("rows"))});
@@ -939,11 +1085,22 @@ TEST_CASE("an alternate-screen click positions and focuses the editor cursor",
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("an editor click respects the borders, the wrapped segments and the wide graphemes",
+TEST_CASE("an alternate-screen click positions and focuses the editor cursor",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "editor-click-bounds-wrapped-segments-and-wide-graphemes");
+    check_an_alternate_screen_click_positions_and_focuses_the_editor_c(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_an_alternate_screen_click_positions_and_focuses_the_editor_c(*bundle);
+}
+
+
+void check_an_editor_click_respects_the_borders_the_wrapped_segments_an(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "editor-click-bounds-wrapped-segments-and-wide-graphemes");
     const auto& frozen = scenario.at("expected");
     const auto typed = scenario.at("inputs").at("typed").get_string();
 
@@ -979,11 +1136,22 @@ TEST_CASE("an editor click respects the borders, the wrapped segments and the wi
     }
 }
 
-TEST_CASE("an editor drag selects and copies instead of moving the cursor",
+TEST_CASE("an editor click respects the borders, the wrapped segments and the wide graphemes",
         "[tui][mouse-components][issue1003][compat-pi]") {
     const auto bundle = mouse_components_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "editor-drag-selects-and-copies-instead-of-moving-the-cursor");
+    check_an_editor_click_respects_the_borders_the_wrapped_segments_an(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_an_editor_click_respects_the_borders_the_wrapped_segments_an(*bundle);
+}
+
+
+void check_an_editor_drag_selects_and_copies_instead_of_moving_the_curs(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "editor-drag-selects-and-copies-instead-of-moving-the-cursor");
     const auto& frozen = scenario.at("expected").at("drag");
 
     cch::tui::VirtualTerminal terminal({.columns = size_of(scenario.at("dimensions").at("columns")),
@@ -1020,3 +1188,17 @@ TEST_CASE("an editor drag selects and copies instead of moving the cursor",
     CHECK(screen[1] == drawn_row(frozen.at("screen").get_array()[1].get_string()));
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("an editor drag selects and copies instead of moving the cursor",
+        "[tui][mouse-components][issue1003][compat-pi]") {
+    const auto bundle = mouse_components_bundle();
+    REQUIRE(bundle);
+    check_an_editor_drag_selects_and_copies_instead_of_moving_the_curs(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 an editor drag selects and copies instead of moving the cursor", "[tui][mouse][components][issue1212][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    check_an_editor_drag_selects_and_copies_instead_of_moving_the_curs(*bundle);
+}
+

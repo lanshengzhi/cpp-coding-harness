@@ -107,6 +107,10 @@ private:
     return cch::tests::read_pi_tui_evidence("scroll-view.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1213_scroll_view_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1213", "scroll-view.json");
+}
+
 [[nodiscard]] const JsonValue& scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
         if (scenario.at("name").get_string() == name) return scenario;
@@ -146,11 +150,8 @@ private:
 
 } // namespace
 
-TEST_CASE("scroll viewports follow the content end and report unused deltas as the frozen pi frame does",
-        "[tui][scroll-view][issue1000][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "follow-transitions");
+void check_scroll_viewports_follow_the_content_end_and_report_unused_de(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "follow-transitions");
     const auto& frozen = scenario.at("expected");
     const auto& window = frozen.at("window");
     const auto& requests = scenario.at("inputs").at("requests").get_array();
@@ -177,11 +178,22 @@ TEST_CASE("scroll viewports follow the content end and report unused deltas as t
     CHECK(index == requests.size());
 }
 
-TEST_CASE("appended rows move a followed viewport as the frozen pi frame does",
+TEST_CASE("scroll viewports follow the content end and report unused deltas as the frozen pi frame does",
         "[tui][scroll-view][issue1000][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "follow-append");
+    check_scroll_viewports_follow_the_content_end_and_report_unused_de(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 scroll viewports follow the content end and report unused deltas as the pi frame does", "[tui][scroll-view][issue1211][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_scroll_viewports_follow_the_content_end_and_report_unused_de(*bundle);
+}
+
+
+void check_appended_rows_move_a_followed_viewport_as_the_frozen_pi_fram(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "follow-append");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
 
@@ -207,11 +219,22 @@ TEST_CASE("appended rows move a followed viewport as the frozen pi frame does",
     CHECK(drawn_lines(*frame) == string_lines(frozen.at("after").at("lines")));
 }
 
-TEST_CASE("an absolute scroll with disableFollow holds the last row until follow is restored",
+TEST_CASE("appended rows move a followed viewport as the frozen pi frame does",
         "[tui][scroll-view][issue1000][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "scroll-to-disable-follow");
+    check_appended_rows_move_a_followed_viewport_as_the_frozen_pi_fram(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 appended rows move a followed viewport as the pi frame does", "[tui][scroll-view][issue1211][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_appended_rows_move_a_followed_viewport_as_the_frozen_pi_fram(*bundle);
+}
+
+
+void check_an_absolute_scroll_with_disableFollow_holds_the_last_row_unt(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "scroll-to-disable-follow");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
     const auto& actions = inputs.at("actions").get_array();
@@ -245,11 +268,22 @@ TEST_CASE("an absolute scroll with disableFollow holds the last row until follow
     CHECK(index == actions.size());
 }
 
-TEST_CASE("nested viewport measurement, delta ownership and depth order match the frozen pi frame",
+TEST_CASE("an absolute scroll with disableFollow holds the last row until follow is restored",
         "[tui][scroll-view][issue1000][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "nested-scroll");
+    check_an_absolute_scroll_with_disableFollow_holds_the_last_row_unt(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 an absolute scroll with disableFollow holds the last row until follow is restored", "[tui][scroll-view][issue1211][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_an_absolute_scroll_with_disableFollow_holds_the_last_row_unt(*bundle);
+}
+
+
+void check_nested_viewport_measurement_delta_ownership_and_depth_order_(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "nested-scroll");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
 
@@ -305,10 +339,22 @@ TEST_CASE("nested viewport measurement, delta ownership and depth order match th
     CHECK(probe_index == 3);
 }
 
-TEST_CASE("scrolled image placements match the frozen pi crop geometry", "[tui][scroll-view][issue1000][compat-pi]") {
+TEST_CASE("nested viewport measurement, delta ownership and depth order match the frozen pi frame",
+        "[tui][scroll-view][issue1000][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "scroll-image-crop");
+    check_nested_viewport_measurement_delta_ownership_and_depth_order_(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 nested viewport measurement, delta ownership and depth order match the pi frame", "[tui][scroll-view][issue1211][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_nested_viewport_measurement_delta_ownership_and_depth_order_(*bundle);
+}
+
+
+void check_scrolled_image_placements_match_the_frozen_pi_crop_geometry(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "scroll-image-crop");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
     const auto placed_columns = static_cast<std::size_t>(int_of(inputs.at("placement").at("columns")));
@@ -379,11 +425,22 @@ TEST_CASE("scrolled image placements match the frozen pi crop geometry", "[tui][
     }
 }
 
-TEST_CASE("the implicit alternate-screen viewport matches the frozen pi phases",
-        "[tui][alt-screen][scroll-view][issue1000][compat-pi]") {
+TEST_CASE("scrolled image placements match the frozen pi crop geometry",
+        "[tui][scroll-view][issue1000][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "alt-screen-implicit-follow");
+    check_scrolled_image_placements_match_the_frozen_pi_crop_geometry(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 scrolled image placements match the pi crop geometry", "[tui][scroll-view][issue1211][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_scrolled_image_placements_match_the_frozen_pi_crop_geometry(*bundle);
+}
+
+
+void check_the_implicit_alternate_screen_viewport_matches_the_frozen_pi(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "alt-screen-implicit-follow");
     const auto& phases = scenario.at("expected").at("phases").get_array();
     const auto& inputs = scenario.at("inputs");
     const auto resizes = scenario.at("inputs").at("resizes").get_array();
@@ -429,11 +486,22 @@ TEST_CASE("the implicit alternate-screen viewport matches the frozen pi phases",
     CHECK(phase_index == phases.size());
 }
 
-TEST_CASE("frozen wheel policy drives fixed, accelerated, burst, reset, and fractional deltas",
-        "[tui][scroll-view][issue1004][compat-pi]") {
+TEST_CASE("the implicit alternate-screen viewport matches the frozen pi phases",
+        "[tui][alt-screen][scroll-view][issue1000][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "wheel-accelerator");
+    check_the_implicit_alternate_screen_viewport_matches_the_frozen_pi(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 the implicit alternate-screen viewport matches the pi phases", "[tui][scroll-view][issue1211][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_the_implicit_alternate_screen_viewport_matches_the_frozen_pi(*bundle);
+}
+
+
+void check_wheel_accelerator(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "wheel-accelerator");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
     auto clock = std::chrono::steady_clock::time_point{};
@@ -505,11 +573,22 @@ TEST_CASE("frozen wheel policy drives fixed, accelerated, burst, reset, and frac
     CHECK(alt_deltas == std::vector<std::ptrdiff_t>{-15});
 }
 
-TEST_CASE("frozen nested wheel routing consumes the child then chains only to its enclosing viewport",
+TEST_CASE("frozen wheel policy drives fixed, accelerated, burst, reset, and fractional deltas",
         "[tui][scroll-view][issue1004][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "nested-wheel-chaining");
+    check_wheel_accelerator(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 wheel policy drives fixed, accelerated, burst, reset, and fractional deltas", "[tui][scroll-view][issue1211][issue1213][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_wheel_accelerator(*bundle);
+}
+
+
+void check_frozen_nested_wheel_routing_consumes_the_child_then_chains_o(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "nested-wheel-chaining");
     const auto& expected = scenario.at("expected");
     cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 3});
     cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.wheel_scroll_lines = std::size_t{5}});
@@ -542,11 +621,22 @@ TEST_CASE("frozen nested wheel routing consumes the child then chains only to it
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("frozen fullscreen navigation, releases, and indicator clicks match pi",
+TEST_CASE("frozen nested wheel routing consumes the child then chains only to its enclosing viewport",
         "[tui][scroll-view][issue1004][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "alt-screen-navigation-indicator");
+    check_frozen_nested_wheel_routing_consumes_the_child_then_chains_o(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 nested wheel routing consumes the child then chains only to its enclosing viewport", "[tui][scroll-view][issue1211][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_frozen_nested_wheel_routing_consumes_the_child_then_chains_o(*bundle);
+}
+
+
+void check_fullscreen_navigation_indicator(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "alt-screen-navigation-indicator");
     const auto& phases = scenario.at("expected").at("phases").get_array();
     const auto phase = [&](std::string_view name) -> const JsonValue& {
         for (const auto& value : phases)
@@ -614,11 +704,22 @@ TEST_CASE("frozen fullscreen navigation, releases, and indicator clicks match pi
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("a primary scroll view without follow-end never shows the jump-to-end indicator",
-        "[tui][alt-screen][scroll-view][issue1004][compat-pi]") {
+TEST_CASE("frozen fullscreen navigation, releases, and indicator clicks match pi",
+        "[tui][scroll-view][issue1004][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "alt-screen-indicator-no-follow-end");
+    check_fullscreen_navigation_indicator(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 fullscreen navigation, releases, and indicator clicks match frozen pi", "[tui][scroll-view][issue1211][issue1213][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_fullscreen_navigation_indicator(*bundle);
+}
+
+
+void check_a_primary_scroll_view_without_follow_end_never_shows_the_jum(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "alt-screen-indicator-no-follow-end");
     const auto& phases = scenario.at("expected").at("phases").get_array();
     const auto phase = [&](std::string_view name) -> const JsonValue& {
         for (const auto& value : phases)
@@ -656,3 +757,17 @@ TEST_CASE("a primary scroll view without follow-end never shows the jump-to-end 
     }
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("a primary scroll view without follow-end never shows the jump-to-end indicator",
+        "[tui][alt-screen][scroll-view][issue1004][issue1213][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_a_primary_scroll_view_without_follow_end_never_shows_the_jum(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a primary scroll view without follow-end never shows the jump-to-end indicator", "[tui][scroll-view][issue1211][compat-pi]") {
+    const auto bundle = audit1213_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_a_primary_scroll_view_without_follow_end_never_shows_the_jum(*bundle);
+}
+

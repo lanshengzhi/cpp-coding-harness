@@ -144,7 +144,7 @@ private:
 
 } // namespace
 
-TEST_CASE("mouse reports parse from SGR, legacy X10, and wheel forms", "[tui][mouse][issue1002][spec]") {
+TEST_CASE("mouse reports parse from SGR, legacy X10, and wheel forms", "[tui][mouse][issue1002][issue1213][spec]") {
     using cch::tui::detail::MousePacket;
     using cch::tui::detail::parse_mouse_packet;
 
@@ -856,5 +856,68 @@ TEST_CASE("regular mode neither consumes nor paints a mouse report", "[tui][mous
     // Typed input after the report is unaffected.
     REQUIRE(terminal.inject_input("a"));
     CHECK(probe_pointer->keys == 1);
+    CHECK(tui.stop());
+}
+
+TEST_CASE("a released gesture stops capturing before the next press", "[tui][mouse][issue1213][spec]") {
+    // Discriminating case for the frozen capture gesture: a capture map that
+    // leaks past release keeps sending moves to the old target; the frozen
+    // behavior hit-tests the component under the pointer once the gesture ends.
+    VirtualTerminal terminal({.columns = 20, .rows = 2});
+    cch::tui::AltScreen tui(terminal);
+    auto first = std::make_unique<MouseProbe>(std::vector<std::string>{"first"},
+            answer_types({MouseEventType::Press},
+                    MouseEventResult{.handled = true, .capture = true, .focus = true}));
+    auto* first_pointer = first.get();
+    auto second = std::make_unique<MouseProbe>(std::vector<std::string>{"second"});
+    auto* second_pointer = second.get();
+    REQUIRE(tui.add_child(std::move(first)));
+    REQUIRE(tui.add_child(std::move(second)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Press on the first row captures the gesture, wherever the pointer goes.
+    REQUIRE(terminal.inject_input("\x1b[<0;1;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;1;2M"));
+    REQUIRE(tui.render());
+    // The captured component sees the press and the drag outside its rows.
+    REQUIRE(first_pointer->events.size() == 2);
+    CHECK(first_pointer->events.front().type == MouseEventType::Press);
+    CHECK(first_pointer->events.back().type == MouseEventType::Drag);
+    // Release ends the gesture and is still delivered to the captured target.
+    REQUIRE(terminal.inject_input("\x1b[<0;1;2m"));
+    REQUIRE(tui.render());
+    REQUIRE(first_pointer->events.size() == 3);
+    CHECK(first_pointer->events.back().type == MouseEventType::Release);
+    // A motion over the second row now belongs to the second component.
+    REQUIRE(terminal.inject_input("\x1b[<35;1;2M"));
+    REQUIRE(tui.render());
+    REQUIRE(second_pointer->events.size() == 1);
+    CHECK(second_pointer->events.front().type == MouseEventType::Move);
+    CHECK(first_pointer->events.size() == 3);
+    CHECK(tui.stop());
+}
+
+TEST_CASE("an unconsumed wheel scrolls after handled pointer motion", "[tui][mouse][issue1213][spec]") {
+    // Discriminating case for the frozen wheel routing: motion-handling state
+    // must not swallow a later wheel report; an unconsumed wheel still scrolls
+    // the transcript after a handled motion.
+    VirtualTerminal terminal({.columns = 20, .rows = 3});
+    cch::tui::AltScreen tui(terminal);
+    auto probe = std::make_unique<MouseProbe>(std::vector<std::string>{"1", "2", "3", "4", "5", "6", "7", "8"},
+            answer_types({MouseEventType::Move}, MouseEventResult{.handled = true}));
+    auto* probe_pointer = probe.get();
+    REQUIRE(tui.add_child(std::move(probe)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto viewport_top = tui.viewport_top();
+
+    REQUIRE(terminal.inject_input("\x1b[<35;1;1M"));
+    REQUIRE(tui.render());
+    CHECK(probe_pointer->events.size() == 1);
+    // The wheel is not answered by the probe, so the viewport scrolls up.
+    REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
+    REQUIRE(tui.render());
+    CHECK(tui.viewport_top() == viewport_top - 1);
     CHECK(tui.stop());
 }

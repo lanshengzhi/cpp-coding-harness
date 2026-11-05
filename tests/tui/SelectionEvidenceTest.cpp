@@ -54,6 +54,10 @@ void drag(cch::tui::VirtualTerminal& terminal, const JsonValue& inputs) {
     return cch::tests::read_pi_v130_audit_evidence("audit-1050", "selection-multiclick.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1212_selection_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1212", "selection.json");
+}
+
 [[nodiscard]] const JsonValue& mouse_scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
         if (scenario.at("name").get_string() == name) return scenario;
@@ -87,10 +91,8 @@ void drag(cch::tui::VirtualTerminal& terminal, const JsonValue& inputs) {
 /// `advanceMs` clock deltas; the replay injects them on a deterministic
 /// selection-click clock and compares every recorded observation (selection
 /// state plus the accumulated copies) and viewport snapshot in order.
-void replay_multiclick_scenario(std::string_view name) {
-    const auto bundle = selection_bundle();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, name);
+void replay_multiclick_scenario(const JsonValue& bundle, std::string_view name) {
+    const auto& scenario = scenario_of(bundle, name);
     const auto& dimensions = scenario.at("dimensions");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
@@ -180,10 +182,8 @@ void replay_multiclick_scenario(std::string_view name) {
     REQUIRE(tui.stop());
 }
 
-void replay_mouse_routing_scenario(std::string_view name) {
-    const auto bundle = selection_bundle();
-    REQUIRE(bundle);
-    const auto& scenario = mouse_scenario_of(*bundle, name);
+void replay_mouse_routing_scenario(const JsonValue& bundle, std::string_view name) {
+    const auto& scenario = mouse_scenario_of(bundle, name);
     const auto& dimensions = scenario.at("dimensions");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
@@ -250,6 +250,18 @@ void replay_mouse_routing_scenario(std::string_view name) {
     REQUIRE(tui.stop());
 }
 
+void replay_multiclick_scenario(std::string_view name) {
+    const auto bundle = selection_bundle();
+    REQUIRE(bundle);
+    replay_multiclick_scenario(*bundle, name);
+}
+
+void replay_mouse_routing_scenario(std::string_view name) {
+    const auto bundle = selection_bundle();
+    REQUIRE(bundle);
+    replay_mouse_routing_scenario(*bundle, name);
+}
+
 } // namespace
 
 TEST_CASE("AltScreen OSC 8 clicks and drags replay named frozen observations",
@@ -262,11 +274,8 @@ TEST_CASE("AltScreen secondary button replays named Linux paste routing observat
     replay_mouse_routing_scenario("linux-secondary-button-paste");
 }
 
-TEST_CASE("AltScreen selection replays styled CJK cells across wrapped rows and copies frozen text",
-        "[tui][alt-screen][selection][issue1006][issue1182][compat-pi]") {
-    const auto bundle = selection_bundle();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "styled-cjk-wrapped-selection");
+void check_styled_cjk_wrapped_selection(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "styled-cjk-wrapped-selection");
     const auto& dimensions = scenario.at("dimensions");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
@@ -317,11 +326,22 @@ TEST_CASE("AltScreen selection replays styled CJK cells across wrapped rows and 
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("AltScreen selection preserves the cell range through content and focus changes",
+TEST_CASE("AltScreen selection replays styled CJK cells across wrapped rows and copies frozen text",
         "[tui][alt-screen][selection][issue1006][issue1182][compat-pi]") {
     const auto bundle = selection_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "selection-content-focus-and-clear-lifecycle");
+    check_styled_cjk_wrapped_selection(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 styled CJK selection replays across wrapped rows and copies frozen text", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1212_selection_bundle();
+    REQUIRE(bundle);
+    check_styled_cjk_wrapped_selection(*bundle);
+}
+
+
+void check_selection_content_focus_and_clear_lifecycle(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "selection-content-focus-and-clear-lifecycle");
     const auto& dimensions = scenario.at("dimensions");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
@@ -373,11 +393,22 @@ TEST_CASE("AltScreen selection preserves the cell range through content and focu
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("AltScreen selection copy returns the frozen specific clipboard failure",
-        "[tui][alt-screen][selection][issue1006][compat-pi]") {
+TEST_CASE("AltScreen selection preserves the cell range through content and focus changes",
+        "[tui][alt-screen][selection][issue1006][issue1182][compat-pi]") {
     const auto bundle = selection_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "selection-copy-specific-failure");
+    check_selection_content_focus_and_clear_lifecycle(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 selection preserves the cell range through content and focus changes", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1212_selection_bundle();
+    REQUIRE(bundle);
+    check_selection_content_focus_and_clear_lifecycle(*bundle);
+}
+
+
+void check_selection_copy_specific_failure(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "selection-copy-specific-failure");
     const auto& dimensions = scenario.at("dimensions");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
@@ -406,11 +437,22 @@ TEST_CASE("AltScreen selection copy returns the frozen specific clipboard failur
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("AltScreen copy-on-select uses the frozen default and ignores an empty click",
+TEST_CASE("AltScreen selection copy returns the frozen specific clipboard failure",
         "[tui][alt-screen][selection][issue1006][compat-pi]") {
     const auto bundle = selection_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "copy-on-select-default-and-empty-range");
+    check_selection_copy_specific_failure(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 selection copy returns the frozen specific clipboard failure", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1212_selection_bundle();
+    REQUIRE(bundle);
+    check_selection_copy_specific_failure(*bundle);
+}
+
+
+void check_copy_on_select_default_and_empty_range(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "copy-on-select-default-and-empty-range");
     const auto& dimensions = scenario.at("dimensions");
     const auto& inputs = scenario.at("inputs");
     const auto& expected = scenario.at("expected");
@@ -443,6 +485,20 @@ TEST_CASE("AltScreen copy-on-select uses the frozen default and ignores an empty
     CHECK(copied == copied_texts(expected.at("copied")));
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("AltScreen copy-on-select uses the frozen default and ignores an empty click",
+        "[tui][alt-screen][selection][issue1006][compat-pi]") {
+    const auto bundle = selection_bundle();
+    REQUIRE(bundle);
+    check_copy_on_select_default_and_empty_range(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 copy-on-select uses the frozen default and ignores an empty click", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1212_selection_bundle();
+    REQUIRE(bundle);
+    check_copy_on_select_default_and_empty_range(*bundle);
+}
+
 
 TEST_CASE("AltScreen multi-click selection replays the frozen word-line cycle",
         "[tui][alt-screen][selection][issue1007][compat-pi]") {
@@ -487,3 +543,18 @@ TEST_CASE("AltScreen multi-click selection replays the frozen dictionary-script 
 // The inclusive 500 ms / 501 ms interval boundary is pinned by the frozen
 // `multiclick-expiry-and-word-identity` scenario steps and the AltScreen unit
 // test on the same boundary.
+
+TEST_CASE("pi-v1.3.0 selection routing and multi-click scenarios replay against frozen pi",
+        "[tui][alt-screen][selection][issue1212][compat-pi]") {
+    const auto bundle = audit1212_selection_bundle();
+    REQUIRE(bundle);
+    for (const auto& scenario : bundle->at("scenarios").get_array()) {
+        const auto name = scenario.at("name").get_string();
+        INFO("scenario " << name);
+        if (name == "osc8-click-and-drag-routing" || name == "linux-secondary-button-paste") {
+            replay_mouse_routing_scenario(*bundle, name);
+        } else if (name.starts_with("multiclick-")) {
+            replay_multiclick_scenario(*bundle, name);
+        }
+    }
+}

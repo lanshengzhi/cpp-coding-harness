@@ -83,6 +83,10 @@ using cch::tui::MouseEventType;
     return cch::tests::read_pi_v130_audit_evidence("audit-1050", "overlay-routing.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1213_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1213", "mouse.json");
+}
+
 class OverlayWheelProbe final : public cch::tui::Component,
                                 public cch::tui::Focusable,
                                 public cch::tui::InputHandler,
@@ -277,11 +281,8 @@ void check_optional_click_count(const JsonValue& frozen, const std::optional<std
 
 } // namespace
 
-TEST_CASE("the cached frame routes a press to the deepest nested region as frozen pi does",
-        "[tui][mouse][issue1002][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "cached-frame-hit-test");
+void check_cached_frame_hit_test(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "cached-frame-hit-test");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
 
@@ -458,11 +459,22 @@ TEST_CASE("the cached frame routes a press to the deepest nested region as froze
     CHECK(retargeted.height == static_cast<std::size_t>(int_of(frozen_retarget.at("size").at("height"))));
 }
 
-TEST_CASE("a captured gesture follows the pointer outside its component and keeps host focus",
+TEST_CASE("the cached frame routes a press to the deepest nested region as frozen pi does",
         "[tui][mouse][issue1002][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "capture-drag-and-host-focus");
+    check_cached_frame_hit_test(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 cached frame routes a press to the deepest nested region", "[tui][mouse][issue1209][issue1213][compat-pi]") {
+    const auto bundle = audit1213_bundle();
+    REQUIRE(bundle);
+    check_cached_frame_hit_test(*bundle);
+}
+
+
+void check_capture_drag_and_host_focus(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "capture-drag-and-host-focus");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
 
@@ -526,6 +538,20 @@ TEST_CASE("a captured gesture follows the pointer outside its component and keep
     CHECK(inputs.at("host").at("hostHandlesInput").get_boolean());
     REQUIRE(host_tui.stop());
 }
+
+TEST_CASE("a captured gesture follows the pointer outside its component and keeps host focus",
+        "[tui][mouse][issue1002][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_capture_drag_and_host_focus(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus", "[tui][mouse][issue1209][issue1212][issue1213][compat-pi]") {
+    const auto bundle = audit1213_bundle();
+    REQUIRE(bundle);
+    check_capture_drag_and_host_focus(*bundle);
+}
+
 
 TEST_CASE("focused overlay wheel routing matches the frozen pi-v1.3.0 observation",
         "[tui][mouse][overlay][issue1125][compat-pi]") {
@@ -599,11 +625,8 @@ TEST_CASE("focused overlay wheel routing matches the frozen pi-v1.3.0 observatio
     CHECK(consumed_tui.stop());
 }
 
-TEST_CASE("a consumed wheel report keeps the viewport and an unconsumed one scrolls it",
-        "[tui][mouse][issue1002][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "wheel-consumed-and-unconsumed");
+void check_wheel_consumed_and_unconsumed(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "wheel-consumed-and-unconsumed");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
 
@@ -654,11 +677,22 @@ TEST_CASE("a consumed wheel report keeps the viewport and an unconsumed one scro
     REQUIRE(open_tui.stop());
 }
 
-TEST_CASE("handled motion writes nothing and consecutive clicks count up as frozen pi does",
+TEST_CASE("a consumed wheel report keeps the viewport and an unconsumed one scrolls it",
         "[tui][mouse][issue1002][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "motion-and-click-counts");
+    check_wheel_consumed_and_unconsumed(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 consumed wheel report keeps the viewport and an unconsumed one scrolls it", "[tui][mouse][issue1209][issue1213][compat-pi]") {
+    const auto bundle = audit1213_bundle();
+    REQUIRE(bundle);
+    check_wheel_consumed_and_unconsumed(*bundle);
+}
+
+
+void check_motion_and_click_counts(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "motion-and-click-counts");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
 
@@ -734,11 +768,22 @@ TEST_CASE("handled motion writes nothing and consecutive clicks count up as froz
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("the regular screen leaves terminal-owned mouse behavior and typed input intact",
+TEST_CASE("handled motion writes nothing and consecutive clicks count up as frozen pi does",
         "[tui][mouse][issue1002][compat-pi]") {
     const auto bundle = named_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "regular-screen-keeps-terminal-mouse");
+    check_motion_and_click_counts(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 handled motion writes nothing and consecutive clicks count up", "[tui][mouse][issue1209][issue1213][compat-pi]") {
+    const auto bundle = audit1213_bundle();
+    REQUIRE(bundle);
+    check_motion_and_click_counts(*bundle);
+}
+
+
+void check_regular_screen_keeps_terminal_mouse(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "regular-screen-keeps-terminal-mouse");
     const auto& frozen = scenario.at("expected").at("regular");
     const auto& inputs = scenario.at("inputs");
 
@@ -762,3 +807,17 @@ TEST_CASE("the regular screen leaves terminal-owned mouse behavior and typed inp
     CHECK(input_pointer->value().find("\x1b[<") == std::string::npos);
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("the regular screen leaves terminal-owned mouse behavior and typed input intact",
+        "[tui][mouse][issue1002][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_regular_screen_keeps_terminal_mouse(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 regular screen leaves terminal-owned mouse behavior and typed input intact", "[tui][mouse][issue1209][issue1213][compat-pi]") {
+    const auto bundle = audit1213_bundle();
+    REQUIRE(bundle);
+    check_regular_screen_keeps_terminal_mouse(*bundle);
+}
+

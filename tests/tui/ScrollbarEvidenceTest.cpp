@@ -137,6 +137,10 @@ private:
     return cch::tests::read_pi_tui_evidence("scrollbar.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1211_scrollbar_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1211", "scrollbar.json");
+}
+
 [[nodiscard]] const JsonValue& scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
         if (scenario.at("name").get_string() == name) return scenario;
@@ -246,11 +250,8 @@ void check_phase(const ViewportPhase& observed, const ViewportPhase& frozen) {
 
 } // namespace
 
-TEST_CASE("scrollbar modes reserve the frozen content column and re-wrap the child",
-        "[tui][scroll-view][scrollbar][issue1001][compat-pi]") {
-    const auto bundle = scrollbar_bundle();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "scrollbar-modes-and-reservation");
+void check_scrollbar_modes_reserve_the_frozen_content_column_and_re_wra(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "scrollbar-modes-and-reservation");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
     const auto& dimensions = scenario.at("dimensions");
@@ -282,11 +283,22 @@ TEST_CASE("scrollbar modes reserve the frozen content column and re-wrap the chi
     check_phase(phase_of(view, *frame), phase_of(frozen.at("restored")));
 }
 
-TEST_CASE("the transient scrollbar follows the frozen timeline and overlay splice",
+TEST_CASE("scrollbar modes reserve the frozen content column and re-wrap the child",
         "[tui][scroll-view][scrollbar][issue1001][compat-pi]") {
     const auto bundle = scrollbar_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "scrollbar-transient-timeline");
+    check_scrollbar_modes_reserve_the_frozen_content_column_and_re_wra(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 scrollbar modes reserve the content column and re-wrap the child", "[tui][scroll-view][scrollbar][issue1211][compat-pi]") {
+    const auto bundle = audit1211_scrollbar_bundle();
+    REQUIRE(bundle);
+    check_scrollbar_modes_reserve_the_frozen_content_column_and_re_wra(*bundle);
+}
+
+
+void check_the_transient_scrollbar_follows_the_frozen_timeline_and_over(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "scrollbar-transient-timeline");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
     const auto& styles = inputs.at("styles");
@@ -417,11 +429,22 @@ TEST_CASE("the transient scrollbar follows the frozen timeline and overlay splic
     }) == booleans(frozen.at("alwaysOverflowingReset")));
 }
 
-TEST_CASE("scrollbar thumb proportions, empty, tiny and single-column viewports match the frozen frames",
+TEST_CASE("the transient scrollbar follows the frozen timeline and overlay splice",
         "[tui][scroll-view][scrollbar][issue1001][compat-pi]") {
     const auto bundle = scrollbar_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "scrollbar-geometry-edges");
+    check_the_transient_scrollbar_follows_the_frozen_timeline_and_over(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 the transient scrollbar follows the timeline and overlay splice", "[tui][scroll-view][scrollbar][issue1211][compat-pi]") {
+    const auto bundle = audit1211_scrollbar_bundle();
+    REQUIRE(bundle);
+    check_the_transient_scrollbar_follows_the_frozen_timeline_and_over(*bundle);
+}
+
+
+void check_scrollbar_thumb_proportions_empty_tiny_and_single_column_vie(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "scrollbar-geometry-edges");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
     const auto identity_thumb = [](std::string_view text) { return std::string(text); };
@@ -492,11 +515,22 @@ TEST_CASE("scrollbar thumb proportions, empty, tiny and single-column viewports 
     check_window(*frame, frozen.at("singleColumn").at("window"));
 }
 
-TEST_CASE("the overlay scrollbar keeps the frozen background splice",
+TEST_CASE("scrollbar thumb proportions, empty, tiny and single-column viewports match the frozen frames",
         "[tui][scroll-view][scrollbar][issue1001][compat-pi]") {
     const auto bundle = scrollbar_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "scrollbar-overlay-preserves-background");
+    check_scrollbar_thumb_proportions_empty_tiny_and_single_column_vie(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 scrollbar thumb proportions, empty, tiny and single-column viewports match the frames", "[tui][scroll-view][scrollbar][issue1211][compat-pi]") {
+    const auto bundle = audit1211_scrollbar_bundle();
+    REQUIRE(bundle);
+    check_scrollbar_thumb_proportions_empty_tiny_and_single_column_vie(*bundle);
+}
+
+
+void check_the_overlay_scrollbar_keeps_the_frozen_background_splice(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "scrollbar-overlay-preserves-background");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
     const auto background = inputs.at("contentBackground").get_string();
@@ -525,11 +559,22 @@ TEST_CASE("the overlay scrollbar keeps the frozen background splice",
     }) == booleans(frozen.at("preservedBackgroundReemit")));
 }
 
-TEST_CASE("the frozen track clicks and drag phases drive the alternate-screen scrollbar",
-        "[tui][scroll-view][scrollbar][issue1005][compat-pi]") {
+TEST_CASE("the overlay scrollbar keeps the frozen background splice",
+        "[tui][scroll-view][scrollbar][issue1001][compat-pi]") {
     const auto bundle = scrollbar_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "scrollbar-alt-screen-drag-and-track-click");
+    check_the_overlay_scrollbar_keeps_the_frozen_background_splice(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 the overlay scrollbar keeps the background splice", "[tui][scroll-view][scrollbar][issue1211][compat-pi]") {
+    const auto bundle = audit1211_scrollbar_bundle();
+    REQUIRE(bundle);
+    check_the_overlay_scrollbar_keeps_the_frozen_background_splice(*bundle);
+}
+
+
+void check_scrollbar_drag_and_track_click(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "scrollbar-alt-screen-drag-and-track-click");
     const auto& phases = scenario.at("expected").at("phases").get_array();
     const auto& actions = scenario.at("inputs").at("actions").get_array();
     const auto& dimensions = scenario.at("dimensions");
@@ -581,11 +626,22 @@ TEST_CASE("the frozen track clicks and drag phases drive the alternate-screen sc
     CHECK(tui.stop());
 }
 
-TEST_CASE("the frozen drag phases capture layout routing in the alternate screen",
+TEST_CASE("the frozen track clicks and drag phases drive the alternate-screen scrollbar",
         "[tui][scroll-view][scrollbar][issue1005][compat-pi]") {
     const auto bundle = scrollbar_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "scrollbar-alt-screen-drag-captures-layout-routing");
+    check_scrollbar_drag_and_track_click(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 track clicks and drag phases drive the alternate-screen scrollbar", "[tui][issue1211][issue1213][compat-pi]") {
+    const auto bundle = audit1211_scrollbar_bundle();
+    REQUIRE(bundle);
+    check_scrollbar_drag_and_track_click(*bundle);
+}
+
+
+void check_the_frozen_drag_phases_capture_layout_routing_in_the_alterna(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "scrollbar-alt-screen-drag-captures-layout-routing");
     const auto& frozen = scenario.at("expected");
     const auto& dimensions = scenario.at("dimensions");
     const auto columns = static_cast<std::size_t>(int_of(dimensions.at("columns")));
@@ -643,11 +699,22 @@ TEST_CASE("the frozen drag phases capture layout routing in the alternate screen
     CHECK(tui.stop());
 }
 
-TEST_CASE("the frozen hover phases drive the alternate-screen scrollbar",
-        "[tui][scroll-view][scrollbar][issue1001][compat-pi]") {
+TEST_CASE("the frozen drag phases capture layout routing in the alternate screen",
+        "[tui][scroll-view][scrollbar][issue1005][issue1213][compat-pi]") {
     const auto bundle = scrollbar_bundle();
     REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "scrollbar-alt-screen-hover");
+    check_the_frozen_drag_phases_capture_layout_routing_in_the_alterna(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 the drag phases capture layout routing in the alternate screen", "[tui][scroll-view][scrollbar][issue1211][compat-pi]") {
+    const auto bundle = audit1211_scrollbar_bundle();
+    REQUIRE(bundle);
+    check_the_frozen_drag_phases_capture_layout_routing_in_the_alterna(*bundle);
+}
+
+
+void check_the_frozen_hover_phases_drive_the_alternate_screen_scrollbar(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "scrollbar-alt-screen-hover");
     const auto& frozen = scenario.at("expected");
     const auto& inputs = scenario.at("inputs");
     const auto& dimensions = scenario.at("dimensions");
@@ -698,3 +765,17 @@ TEST_CASE("the frozen hover phases drive the alternate-screen scrollbar",
     }
     CHECK(phase_index == frozen.at("phases").get_array().size());
 }
+
+TEST_CASE("the frozen hover phases drive the alternate-screen scrollbar",
+        "[tui][scroll-view][scrollbar][issue1001][compat-pi]") {
+    const auto bundle = scrollbar_bundle();
+    REQUIRE(bundle);
+    check_the_frozen_hover_phases_drive_the_alternate_screen_scrollbar(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 the hover phases drive the alternate-screen scrollbar", "[tui][scroll-view][scrollbar][issue1211][compat-pi]") {
+    const auto bundle = audit1211_scrollbar_bundle();
+    REQUIRE(bundle);
+    check_the_frozen_hover_phases_drive_the_alternate_screen_scrollbar(*bundle);
+}
+

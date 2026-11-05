@@ -3,6 +3,8 @@
 #include <cch/tui/Text.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/PiTuiEvidence.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
@@ -1254,4 +1256,101 @@ TEST_CASE("AltScreen stop aggregates multiple errors from pre-steps and stop",
     CHECK(res.error().message.find("AltScreen stop encountered multiple failures") != std::string::npos);
     CHECK(res.error().detail.find("mouse disable failure") != std::string::npos);
     CHECK(res.error().detail.find("atomic stop failure") != std::string::npos);
+}
+
+// The frozen pi-v1.3.0 observation (audit-1050/padding-and-selection-reset.json,
+// scenarios `selection-reset-drops-selection-and-multiclick-history` and
+// `third-consecutive-click-selects-line-control`) replays through the public
+// selection API: pi's resetTextSelection() clears the visible selection and the
+// multi-click history, so the drag after the reset selects the dragged
+// characters; without it the third consecutive press selects the whole line.
+namespace {
+
+void check_selection_reset_scenario(const cch::support::JsonValue& bundle, std::string_view name) {
+    const auto* scenario = &bundle;
+    for (const auto& item : bundle.at("scenarios").get_array()) {
+        if (item.at("name").get_string() == name) scenario = &item;
+    }
+    REQUIRE(scenario->at("name").get_string() == name);
+    const auto& inputs = scenario->at("inputs");
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
+    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.copy_on_select = false});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>(inputs.at("text").get_string(), 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    std::size_t clicks = 0;
+    const auto click_at = [&](std::ptrdiff_t x, std::ptrdiff_t y) {
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";" + std::to_string(y) + "M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";" + std::to_string(y) + "m"));
+    };
+    std::vector<std::string> phases;
+    for (const auto& step : inputs.at("steps").get_array()) {
+        const auto command = step.get_string();
+        if (command.starts_with("click(")) {
+            // The frozen capture arms the first click after the multi-click
+            // window and repeats within it (600 ms then 150 ms).
+            now += std::chrono::milliseconds{clicks == 0 ? 600 : 150};
+            ++clicks;
+            const auto x = std::stoll(command.substr(6, command.find(",") - 6));
+            const auto y = std::stoll(command.substr(command.find(",") + 1, command.find(")") - command.find(",") - 1));
+            click_at(x, y);
+            REQUIRE(tui.render());
+            phases.push_back(tui.selection_text_trace().value_or("<no selection>"));
+        } else if (command.starts_with("press(")) {
+            now += std::chrono::milliseconds{150};
+            const auto x = std::stoll(command.substr(6, command.find(",") - 6));
+            const auto y = std::stoll(command.substr(command.find(",") + 1, command.find(")") - command.find(",") - 1));
+            REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";" + std::to_string(y) + "M"));
+            REQUIRE(tui.render());
+        } else if (command.starts_with("drag(")) {
+            // Two frozen spellings: `drag(x1,y1 -> x2,y2)` presses at the start
+            // cell, and `drag(x2,y2)` continues the press the step before it.
+            const auto arrow = command.find("->");
+            std::string end = command;
+            if (arrow != std::string::npos) {
+                const auto x1 = std::stoll(command.substr(5, command.find(",") - 5));
+                const auto y1 = std::stoll(command.substr(command.find(",") + 1, arrow - command.find(",") - 1));
+                REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x1) + ";" + std::to_string(y1) + "M"));
+                end = command.substr(0, arrow - 1) + command.substr(command.find("->"));
+                end = "drag(" + command.substr(arrow + 2);
+            }
+            const auto x2 = std::stoll(end.substr(5, end.find(",") - 5));
+            const auto y2 = std::stoll(end.substr(end.find(",") + 1, end.find(")") - end.find(",") - 1));
+            REQUIRE(terminal.inject_input("\x1b[<32;" + std::to_string(x2) + ";" + std::to_string(y2) + "M"));
+            REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x2) + ";" + std::to_string(y2) + "m"));
+            REQUIRE(tui.render());
+            phases.push_back(tui.selection_text_trace().value_or("<no selection>"));
+        } else if (command == "resetTextSelection") {
+            tui.reset_text_selection();
+            REQUIRE(tui.render());
+            phases.push_back(tui.has_active_selection() ? "<selection remains>" : "<no selection>");
+        } else {
+            FAIL("unknown frozen step: " << command);
+        }
+    }
+    const auto& expected = scenario->at("expected");
+    // One phase is recorded per frozen step; the phases the artifact names are
+    // the double click's word selection, the reset's empty selection, the drag's
+    // character selection, and the third-click drag's whole-line selection.
+    std::vector<std::string> frozen;
+    if (expected.get_object().contains("afterDoubleClick")) {
+        frozen = {"<no selection>", "beta", "<no selection>", "bet"};
+    } else {
+        frozen = {"<no selection>", "beta", "alpha beta gamma"};
+    }
+    CHECK(phases == frozen);
+    CHECK(tui.stop());
+}
+
+} // namespace
+
+TEST_CASE("pi-v1.3.0 selection reset drops the multi-click history like frozen pi",
+        "[tui][alt-screen][selection][issue1211][issue1212][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "padding-and-selection-reset.json");
+    REQUIRE(bundle);
+    check_selection_reset_scenario(*bundle, "selection-reset-drops-selection-and-multiclick-history");
+    check_selection_reset_scenario(*bundle, "third-consecutive-click-selects-line-control");
 }
