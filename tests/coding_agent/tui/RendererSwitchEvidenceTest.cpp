@@ -81,6 +81,14 @@ constexpr std::string_view kFrozenRevision{"7c10bd4337495ee613f2224843ecdf349b80
     return text;
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> renderer_switch_bundle() {
+    return cch::tests::read_pi_tui_evidence("renderer-switch.json");
+}
+
+[[nodiscard]] cch::support::Expected<JsonValue> audit1210_renderer_switch_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1210", "renderer-switch.json");
+}
+
 [[nodiscard]] const JsonValue& scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
         if (scenario.at("name").get_string() == name) return scenario;
@@ -192,19 +200,22 @@ public:
 
 } // namespace
 
-TEST_CASE("frozen renderer-switch observations record the state and callback contract",
-        "[coding_agent][tui][fullscreen][renderer-switch][issue1018][compat-pi]") {
-    const auto bundle = cch::tests::read_pi_tui_evidence("renderer-switch.json");
-    REQUIRE(bundle);
-    CHECK(bundle->at("schema").get_string() == "pike/tui-evidence/1");
-    CHECK(bundle->at("revision").get_string() == kFrozenRevision);
-    CHECK(bundle->at("baseline").get_string() == "pi-v1.0.4");
-    REQUIRE(bundle->at("scenarios").get_array().size() == 8);
+void check_frozen_renderer_switch_observations_record_the_state_and_cal(const JsonValue& bundle) {
+    // The historical bundle carries the pike/tui-evidence/1 envelope and the
+    // recaptured audit-1210 family the pike/pi-v1.3.0-audit-evidence/1 one;
+    // both name one of the two known frozen revisions.
+    const auto& schema = bundle.at("schema").get_string();
+    CHECK((schema == "pike/tui-evidence/1" || schema == "pike/pi-v1.3.0-audit-evidence/1"));
+    const auto& revision = bundle.at("revision").get_string();
+    CHECK((revision == kFrozenRevision || revision == "71023aec1546d6d677a65669c5665c0927ce0dd0"));
+    const auto& baseline = bundle.at("baseline").get_string();
+    CHECK((baseline == "pi-v1.0.4" || baseline == "pi-v1.3.0"));
+    REQUIRE(bundle.at("scenarios").get_array().size() == 8);
 
     // 1. Same mode is a no-op. The row carries a live visible overlay entry, so
     // this is also the ordering proof: the no-op check runs before the guard.
     {
-        const auto& scenario = scenario_of(*bundle, "same-mode-returns-true-without-touching-the-renderer");
+        const auto& scenario = scenario_of(bundle, "same-mode-returns-true-without-touching-the-renderer");
         const auto& expected = scenario.at("expected");
         REQUIRE(scenario.at("inputs").at("overlay").get_string() == "visible");
         CHECK(expected.at("result").get_boolean());
@@ -220,7 +231,7 @@ TEST_CASE("frozen renderer-switch observations record the state and callback con
     // 2. Any overlay entry refuses, hidden ones included, and the refusal
     // leaves the engine exactly as it was.
     {
-        const auto& scenario = scenario_of(*bundle, "overlay-entry-refuses-the-switch-and-leaves-everything-intact");
+        const auto& scenario = scenario_of(bundle, "overlay-entry-refuses-the-switch-and-leaves-everything-intact");
         const auto& cases = scenario.at("expected").at("cases").get_array();
         REQUIRE(cases.size() == 2);
         for (const auto& recorded_case : cases) {
@@ -260,7 +271,7 @@ TEST_CASE("frozen renderer-switch observations record the state and callback con
     // live consumers.
     {
         const auto& scenario =
-                scenario_of(*bundle, "regular-to-fullscreen-retains-children-focus-editor-and-transcript");
+                scenario_of(bundle, "regular-to-fullscreen-retains-children-focus-editor-and-transcript");
         const auto& expected = scenario.at("expected");
         const auto& before = expected.at("stateBefore");
         const auto& after = expected.at("stateAfter");
@@ -282,7 +293,7 @@ TEST_CASE("frozen renderer-switch observations record the state and callback con
     // the retired root.
     {
         const auto& scenario =
-                scenario_of(*bundle, "fullscreen-to-regular-retains-the-tree-and-detaches-the-layout-root");
+                scenario_of(bundle, "fullscreen-to-regular-retains-the-tree-and-detaches-the-layout-root");
         const auto& expected = scenario.at("expected");
         const auto& before = expected.at("stateBefore");
         const auto& after = expected.at("stateAfter");
@@ -304,7 +315,7 @@ TEST_CASE("frozen renderer-switch observations record the state and callback con
     // 5. The main-screen render state crosses out and back: the switch captured
     // the live main screen, and the returning root repaints from that baseline.
     {
-        const auto& scenario = scenario_of(*bundle, "main-screen-render-state-transfers-out-and-back");
+        const auto& scenario = scenario_of(bundle, "main-screen-render-state-transfers-out-and-back");
         const auto& expected = scenario.at("expected");
         CHECK(expected.at("result").get_boolean());
         CHECK(expected.at("backResult").get_boolean());
@@ -319,7 +330,7 @@ TEST_CASE("frozen renderer-switch observations record the state and callback con
     // replacement root. Pike's seam has no such parameter: the engine always
     // starts the root it selected, so this row is recorded rather than driven.
     {
-        const auto& scenario = scenario_of(*bundle, "start-renderer-false-completes-without-starting-the-new-root");
+        const auto& scenario = scenario_of(bundle, "start-renderer-false-completes-without-starting-the-new-root");
         const auto& expected = scenario.at("expected");
         const auto& before = expected.at("stateBefore");
         const auto& after = expected.at("stateAfter");
@@ -337,7 +348,7 @@ TEST_CASE("frozen renderer-switch observations record the state and callback con
     // that recorded a `terminal.setProgress(true)` call.
     {
         const auto& scenario =
-                scenario_of(*bundle, "progress-restore-uses-the-show-terminal-progress-and-session-busy-condition");
+                scenario_of(bundle, "progress-restore-uses-the-show-terminal-progress-and-session-busy-condition");
         const auto& cases = scenario.at("expected").at("cases").get_array();
         REQUIRE(cases.size() == 5);
         std::size_t restored_rows = 0;
@@ -366,7 +377,7 @@ TEST_CASE("frozen renderer-switch observations record the state and callback con
     // without starting the replacement, render once and stop the terminal.
     {
         const auto& scenario =
-                scenario_of(*bundle, "transcript-exit-switches-to-regular-renders-without-starting-and-stops");
+                scenario_of(bundle, "transcript-exit-switches-to-regular-renders-without-starting-and-stops");
         const auto& expected = scenario.at("expected");
         const auto& steps = scenario.at("inputs").at("steps").get_array();
         REQUIRE(steps.size() == 4);
@@ -384,10 +395,21 @@ TEST_CASE("frozen renderer-switch observations record the state and callback con
     }
 }
 
-TEST_CASE("frozen renderer-switch frames replay through the Pike roots",
+TEST_CASE("frozen renderer-switch observations record the state and callback contract",
         "[coding_agent][tui][fullscreen][renderer-switch][issue1018][compat-pi]") {
-    const auto bundle = cch::tests::read_pi_tui_evidence("renderer-switch.json");
+    const auto bundle = renderer_switch_bundle();
     REQUIRE(bundle);
+    check_frozen_renderer_switch_observations_record_the_state_and_cal(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 renderer-switch observations record the state and callback contract", "[tui][renderer-switch][issue1209][issue1210][compat-pi]") {
+    const auto bundle = audit1210_renderer_switch_bundle();
+    REQUIRE(bundle);
+    check_frozen_renderer_switch_observations_record_the_state_and_cal(*bundle);
+}
+
+
+void check_frozen_renderer_switch_frames_replay_through_the_Pike_roots(const JsonValue& bundle) {
 
     struct FrameCase {
         std::string_view scenario;
@@ -423,7 +445,7 @@ TEST_CASE("frozen renderer-switch frames replay through the Pike roots",
 
     std::size_t styled_frames = 0;
     for (const auto& frame_case : cases) {
-        const auto& scenario = scenario_of(*bundle, frame_case.scenario);
+        const auto& scenario = scenario_of(bundle, frame_case.scenario);
         const JsonValue* const case_expected =
                 frame_case.has_case
                         ? &scenario.at("expected").at("cases").get_array()[frame_case.case_index].at("expected")
@@ -492,6 +514,20 @@ TEST_CASE("frozen renderer-switch frames replay through the Pike roots",
     CHECK(styled_frames == 2);
 }
 
+TEST_CASE("frozen renderer-switch frames replay through the Pike roots",
+        "[coding_agent][tui][fullscreen][renderer-switch][issue1018][compat-pi]") {
+    const auto bundle = renderer_switch_bundle();
+    REQUIRE(bundle);
+    check_frozen_renderer_switch_frames_replay_through_the_Pike_roots(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 renderer-switch frames replay through the Pike roots", "[tui][renderer-switch][issue1210][compat-pi]") {
+    const auto bundle = audit1210_renderer_switch_bundle();
+    REQUIRE(bundle);
+    check_frozen_renderer_switch_frames_replay_through_the_Pike_roots(*bundle);
+}
+
+
 namespace {
 
 [[nodiscard]] std::string live_visible_screen(const cch::tui::VirtualTerminal& terminal) {
@@ -548,13 +584,10 @@ namespace {
 
 } // namespace
 
-TEST_CASE("live renderer switch validates focus and state expectations from frozen evidence",
-        "[coding_agent][tui][fullscreen][renderer-switch][issue1018][compat-pi]") {
-    const auto bundle = cch::tests::read_pi_tui_evidence("renderer-switch.json");
-    REQUIRE(bundle);
+void check_live_renderer_switch_validates_focus_and_state_expectations_(const JsonValue& bundle) {
 
     const auto& f2r_scenario =
-            scenario_of(*bundle, "fullscreen-to-regular-retains-the-tree-and-detaches-the-layout-root");
+            scenario_of(bundle, "fullscreen-to-regular-retains-the-tree-and-detaches-the-layout-root");
     const auto& f2r_expected = f2r_scenario.at("expected");
     const auto& f2r_before = f2r_expected.at("stateBefore");
     const auto& f2r_after = f2r_expected.at("stateAfter");
@@ -653,5 +686,19 @@ TEST_CASE("live renderer switch validates focus and state expectations from froz
     REQUIRE(run_result);
     CHECK(*run_result);
 }
+
+TEST_CASE("live renderer switch validates focus and state expectations from frozen evidence",
+        "[coding_agent][tui][fullscreen][renderer-switch][issue1018][compat-pi]") {
+    const auto bundle = renderer_switch_bundle();
+    REQUIRE(bundle);
+    check_live_renderer_switch_validates_focus_and_state_expectations_(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 live renderer switch validates focus and state expectations from evidence", "[tui][renderer-switch][issue1210][compat-pi]") {
+    const auto bundle = audit1210_renderer_switch_bundle();
+    REQUIRE(bundle);
+    check_live_renderer_switch_validates_focus_and_state_expectations_(*bundle);
+}
+
 
 } // namespace cch::coding_agent::tui

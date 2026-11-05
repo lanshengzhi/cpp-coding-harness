@@ -438,13 +438,18 @@ TEST_CASE(
     }
 }
 
+[[nodiscard]] cch::support::Expected<cch::support::JsonValue> fullscreen_exit_output_bundle() {
+    return tests::read_pi_tui_evidence("fullscreen-exit-output.json");
+}
+
+[[nodiscard]] cch::support::Expected<cch::support::JsonValue> audit1210_fullscreen_exit_output_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1210", "fullscreen-exit-output.json");
+}
+
 // ── 2. format_resume_command Matrix ──────────────────────────────────────────
 
-TEST_CASE("Native TUI format_resume_command characterizes the frozen resume command matrix",
-        "[coding_agent][tui][exit][resume_command][issue1019][spec]") {
-    const auto bundle = tests::read_pi_tui_evidence("fullscreen-exit-output.json");
-    REQUIRE(bundle);
-    const auto& scenarios = bundle->at("scenarios").get_array();
+void check_format_resume_command_matrix(const cch::support::JsonValue& bundle) {
+    const auto& scenarios = bundle.at("scenarios").get_array();
     auto sc_it = std::find_if(scenarios.begin(), scenarios.end(), [](const auto& s) {
         return s.at("name").get_string() == "format-resume-command-matrix";
     });
@@ -589,6 +594,20 @@ TEST_CASE("Native TUI format_resume_command characterizes the frozen resume comm
         CHECK(std::string(coding_agent::tui::kResumeNoticePrefix) + *cmd + "\n" == exp.at("styledNotice").get_string());
     }
 }
+
+TEST_CASE("Native TUI format_resume_command characterizes the frozen resume command matrix",
+        "[coding_agent][tui][exit][resume_command][issue1019][spec]") {
+    const auto bundle = fullscreen_exit_output_bundle();
+    REQUIRE(bundle);
+    check_format_resume_command_matrix(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 format_resume_command characterizes the frozen resume command matrix", "[coding_agent][tui][exit][resume_command][issue1210][compat-pi]") {
+    const auto bundle = audit1210_fullscreen_exit_output_bundle();
+    REQUIRE(bundle);
+    check_format_resume_command_matrix(*bundle);
+}
+
 
 // ── 3. Fullscreen Exit Output Policy at Native TUI Consumers ──────────────────
 
@@ -2825,11 +2844,8 @@ ExitRunResult run_exit_scenario(const ExitScenarioParams& params) {
     return result;
 }
 
-TEST_CASE("Native TUI public fullscreen exit output characterizes frozen artifact 33 scenarios",
-        "[coding_agent][tui][exit][artifact33][issue1019][spec]") {
-    const auto bundle = tests::read_pi_tui_evidence("fullscreen-exit-output.json");
-    REQUIRE(bundle);
-    const auto& scenarios = bundle->at("scenarios").get_array();
+void check_public_fullscreen_exit_output_characterizes(const cch::support::JsonValue& bundle) {
+    const auto& scenarios = bundle.at("scenarios").get_array();
 
     for (std::size_t s_idx = 0; s_idx < 6; ++s_idx) {
         const auto& s = scenarios[s_idx];
@@ -2888,6 +2904,20 @@ TEST_CASE("Native TUI public fullscreen exit output characterizes frozen artifac
         }
     }
 }
+
+TEST_CASE("Native TUI public fullscreen exit output characterizes frozen artifact 33 scenarios",
+        "[coding_agent][tui][exit][artifact33][issue1019][spec]") {
+    const auto bundle = fullscreen_exit_output_bundle();
+    REQUIRE(bundle);
+    check_public_fullscreen_exit_output_characterizes(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 public fullscreen exit output characterizes the frozen artifact scenarios", "[coding_agent][tui][exit][issue1210][compat-pi]") {
+    const auto bundle = audit1210_fullscreen_exit_output_bundle();
+    REQUIRE(bundle);
+    check_public_fullscreen_exit_output_characterizes(*bundle);
+}
+
 
 TEST_CASE("Native TUI fullscreen exit characterizes live artifact 35 fullscreen-transcript-short probe",
         "[coding_agent][tui][exit][artifact35][issue1019][probe][fullscreen_short]") {

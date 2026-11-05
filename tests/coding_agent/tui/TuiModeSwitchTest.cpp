@@ -2478,17 +2478,15 @@ private:
 
 } // namespace
 
-TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped cursor coordinates and protocol across mode "
-          "switch in both directions",
-        "[coding_agent][tui][cursor][renderer-switch][issue1037][spec]") {
+void check_nested_clipped_cursor_coordinates_across_mode_switches(const cch::support::JsonValue& bundle) {
     tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
     env_guard.unset();
 
-    const auto artifact = tests::read_pi_tui_evidence("product-cursor-layout.json");
-    REQUIRE(artifact);
-    const auto& bundle = *artifact;
-    REQUIRE(bundle.at("baseline").get_string() == "pi-v1.0.4");
-    REQUIRE(bundle.at("revision").get_string() == "7c10bd4337495ee613f2224843ecdf349b80d1df");
+    // The same frozen replay accepts the historical pi-v1.0.4 bundle and the
+    // recaptured pi-v1.3.0 audit-1210 family (both named baselines).
+    const auto& revision = bundle.at("revision").get_string();
+    REQUIRE((revision == "7c10bd4337495ee613f2224843ecdf349b80d1df" ||
+             revision == "71023aec1546d6d677a65669c5665c0927ce0dd0"));
 
     auto run_live_switch_scenario = [&](std::string_view scenario_name) {
         const auto& scenario = find_evidence_scenario(bundle, scenario_name);
@@ -2799,6 +2797,22 @@ TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped curso
         run_clipped_switch_scenario("clipped-switch-regular-to-fullscreen");
     }
 }
+
+TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped cursor coordinates and protocol across mode "
+          "switch in both directions",
+        "[coding_agent][tui][cursor][renderer-switch][issue1037][spec]") {
+    const auto artifact = tests::read_pi_tui_evidence("product-cursor-layout.json");
+    REQUIRE(artifact);
+    check_nested_clipped_cursor_coordinates_across_mode_switches(*artifact);
+}
+
+TEST_CASE("pi-v1.3.0 InteractiveEngine preserves exact nested and clipped cursor coordinates across mode switch",
+        "[coding_agent][tui][cursor][renderer-switch][issue1210][compat-pi]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1210", "product-cursor-layout.json");
+    REQUIRE(artifact);
+    check_nested_clipped_cursor_coordinates_across_mode_switches(*artifact);
+}
+
 
 TEST_CASE("Protocol decoder extracts exact ordered IME tokens from frozen bundled writes",
         "[coding_agent][tui][cursor][protocol][issue1037][spec]") {

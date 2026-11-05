@@ -84,13 +84,20 @@ private:
 
 } // namespace
 
-TEST_CASE("frozen product-cursor settings resolution replays against SettingsManager",
-        "[coding_agent][settings][cursor][issue1037][spec]") {
-    const auto artifact = cch::tests::read_pi_tui_evidence("product-cursor.json");
-    REQUIRE(artifact);
-    const auto& bundle = *artifact;
-    REQUIRE(bundle.at("baseline").get_string() == "pi-v1.0.4");
-    REQUIRE(bundle.at("revision").get_string() == "7c10bd4337495ee613f2224843ecdf349b80d1df");
+[[nodiscard]] cch::support::Expected<JsonValue> product_cursor_bundle() {
+    return cch::tests::read_pi_tui_evidence("product-cursor.json");
+}
+
+[[nodiscard]] cch::support::Expected<JsonValue> audit1209_product_cursor_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1209", "product-cursor.json");
+}
+
+void check_product_cursor_settings_resolution(const JsonValue& bundle) {
+    // The same frozen replay accepts the historical pi-v1.0.4 bundle and the
+    // recaptured pi-v1.3.0 audit-1209 family (both named baselines).
+    const auto& revision = bundle.at("revision").get_string();
+    REQUIRE((revision == "7c10bd4337495ee613f2224843ecdf349b80d1df" ||
+             revision == "71023aec1546d6d677a65669c5665c0927ce0dd0"));
 
     const auto& scenario = find_scenario(bundle, "product-settings-resolution");
     const auto& results = scenario.at("expected").at("settingsResults");
@@ -137,13 +144,24 @@ TEST_CASE("frozen product-cursor settings resolution replays against SettingsMan
             std::nullopt);
 }
 
-TEST_CASE("frozen product-cursor live switch scenarios replay across MainScreen and AltScreen",
-        "[coding_agent][tui][cursor][renderer-switch][issue1037][spec]") {
-    const auto artifact = cch::tests::read_pi_tui_evidence("product-cursor.json");
-    REQUIRE(artifact);
-    const auto& bundle = *artifact;
-    REQUIRE(bundle.at("baseline").get_string() == "pi-v1.0.4");
-    REQUIRE(bundle.at("revision").get_string() == "7c10bd4337495ee613f2224843ecdf349b80d1df");
+TEST_CASE("frozen product-cursor settings resolution replays against SettingsManager",
+        "[coding_agent][settings][cursor][issue1037][spec]") {
+    const auto bundle = product_cursor_bundle();
+    REQUIRE(bundle);
+    check_product_cursor_settings_resolution(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 product-cursor settings resolution replays against SettingsManager", "[tui][product-cursor][issue1210][compat-pi]") {
+    const auto bundle = audit1209_product_cursor_bundle();
+    REQUIRE(bundle);
+    check_product_cursor_settings_resolution(*bundle);
+}
+
+
+void check_product_cursor_live_switch_scenarios(const JsonValue& bundle) {
+    const auto& pinned_revision = bundle.at("revision").get_string();
+    REQUIRE((pinned_revision == "7c10bd4337495ee613f2224843ecdf349b80d1df" ||
+             pinned_revision == "71023aec1546d6d677a65669c5665c0927ce0dd0"));
 
     const std::vector<std::string> scenario_names = {
             "switch-regular-to-fullscreen-live-true",
@@ -301,3 +319,17 @@ TEST_CASE("frozen product-cursor live switch scenarios replay across MainScreen 
         }
     }
 }
+
+TEST_CASE("frozen product-cursor live switch scenarios replay across MainScreen and AltScreen",
+        "[coding_agent][tui][cursor][renderer-switch][issue1037][spec]") {
+    const auto bundle = product_cursor_bundle();
+    REQUIRE(bundle);
+    check_product_cursor_live_switch_scenarios(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 product-cursor live switch scenarios replay across MainScreen and AltScreen", "[tui][product-cursor][issue1210][compat-pi]") {
+    const auto bundle = audit1209_product_cursor_bundle();
+    REQUIRE(bundle);
+    check_product_cursor_live_switch_scenarios(*bundle);
+}
+
