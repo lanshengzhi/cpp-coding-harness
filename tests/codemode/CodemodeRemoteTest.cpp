@@ -1009,3 +1009,253 @@ TEST_CASE("RemoteCodemodeSandbox reports failing, silent or unreachable remote a
         CHECK(res->error->message == frozen_expected.at(2).get_object().at("message").get_string());
     }
 }
+
+// ---------------------------------------------------------------------------
+// #1193: the generic Remote row's independent frozen capture (audit-1193).
+// The scenarios below replay audit-1193/remote-generic.json through the
+// public Remote surface: the request that crosses to the remote, the exchange
+// message sequence, the terminal writes set, and the three transport errors.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+[[nodiscard]] support::JsonValue read_1193_artifact(std::string_view name) {
+    const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1193" / name;
+    std::ifstream input(path, std::ios::binary);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto parsed = support::read_json(text);
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue* scenario_named(const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return &candidate;
+    }
+    return nullptr;
+}
+
+/// A remote that serves the request in-process and records the request and
+/// the exchange message kinds, exactly as the frozen capture's recording
+/// remote does.
+struct GenericRecordingRemote final : public codemode::CodemodeRemote {
+    struct CallRecord {
+        std::int64_t id;
+        std::string target;
+        std::string name;
+        std::optional<std::string> args;
+    };
+
+    std::mutex mutex;
+    std::optional<codemode::CodemodeRemoteRequest> request;
+    std::vector<std::string> exchange_kinds;
+    std::vector<CallRecord> calls;
+
+    [[nodiscard]] support::AsyncResult<void> execute(
+            codemode::CodemodeRemoteRequest incoming, codemode::CodemodeRemoteExchangeHook exchange) override {
+        {
+            std::lock_guard lock(mutex);
+            request = incoming;
+        }
+        auto exchange_hook = std::make_shared<codemode::CodemodeRemoteExchangeHook>(std::move(exchange));
+        auto wrapped = [this, exchange_hook](std::vector<codemode::CodemodeRemoteMessageVariant> messages)
+                -> support::AsyncResult<codemode::CodemodeRemoteReplyVariant> {
+            {
+                std::lock_guard lock(mutex);
+                for (const auto& message : messages) {
+                    std::visit(
+                            [&](const auto& m) {
+                                using T = std::decay_t<decltype(m)>;
+                                if constexpr (std::is_same_v<T, codemode::CodemodeRemoteCallMessage>) {
+                                    exchange_kinds.push_back("call");
+                                    calls.push_back(
+                                            CallRecord{.id = m.id, .target = m.target, .name = m.name, .args = m.args});
+                                } else if constexpr (std::is_same_v<T, codemode::CodemodeRemoteOutputMessage>) {
+                                    exchange_kinds.push_back("output");
+                                } else if constexpr (std::is_same_v<T, codemode::CodemodeRemoteDoneMessage>) {
+                                    exchange_kinds.push_back("done");
+                                } else if constexpr (std::is_same_v<T, codemode::CodemodeRemoteCrashMessage>) {
+                                    exchange_kinds.push_back("crash");
+                                } else if constexpr (std::is_same_v<T, codemode::CodemodeRemoteStartedMessage>) {
+                                    exchange_kinds.push_back("started");
+                                } else if constexpr (std::is_same_v<T, codemode::CodemodeRemoteIdleMessage>) {
+                                    exchange_kinds.push_back("idle");
+                                } else if constexpr (std::is_same_v<T, codemode::CodemodeRemoteFailureMessage>) {
+                                    exchange_kinds.push_back("failure");
+                                }
+                            },
+                            message);
+                }
+            }
+            return (*exchange_hook)(std::move(messages));
+        };
+        auto done = codemode::serve_codemode_remote(std::move(incoming), std::move(wrapped));
+        return done;
+    }
+};
+
+} // namespace
+
+TEST_CASE("the generic remote exchange runs the script remotely and calls a caller tool with the frozen contract",
+        "[codemode][remote][issue1193][spec]") {
+    // A remote that only returns the script value without exchange messages
+    // fails this comparison: the recorded exchange sequence and the caller-side
+    // tool execution are the compared contract.
+    const auto artifact = read_1193_artifact("remote-generic.json");
+    const auto* exchange =
+            scenario_named(artifact, "a generic remote exchange runs the script remotely and calls a caller tool");
+    REQUIRE(exchange != nullptr);
+    const auto& expected = exchange->get_object().at("expected").get_object();
+
+    auto remote = std::make_shared<GenericRecordingRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(created.has_value());
+    auto& sandbox = *created;
+
+    std::vector<std::string> seen_args;
+    std::map<std::string, support::JsonValue> store;
+    store.emplace("k", support::JsonValue{1.0});
+    auto result = run_async(sandbox->run(
+            "text('hi'); return await tools.add({ a: 1 })",
+            std::vector<codemode::CodemodeToolDescriptor>{{.name = "add", .js_name = "add", .description = "Add one."}},
+            codemode::CodemodeLimits{},
+            {},
+            [&seen_args](std::string_view, std::string_view arguments_json, std::stop_token)
+                    -> support::AsyncResult<std::string> {
+                seen_args.emplace_back(arguments_json);
+                return support::AsyncResult<std::string>{support::Expected<std::string>{std::string{"2"}}};
+            },
+            std::move(store)));
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json == "2");
+    REQUIRE(result->output.size() == 1);
+    CHECK(result->output[0].data == "hi");
+    REQUIRE(result->calls.size() == 1);
+    CHECK(result->calls[0].name == "add");
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Ok);
+    REQUIRE(result->store_writes.has_value());
+    CHECK(result->store_writes->set.empty());
+    CHECK(result->store_writes->deleted.empty());
+    REQUIRE(seen_args.size() == 1);
+    CHECK(seen_args[0] == R"({"a":1})");
+
+    // The request that crossed to the remote matches the frozen request:
+    // the code, the tool table with its script name, and the store snapshot.
+    std::lock_guard lock(remote->mutex);
+    REQUIRE(remote->request.has_value());
+    const auto& frozen_request = expected.at("request").get_object();
+    CHECK(remote->request->data.code == frozen_request.at("code").get_string());
+    REQUIRE(remote->request->data.tools.size() == 1);
+    CHECK(remote->request->data.tools[0].name == "add");
+    CHECK(remote->request->data.tools[0].js_name == "add");
+    CHECK(remote->request->data.store.at("k") == "1");
+    CHECK_FALSE(remote->request->interrupt_budget.has_value());
+
+    // The exchange carried the caller's tool call and ended with the terminal
+    // done message, in the frozen order.
+    const auto& frozen_calls = expected.at("callMessages").get_array();
+    REQUIRE(remote->calls.size() == frozen_calls.size());
+    for (std::size_t i = 0; i < remote->calls.size(); ++i) {
+        const auto& frozen_call = frozen_calls[i].get_object();
+        CHECK(remote->calls[i].id == static_cast<std::int64_t>(frozen_call.at("id").get_number()));
+        CHECK(remote->calls[i].target == frozen_call.at("target").get_string());
+        CHECK(remote->calls[i].name == frozen_call.at("name").get_string());
+        REQUIRE(remote->calls[i].args.has_value());
+        CHECK(*remote->calls[i].args == frozen_call.at("args").get_string());
+    }
+    REQUIRE_FALSE(remote->exchange_kinds.empty());
+    CHECK(remote->exchange_kinds.back() == "done");
+}
+
+TEST_CASE("the generic remote terminal writes set is empty on success and carries the script write set",
+        "[codemode][remote][issue1193][spec]") {
+    const auto artifact = read_1193_artifact("remote-generic.json");
+    const auto* writes = scenario_named(artifact,
+            "the terminal writes set is empty on success and carries a real write set when the script writes");
+    REQUIRE(writes != nullptr);
+    const auto& expected = writes->get_object().at("expected").get_object();
+
+    auto remote = std::make_shared<GenericRecordingRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(created.has_value());
+    auto& sandbox = *created;
+
+    auto plain = run_async(sandbox->run("return 1"));
+    auto writing = run_async(sandbox->run("store('a', 1); store('b', { c: 2 }); return load('a');"));
+
+    REQUIRE(plain.has_value());
+    REQUIRE_FALSE(plain->error.has_value());
+    REQUIRE(plain->value_json.has_value());
+    CHECK(std::stod(*plain->value_json) == expected.at("plain").get_object().at("value").get_number());
+    REQUIRE(plain->store_writes.has_value());
+    CHECK(plain->store_writes->set.empty());
+    CHECK(plain->store_writes->deleted.empty());
+
+    REQUIRE(writing.has_value());
+    REQUIRE_FALSE(writing->error.has_value());
+    REQUIRE(writing->value_json.has_value());
+    CHECK(std::stod(*writing->value_json) == expected.at("writing").get_object().at("value").get_number());
+    REQUIRE(writing->store_writes.has_value());
+    const auto& frozen_set = expected.at("writing").get_object().at("writes").get_object().at("set").get_object();
+    REQUIRE(writing->store_writes->set.size() == frozen_set.size());
+    auto written_b = support::write_json(writing->store_writes->set.at("b"));
+    REQUIRE(written_b.has_value());
+    CHECK(*written_b == R"({"c":2})");
+    CHECK(writing->store_writes->set.at("a").get_number() == 1);
+    CHECK(writing->store_writes->deleted.empty());
+}
+
+TEST_CASE("the generic remote keeps three distinct sandbox errors for rejected silent and unreachable remotes",
+        "[codemode][remote][issue1193][spec]") {
+    const auto artifact = read_1193_artifact("remote-generic.json");
+    const auto* failures =
+            scenario_named(artifact, "a rejected silent or unreachable remote keeps three distinct sandbox errors");
+    REQUIRE(failures != nullptr);
+    const auto& expected = failures->get_object().at("expected").get_object();
+
+    struct FailingRemote final : public codemode::CodemodeRemote {
+        [[nodiscard]] support::AsyncResult<void> execute(
+                codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchangeHook) override {
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Validation, "object reset"))};
+        }
+    };
+    struct SilentRemote final : public codemode::CodemodeRemote {
+        [[nodiscard]] support::AsyncResult<void> execute(
+                codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchangeHook) override {
+            return support::AsyncResult<void>{support::ExpectedVoid{}};
+        }
+    };
+
+    for (std::size_t index = 0; index < 3; ++index) {
+        const char* mode = index == 0 ? "rejected" : index == 1 ? "silent" : "unreachable";
+        codemode::RemoteCodemodeSandboxOptions options;
+        if (index == 0) {
+            options.remote = []() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> {
+                return std::make_shared<FailingRemote>();
+            };
+        } else if (index == 1) {
+            options.remote = []() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> {
+                return std::make_shared<SilentRemote>();
+            };
+        } else {
+            options.remote = []() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> {
+                return std::unexpected(support::make_error(support::ErrorCode::Validation, "no binding"));
+            };
+        }
+        auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+        REQUIRE(created.has_value());
+        auto result = run_async((*created)->run("return 1"));
+        REQUIRE(result.has_value());
+        REQUIRE(result->error.has_value());
+        CHECK(result->error->kind == codemode::CodemodeError::Kind::Sandbox);
+        const auto& frozen_error = expected.at(mode).get_object().at("error").get_object();
+        CHECK(result->error->message == frozen_error.at("message").get_string());
+    }
+}

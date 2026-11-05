@@ -13,7 +13,7 @@
 
 #include <cch/codemode/Sandbox.hpp>
 
-#include "codemode/Prelude.hpp"
+#include <cch/codemode/Prelude.hpp>
 #include "support/Json.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"

@@ -9,11 +9,15 @@
 // runtime, and the failure case proves a rejected nested call reaches the
 // script while prior output survives.
 
+// `tm_gmtoff` (the host UTC offset) is glibc-visible under _DEFAULT_SOURCE;
+// the strict `-std=c++23` mode hides it otherwise (#1195 host-clock case).
+#define _DEFAULT_SOURCE
+
 #include <cch/codemode/Declarations.hpp>
 #include <cch/codemode/Sandbox.hpp>
 #include <cch/codemode/Source.hpp>
 
-#include "codemode/Prelude.hpp"
+#include <cch/codemode/Prelude.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 
@@ -35,6 +39,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <ctime>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -205,6 +211,13 @@ struct WorkerHostProbe {
     std::size_t exit_callbacks{0};
     std::size_t max_active{0};
     bool fail_start{false};
+    /// #1196: the frozen throwing lifetime hook. The strict no-exception seam
+    /// cannot throw from the start hook; the host models the hook failure by
+    /// returning this message, and records the termination it requested for
+    /// the worker it had already started (pi's `stop()` on the started
+    /// worker).
+    std::optional<std::string> fail_start_message;
+    std::size_t termination_requests{0};
     std::vector<std::shared_ptr<WorkerExitGate>> exit_gates;
     std::vector<std::thread> workers;
     std::atomic<std::size_t> released{0};
@@ -296,8 +309,9 @@ struct WorkerHostProbe {
             std::lock_guard lock(probe->mutex);
             ++probe->start_attempts;
             if (probe->fail_start) {
-                return std::unexpected(
-                        support::make_error(support::ErrorCode::Validation, "worker construction failed"));
+                ++probe->termination_requests;
+                return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                        probe->fail_start_message.value_or("worker construction failed")));
             }
         }
         auto gate = std::make_shared<WorkerExitGate>();
@@ -637,7 +651,10 @@ TEST_CASE("closing codemode settles the run before its worker exit releases admi
     auto after_close = run_async(sandbox->run("return 2", {}, limits()));
     REQUIRE(after_close.has_value());
     REQUIRE(after_close->error.has_value());
-    CHECK(after_close->error->message == "Sandbox closed");
+    // #1192: pi's later-run rejection after close is "Sandbox is closed";
+    // the in-flight abort of the still-running first run keeps "Sandbox
+    // closed" below.
+    CHECK(after_close->error->message == "Sandbox is closed");
     {
         std::lock_guard lock(probe->mutex);
         CHECK(probe->acquired == 1);
@@ -651,6 +668,336 @@ TEST_CASE("closing codemode settles the run before its worker exit releases admi
     CHECK(closed_run->error->kind == codemode::CodemodeError::Kind::Aborted);
     CHECK(closed_run->error->message == "Sandbox closed");
     probe->wait_for_releases(1);
+}
+
+TEST_CASE("codemode execute and start each start one worker and release it only after actual exit",
+        "[codemode][worker][issue1196][spec]") {
+    // #1196: the frozen worker-lifetime observation requires both entry points
+    // to start one worker each and to hold the admission until the worker's
+    // actual exit. A close-only or execute-only accounting fails the start
+    // half; an early release fails the exit-gate half.
+    const auto artifact = read_artifact("worker-lifetime.json");
+    const auto* scenario =
+            find_scenario(artifact, "execute and start each start one worker and release it only after actual exit");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->get_object().at("expected").get_object();
+    auto probe = std::make_shared<WorkerHostProbe>();
+    auto sandbox = make_sandbox(worker_host(probe));
+    WorkerTestGuard cleanup{probe, {}};
+
+    auto executed = run_async_later(sandbox->run("return 1;", {}, limits()));
+    REQUIRE(executed.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    auto executed_result = executed.get();
+    REQUIRE(executed_result.has_value());
+    REQUIRE(executed_result->value_json.has_value());
+    CHECK(*executed_result->value_json == "1");
+
+    auto started = sandbox->start("return 2;", {});
+    REQUIRE(started.has_value());
+    auto started_future = run_async_later(started->result());
+    REQUIRE(started_future.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    auto started_result = started_future.get();
+    REQUIRE(started_result.has_value());
+    REQUIRE(started_result->value_json.has_value());
+    CHECK(*started_result->value_json == "2");
+    CHECK(started->finished());
+
+    // Both workers started; both results settled while the workers are still
+    // held at their exit gates, so no admission has been released.
+    CHECK(probe->wait_for_task_completion(2));
+    CHECK(probe->released.load(std::memory_order_acquire) == 0);
+    {
+        std::lock_guard lock(probe->mutex);
+        CHECK(probe->acquired == static_cast<std::size_t>(expected.at("acquired").get_number()));
+        CHECK(probe->started == static_cast<std::size_t>(expected.at("started").get_number()));
+    }
+
+    probe->release_all_exits();
+    probe->wait_for_releases(2);
+    CHECK(probe->wait_for_exit_callbacks(2));
+    {
+        std::lock_guard lock(probe->mutex);
+        CHECK(probe->active == 0);
+    }
+}
+
+TEST_CASE("a failing codemode worker lifetime hook requests termination and still releases the worker",
+        "[codemode][worker][issue1196][spec]") {
+    // #1196: the frozen "throwing lifetime hook" observation. The strict
+    // no-exception build cannot throw from a hook, so the worker-host seam
+    // models it: the host starts the worker, requests its termination (pi's
+    // `stop()` on the started worker), and reports the hook failure. The
+    // compared shape is the run's sandbox error with the frozen message and
+    // exactly one admission release on each entry point.
+    const auto artifact = read_artifact("worker-lifetime.json");
+    const auto* scenario =
+            find_scenario(artifact, "a throwing lifetime hook requests termination and still releases the worker");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->get_object().at("expected").get_object();
+    const auto frozen_message = expected.at("errorMessage").get_string();
+    const auto frozen_released = static_cast<std::size_t>(expected.at("released").get_number());
+
+    auto probe = std::make_shared<WorkerHostProbe>();
+    probe->fail_start = true;
+    probe->fail_start_message = frozen_message;
+    auto sandbox = make_sandbox(worker_host(probe));
+    WorkerTestGuard cleanup{probe, {}};
+
+    auto failed_run = run_async(sandbox->run("while (true) {}", {}, limits()));
+    REQUIRE(failed_run.has_value());
+    REQUIRE(failed_run->error.has_value());
+    CHECK(failed_run->error->kind == codemode::CodemodeError::Kind::Sandbox);
+    CHECK(failed_run->error->message == frozen_message);
+    CHECK(probe->released.load(std::memory_order_acquire) == frozen_released);
+
+    // The deterministic start enters through the same seam and fails the same
+    // way: the run handle is valid, its result carries the hook failure, and
+    // the admission is released exactly once more.
+    auto failed_start = sandbox->start("return 1;", {});
+    REQUIRE(failed_start.has_value());
+    auto failed_start_result = run_async(failed_start->result());
+    REQUIRE(failed_start_result.has_value());
+    REQUIRE(failed_start_result->error.has_value());
+    CHECK(failed_start_result->error->kind == codemode::CodemodeError::Kind::Sandbox);
+    CHECK(failed_start_result->error->message == frozen_message);
+    CHECK(probe->released.load(std::memory_order_acquire) == 2 * frozen_released);
+    {
+        std::lock_guard lock(probe->mutex);
+        CHECK(probe->termination_requests == probe->start_attempts);
+        CHECK(probe->started == 0);
+        CHECK(probe->active == 0);
+    }
+}
+
+TEST_CASE("a timed-out codemode run releases its worker only after the worker's actual exit",
+        "[codemode][worker][issue1196][spec]") {
+    // #1196: the frozen Node-child scenario's timeout half. The Node-child
+    // premise itself is a recorded product divergence (the C++ host is a
+    // native pthread worker, not a Node child); the compared shape here is
+    // the result-before-exit separation for a deadline: the timeout result
+    // settles while the worker is still held at its exit gate, and the
+    // admission releases only on the worker's actual exit.
+    auto probe = std::make_shared<WorkerHostProbe>();
+    auto sandbox = make_sandbox(worker_host(probe));
+    WorkerTestGuard cleanup{probe, {}};
+
+    codemode::CodemodeLimits deadline;
+    deadline.timeout = std::chrono::milliseconds{50};
+    auto timed_out = run_async_later(sandbox->run("while (true) {}", {}, deadline));
+    REQUIRE(timed_out.wait_for(std::chrono::seconds{10}) == std::future_status::ready);
+    auto result = timed_out.get();
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Timeout);
+    CHECK(result->error->message == "Execution timed out after 50 ms");
+
+    // The result settled before the exit: the worker has finished its task but
+    // the admission is still held at the exit gate.
+    CHECK(probe->wait_for_task_completion(1));
+    CHECK(probe->released.load(std::memory_order_acquire) == 0);
+
+    probe->release_all_exits();
+    probe->wait_for_releases(1);
+    CHECK(probe->wait_for_exit_callbacks(1));
+}
+
+TEST_CASE("a normal codemode run reads the host timezone while deterministic start pins UTC",
+        "[codemode][clock][issue1195][spec]") {
+    // #1195: the independent frozen capture (audit-1195/clock-timezone.json)
+    // records that pi's non-deterministic execute() observes the host offset
+    // while deterministic start() pins UTC. A check that only pins
+    // deterministic UTC fails the normal half; a run that always reports UTC
+    // fails the host half.
+    const auto root = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1195";
+    auto artifact = support::read_json(read_text(root / "clock-timezone.json"));
+    REQUIRE(artifact.has_value());
+    const auto* scenario =
+            find_scenario(artifact.value(), "execute reads the host timezone while deterministic start pins UTC");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->get_object().at("expected").get_object();
+    CHECK(expected.at("startIsUtc").get_boolean());
+    CHECK(expected.at("executeMatchesHost").get_boolean());
+
+    // A fixed-offset zone without DST keeps the observation deterministic on
+    // any runner host. The guard restores the ambient TZ at case end.
+    struct TzGuard {
+        std::string previous;
+        TzGuard()
+            : previous{[] {
+                  const char* value = std::getenv("TZ");
+                  return value == nullptr ? std::string{} : std::string{value};
+              }()} {
+            setenv("TZ", "Etc/GMT-14", 1);
+            tzset();
+        }
+        ~TzGuard() {
+            if (previous.empty())
+                unsetenv("TZ");
+            else
+                setenv("TZ", previous.c_str(), 1);
+            tzset();
+        }
+    } guard;
+    (void)guard;
+
+    // The host offset this machine reports for the zone, straight from libc:
+    // getTimezoneOffset() is minutes behind UTC, so a +14 zone reads -840.
+    const std::time_t epoch = 0;
+    struct tm local{};
+    REQUIRE(localtime_r(&epoch, &local) != nullptr);
+    const auto host_offset_minutes = static_cast<std::int64_t>(-local.tm_gmtoff / 60);
+
+    auto sandbox = make_sandbox();
+    const std::string script =
+            "return [new Date(0).getTimezoneOffset(), new Date('2026-06-01T00:00:00Z').getTimezoneOffset()];";
+    auto normal = run_async(sandbox->run(script, {}, limits()));
+    REQUIRE(normal.has_value());
+    REQUIRE_FALSE(normal->error.has_value());
+    REQUIRE(normal->value_json.has_value());
+    CHECK(*normal->value_json == std::format("[{},{}]", host_offset_minutes, host_offset_minutes));
+
+    auto started = sandbox->start(script, {});
+    REQUIRE(started.has_value());
+    auto deterministic = run_async(started->result());
+    REQUIRE(deterministic.has_value());
+    REQUIRE_FALSE(deterministic->error.has_value());
+    REQUIRE(deterministic->value_json.has_value());
+    CHECK(*deterministic->value_json == "[0,0]");
+}
+
+TEST_CASE("the public codemode create validates the guest eagerly with an explicit error",
+        "[codemode][create][issue1193][spec]") {
+    // #1193: the independent frozen capture (audit-1193/sandbox-create.json)
+    // records pi's lazy boundary — construction succeeds and the first run
+    // reports "Failed to load QuickJS: wasm unavailable". The C++ create
+    // validates eagerly, so the missing module is an explicit create error
+    // before any run; a create path that defers the failure to the first run
+    // fails this case. A present guest creates and runs exactly as frozen.
+    const auto root = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1193";
+    auto artifact = support::read_json(read_text(root / "sandbox-create.json"));
+    REQUIRE(artifact.has_value());
+    const auto* missing = find_scenario(
+            artifact.value(), "a missing guest module fails at the first run in pi, never at construction");
+    const auto* present = find_scenario(artifact.value(), "a present guest module constructs and runs");
+    REQUIRE(missing != nullptr);
+    REQUIRE(present != nullptr);
+
+    const auto missing_path = codemode::default_codemode_guest_wasm_path() / "definitely-missing.wasm";
+    auto rejected = codemode::CodemodeSandbox::create(missing_path, {});
+    CHECK_FALSE(rejected.has_value());
+    if (!rejected) {
+        CHECK(rejected.error().message.find("definitely-missing.wasm") != std::string::npos);
+    }
+    // The frozen boundary is recorded for the delivery receipt: pi fails the
+    // first run with this message; the C++ create refuses earlier.
+    CHECK(member(*missing, "expected").get_object().at("constructionOk").get_boolean());
+    CHECK(member(member(*missing, "expected"), "error").get_object().at("message").get_string() ==
+            "Failed to load QuickJS: wasm unavailable");
+
+    auto sandbox = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path(), {});
+    REQUIRE(sandbox.has_value());
+    auto result = run_async((*sandbox)->run("return 1;", {}, limits()));
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(std::stod(*result->value_json) == member(*present, "expected").get_object().at("value").get_number());
+}
+
+TEST_CASE("the public codemode tool table registers lists and unregisters with the frozen messages",
+        "[codemode][tool-table][issue1192][spec]") {
+    // #1192: the frozen `script-execution.json` scenario pins the public tool
+    // table: duplicate constructor tools are refused, a duplicate registration
+    // returns the frozen message, list/remove follow the frozen table, and a
+    // later run after close fails with "Sandbox is closed". A close-only
+    // implementation fails this case because the register/list/unregister
+    // observations never run, and a silently-idempotent register fails the
+    // frozen duplicate message.
+    const auto artifact = read_artifact("script-execution.json");
+    const auto* scenario = find_scenario(
+            artifact, "the public tool table can be registered, listed and unregistered; close rejects later runs");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->get_object().at("expected").get_object();
+    const auto listed_names = [](const std::vector<codemode::CodemodeToolDescriptor>& tools) {
+        std::vector<std::string> names;
+        names.reserve(tools.size());
+        for (const auto& tool : tools)
+            names.push_back(tool.name);
+        return names;
+    };
+    const auto& frozen_tools = scenario->get_object().at("inputs").get_object().at("tools").get_array();
+    std::vector<codemode::CodemodeToolDescriptor> constructor_tools;
+    for (const auto& tool : frozen_tools) {
+        const auto& name = tool.get_string();
+        constructor_tools.push_back(codemode::CodemodeToolDescriptor{.name = name,
+                .js_name = codemode::to_codemode_identifier(name),
+                .description = "frozen constructor tool"});
+    }
+    auto sandbox =
+            codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path(), {}, constructor_tools);
+    REQUIRE(sandbox.has_value());
+    CHECK(listed_names((*sandbox)->registered_tools()) == std::vector<std::string>{"a-b", "a_b"});
+
+    // The duplicate constructor tool is refused with the frozen message before
+    // any run, exactly as pi's constructor's registerTool loop refuses it.
+    auto duplicate_constructor = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path(),
+            {},
+            std::vector<codemode::CodemodeToolDescriptor>{constructor_tools[0], constructor_tools[0]});
+    CHECK_FALSE(duplicate_constructor.has_value());
+    if (!duplicate_constructor) {
+        CHECK(duplicate_constructor.error().message == expected.at("duplicateRegister").get_string());
+    }
+
+    // A duplicate registration returns the frozen message.
+    auto duplicate = (*sandbox)->register_tool(constructor_tools[0]);
+    CHECK_FALSE(duplicate.has_value());
+    if (!duplicate) CHECK(duplicate.error().message == expected.at("duplicateRegister").get_string());
+
+    // The registered table is live: a script can call the remaining tool
+    // through the snapshot the run takes.
+    auto answered = run_async((*sandbox)->run("return await tools.a_b(7);",
+            {},
+            limits(),
+            {},
+            [](std::string_view, std::string_view arguments_json, std::stop_token) {
+                return support::AsyncResult<std::string>{support::Expected<std::string>{std::string{arguments_json}}};
+            }));
+    REQUIRE(answered.has_value());
+    REQUIRE(answered->value_json.has_value());
+    CHECK(*answered->value_json == "7");
+
+    // Removal returns the frozen booleans and the list shrinks in place.
+    CHECK((*sandbox)->unregister_tool("a-b") == static_cast<bool>(expected.at("removedExisting").get_boolean()));
+    CHECK((*sandbox)->unregister_tool("a-b") == static_cast<bool>(expected.at("removedMissing").get_boolean()));
+    const auto after = listed_names((*sandbox)->registered_tools());
+    const auto& frozen_after = expected.at("listedAfter").get_array();
+    REQUIRE(after.size() == frozen_after.size());
+    for (std::size_t i = 0; i < after.size(); ++i)
+        CHECK(after[i] == frozen_after[i].get_string());
+
+    // Close rejects a later run with the frozen spelling.
+    (*sandbox)->close();
+    auto rejected = run_async((*sandbox)->run("return 1", {}, limits()));
+    REQUIRE(rejected.has_value());
+    REQUIRE(rejected->error.has_value());
+    CHECK(rejected->error->message == expected.at("closed").get_string());
+}
+
+TEST_CASE("the public codemode start rejects a later run after close with the frozen spelling",
+        "[codemode][tool-table][issue1192][spec]") {
+    // #1192: pi's `start()` throws Error("Sandbox is closed") after close, as
+    // the same frozen scenario's close half records; the in-flight abort keeps
+    // the "Sandbox closed" spelling (the worker-lifetime close row).
+    const auto artifact = read_artifact("script-execution.json");
+    const auto* scenario = find_scenario(
+            artifact, "the public tool table can be registered, listed and unregistered; close rejects later runs");
+    REQUIRE(scenario != nullptr);
+    const auto frozen = scenario->get_object().at("expected").get_object().at("closed").get_string();
+
+    auto sandbox = make_sandbox();
+    sandbox->close();
+    auto rejected = sandbox->start("return 1", {});
+    CHECK_FALSE(rejected.has_value());
+    if (!rejected) CHECK(rejected.error().message == frozen);
 }
 
 TEST_CASE("the public codemode source parser keeps only a first-line options command",

@@ -11,6 +11,7 @@
 // inspect the durable side effect the content alone would not prove.
 
 #include "coding_agent/extensions/codemode/CodemodeExecution.hpp"
+#include "coding_agent/extensions/codemode/CodemodeCatalogState.hpp"
 #include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
 
 #include "coding_agent/Base64.hpp"
@@ -435,4 +436,252 @@ TEST_CASE("a codemode store entry replays from the root and a later delete wins"
     const auto deleted = run_script("store('answer', undefined); return load('answer');", nullptr, session);
     check_scenario(artifact, "delete", deleted);
     CHECK(extensions::codemode_store_from_branch(store->get_branch()).empty());
+}
+
+// ---------------------------------------------------------------------------
+// #1193: the output-token option's independent frozen capture
+// (audit-1193/output-budget.json). The audit-1119 comparison above binds the
+// same behavior to the 1119 bundle; this case binds the row's scenario to the
+// independent audit-1193 observation, including the spilled file's exact
+// bytes — a formatter that writes a path without the full text fails here.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+[[nodiscard]] support::JsonValue read_1193_budget_artifact() {
+    const auto path =
+            std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1193" / "output-budget.json";
+    auto parsed = support::read_json(tests::read_text_file(path));
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+[[nodiscard]] const support::JsonValue* budget_scenario_named(
+        const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == name) return &candidate;
+    }
+    return nullptr;
+}
+
+/// Normalizes the C++ observation to the capture's recorded form: the wall
+/// time line and the script stack frames carry the recorded normalizations.
+[[nodiscard]] std::string normalize_budget_text(std::string text) {
+    static const std::regex wall_time{R"(Wall time [0-9]+\.[0-9] seconds)"};
+    static const std::regex stack_frame{R"(\n    at [^\n]*)"};
+    text = std::regex_replace(text, wall_time, "Wall time <N> seconds");
+    return std::regex_replace(text, stack_frame, "");
+}
+
+/// Normalizes the artifact side: the frozen spill path is a literal temp
+/// file; only its presence is the compared contract.
+[[nodiscard]] std::string normalize_budget_path(std::string text) {
+    static const std::regex output_path{R"(/[^\s\]]*pi-codemode-[0-9a-f]+\.txt)"};
+    return std::regex_replace(text, output_path, "<output-file>");
+}
+
+} // namespace
+
+TEST_CASE("the independently captured output-token budget keeps the head and tail and spills the full bytes",
+        "[coding_agent][codemode][issue1193][spec]") {
+    const auto artifact = read_1193_budget_artifact();
+    tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    auto session = std::make_shared<extensions::CodemodeSessionState>();
+    session->filesystem = std::make_shared<harness::AsyncLocalFileSystem>(runtime.make_target(), workspace.path());
+
+    // Over budget: the option is parsed and consumed (the 80-token budget
+    // truncates where the default 10000-token budget would not), the head and
+    // tail survive, and the spill file holds the full text.
+    {
+        const auto* frozen = budget_scenario_named(
+                artifact, "over-budget output keeps the head and tail and spills the full text to a named file");
+        REQUIRE(frozen != nullptr);
+        const auto& expected = frozen->get_object().at("expected").get_object();
+        const auto script = frozen->get_object().at("inputs").get_object().at("script").get_string();
+
+        auto result = run_script(script, nullptr, session, &runtime);
+        CHECK_FALSE(result.is_error);
+        std::string text;
+        for (const auto& block : result.content) {
+            if (const auto* item = std::get_if<ai::TextContent>(&block); item != nullptr) {
+                if (!text.empty()) text.push_back('\n');
+                text += item->text;
+            }
+        }
+        CHECK(normalize_budget_path(normalize_budget_text(std::move(text))) ==
+                normalize_budget_path(expected.at("text").get_string()));
+        REQUIRE(result.details.has_value());
+        CHECK(result.details->get_object().at("calls").get_array().empty());
+        const auto* spilled = result.details->get_object().at("fullOutputPath").get_if<std::string>();
+        REQUIRE(spilled != nullptr);
+        CHECK(expected.at("fullOutputPathNamed").get_boolean());
+        REQUIRE(expected.at("spillBytes").get_if<std::string>() != nullptr);
+        CHECK(tests::read_text_file(*spilled) == *expected.at("spillBytes").get_if<std::string>());
+        std::filesystem::remove(*spilled);
+    }
+
+    // Zero budget: the error text is truncated away entirely; the spill still
+    // carries the full error text.
+    {
+        const auto* frozen = budget_scenario_named(artifact, "a zero budget truncates over the error text");
+        REQUIRE(frozen != nullptr);
+        const auto& expected = frozen->get_object().at("expected").get_object();
+        const auto script = frozen->get_object().at("inputs").get_object().at("script").get_string();
+
+        auto result = run_script(script, nullptr, session, &runtime);
+        CHECK(result.is_error);
+        std::string text;
+        for (const auto& block : result.content) {
+            if (const auto* item = std::get_if<ai::TextContent>(&block); item != nullptr) {
+                if (!text.empty()) text.push_back('\n');
+                text += item->text;
+            }
+        }
+        CHECK(normalize_budget_path(normalize_budget_text(std::move(text))) ==
+                normalize_budget_path(expected.at("text").get_string()));
+        REQUIRE(result.details.has_value());
+        const auto* spilled = result.details->get_object().at("fullOutputPath").get_if<std::string>();
+        REQUIRE(spilled != nullptr);
+        REQUIRE(expected.at("spillBytes").get_if<std::string>() != nullptr);
+        CHECK(tests::read_text_file(*spilled) == *expected.at("spillBytes").get_if<std::string>());
+        std::filesystem::remove(*spilled);
+    }
+
+    // Under budget: no truncation marker, no spill file.
+    {
+        const auto* frozen =
+                budget_scenario_named(artifact, "an under-budget output is not truncated and names no spill file");
+        REQUIRE(frozen != nullptr);
+        const auto& expected = frozen->get_object().at("expected").get_object();
+        const auto script = frozen->get_object().at("inputs").get_object().at("script").get_string();
+
+        auto result = run_script(script, nullptr, session, &runtime);
+        CHECK_FALSE(result.is_error);
+        std::string text;
+        for (const auto& block : result.content) {
+            if (const auto* item = std::get_if<ai::TextContent>(&block); item != nullptr) {
+                if (!text.empty()) text.push_back('\n');
+                text += item->text;
+            }
+        }
+        CHECK(normalize_budget_text(std::move(text)) == expected.at("text").get_string());
+        REQUIRE(result.details.has_value());
+        CHECK_FALSE(result.details->get_object().contains("fullOutputPath"));
+        CHECK_FALSE(expected.at("hasTruncationMarker").get_boolean());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// #1195: the discovery-absence boundary. The independent frozen capture
+// (audit-1195/discovery-absence.json) records what a script observes for
+// absent describeTool/describeNamespace names: JS undefined, not JSON null.
+// The C++ bridge preserves undefined through the empty-payload spelling, so a
+// host that reported JSON null for an absent name fails this comparison.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+[[nodiscard]] support::JsonValue read_1195_artifact(std::string_view name) {
+    const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1195" / name;
+    auto parsed = support::read_json(tests::read_text_file(path));
+    REQUIRE(parsed.has_value());
+    return std::move(*parsed);
+}
+
+} // namespace
+
+TEST_CASE("an absent discovery name reads as undefined through a real script",
+        "[coding_agent][codemode][issue1195][spec]") {
+    const auto artifact = read_1195_artifact("discovery-absence.json");
+    const support::JsonValue* frozen_scenario = nullptr;
+    for (const auto& candidate : artifact.get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() ==
+                "an absent tool or namespace reads as undefined through the discovery globals")
+            frozen_scenario = &candidate;
+    }
+    REQUIRE(frozen_scenario != nullptr);
+    const auto& expected = frozen_scenario->get_object().at("expected").get_object();
+    const auto script = frozen_scenario->get_object().at("inputs").get_object().at("script").get_string();
+
+    // The callable loadout the discovery globals answer over: one plain tool
+    // and one tool in the docs namespace, as in the frozen capture.
+    auto catalog = std::make_shared<extensions::CodemodeCatalogState>();
+    extensions::LoadoutTool read;
+    read.definition.name = "read";
+    read.definition.description = "Read a file";
+    auto read_schema = support::read_json(
+            R"({"type":"object","properties":{"path":{"type":"string","description":"File path"}}})");
+    REQUIRE(read_schema.has_value());
+    read.definition.parameters = std::move(*read_schema);
+    catalog->register_tool(read);
+    extensions::LoadoutTool search;
+    search.definition.name = "mcp__docs__search";
+    search.definition.description = "Search docs";
+    auto search_schema = support::read_json(R"({"type":"object","properties":{"query":{"type":"string"}}})");
+    REQUIRE(search_schema.has_value());
+    search.definition.parameters = std::move(*search_schema);
+    auto search_output = support::read_json(
+            R"({"type":"object","properties":{"results":{"type":"array","items":{"type":"string"}}}})");
+    REQUIRE(search_output.has_value());
+    search.definition.output_schema = std::move(*search_output);
+    search.name_space = extensions::ToolNamespace{
+            .name = "docs",
+            .aliases = {},
+            .description = "Documentation tools",
+            .instructions = "Use docs.",
+    };
+    catalog->register_tool(search);
+    // Declare both tools so the catalog's callable loadout lists them, as the
+    // frozen capture's session does.
+    agent::ToolRegistry registry;
+    auto changes = catalog->apply(registry, std::vector<std::string>{"read", "mcp__docs__search"});
+    // Both tools are declared `direct` exposure: neither is hidden.
+    CHECK(changes.hidden_declarations.empty());
+
+    auto runner = make_runner({text_tool("read", "ok"), text_tool("mcp__docs__search", "ok")});
+    extensions::CodemodeToolSource source{codemode::default_codemode_guest_wasm_path(), catalog};
+    auto tools = source.load_tools();
+    REQUIRE(tools.has_value());
+    REQUIRE(tools->size() == 1);
+    extensions::ExtensionToolContext context;
+    context.call_id = "call_1";
+    context.nested_calls = &runner;
+    auto executed = tools->front().context_execute(
+            support::JsonValue{support::JsonValue::object_t{{"code", support::JsonValue{script}}}},
+            std::move(context),
+            std::stop_token{});
+    auto outcome = tests::run_async_result(std::move(executed));
+    REQUIRE(outcome.has_value());
+    REQUIRE_FALSE(outcome->is_error);
+
+    // The script returns JSON.stringify(observations); the returned value is
+    // the last text item.
+    std::vector<std::string> texts;
+    for (const auto& block : outcome->content) {
+        if (const auto* item = std::get_if<ai::TextContent>(&block); item != nullptr) texts.push_back(item->text);
+    }
+    REQUIRE_FALSE(texts.empty());
+    auto parsed = support::read_json(texts.back());
+    REQUIRE(parsed.has_value());
+    const auto& observed = parsed->get_object();
+
+    const std::vector<std::string> bool_fields{"absentToolUndefined",
+            "absentNsUndefined",
+            "presentIsString",
+            "presentHasDeclaration",
+            "presentByJsNameIsString"};
+    for (const auto& field : bool_fields) {
+        INFO("field: " << field);
+        CHECK(observed.at(field).get_boolean() == expected.at(field).get_boolean());
+    }
+    CHECK(observed.at("absentToolType").get_string() == expected.at("absentToolType").get_string());
+    CHECK(observed.at("absentNsType").get_string() == expected.at("absentNsType").get_string());
+    CHECK(observed.at("nsName").get_string() == expected.at("nsName").get_string());
+    const auto& frozen_tools = expected.at("nsTools").get_array();
+    const auto& observed_tools = observed.at("nsTools").get_array();
+    REQUIRE(observed_tools.size() == frozen_tools.size());
+    for (std::size_t i = 0; i < observed_tools.size(); ++i)
+        CHECK(observed_tools[i].get_string() == frozen_tools[i].get_string());
+    CHECK(observed.at("nsDescription").get_string() == expected.at("nsDescription").get_string());
 }

@@ -27,6 +27,7 @@
 #include "support/RuntimeFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/TextFile.hpp"
 
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -203,4 +204,57 @@ TEST_CASE("a stray .pi/codemode declaration adds nothing to the session tool sur
     CHECK(std::ranges::find(names, "stale") == names.end());
 
     session->close();
+}
+
+// ---------------------------------------------------------------------------
+// #1193: the guest-module load boundary's independent frozen capture
+// (audit-1193/sandbox-create.json). The C++ Application source holder keeps
+// pi's laziness — a session that never calls codemode never touches the
+// guest — while the public create validates eagerly, surfacing a missing
+// guest as the tool call's explicit error.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("the codemode tool source never touches the guest until a script runs",
+        "[coding_agent][codemode][issue1193][spec]") {
+    const auto artifact_path =
+            std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-1193" / "sandbox-create.json";
+    auto artifact = support::read_json(tests::read_text_file(artifact_path));
+    REQUIRE(artifact.has_value());
+    const support::JsonValue* never = nullptr;
+    for (const auto& candidate : artifact->get_object().at("scenarios").get_array()) {
+        if (candidate.get_object().at("name").get_string() == "a sandbox that never executes never touches the guest")
+            never = &candidate;
+    }
+    REQUIRE(never != nullptr);
+
+    // The guest path does not exist; loading the tool source still succeeds,
+    // so a session assembling this source never observes the missing guest.
+    const auto missing = codemode::default_codemode_guest_wasm_path() / "definitely-missing.wasm";
+    extensions::CodemodeToolSource source{missing};
+    auto tools = source.load_tools();
+    REQUIRE(tools.has_value());
+    REQUIRE(tools->size() == 1);
+    CHECK(tools->front().definition.name == "codemode");
+
+    // The frozen observation this boundary honors: pi constructs cleanly and
+    // never loads when nothing executes.
+    const auto& expected = never->get_object().at("expected").get_object();
+    CHECK(expected.at("constructionOk").get_boolean());
+    CHECK(expected.at("closeOk").get_boolean());
+    CHECK(expected.at("loadAttempts").get_number() == 0);
+
+    // The first script surfaces the explicit create error — never a silent
+    // success, never a deferred failure inside the run.
+    extensions::ExtensionToolContext context;
+    context.call_id = "call_1";
+    auto executed = tools->front().context_execute(
+            support::JsonValue{support::JsonValue::object_t{{"code", support::JsonValue{"return 1;"}}}},
+            std::move(context),
+            std::stop_token{});
+    auto outcome = tests::run_async_result(std::move(executed));
+    // The lazy holder refuses at its ensure boundary: the failure is the
+    // call's explicit error, never a silent success and never an assembly
+    // failure for a session that did not run a script.
+    REQUIRE_FALSE(outcome.has_value());
+    CHECK(outcome.error().message.find("definitely-missing.wasm") != std::string::npos);
 }

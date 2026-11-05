@@ -556,10 +556,12 @@ TEST_CASE("an unknown discovery name is an explicit rejected call, never a silen
     CHECK(contains(*result, "Script failed"));
     CHECK(contains(*result, "searchTools() expects a query string"));
 
-    // An unknown namespace is an explicit null result, never a fabricated
-    // group. (pi returns `undefined`; this port's host bridge carries JSON text,
-    // so the absent value arrives as JSON `null`. The absence, not the JS
-    // spelling, is what the catalog contract fixes.)
+    // An unknown namespace is an explicit undefined result, never a fabricated
+    // group. #1195 added the host-protocol field that preserves pi's JS
+    // `undefined`: an absent describeTool/describeNamespace name crosses the
+    // bridge as undefined, exactly as frozen pi's scripts observe (the
+    // discovery handler returns the empty payload, which the bridge maps to
+    // the guest's undefined value).
     provider = std::make_shared<CapturingProvider>();
     attempt.session->close();
     auto second = make_session(runtime, workspace, provider, std::vector<std::string>{"codemode"});
@@ -569,7 +571,8 @@ TEST_CASE("an unknown discovery name is an explicit rejected call, never a silen
     const auto second_result = tool_result_text(*second.session, "codemode");
     REQUIRE(second_result.has_value());
     INFO(*second_result);
-    CHECK(contains(*second_result, "null"));
+    CHECK(contains(*second_result, "undefined"));
+    CHECK_FALSE(contains(*second_result, "null"));
     CHECK_FALSE(contains(*second_result, "Script failed"));
     second.session->close();
 }
