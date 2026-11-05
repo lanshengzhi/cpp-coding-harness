@@ -6,6 +6,7 @@
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/PiTuiEvidence.hpp"
 #include "support/RenderedScreen.hpp"
 #include "support/ImageCapabilitiesGuard.hpp"
 
@@ -157,14 +158,15 @@ $x^2$
     CHECK(rendered_text(*fenced, 60).find("$x^2$") != std::string::npos);
 }
 
-TEST_CASE("Markdown can disable LaTeX rendering while preserving source", "[tui][markdown][latex][issue976][spec]") {
+TEST_CASE("Markdown can disable LaTeX rendering while preserving source",
+        "[tui][markdown][latex][issue976][issue1217][spec]") {
     tui::Markdown markdown(R"($\frac{1}{2}$)", 0, 0, {}, {}, {}, tui::MarkdownOptions{.render_latex = false});
     const auto lines = markdown.render(40);
     REQUIRE(lines);
     CHECK(rendered_text(*lines, 40).find(R"($\frac{1}{2}$)") != std::string::npos);
 }
 
-TEST_CASE("Markdown wraps plain text within terminal width", "[tui][markdown][issue51][spec]") {
+TEST_CASE("Markdown wraps plain text within terminal width", "[tui][markdown][issue51][issue1217][spec]") {
     tui::Markdown markdown("alpha beta gamma", 0, 0);
 
     const auto lines = markdown.render(10);
@@ -174,7 +176,8 @@ TEST_CASE("Markdown wraps plain text within terminal width", "[tui][markdown][is
     CHECK(lines->lines == expected);
 }
 
-TEST_CASE("Markdown renders common response constructs in semantic order", "[tui][markdown][issue51][spec]") {
+TEST_CASE(
+        "Markdown renders common response constructs in semantic order", "[tui][markdown][issue51][issue1217][spec]") {
     tui::Markdown markdown(
         "# Heading\n\nParagraph with *emphasis*, **strong**, ~~gone~~, and `code`.\n\n"
         "- first item\n- second item\n\n"
@@ -214,7 +217,7 @@ TEST_CASE("Markdown renders common response constructs in semantic order", "[tui
 }
 
 TEST_CASE("Markdown styles link labels and visible URL fallbacks independently",
-        "[tui][markdown][theme][issue55][spec]") {
+        "[tui][markdown][theme][issue55][issue1217][spec]") {
     // The `label (url)` fallback is the no-hyperlink branch, so pin it instead
     // of reading the runner's own terminal capabilities (a Herdr pane reports
     // OSC 8 support and would take the link branch, #1124).
@@ -241,7 +244,7 @@ TEST_CASE("Markdown styles link labels and visible URL fallbacks independently",
 }
 
 TEST_CASE("Markdown preserves nested styles Unicode and link termination at narrow widths",
-        "[tui][markdown][issue51][spec]") {
+        "[tui][markdown][issue51][issue1217][spec]") {
     tui::Markdown markdown(
         "> **Cafe\xcc\x81 \xe4\xb8\xad \xf0\x9f\x99\x82 [linked words](https://example.com/long)**",
         0,
@@ -308,7 +311,7 @@ TEST_CASE(
     CHECK(fallback->lines.at(1).find("\x1b[32m") != std::string::npos);
 }
 
-TEST_CASE("Markdown keeps partial and invalid input readable", "[tui][markdown][issue51][spec]") {
+TEST_CASE("Markdown keeps partial and invalid input readable", "[tui][markdown][issue51][issue1217][spec]") {
     tui::Markdown markdown("**unfinished [link](\n\n```cpp\nint value = 1;", 0, 0, ansi_style());
 
     const auto lines = markdown.render(18);
@@ -322,7 +325,8 @@ TEST_CASE("Markdown keeps partial and invalid input readable", "[tui][markdown][
     CHECK(text.find("```") != std::string::npos);
 }
 
-TEST_CASE("Markdown degrades semantic prefixes at extremely narrow widths", "[tui][markdown][issue51][spec]") {
+TEST_CASE(
+        "Markdown degrades semantic prefixes at extremely narrow widths", "[tui][markdown][issue51][issue1217][spec]") {
     const std::vector<std::string> samples{
         "> quote",
         "- item",
@@ -339,7 +343,7 @@ TEST_CASE("Markdown degrades semantic prefixes at extremely narrow widths", "[tu
     }
 }
 
-TEST_CASE("Markdown follows strict strikethrough delimiter semantics", "[tui][markdown][issue51][spec]") {
+TEST_CASE("Markdown follows strict strikethrough delimiter semantics", "[tui][markdown][issue51][issue1217][spec]") {
     tui::Markdown markdown(
         "~~valid~~ and ~~invalid ~~ plus ~~a\\ ~~ and ~~\\~a~~",
         0,
@@ -356,7 +360,7 @@ TEST_CASE("Markdown follows strict strikethrough delimiter semantics", "[tui][ma
     CHECK(text.find("~~~a~~") == std::string::npos);
 }
 
-TEST_CASE("Markdown preserves loose list paragraph structure", "[tui][markdown][issue51][spec]") {
+TEST_CASE("Markdown preserves loose list paragraph structure", "[tui][markdown][issue51][issue1217][spec]") {
     tui::Markdown markdown(
         "1. first paragraph\n\n   second paragraph\n\n2. final item",
         0,
@@ -376,7 +380,7 @@ TEST_CASE("Markdown preserves loose list paragraph structure", "[tui][markdown][
     CHECK(std::distance(first, second) >= 2);
 }
 
-TEST_CASE("Markdown stabilizes streamed partial closing fences", "[tui][markdown][issue51][spec]") {
+TEST_CASE("Markdown stabilizes streamed partial closing fences", "[tui][markdown][issue51][issue1217][spec]") {
     const std::vector<std::pair<std::string, std::string>> samples{
         {"```cpp\nvalue\n``", "```cpp\nvalue\n```"},
         {"> ```cpp\n> value\n> ``", "> ```cpp\n> value\n> ```"},
@@ -399,7 +403,7 @@ TEST_CASE("Markdown stabilizes streamed partial closing fences", "[tui][markdown
 
 TEST_CASE("Markdown converts injected callback exceptions to render errors", "[tui][markdown][issue51][spec]") {}
 
-TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][markdown][issue51][spec]") {
+TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][markdown][issue51][issue1217][spec]") {
     auto style = ansi_style();
     style.strong = [](std::string text) { return "\x1b[31m" + text + "\x1b[39m"; };
     tui::Markdown markdown("**old**", 0, 0, std::move(style));
@@ -458,7 +462,7 @@ TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][ma
     CHECK(second_highlight->lines.at(1).find("\x1b[36m") == std::string::npos);
 }
 
-TEST_CASE("Markdown heading roles match frozen pi styling", "[tui][markdown][issue971][compat-pi]") {
+TEST_CASE("Markdown heading roles match frozen pi styling", "[tui][markdown][issue971][issue1217][compat-pi]") {
     tui::MarkdownStyleConfig style;
     style.heading = [](std::string text) { return "\x1b[36m" + text + "\x1b[39m"; };
     style.strong = [](std::string text) { return "\x1b[1m" + text + "\x1b[22m"; };
@@ -501,7 +505,7 @@ TEST_CASE("Markdown heading roles match frozen pi styling", "[tui][markdown][iss
 }
 
 TEST_CASE("Markdown nested quote styles and OSC links preserve frozen cell attributes",
-        "[tui][markdown][issue971][compat-pi]") {
+        "[tui][markdown][issue971][issue1217][compat-pi]") {
     tui::MarkdownStyleConfig style;
     style.quote = [](std::string text) { return "\x1b[3m" + text + "\x1b[23m"; };
     style.quote_border = [](std::string text) { return "\x1b[34m" + text + "\x1b[39m"; };
@@ -529,7 +533,8 @@ TEST_CASE("Markdown nested quote styles and OSC links preserve frozen cell attri
     CHECK(terminal.final_style() == tui::TerminalStyle{});
 }
 
-TEST_CASE("Markdown streamed code fences match frozen pi at each chunk", "[tui][markdown][issue971][compat-pi]") {
+TEST_CASE("Markdown streamed code fences match frozen pi at each chunk",
+        "[tui][markdown][issue971][issue1217][compat-pi]") {
     constexpr std::size_t kWidth = 40;
     const std::vector<std::pair<std::string, std::vector<std::string>>> snapshots{
             {"```cpp\n",
@@ -566,7 +571,7 @@ TEST_CASE("Markdown streamed code fences match frozen pi at each chunk", "[tui][
 }
 
 TEST_CASE("Markdown default text hooks respect empty narrow and padded rendering",
-        "[tui][markdown][issue971][compat-pi]") {
+        "[tui][markdown][issue971][issue1217][compat-pi]") {
     tui::Markdown empty(" \n\t", 0, 0, {});
     const auto empty_lines = empty.render(4);
     REQUIRE(empty_lines);
@@ -604,7 +609,8 @@ TEST_CASE("Markdown default text hooks respect empty narrow and padded rendering
     CHECK(narrow_lines->lines == std::vector<std::string>{"w", "o", "r", "d"});
 }
 
-TEST_CASE("Markdown applies configured padding and background to every cell", "[tui][markdown][issue51][spec]") {
+TEST_CASE("Markdown applies configured padding and background to every cell",
+        "[tui][markdown][issue51][issue1217][spec]") {
     auto background = tests::background_hook("\x1b[44m");
     tui::Markdown markdown("body", 1, 1, {}, {}, std::move(background));
 
@@ -669,7 +675,7 @@ TEST_CASE("Markdown wraps narrow GFM table cells within frozen borders", "[tui][
     CHECK(text.find("the") != std::string::npos);
 }
 
-TEST_CASE("Markdown measures CJK GFM table cells by terminal columns", "[tui][markdown][issue972][spec]") {
+TEST_CASE("Markdown measures CJK GFM table cells by terminal columns", "[tui][markdown][issue972][issue1217][spec]") {
     tui::Markdown markdown("| 地域 | 名前 |\n| --- | --- |\n| 東京 | 大阪 |", 0, 0);
 
     const auto lines = markdown.render(24);
@@ -793,4 +799,165 @@ TEST_CASE("Markdown background survives inline styling and code blocks on every 
         CHECK(row.ends_with("\x1b[0m\x1b]8;;\x07"));
     }
     CHECK(background_rows == row_count);
+}
+
+TEST_CASE("pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+        "[tui][markdown][issue1217][compat-pi]") {
+    const auto fixture = tests::read_pi_v130_audit_evidence("audit-1217", "markdown.json");
+    REQUIRE(fixture);
+    const auto& scenario = tests::find_scenario(*fixture, "markdown-headings-and-inline-styles");
+    const auto& expected = scenario.at("expected").at("lines").get_array();
+    REQUIRE(expected.size() >= 4);
+
+    tui::Markdown markdown(scenario.at("inputs").at("markdown").get_string(), 0, 0, ansi_style());
+    const auto rendered = markdown.render(50);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() >= 4);
+    const auto text = rendered_text(*rendered, 50);
+    CHECK(text.find("Heading 1") != std::string::npos);
+    CHECK(text.find("Heading 2") != std::string::npos);
+    CHECK(text.find("bold") != std::string::npos);
+    CHECK(text.find("inline") != std::string::npos);
+    CHECK(text.find("code") != std::string::npos);
+}
+
+TEST_CASE("pi-v1.3.0 markdown list markers and normalization match frozen observation",
+        "[tui][markdown][issue1217][compat-pi]") {
+    const auto fixture = tests::read_pi_v130_audit_evidence("audit-1217", "markdown.json");
+    REQUIRE(fixture);
+    const auto& scenario = tests::find_scenario(*fixture, "markdown-lists-and-markers");
+
+    tui::Markdown unordered(scenario.at("inputs").at("unordered").get_string(), 0, 0, ansi_style());
+    const auto un_rendered = unordered.render(40);
+    REQUIRE(un_rendered);
+    const auto un_text = rendered_text(*un_rendered, 40);
+    CHECK(un_text.find("bullet 1") != std::string::npos);
+    CHECK(un_text.find("nested bullet") != std::string::npos);
+
+    tui::Markdown ordered(scenario.at("inputs").at("ordered").get_string(), 0, 0, ansi_style());
+    const auto ord_rendered = ordered.render(40);
+    REQUIRE(ord_rendered);
+    const auto ord_text = rendered_text(*ord_rendered, 40);
+    CHECK(ord_text.find("1. item one") != std::string::npos);
+    CHECK(ord_text.find("2. item two") != std::string::npos);
+    CHECK(ord_text.find("3. item three") != std::string::npos);
+}
+
+TEST_CASE("pi-v1.3.0 markdown tables and CJK width measurement match frozen observation",
+        "[tui][markdown][issue1217][compat-pi]") {
+    const auto fixture = tests::read_pi_v130_audit_evidence("audit-1217", "markdown.json");
+    REQUIRE(fixture);
+    const auto& scenario = tests::find_scenario(*fixture, "markdown-tables-and-cjk");
+
+    tui::Markdown std_table(scenario.at("inputs").at("standard").get_string(), 0, 0, ansi_style());
+    const auto std_rendered = std_table.render(30);
+    REQUIRE(std_rendered);
+    const auto std_text = rendered_text(*std_rendered, 30);
+    CHECK(std_text.find("Col A") != std::string::npos);
+    CHECK(std_text.find("val 1") != std::string::npos);
+
+    tui::Markdown cjk_table(scenario.at("inputs").at("cjk").get_string(), 0, 0, ansi_style());
+    const auto cjk_rendered = cjk_table.render(24);
+    REQUIRE(cjk_rendered);
+    const auto cjk_text = rendered_text(*cjk_rendered, 24);
+    CHECK(cjk_text.find("地域") != std::string::npos);
+    CHECK(cjk_text.find("東京") != std::string::npos);
+}
+
+TEST_CASE("pi-v1.3.0 markdown code blocks and blockquotes match frozen observation",
+        "[tui][markdown][issue1217][compat-pi]") {
+    const auto fixture = tests::read_pi_v130_audit_evidence("audit-1217", "markdown.json");
+    REQUIRE(fixture);
+    const auto& scenario = tests::find_scenario(*fixture, "markdown-code-blocks-and-quotes");
+
+    tui::Markdown code(scenario.at("inputs").at("code").get_string(), 0, 0, ansi_style());
+    const auto code_rendered = code.render(40);
+    REQUIRE(code_rendered);
+    const auto code_text = rendered_text(*code_rendered, 40);
+    CHECK(code_text.find("int answer = 42;") != std::string::npos);
+
+    tui::Markdown quote(scenario.at("inputs").at("quote").get_string(), 0, 0, ansi_style());
+    const auto quote_rendered = quote.render(40);
+    REQUIRE(quote_rendered);
+    const auto quote_text = rendered_text(*quote_rendered, 40);
+    CHECK(quote_text.find("first line of quote") != std::string::npos);
+    CHECK(quote_text.find("nested quote") != std::string::npos);
+}
+
+TEST_CASE("pi-v1.3.0 markdown links hr and options transform match frozen observation",
+        "[tui][markdown][issue1217][compat-pi]") {
+    const auto fixture = tests::read_pi_v130_audit_evidence("audit-1217", "markdown.json");
+    REQUIRE(fixture);
+    const auto& scenario = tests::find_scenario(*fixture, "markdown-links-hr-and-transforms");
+
+    tui::Markdown link(scenario.at("inputs").at("link").get_string(), 0, 0, ansi_style());
+    const auto link_rendered = link.render(40);
+    REQUIRE(link_rendered);
+    const auto link_text = rendered_text(*link_rendered, 40);
+    CHECK(link_text.find("Pike") != std::string::npos);
+
+    tui::Markdown hr(scenario.at("inputs").at("hr").get_string(), 0, 0, ansi_style());
+    const auto hr_rendered = hr.render(30);
+    REQUIRE(hr_rendered);
+    CHECK(hr_rendered->lines.size() == 1);
+    CHECK(hr_rendered->lines[0].find("─") != std::string::npos);
+}
+
+TEST_CASE("pi-v1.3.0 markdown latex math integration matches frozen observation",
+        "[tui][markdown][issue1217][compat-pi]") {
+    const auto fixture = tests::read_pi_v130_audit_evidence("audit-1217", "markdown.json");
+    REQUIRE(fixture);
+    const auto& scenario = tests::find_scenario(*fixture, "markdown-latex-math-integration");
+
+    tui::Markdown inline_math(scenario.at("inputs").at("inlineMath").get_string(), 0, 0, ansi_style());
+    const auto inline_rendered = inline_math.render(40);
+    REQUIRE(inline_rendered);
+    const auto inline_text = rendered_text(*inline_rendered, 40);
+    CHECK(inline_text.find("1/2") != std::string::npos);
+    CHECK(inline_text.find("x²") != std::string::npos);
+
+    tui::Markdown display_math(scenario.at("inputs").at("displayMath").get_string(), 0, 0, ansi_style());
+    const auto display_rendered = display_math.render(40);
+    REQUIRE(display_rendered);
+    const auto display_text = rendered_text(*display_rendered, 40);
+    CHECK(display_text.find("1") != std::string::npos);
+    CHECK(display_text.find("─") != std::string::npos);
+
+    tui::Markdown disabled_math(
+            scenario.at("inputs").at("inlineMath").get_string(), 0, 0, ansi_style(), {}, {}, {.render_latex = false});
+    const auto disabled_rendered = disabled_math.render(40);
+    REQUIRE(disabled_rendered);
+    const auto disabled_text = rendered_text(*disabled_rendered, 40);
+    CHECK(disabled_text.find(R"($\frac{1}{2}$)") != std::string::npos);
+
+    tui::Markdown pending_math(scenario.at("inputs").at("pendingMath").get_string(), 0, 0, ansi_style());
+    const auto pending_rendered = pending_math.render(40);
+    REQUIRE(pending_rendered);
+    const auto pending_text = rendered_text(*pending_rendered, 40);
+    CHECK(pending_text.find("before $") != std::string::npos);
+}
+
+TEST_CASE("pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+        "[tui][markdown][issue1217][compat-pi]") {
+    const auto fixture = tests::read_pi_v130_audit_evidence("audit-1217", "markdown.json");
+    REQUIRE(fixture);
+    const auto& scenario = tests::find_scenario(*fixture, "markdown-lifecycle-and-default-styles");
+
+    tui::Markdown md(scenario.at("inputs").at("initial").get_string(), 2, 1, ansi_style());
+    CHECK(md.text() == "initial text");
+    const auto initial = md.render(40);
+    REQUIRE(initial);
+    CHECK(initial->lines.size() >= 3);
+
+    md.set_text(scenario.at("inputs").at("updated").get_string());
+    CHECK(md.text() == "updated text");
+    const auto updated = md.render(30);
+    REQUIRE(updated);
+    const auto updated_text = rendered_text(*updated, 30);
+    CHECK(updated_text.find("updated text") != std::string::npos);
+
+    md.invalidate();
+    const auto invalidated = md.render(30);
+    REQUIRE(invalidated);
+    CHECK(invalidated->lines == updated->lines);
 }

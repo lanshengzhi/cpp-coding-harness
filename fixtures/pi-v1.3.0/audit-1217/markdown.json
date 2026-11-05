@@ -1,0 +1,290 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T21:15:13.324Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/markdown.ts:Markdown,MarkdownOptions,MarkdownTheme,DefaultTextStyle"
+  ],
+  "scenarios": [
+    {
+      "name": "markdown-headings-and-inline-styles",
+      "dimensions": {
+        "columns": 50,
+        "rows": 7
+      },
+      "inputs": {
+        "markdown": "# Heading 1\n## Heading 2\nText with **bold**, *italic*, ~~strikethrough~~, and `inline code`.\nPlain paragraph.",
+        "width": 50,
+        "styles": {
+          "heading": {
+            "prefix": "\u001b[36m",
+            "suffix": "\u001b[39m"
+          },
+          "bold": {
+            "prefix": "\u001b[1m",
+            "suffix": "\u001b[22m"
+          },
+          "italic": {
+            "prefix": "\u001b[3m",
+            "suffix": "\u001b[23m"
+          },
+          "strikethrough": {
+            "prefix": "\u001b[9m",
+            "suffix": "\u001b[29m"
+          },
+          "underline": {
+            "prefix": "\u001b[4m",
+            "suffix": "\u001b[24m"
+          },
+          "code": {
+            "prefix": "\u001b[33m",
+            "suffix": "\u001b[39m"
+          },
+          "codeBlock": {
+            "prefix": "\u001b[32m",
+            "suffix": "\u001b[39m"
+          },
+          "codeBlockBorder": {
+            "prefix": "\u001b[2m",
+            "suffix": "\u001b[22m"
+          },
+          "listBullet": {
+            "prefix": "\u001b[35m",
+            "suffix": "\u001b[39m"
+          },
+          "quote": {
+            "prefix": "\u001b[3m",
+            "suffix": "\u001b[23m"
+          },
+          "quoteBorder": {
+            "prefix": "\u001b[34m",
+            "suffix": "\u001b[39m"
+          },
+          "hr": {
+            "prefix": "\u001b[2m",
+            "suffix": "\u001b[22m"
+          },
+          "link": {
+            "prefix": "\u001b[34m",
+            "suffix": "\u001b[39m"
+          },
+          "linkUrl": {
+            "prefix": "\u001b[2m",
+            "suffix": "\u001b[22m"
+          }
+        }
+      },
+      "expected": {
+        "lines": [
+          "\u001b[36m\u001b[1m\u001b[4mHeading 1\u001b[24m\u001b[22m\u001b[39m                                         ",
+          "                                                  ",
+          "\u001b[36m\u001b[1mHeading 2\u001b[22m\u001b[39m                                         ",
+          "                                                  ",
+          "Text with \u001b[1mbold\u001b[22m, \u001b[3mitalic\u001b[23m, \u001b[9mstrikethrough\u001b[29m, and \u001b[33minline ",
+          "\u001b[33mcode\u001b[39m.                                             ",
+          "Plain paragraph.                                  "
+        ]
+      }
+    },
+    {
+      "name": "markdown-lists-and-markers",
+      "dimensions": {
+        "columns": 40,
+        "rows": 6
+      },
+      "inputs": {
+        "unordered": "- bullet 1\n- bullet 2\n  - nested bullet",
+        "ordered": "1. item one\n1. item two\n1. item three",
+        "width": 40
+      },
+      "expected": {
+        "unorderedLines": [
+          "\u001b[35m- \u001b[39mbullet 1                              ",
+          "\u001b[35m- \u001b[39mbullet 2                              ",
+          "    \u001b[35m- \u001b[39mnested bullet                     "
+        ],
+        "orderedNormalizedLines": [
+          "\u001b[35m1. \u001b[39mitem one                             ",
+          "\u001b[35m2. \u001b[39mitem two                             ",
+          "\u001b[35m3. \u001b[39mitem three                           "
+        ],
+        "orderedPreservedLines": [
+          "\u001b[35m1. \u001b[39mitem one                             ",
+          "\u001b[35m1. \u001b[39mitem two                             ",
+          "\u001b[35m1. \u001b[39mitem three                           "
+        ]
+      }
+    },
+    {
+      "name": "markdown-tables-and-cjk",
+      "dimensions": {
+        "columns": 35,
+        "rows": 15
+      },
+      "inputs": {
+        "standard": "| Col A | Col B |\n| --- | --- |\n| val 1 | val 2 |",
+        "cjk": "| 地域 | 名前 |\n| --- | --- |\n| 東京 | 大阪 |",
+        "unequal": "| Short | Long Description Column |\n| --- | --- |\n| a | b |"
+      },
+      "expected": {
+        "standardLines": [
+          "┌───────┬───────┐             ",
+          "│ \u001b[1mCol A\u001b[22m │ \u001b[1mCol B\u001b[22m │             ",
+          "├───────┼───────┤             ",
+          "│ val 1 │ val 2 │             ",
+          "└───────┴───────┘             "
+        ],
+        "cjkLines": [
+          "┌──────┬──────┐         ",
+          "│ \u001b[1m地域\u001b[22m │ \u001b[1m名前\u001b[22m │         ",
+          "├──────┼──────┤         ",
+          "│ 東京 │ 大阪 │         ",
+          "└──────┴──────┘         "
+        ],
+        "unequalLines": [
+          "┌───────┬─────────────────────────┐",
+          "│ \u001b[1mShort\u001b[22m │ \u001b[1mLong Description Column\u001b[22m │",
+          "├───────┼─────────────────────────┤",
+          "│ a     │ b                       │",
+          "└───────┴─────────────────────────┘"
+        ]
+      }
+    },
+    {
+      "name": "markdown-code-blocks-and-quotes",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "code": "```cpp\nint answer = 42;\nreturn answer;\n```",
+        "quote": "> first line of quote\n> second line of quote\n>> nested quote",
+        "width": 40
+      },
+      "expected": {
+        "codeLines": [
+          "\u001b[2m```cpp\u001b[22m                                  ",
+          "  \u001b[32mint answer = 42;\u001b[39m                      ",
+          "  \u001b[32mreturn answer;\u001b[39m                        ",
+          "\u001b[2m```\u001b[22m                                     "
+        ],
+        "highlightedLines": [
+          "\u001b[2m```cpp\u001b[22m                                  ",
+          "  \u001b[35mint answer = 42;\u001b[39m                      ",
+          "  \u001b[35mreturn answer;\u001b[39m                        ",
+          "\u001b[2m```\u001b[22m                                     "
+        ],
+        "quoteLines": [
+          "\u001b[34m│ \u001b[39m\u001b[3m\u001b[3mfirst line of quote                   ",
+          "\u001b[34m│ \u001b[39m\u001b[3msecond line of quote\u001b[23m\u001b[23m                  ",
+          "\u001b[34m│ \u001b[39m\u001b[3m\u001b[3m\u001b[23m\u001b[23m                                      ",
+          "\u001b[34m│ \u001b[39m\u001b[3m\u001b[3m\u001b[34m│ \u001b[39m\u001b[3m\u001b[3mnested quote\u001b[23m\u001b[23m\u001b[23m\u001b[23m                        "
+        ]
+      }
+    },
+    {
+      "name": "markdown-links-hr-and-transforms",
+      "dimensions": {
+        "columns": 40,
+        "rows": 3
+      },
+      "inputs": {
+        "link": "[Pike](https://example.com/pike)",
+        "hr": "---",
+        "transform": "transformed text",
+        "backslash": "\\*not italic\\*"
+      },
+      "expected": {
+        "linkLines": [
+          "\u001b[34m\u001b[4mPike\u001b[24m\u001b[39m\u001b[2m (https://example.com/pike)\u001b[22m         "
+        ],
+        "hrLines": [
+          "\u001b[2m──────────────────────────────\u001b[22m"
+        ],
+        "transformLines": [
+          "transformed text [cols=35]         "
+        ],
+        "backslashDefaultLines": [
+          "*not italic*                  "
+        ],
+        "backslashPreservedLines": [
+          "\\*not italic\\*                "
+        ]
+      }
+    },
+    {
+      "name": "markdown-latex-math-integration",
+      "dimensions": {
+        "columns": 40,
+        "rows": 5
+      },
+      "inputs": {
+        "inlineMath": "inline $\\frac{1}{2}$ and $x^2$",
+        "displayMath": "$$\\frac{1}{2}$$",
+        "pendingMath": "before $",
+        "width": 40
+      },
+      "expected": {
+        "inlineLines": [
+          "inline 1/2 and x²                       "
+        ],
+        "displayLines": [
+          "1                                       ",
+          "─                                       ",
+          "2                                       "
+        ],
+        "disabledLines": [
+          "inline $\\frac{1}{2}$ and $x^2$          "
+        ],
+        "pendingLines": [
+          "before $                                "
+        ]
+      }
+    },
+    {
+      "name": "markdown-lifecycle-and-default-styles",
+      "dimensions": {
+        "columns": 40,
+        "rows": 6
+      },
+      "inputs": {
+        "initial": "initial text",
+        "updated": "updated text",
+        "paddingX": 2,
+        "paddingY": 1,
+        "defaultTextStyle": {
+          "bold": true,
+          "italic": true,
+          "color": "gray"
+        }
+      },
+      "expected": {
+        "defaultStylePrefix": "\u001b[3m\u001b[1m\u001b[90m",
+        "initialLines": [
+          "                                        ",
+          "  \u001b[3m\u001b[1m\u001b[90minitial text\u001b[39m\u001b[22m\u001b[23m                          ",
+          "                                        "
+        ],
+        "updatedLines": [
+          "                              ",
+          "  \u001b[3m\u001b[1m\u001b[90mupdated text\u001b[39m\u001b[22m\u001b[23m                ",
+          "                              "
+        ],
+        "invalidatedLines": [
+          "                              ",
+          "  \u001b[3m\u001b[1m\u001b[90mupdated text\u001b[39m\u001b[22m\u001b[23m                ",
+          "                              "
+        ]
+      }
+    }
+  ]
+}

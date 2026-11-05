@@ -68,6 +68,22 @@ struct FrozenLatexObservation {
     return by_name;
 }
 
+[[nodiscard]] support::Expected<std::map<std::string, FrozenLatexObservation>> named_v130_observations(
+        std::string_view scenario, std::string_view group) {
+    const auto bundle = tests::read_pi_v130_audit_evidence("audit-1217", "latex.json");
+    if (!bundle) return std::unexpected(bundle.error());
+    const auto* found = find_scenario(*bundle, scenario);
+    if (found == nullptr) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "missing latex evidence scenario: " + std::string(scenario)));
+    }
+    std::map<std::string, FrozenLatexObservation> by_name;
+    for (auto& observation : read_observations(found->at("expected").at(std::string(group)))) {
+        by_name.emplace(observation.name, std::move(observation));
+    }
+    return by_name;
+}
+
 } // namespace
 
 TEST_CASE("render_latex matches every frozen pi inline grammar observation", "[tui][latex][issue973][compat-pi]") {
@@ -85,7 +101,36 @@ TEST_CASE("render_latex matches every frozen pi inline grammar observation", "[t
     }
 }
 
-TEST_CASE("render_latex reproduces the frozen frac one-half rendering", "[tui][latex][issue973][compat-pi]") {
+TEST_CASE("render_latex matches every frozen pi-v1.3.0 inline grammar observation",
+        "[tui][latex][issue1217][compat-pi]") {
+    const auto observations = named_v130_observations("inline-grammar", "inline");
+    REQUIRE(observations);
+    REQUIRE(observations->size() >= 40);
+    for (const auto& [name, observation] : *observations) {
+        CAPTURE(name);
+        const auto rendered = tui::render_latex(observation.source);
+        REQUIRE(observation.output);
+        REQUIRE(rendered);
+        CHECK(*rendered == *observation.output);
+    }
+}
+
+TEST_CASE("render_latex matches frozen pi-v1.3.0 display rows and baseline alignment",
+        "[tui][latex][issue1217][compat-pi]") {
+    const auto observations = named_v130_observations("display-option", "display");
+    REQUIRE(observations);
+    REQUIRE(observations->size() == 3);
+    for (const auto& [name, observation] : *observations) {
+        CAPTURE(name);
+        REQUIRE(observation.output);
+        const auto rendered = tui::render_latex(observation.source, {.display = true});
+        REQUIRE(rendered);
+        CHECK(*rendered == *observation.output);
+    }
+}
+
+TEST_CASE(
+        "render_latex reproduces the frozen frac one-half rendering", "[tui][latex][issue973][issue1217][compat-pi]") {
     const auto observations = named_observations("inline-grammar", "inline");
     REQUIRE(observations);
     const auto& fraction = observations->at("frac-half");
@@ -112,7 +157,7 @@ TEST_CASE("render_latex reports the frozen failure value for unsupported and mal
 }
 
 TEST_CASE("render_latex does not invent a rendering for a failure by keeping the source",
-        "[tui][latex][issue973][compat-pi]") {
+        "[tui][latex][issue973][issue1217][compat-pi]") {
     const auto rendered = tui::render_latex("\\frac{1}");
     CHECK_FALSE(rendered.has_value());
     // A source-preserving fallback would echo the input; the failure value is
@@ -121,7 +166,8 @@ TEST_CASE("render_latex does not invent a rendering for a failure by keeping the
 }
 
 // Complete matrix and environment outputs below were checked against the frozen pi v1.0.4 latex.ts renderer.
-TEST_CASE("render_latex aligns matrix columns and renders frozen delimiters", "[tui][latex][issue975][spec]") {
+TEST_CASE(
+        "render_latex aligns matrix columns and renders frozen delimiters", "[tui][latex][issue975][issue1217][spec]") {
     const auto parenthesized = tui::render_latex(R"(\begin{pmatrix} a & long \\ xy & z \\ m & uvw \end{pmatrix})");
     REQUIRE(parenthesized);
     CHECK(*parenthesized == "⎛ a  │ long ⎞\n⎜ xy │ z    ⎟\n⎝ m  │ uvw  ⎠");
