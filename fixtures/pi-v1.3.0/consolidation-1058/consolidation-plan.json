@@ -5625,16 +5625,6 @@
     ]
    },
    {
-    "id": "TM-tui-b7",
-    "ticket": "#1215",
-    "history": false,
-    "note": "Proposal section 2 group 16 -> N5: #1182 route batch B7 filed as #1208 + 7 (Editor: layout, history, undo and kill/yank).",
-    "rows": [
-     "cch_tui:Editor",
-     "cch_tui:Editor.render"
-    ]
-   },
-   {
     "id": "TM-tui-b8",
     "ticket": "#1216",
     "history": false,

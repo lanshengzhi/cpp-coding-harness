@@ -7721,7 +7721,14 @@
     "editor-alternate-screen-click-positions-cursor",
     "editor-click-bounds-wrapped-segments-and-wide-graphemes",
     "editor-drag-selects-and-copies-instead-of-moving-the-cursor"
-   ]
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "editor-alternate-screen-click-positions-cursor",
+     "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+     "editor-drag-selects-and-copies-instead-of-moving-the-cursor"
+    ]
+   }
   },
   {
    "id": "Editor.handleInput",
@@ -7783,7 +7790,13 @@
    "comparisonCase": [
     "coalesced-unicode-edit-after-undo",
     "undo-shortcut-rebinding"
-   ]
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "coalesced-unicode-edit-after-undo",
+     "undo-shortcut-rebinding"
+    ]
+   }
   },
   {
    "id": "Editor.layoutText",
@@ -9027,7 +9040,13 @@
    "comparisonCase": [
     "coalesced-unicode-edit-after-undo",
     "undo-shortcut-rebinding"
-   ]
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "coalesced-unicode-edit-after-undo",
+     "undo-shortcut-rebinding"
+    ]
+   }
   },
   {
    "id": "Editor.moveWordForwards",

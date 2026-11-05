@@ -795,8 +795,9 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # 209 after the #1226 withdrawal of cch_mcp:mcp-request-auth, and 195 after
         # #1229 withdraws the fourteen unexercised ScreenStateGoldenTest claims from
         # 1209-root-tui-lifecycle (the 182 discriminating-case rows were already
-        # reverted and stay reverted as bounded claims).
-        self.assertEqual(len(delivered), 195)
+        # reverted and stay reverted as bounded claims). #1215 (route batch B7)
+        # receipted 80 editor rows whole-row: 275.
+        self.assertEqual(len(delivered), 275)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)

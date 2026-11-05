@@ -174,7 +174,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -229,14 +229,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml",
-     "sha256": "b7c4eb8843d70e89998b58ebf8aec8dca25f9c4d02086049e9cd8f2296d716ad"
+     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml",
+     "sha256": "9849f97ebf70981ae4655afb6643c9259544f13d0114b7cc9c2225835d892af0"
     }
    },
    "rows": [
@@ -758,6 +758,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml",
+      "sha256": "9849f97ebf70981ae4655afb6643c9259544f13d0114b7cc9c2225835d892af0"
+     }
+    }
    }
   },
   {
@@ -777,14 +801,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml",
-     "sha256": "6be3a8a1c4b9a0680ae1dd45f89a1be04a54e74c6c95abc17f0267fca1f840f5"
+     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml",
+     "sha256": "9f2f48fd10d9b2080d27d1242713bb512a86c83e9912caa48e4beb76a0838329"
     }
    },
    "inputs": [
@@ -830,7 +854,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "src/durable/CodingTools.cpp",
@@ -1471,6 +1495,30 @@
       "sha256": "6be3a8a1c4b9a0680ae1dd45f89a1be04a54e74c6c95abc17f0267fca1f840f5"
      }
     }
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml",
+      "sha256": "9f2f48fd10d9b2080d27d1242713bb512a86c83e9912caa48e4beb76a0838329"
+     }
+    }
    }
   },
   {
@@ -1730,11 +1778,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1757,14 +1805,14 @@
      "-L",
      "issue1118",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml",
-     "sha256": "721aeb2454221bee7c9c8b2c386b1b7f2f7e83e899586b1810de00f027da6a63"
+     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml",
+     "sha256": "deb6884e25283d5dacb10bf4c9696d11ff6bf27d21c749ec1979f05c6201405e"
     }
    },
    "rows": [
@@ -2385,6 +2433,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml",
+      "sha256": "deb6884e25283d5dacb10bf4c9696d11ff6bf27d21c749ec1979f05c6201405e"
+     }
+    }
    }
   },
   {
@@ -3638,7 +3710,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -3646,7 +3718,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     }
    ],
    "validation": {
@@ -3657,14 +3729,14 @@
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1231-revalidation-1181.xml"
+     "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml"
     ],
-    "testedRevision": "0e61747393b2539ff79a26ff40d444189d2654fd",
-    "recordedAt": "2026-11-05T16:44:24Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1231-revalidation-1181.xml",
-     "sha256": "6221d8f648a57ca28963a5e066cbddf21f5dcfecb942210ce0fd6a169b9bc1e0"
+     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml",
+     "sha256": "b3ccd90725f01731c9209f083265e2221140141aea6f7175835c0b45673b19cd"
     }
    },
    "rows": [
@@ -4301,6 +4373,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml",
+      "sha256": "b3ccd90725f01731c9209f083265e2221140141aea6f7175835c0b45673b19cd"
+     }
+    }
    }
   },
   {
@@ -5041,14 +5137,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml",
-     "sha256": "8c4676d1577f5eada43b6461817a8fc2a5d8ddd0a93099da8e8faf309e5ec44a"
+     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml",
+     "sha256": "f848ef0d555f58ca6cc1e100a2bc2476a7801ef93ae94e2db984b106faa6a6e1"
     }
    },
    "rows": [
@@ -5222,11 +5318,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5526,6 +5622,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml",
+      "sha256": "f848ef0d555f58ca6cc1e100a2bc2476a7801ef93ae94e2db984b106faa6a6e1"
+     }
+    }
    }
   },
   {
@@ -5544,14 +5664,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml",
-     "sha256": "edc3886927d1992f9eec0bbd6594d3797543de3479a3c4cb38e26df7f10aa29b"
+     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml",
+     "sha256": "4edbb4fc0f7aa30309542152d689a1165c29baa9a7f9a0fa3b920880eaa70378"
     }
    },
    "rows": [
@@ -5719,7 +5839,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5996,6 +6116,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml",
+      "sha256": "4edbb4fc0f7aa30309542152d689a1165c29baa9a7f9a0fa3b920880eaa70378"
+     }
+    }
    }
   },
   {
@@ -6214,14 +6358,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml",
-     "sha256": "2aefa829a77be43e57339c4eba028be87d4392287b6ac9552df820e9209f05e2"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml",
+     "sha256": "0203d83146382d86a871d452b070450ba046d2436b75ddc7af86ee57b95fdcd2"
     }
    },
    "rows": [
@@ -6444,7 +6588,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -6468,7 +6612,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6484,7 +6628,7 @@
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
-     "sha256": "f9ab199b4ca6659d23a418170529895c58016ad5e1d1bfba0460e1f4e30c9539"
+     "sha256": "0b90426e55f7e9756582354c88df5175289ca9533ddaf17b54f78e4dfc62b5b8"
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
@@ -6774,6 +6918,31 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "docs/research/pi-v1.3.0/1182-tui-route-batches.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml",
+      "sha256": "0203d83146382d86a871d452b070450ba046d2436b75ddc7af86ee57b95fdcd2"
+     }
+    }
    }
   },
   {
@@ -6978,11 +7147,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7915,14 +8084,14 @@
      "-R",
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml",
-     "sha256": "d4e469dc8d7e2a9c6bc2294b06d0fb5c3577dc1436b2382e031295d346eeb31c"
+     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml",
+     "sha256": "05d1ad7946bc9c524e80212975c5e70da3f5dea0e255449e486ab4af7d2b152f"
     }
    },
    "revalidation1179m": {
@@ -8138,6 +8307,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml",
+      "sha256": "05d1ad7946bc9c524e80212975c5e70da3f5dea0e255449e486ab4af7d2b152f"
+     }
+    }
    }
   },
   {
@@ -8206,11 +8399,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -8241,14 +8434,14 @@
      "-R",
      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml",
-     "sha256": "5a34ef523d360f0af5c242c5b6f8a157962819091641df8ccab48650e9522c5f"
+     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml",
+     "sha256": "c3d58e144438229f65e72f00e319d1a25a31af1c294f6f5ba43d384eb1633012"
     }
    },
    "rows": [
@@ -8492,6 +8685,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml",
+      "sha256": "c3d58e144438229f65e72f00e319d1a25a31af1c294f6f5ba43d384eb1633012"
+     }
+    }
    }
   },
   {
@@ -8556,11 +8773,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -8611,14 +8828,14 @@
      "-R",
      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml",
-     "sha256": "a118fe2a5b0d91ef9d71645876f509f364d0ba2360e543919dd8504d11483f42"
+     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml",
+     "sha256": "81c43835d0896f247cd64b15e4c962988d846734d7614590ec4e05ba37db89a8"
     }
    },
    "rows": [
@@ -8897,6 +9114,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml",
+      "sha256": "81c43835d0896f247cd64b15e4c962988d846734d7614590ec4e05ba37db89a8"
+     }
+    }
    }
   },
   {
@@ -9262,7 +9503,7 @@
     },
     {
      "path": "tests/tui/EditorTest.cpp",
-     "sha256": "ddf13b7aaf2bf2ba40de6956b7d8b5627c847c8d6c1c0421207f4892c03e0047"
+     "sha256": "c033f77463931d25d1b90adb499bc14c48206aaae7215aef1a635765a4cd3373"
     },
     {
      "path": "tests/tui/NativeClipboardTest.cpp",
@@ -9294,15 +9535,15 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
-     "sha256": "0470c0b9b61fa2bbbc8695bcf44b4ad79b2642bb73acc1c5d8dd1dc8e82d53e0"
+     "sha256": "3960a88b827cc129afd6abb04d90ff281faa8b7eca17cdf50df8066a325785ed"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     }
    ],
    "validation": {
@@ -9315,14 +9556,14 @@
      "-L",
      "issue1201",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 8,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml",
-     "sha256": "8eb0768c66cb25c56b5830171dcf81e0a7eb14e93b622d4e25e96c151045094c"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml",
+     "sha256": "4c83e5990d8434046c70529dae00e1afb44218c3df2d9d1f5409e9e7e2812d6a"
     }
    },
    "rows": [
@@ -9961,6 +10202,32 @@
    "revalidation1229": {
     "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 25 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
     "changedInputs": []
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1201",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 8,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml",
+      "sha256": "4c83e5990d8434046c70529dae00e1afb44218c3df2d9d1f5409e9e7e2812d6a"
+     }
+    }
    }
   },
   {
@@ -9999,11 +10266,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "1ad6c3684e55dfc112f5bdf2ed24cf57baf10490ae14abf1f163ded0c395b9f1"
+     "sha256": "c2db2ac917cf9715fe1fa148de1e359c1519280f9e55154fe7496bc90ccee891"
     },
     {
      "path": "src/durable/Harness.cpp",
@@ -10036,14 +10303,14 @@
      "-L",
      "issue1203",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 3,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml",
-     "sha256": "6d8bbdf2f3cc7533155942b762b6e10c9758a7db115ad99963b6edf56a772e06"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml",
+     "sha256": "9db4090e1be11b6d8e0cd9d993efdcaf102afee397a849549f76f556eb76d28e"
     }
    },
    "rows": [
@@ -10134,6 +10401,32 @@
    "revalidation1229": {
     "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 3 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
     "changedInputs": []
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1203",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 3,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml",
+      "sha256": "9db4090e1be11b6d8e0cd9d993efdcaf102afee397a849549f76f556eb76d28e"
+     }
+    }
    }
   },
   {
@@ -10160,7 +10453,7 @@
     },
     {
      "path": "tests/tui/AltScreenSearchTest.cpp",
-     "sha256": "cdeeab300f9abd34f5c8bc2d16abb07a8a44508ac55a98fad6263e84679e1587"
+     "sha256": "fe73dbc1283a29ea4a9956bb78a878ae96ad353d83eb097c11121260aa933a5a"
     },
     {
      "path": "tests/tui/MouseEvidenceTest.cpp",
@@ -10176,7 +10469,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
@@ -10213,14 +10506,14 @@
      "-L",
      "issue1213",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1213-issue1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 15,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1213.xml",
-     "sha256": "056ef9bba23303b4662dea33645727f35d252ca21fca9e63acbcb370dde9abb9"
+     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml",
+     "sha256": "ef1e1927be9c96222617d2067b1796d0a190758da64c69a17f668ff7f2e5fe70"
     }
    },
    "rows": [
@@ -10592,6 +10885,32 @@
    "revalidation1229": {
     "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 3 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
     "changedInputs": []
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1213",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 15,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml",
+      "sha256": "ef1e1927be9c96222617d2067b1796d0a190758da64c69a17f668ff7f2e5fe70"
+     }
+    }
    }
   },
   {
@@ -10626,7 +10945,7 @@
     },
     {
      "path": "tests/tui/MouseComponentsTest.cpp",
-     "sha256": "d99388c50347b78b47cd3f8054a8c9e98ab64ad0a353d5450e07cb20360b46c9"
+     "sha256": "caf5f1422cdd2b4f9a059776b4fad3b609a9684485eb4905dc61f3caee0e23fb"
     },
     {
      "path": "tests/tui/MouseEvidenceTest.cpp",
@@ -10642,7 +10961,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -10687,14 +11006,14 @@
      "-L",
      "issue1212",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1213-issue1212.xml"
+     "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 28,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1212.xml",
-     "sha256": "af56f02af00a4f2501932ad408cfddde2a7d1789576acaf9df09633d3ae4fa11"
+     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml",
+     "sha256": "43e2e6f466fb31c2174a32a102b4523dba1733d34d7aa5835374bd33295be516"
     }
    },
    "rows": [
@@ -11412,6 +11731,32 @@
    "revalidation1229": {
     "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 23 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
     "changedInputs": []
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1212",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 28,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml",
+      "sha256": "43e2e6f466fb31c2174a32a102b4523dba1733d34d7aa5835374bd33295be516"
+     }
+    }
    }
   },
   {
@@ -11442,7 +11787,7 @@
     },
     {
      "path": "tests/tui/AltScreenSearchTest.cpp",
-     "sha256": "cdeeab300f9abd34f5c8bc2d16abb07a8a44508ac55a98fad6263e84679e1587"
+     "sha256": "fe73dbc1283a29ea4a9956bb78a878ae96ad353d83eb097c11121260aa933a5a"
     },
     {
      "path": "tests/tui/AltScreenTest.cpp",
@@ -11454,7 +11799,7 @@
     },
     {
      "path": "tests/tui/CursorMarkerEvidenceTest.cpp",
-     "sha256": "e6e5728cc5f714e62bccb668c52bbdbd06231a742194ff22ea031759856a5dd0"
+     "sha256": "6f7a0dc16bae77156f3b0e236d8f34739ac58800d0a23c534bc6115aed5eafe1"
     },
     {
      "path": "tests/tui/ScrollViewEvidenceTest.cpp",
@@ -11474,7 +11819,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -11531,14 +11876,14 @@
      "-L",
      "issue1211",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1213-issue1211.xml"
+     "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 34,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1211.xml",
-     "sha256": "6c3a1bce158b5ad4b25bccf6c0a87e5409cc7507843a8dd2fbc8b036d67ed2e8"
+     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml",
+     "sha256": "b85a1c0f4766a74c4f092586f216208d89d446b2d555bcaaa16ac00600eb8068"
     }
    },
    "rows": [
@@ -12614,6 +12959,32 @@
    "revalidation1229": {
     "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 49 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
     "changedInputs": []
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1211",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 34,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml",
+      "sha256": "b85a1c0f4766a74c4f092586f216208d89d446b2d555bcaaa16ac00600eb8068"
+     }
+    }
    }
   },
   {
@@ -12652,11 +13023,11 @@
     },
     {
      "path": "tests/tui/CursorMarkerEvidenceTest.cpp",
-     "sha256": "e6e5728cc5f714e62bccb668c52bbdbd06231a742194ff22ea031759856a5dd0"
+     "sha256": "6f7a0dc16bae77156f3b0e236d8f34739ac58800d0a23c534bc6115aed5eafe1"
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -12693,14 +13064,14 @@
      "-L",
      "issue1210",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1213-issue1210.xml"
+     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1210.xml",
-     "sha256": "ae1ad99df818785ce062b22ea888b6ab4f120e6d315c3f354de1c10d68202cad"
+     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml",
+     "sha256": "fa23f697dcdfcf8f9836eb659d8b19feb3d554d94f9398962f9cca800b3faf19"
     }
    },
    "rows": [
@@ -12982,6 +13353,32 @@
    "revalidation1229": {
     "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 9 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
     "changedInputs": []
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1210",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml",
+      "sha256": "fa23f697dcdfcf8f9836eb659d8b19feb3d554d94f9398962f9cca800b3faf19"
+     }
+    }
    }
   },
   {
@@ -13028,7 +13425,7 @@
     },
     {
      "path": "tests/tui/CursorMarkerEvidenceTest.cpp",
-     "sha256": "e6e5728cc5f714e62bccb668c52bbdbd06231a742194ff22ea031759856a5dd0"
+     "sha256": "6f7a0dc16bae77156f3b0e236d8f34739ac58800d0a23c534bc6115aed5eafe1"
     },
     {
      "path": "tests/tui/MouseEvidenceTest.cpp",
@@ -13048,7 +13445,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "52ff3e6b54a0d7b2d25702a0ea48ccf00e40415c0b89c594f96d0f57969eb70a"
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -13105,14 +13502,14 @@
      "-L",
      "issue1209",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1213-issue1209.xml"
+     "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
     "selected": 30,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1209.xml",
-     "sha256": "141f019e1cff558f5f44924d8490bba818f97cf40960c55c5240a471986e9692"
+     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml",
+     "sha256": "5f59d867e61c339999679e33a9b77bbd09f35b91b490eb81b547dbd04b3b8755"
     }
    },
    "rows": [
@@ -15182,7 +15579,1526 @@
    "revalidation1229": {
     "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 70 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed. Fourteen further claims whose only comparison cites tests/tui/ScreenStateGoldenTest.cpp without exercising the row's specific behavior (preserveScreen, renderNow, mouse handling and the remaining members) are withdrawn through 1229-withdrawn-1209-root-tui-lifecycle-claims.json.",
     "changedInputs": []
+   },
+   "revalidation1215": {
+    "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1209",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml"
+     ],
+     "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+     "recordedAt": "2026-11-05T19:28:14Z",
+     "selected": 30,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml",
+      "sha256": "5f59d867e61c339999679e33a9b77bbd09f35b91b490eb81b547dbd04b3b8755"
+     }
+    }
    }
+  },
+  {
+   "id": "1215-editor-layout-history-undo-kill-yank",
+   "ticket": "1215",
+   "implementationCommits": [
+    "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37"
+   ],
+   "report": "docs/research/pi-v1.3.0/1215-editor-layout-history-undo-kill-yank.md",
+   "inputs": [
+    {
+     "path": "src/tui/Editor.cpp",
+     "sha256": "478583ff74979e150a5ac7ec2862953d0f51644f220d4d12358fa614ff8fa8ef"
+    },
+    {
+     "path": "src/tui/EditorLayout.cpp",
+     "sha256": "36c0b980b32147257172f03dbe16756bda1a8ecb289018fe4134db8b7eae307a"
+    },
+    {
+     "path": "src/tui/EditorCompletionSession.cpp",
+     "sha256": "ab191fa4f1107830ba803b99b789acd42c92b1242a6ede8a305d86d0db734b8f"
+    },
+    {
+     "path": "tests/tui/AltScreenSearchTest.cpp",
+     "sha256": "fe73dbc1283a29ea4a9956bb78a878ae96ad353d83eb097c11121260aa933a5a"
+    },
+    {
+     "path": "tests/tui/CursorMarkerEvidenceTest.cpp",
+     "sha256": "6f7a0dc16bae77156f3b0e236d8f34739ac58800d0a23c534bc6115aed5eafe1"
+    },
+    {
+     "path": "tests/tui/EditorTest.cpp",
+     "sha256": "c033f77463931d25d1b90adb499bc14c48206aaae7215aef1a635765a4cd3373"
+    },
+    {
+     "path": "tests/tui/MouseComponentsTest.cpp",
+     "sha256": "caf5f1422cdd2b4f9a059776b4fad3b609a9684485eb4905dc61f3caee0e23fb"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/baselines.json",
+     "sha256": "110b3f7b3338f4d77a4f869cc6b1545cbaf58c32cc1babd8390dfb9764b7d22d"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
+     "sha256": "6f86fc16da6bfeb72ffb736f3ff4314295d65c76b37c563dc662ecb3c9564590"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
+     "sha256": "3f479083b10886287684afe88a068769ea3989a4020e0559b949c0f937746999"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+     "sha256": "3ef02646c9b23f774ad2c10e38e4e938691cd5bc14d41dba9a897baf7bc4ce1a"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1201/manifest.json",
+     "sha256": "56ffbd9a224181ba6bfd1fd956e71db603d880c6f42960b08ac7fc9ae2d4a616"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
+     "sha256": "e23d19a31411735f1e897452c28b422c450360db6cd91c2ed3ba84482ceb772c"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1211/manifest.json",
+     "sha256": "aa29b7e168171c365209c706ba01daf11301fb40df6493d30748a7a55788142f"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1212/manifest.json",
+     "sha256": "1cbe388c019e28b93fe4cf0eef4507668a2478edc76aee23a596a6475ad32018"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1212/mouse-components.json",
+     "sha256": "216de749368515f410666b4465984f918e024d91b347df9b7d8e4c6cb2116479"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1215/editor-autocomplete.json",
+     "sha256": "e2a58bbdd5bdedb72b551b1ae9042723ea52c76e7d6d5187b891694f8f574d89"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1215/manifest.json",
+     "sha256": "f69560c67b51d614050aa837a765fcc91cd54894777aac048ec8b178da2cd5e0"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1215/screen-state.json",
+     "sha256": "45a43182e955c5c78f56abd125e288e634e790ffeaffe3a571e9f36f94f97a07"
+    }
+   ],
+   "validation": {
+    "command": [
+     "ctest",
+     "--preset",
+     "vcpkg",
+     "-LE",
+     "architecture",
+     "-L",
+     "issue1215",
+     "--output-junit",
+     "docs/research/pi-v1.3.0/deliveries/1215-issue1215.xml"
+    ],
+    "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
+    "recordedAt": "2026-11-05T19:30:35Z",
+    "selected": 26,
+    "junit": {
+     "path": "docs/research/pi-v1.3.0/deliveries/1215-issue1215.xml",
+     "sha256": "46841f59722f5332ed7e12c575be8dace0818a6865722ec1456a7d07d112ff00"
+    }
+   },
+   "rows": [
+    {
+     "id": "cch_tui:Editor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1050/cursor-composition.json",
+       "scenario": "standalone-editor-fake-cursor-is-strippable",
+       "test": "the standalone editor draws a strippable fake cursor marker",
+       "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame",
+      "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp",
+      "reason": "The frozen standalone frame binds the rendered cursor cell; the marker-pair case clicks nothing and instead strips and re-orders the drawn lines, separating a cursor drawn as raw reverse video from the strippable zero-width pair the row's render contract requires."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.render",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1050/cursor-composition.json",
+       "scenario": "standalone-editor-fake-cursor-is-strippable",
+       "test": "the standalone editor draws a strippable fake cursor marker",
+       "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame",
+      "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp",
+      "reason": "The frozen standalone frame binds the rendered cursor cell; the marker-pair case clicks nothing and instead strips and re-orders the drawn lines, separating a cursor drawn as raw reverse video from the strippable zero-width pair the row's render contract requires."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.constructor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1050/cursor-composition.json",
+       "scenario": "standalone-editor-fake-cursor-is-strippable",
+       "test": "the standalone editor draws a strippable fake cursor marker",
+       "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame",
+      "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp",
+      "reason": "The frozen standalone frame binds the rendered cursor cell; the marker-pair case clicks nothing and instead strips and re-orders the drawn lines, separating a cursor drawn as raw reverse video from the strippable zero-width pair the row's render contract requires."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.theme",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1050/cursor-composition.json",
+       "scenario": "standalone-editor-fake-cursor-is-strippable",
+       "test": "the standalone editor draws a strippable fake cursor marker",
+       "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame",
+      "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp",
+      "reason": "The frozen standalone frame binds the rendered cursor cell; the marker-pair case clicks nothing and instead strips and re-orders the drawn lines, separating a cursor drawn as raw reverse video from the strippable zero-width pair the row's render contract requires."
+     }
+    },
+    {
+     "id": "cch_tui:EditorTheme",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1050/cursor-composition.json",
+       "scenario": "standalone-editor-fake-cursor-is-strippable",
+       "test": "the standalone editor draws a strippable fake cursor marker",
+       "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame",
+      "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp",
+      "reason": "The frozen standalone frame binds the rendered cursor cell; the marker-pair case clicks nothing and instead strips and re-orders the drawn lines, separating a cursor drawn as raw reverse video from the strippable zero-width pair the row's render contract requires."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.renderTopBorder",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1050/cursor-composition.json",
+       "scenario": "standalone-editor-fake-cursor-is-strippable",
+       "test": "the standalone editor draws a strippable fake cursor marker",
+       "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame",
+      "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp",
+      "reason": "The frozen standalone frame binds the rendered cursor cell; the marker-pair case clicks nothing and instead strips and re-orders the drawn lines, separating a cursor drawn as raw reverse video from the strippable zero-width pair the row's render contract requires."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.renderBottomBorder",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1050/cursor-composition.json",
+       "scenario": "standalone-editor-fake-cursor-is-strippable",
+       "test": "the standalone editor draws a strippable fake cursor marker",
+       "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame",
+      "testSource": "tests/tui/CursorMarkerEvidenceTest.cpp",
+      "reason": "The frozen standalone frame binds the rendered cursor cell; the marker-pair case clicks nothing and instead strips and re-orders the drawn lines, separating a cursor drawn as raw reverse video from the strippable zero-width pair the row's render contract requires."
+     }
+    },
+    {
+     "id": "cch_tui:EditorTheme.borderColor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "horizontal padding and the border color shape the rendered editor frame",
+       "test": "pi-v1.3.0 padding and the border hook shape the frozen editor frame",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen padding/border scenario binds the styled frame; the empty-result control renders a frame with the list absent, separating the border hook (always applied to the frame) from the conditional list rows a stale renderer might conflate."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.state",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.getText",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.getLines",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.getCursor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.handleInput",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      },
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "undo-shortcut-rebinding",
+       "test": "pi-v1.3.0 editor undo shortcut rebinding replays the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.undo",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      },
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "undo-shortcut-rebinding",
+       "test": "pi-v1.3.0 editor undo shortcut rebinding replays the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.pushUndoSnapshot",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.onChange",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.lastAction",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:internal.undo-stack",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "coalesced-unicode-edit-after-undo",
+       "test": "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen coalesced edit replays text states only through the trailing edit; the cursor-restore case edits mid-line and undoes, separating an undo stack that restores the cursor to the pre-edit column from one that restores text while parking the cursor at a fixed edge."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.setText",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "unicode-word-navigation-and-jump",
+       "test": "pi-v1.3.0 editor word navigation and jump replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 word navigation revisits the frozen boundaries in reverse and clamps at the edges",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen forward pass records each boundary once; the reverse case walks the same boundaries backwards through word-backwards navigation and clamps both edges, separating boundary-faithful navigation from a stepper that skips the punctuation boundary or the wide grapheme."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.moveWordForwards",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "unicode-word-navigation-and-jump",
+       "test": "pi-v1.3.0 editor word navigation and jump replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 word navigation revisits the frozen boundaries in reverse and clamps at the edges",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen forward pass records each boundary once; the reverse case walks the same boundaries backwards through word-backwards navigation and clamps both edges, separating boundary-faithful navigation from a stepper that skips the punctuation boundary or the wide grapheme."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.moveWordBackwards",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "unicode-word-navigation-and-jump",
+       "test": "pi-v1.3.0 editor word navigation and jump replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 word navigation revisits the frozen boundaries in reverse and clamps at the edges",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen forward pass records each boundary once; the reverse case walks the same boundaries backwards through word-backwards navigation and clamps both edges, separating boundary-faithful navigation from a stepper that skips the punctuation boundary or the wide grapheme."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.moveToLineStart",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "unicode-word-navigation-and-jump",
+       "test": "pi-v1.3.0 editor word navigation and jump replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 word navigation revisits the frozen boundaries in reverse and clamps at the edges",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen forward pass records each boundary once; the reverse case walks the same boundaries backwards through word-backwards navigation and clamps both edges, separating boundary-faithful navigation from a stepper that skips the punctuation boundary or the wide grapheme."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.moveToLineEnd",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "unicode-word-navigation-and-jump",
+       "test": "pi-v1.3.0 editor word navigation and jump replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 word navigation revisits the frozen boundaries in reverse and clamps at the edges",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen forward pass records each boundary once; the reverse case walks the same boundaries backwards through word-backwards navigation and clamps both edges, separating boundary-faithful navigation from a stepper that skips the punctuation boundary or the wide grapheme."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.isEditorEmpty",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "history-draft-and-undo",
+       "test": "pi-v1.3.0 editor history draft recall and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen recall restores the captured draft unchanged; the edit case types while browsing and finds the draft discarded, separating an editor that exits history browsing on edit from one that keeps browsing and would overwrite the draft."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.navigateHistory",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "history-draft-and-undo",
+       "test": "pi-v1.3.0 editor history draft recall and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen recall restores the captured draft unchanged; the edit case types while browsing and finds the draft discarded, separating an editor that exits history browsing on edit from one that keeps browsing and would overwrite the draft."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.historyIndex",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "history-draft-and-undo",
+       "test": "pi-v1.3.0 editor history draft recall and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen recall restores the captured draft unchanged; the edit case types while browsing and finds the draft discarded, separating an editor that exits history browsing on edit from one that keeps browsing and would overwrite the draft."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.exitHistoryBrowsing",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "history-draft-and-undo",
+       "test": "pi-v1.3.0 editor history draft recall and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen recall restores the captured draft unchanged; the edit case types while browsing and finds the draft discarded, separating an editor that exits history browsing on edit from one that keeps browsing and would overwrite the draft."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.isOnFirstVisualLine",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "history-draft-and-undo",
+       "test": "pi-v1.3.0 editor history draft recall and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen recall restores the captured draft unchanged; the edit case types while browsing and finds the draft discarded, separating an editor that exits history browsing on edit from one that keeps browsing and would overwrite the draft."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.isOnLastVisualLine",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "history-draft-and-undo",
+       "test": "pi-v1.3.0 editor history draft recall and undo replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen recall restores the captured draft unchanged; the edit case types while browsing and finds the draft discarded, separating an editor that exits history browsing on edit from one that keeps browsing and would overwrite the draft."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.moveCursor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "collapsed-paste-atomic-undo-submit",
+       "test": "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.handlePaste",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "collapsed-paste-atomic-undo-submit",
+       "test": "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.pasteCounter",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "collapsed-paste-atomic-undo-submit",
+       "test": "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.isInPaste",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "collapsed-paste-atomic-undo-submit",
+       "test": "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.expandPasteMarkers",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "collapsed-paste-atomic-undo-submit",
+       "test": "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.handleBackspace",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "collapsed-paste-atomic-undo-submit",
+       "test": "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.onSubmit",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "collapsed-paste-atomic-undo-submit",
+       "test": "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a disabled submit gate suppresses the frozen submission",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.submitValue",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "collapsed-paste-atomic-undo-submit",
+       "test": "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a disabled submit gate suppresses the frozen submission",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.disableSubmit",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "collapsed-paste-atomic-undo-submit",
+       "test": "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a disabled submit gate suppresses the frozen submission",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+     }
+    },
+    {
+     "id": "cch_tui:internal.kill-ring",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "kill-ring-accumulation-and-yank-rotation",
+       "test": "pi-v1.3.0 editor kill ring accumulation and yank rotation replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a third kill accumulates and the ring still yanks the frozen entries newest-first",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen scenario binds a two-kill accumulation; the third-kill case extends the ring and expects the frozen entries in frozen newest-first order, separating an unbounded accumulating ring from one that silently drops the oldest entry."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.deleteWordBackwards",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/screen-state.json",
+       "scenario": "kill-ring-accumulation-and-yank-rotation",
+       "test": "pi-v1.3.0 editor kill ring accumulation and yank rotation replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a third kill accumulates and the ring still yanks the frozen entries newest-first",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen scenario binds a two-kill accumulation; the third-kill case extends the ring and expects the frozen entries in frozen newest-first order, separating an unbounded accumulating ring from one that silently drops the oldest entry."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.handleMouse",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1212/mouse-components.json",
+       "scenario": "editor-alternate-screen-click-positions-cursor",
+       "test": "pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor",
+       "testSource": "tests/tui/MouseComponentsTest.cpp"
+      },
+      {
+       "artifact": "audit-1212/mouse-components.json",
+       "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+       "test": "pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes",
+       "testSource": "tests/tui/MouseComponentsTest.cpp"
+      },
+      {
+       "artifact": "audit-1212/mouse-components.json",
+       "scenario": "editor-drag-selects-and-copies-instead-of-moving-the-cursor",
+       "test": "pi-v1.3.0 an editor drag selects and copies instead of moving the cursor",
+       "testSource": "tests/tui/MouseComponentsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previous one",
+      "testSource": "tests/tui/MouseComponentsTest.cpp",
+      "reason": "The frozen alternate-screen click binds the cursor position and focus; the boundary case clicks one cell past the wrapped segment ends and both half-cells of the wide grapheme, separating segment-aware hit mapping from one that lands on the previous grapheme."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.layoutText",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1212/mouse-components.json",
+       "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+       "test": "pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes",
+       "testSource": "tests/tui/MouseComponentsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previous one",
+      "testSource": "tests/tui/MouseComponentsTest.cpp",
+      "reason": "The frozen cases bind the target grapheme for clicks at the recorded cells; the boundary case clicks one cell further past the segment ends (and both wide-grapheme half-cells) and must land on the same frozen target, separating wrapped-segment-aware mapping from plain column arithmetic."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.paddingX",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1212/mouse-components.json",
+       "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+       "test": "pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes",
+       "testSource": "tests/tui/MouseComponentsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previous one",
+      "testSource": "tests/tui/MouseComponentsTest.cpp",
+      "reason": "The frozen cases bind the target grapheme for clicks at the recorded cells; the boundary case clicks one cell further past the segment ends (and both wide-grapheme half-cells) and must land on the same frozen target, separating wrapped-segment-aware mapping from plain column arithmetic."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.setPaddingX",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1212/mouse-components.json",
+       "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+       "test": "pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes",
+       "testSource": "tests/tui/MouseComponentsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previous one",
+      "testSource": "tests/tui/MouseComponentsTest.cpp",
+      "reason": "The frozen cases bind the target grapheme for clicks at the recorded cells; the boundary case clicks one cell further past the segment ends (and both wide-grapheme half-cells) and must land on the same frozen target, separating wrapped-segment-aware mapping from plain column arithmetic."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.getPaddingX",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1212/mouse-components.json",
+       "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+       "test": "pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes",
+       "testSource": "tests/tui/MouseComponentsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previous one",
+      "testSource": "tests/tui/MouseComponentsTest.cpp",
+      "reason": "The frozen cases bind the target grapheme for clicks at the recorded cells; the boundary case clicks one cell further past the segment ends (and both wide-grapheme half-cells) and must land on the same frozen target, separating wrapped-segment-aware mapping from plain column arithmetic."
+     }
+    },
+    {
+     "id": "cch_tui:EditorOptions.paddingX",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1212/mouse-components.json",
+       "scenario": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+       "test": "pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes",
+       "testSource": "tests/tui/MouseComponentsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previous one",
+      "testSource": "tests/tui/MouseComponentsTest.cpp",
+      "reason": "The frozen cases bind the target grapheme for clicks at the recorded cells; the boundary case clicks one cell further past the segment ends (and both wide-grapheme half-cells) and must land on the same frozen target, separating wrapped-segment-aware mapping from plain column arithmetic."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteMaxVisible",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.getAutocompleteMaxVisible",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.setAutocompleteMaxVisible",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:EditorOptions.autocompleteMaxVisible",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:EditorOptions",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteList",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.createAutocompleteList",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.applyAutocompleteSuggestions",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.updateAutocomplete",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.clearAutocompleteUi",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.isShowingAutocomplete",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:EditorTheme.selectList",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen cap scenario binds the open list frame; the empty-result case feeds a provider that answers with no items and expects the list closed and the frame clear, separating clearAutocompleteUi on an empty result from a stale list left on screen."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteAbort",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteDebouncePattern",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteDebounceTimer",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompletePrefix",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteRequestId",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteRequestTask",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteStartToken",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteState",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.autocompleteTriggerPattern",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.cancelAutocomplete",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.cancelAutocompleteRequest",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.forceFileAutocomplete",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.getAutocompleteDebounceMs",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.isAutocompleteRequestCurrent",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.requestAutocomplete",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.runAutocompleteRequest",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.setAutocompleteProvider",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.setAutocompleteTriggerCharacters",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.startAutocompleteRequest",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.tryTriggerAutocomplete",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:Editor.handleTabCompletion",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1215/editor-autocomplete.json",
+       "scenario": "editor-completion-triggers",
+       "test": "pi-v1.3.0 editor completion triggers replay the frozen observation",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The frozen trigger cases settle one request per input; the negative case asserts an @ after a letter starts no attachment and a bare tab forces exactly the frozen request, separating the trigger pattern from one that fires mid-word or a force flag that never reaches the provider."
+     }
+    },
+    {
+     "id": "cch_tui:internal.alt-screen-search",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1211/alt-screen-search.json",
+       "scenario": "search-index-cache",
+       "test": "pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change",
+       "testSource": "tests/tui/AltScreenSearchTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches",
+      "testSource": "tests/tui/AltScreenSearchTest.cpp",
+      "reason": "The frozen index cache binds match reuse until inputs change; the wrap case navigates past both ends of the match list, separating wrap-around navigation from a navigator that stops at the ends."
+     }
+    }
+   ],
+   "routingSha256": "007504e3d3cc11725c966332617606951f7f9bbd91ec10d3d56c5f92f6c16484"
   }
  ]
 }
