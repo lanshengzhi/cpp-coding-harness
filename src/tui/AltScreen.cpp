@@ -579,8 +579,11 @@ support::ExpectedVoid AltScreen::start() {
     pressed_url_.reset();
     // Frozen `beforeTerminalStart`: the session's image protocol decides
     // whether the root places Kitty images or shows the text fallback for its
-    // whole lifetime, and a previous session's uploads are forgotten.
-    session_image_protocol_ = terminal_.capabilities().inline_images;
+    // whole lifetime, and a previous session's uploads are forgotten. The
+    // protocol is read after `terminal_.start()` on purpose: a real
+    // `ProcessTerminal` detects the image protocol during start, so reading
+    // earlier would pin the text fallback for the whole session on a direct
+    // fullscreen boot (#1035 emulator observation).
     wezterm_session_ = is_wezterm_terminal();
     image_pipeline_->clear_image_placements();
     if (focused_ == nullptr) fallback_focus();
@@ -597,6 +600,7 @@ support::ExpectedVoid AltScreen::start() {
         started_ = false;
         return std::unexpected(result.error());
     }
+    session_image_protocol_ = terminal_.capabilities().inline_images;
 
     // Every frame repaints onto a just-cleared buffer, so a restart never
     // diffs against rows the previous session left behind. A baseline imported

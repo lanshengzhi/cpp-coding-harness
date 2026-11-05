@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -310,6 +311,68 @@ void replay_scenario(std::string_view name, bool wezterm) {
     REQUIRE(tui.stop());
 }
 
+/// A `ProcessTerminal`-shaped double: the inline-image protocol is reported
+/// only after `start()`, mirroring a real terminal that detects its image
+/// capabilities during start. `AltScreen` must read the session protocol
+/// after starting the terminal — reading earlier pins the text fallback for
+/// the whole session on a direct fullscreen boot (#1035 emulator observation).
+class LateCapabilityTerminal final : public cch::tui::Terminal {
+public:
+    LateCapabilityTerminal() : inner_(cch::tui::VirtualTerminalOptions{.columns = 20, .rows = 4}) {}
+
+    [[nodiscard]] cch::support::ExpectedVoid start(
+            cch::tui::TerminalInputSink input_sink, cch::tui::TerminalResizeSink resize_sink) override {
+        started_ = true;
+        return inner_.start(std::move(input_sink), std::move(resize_sink));
+    }
+    [[nodiscard]] cch::support::ExpectedVoid stop() override { return inner_.stop(); }
+    [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
+    [[nodiscard]] cch::tui::TerminalCapabilities capabilities() const override {
+        auto caps = inner_.capabilities();
+        if (started_) {
+            caps.inline_images = cch::tui::InlineImageProtocol::Kitty;
+            caps.cell_pixels = cch::tui::CellPixelDimensions{.width = 9, .height = 18};
+        }
+        return caps;
+    }
+    [[nodiscard]] cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
+    [[nodiscard]] cch::support::ExpectedVoid clear_screen() override { return inner_.clear_screen(); }
+    [[nodiscard]] cch::support::ExpectedVoid write(std::string_view output) override { return inner_.write(output); }
+    [[nodiscard]] cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition position) override {
+        return inner_.set_cursor(position);
+    }
+    [[nodiscard]] cch::support::ExpectedVoid set_cursor_visible(bool visible) override {
+        return inner_.set_cursor_visible(visible);
+    }
+    [[nodiscard]] cch::support::ExpectedVoid set_scroll_margins(std::size_t top, std::size_t bottom) override {
+        return inner_.set_scroll_margins(top, bottom);
+    }
+    [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
+    [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override {
+        return inner_.begin_synchronized_update();
+    }
+    [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override {
+        return inner_.end_synchronized_update();
+    }
+    [[nodiscard]] cch::support::ExpectedVoid set_title(std::string_view title) override {
+        return inner_.set_title(title);
+    }
+    [[nodiscard]] cch::support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+    [[nodiscard]] cch::support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus& status) override {
+        return inner_.set_program_status(status);
+    }
+    [[nodiscard]] cch::support::ExpectedVoid drain_input(
+            std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) override {
+        return inner_.drain_input(max_ms, idle_ms);
+    }
+
+    [[nodiscard]] const std::vector<std::string>& output() const { return inner_.output(); }
+
+private:
+    cch::tui::VirtualTerminal inner_;
+    mutable bool started_{false};
+};
+
 /// A plain overlay body: the compositor paints it at the requested rect, and
 /// the covered base row keeps its content beneath it.
 class OverlayLine final : public cch::tui::Component {
@@ -388,4 +451,25 @@ TEST_CASE("frozen non-WezTerm control rewrites the covered row without image com
 TEST_CASE("frozen WezTerm overlay inside a placement span repaints with image bytes last",
         "[tui][image][alt-screen][issue1035][compat-pi]") {
     replay_overlay_scenario("wezterm-overlay-inside-placement-span");
+}
+
+TEST_CASE("the fullscreen session places Kitty images when the terminal reports its image protocol only at start",
+        "[tui][image][alt-screen][issue1035]") {
+    // A real `ProcessTerminal` detects the image protocol during `start()`; the
+    // session must read it after starting the terminal. Reading earlier pins
+    // the `[Image: ...]` text fallback for the whole direct-fullscreen session.
+    LateCapabilityTerminal terminal;
+    cch::tui::AltScreen tui(terminal);
+    std::vector<cch::tui::InlineImageRenderRegion> images;
+    images.push_back(placement_region(scenario_of("wezterm-placement-span-repaint").at("inputs").at("image")));
+    tui.set_layout_root(std::make_unique<SpanChild>(std::move(images)));
+
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    std::string joined;
+    for (const auto& write : terminal.output())
+        joined += write;
+    CHECK(joined.find("\x1b_G") != std::string::npos);
+    CHECK(joined.find("[Image:") == std::string::npos);
+    REQUIRE(tui.stop());
 }
