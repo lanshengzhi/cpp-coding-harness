@@ -1,6 +1,7 @@
 #include <cch/tui/NativeClipboard.hpp>
 
 #include "support/EnvVarGuard.hpp"
+#include "support/PiTuiEvidence.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -177,4 +178,70 @@ TEST_CASE("Native clipboard receives stop tokens and keeps unavailable distinct 
     const NativeClipboardTextReadVariant empty{std::optional<std::string>{std::nullopt}};
     CHECK(std::holds_alternative<NativeClipboardUnavailable>(unavailable));
     CHECK(std::holds_alternative<std::optional<std::string>>(empty));
+}
+
+// #1201: the recaptured frozen pi-v1.3.0 observation of the native clipboard
+// primitives (registered `audit-1201/native-clipboard.json`) replays through
+// the C++ availability factory. The frozen capture observed `getNativeClipboard`
+// reporting no helper without a display and a loaded helper reporting
+// unavailable reads against a disconnected display; the C++ factory applies
+// the same availability rule to the injected loader, and the unavailable read
+// outcome stays distinct from the empty and failure outcomes.
+TEST_CASE("frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+        "[tui][clipboard][issue1201]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "native-clipboard.json");
+    REQUIRE(artifact);
+
+    for (const auto& scenario : artifact->at("scenarios").get_array()) {
+        const auto& name = scenario.at("name").get_string();
+        if (name == "getNativeClipboard reports no helper when no display variable is set") {
+            const auto& expected = scenario.at("expected");
+            CHECK(expected.at("clipboard").get_string() == "undefined");
+            cch::tests::EnvVarGuard display{"DISPLAY", std::nullopt};
+            cch::tests::EnvVarGuard wayland{"WAYLAND_DISPLAY", std::nullopt};
+            bool loader_called = false;
+            auto clipboard = cch::tui::get_native_clipboard([&loader_called] {
+                loader_called = true;
+                return std::make_unique<StubNativeClipboard>();
+            });
+            CHECK(clipboard == nullptr);
+            CHECK_FALSE(loader_called);
+        } else if (name == "a disconnected display keeps the helper loaded and reads report unavailable") {
+            const auto& expected = scenario.at("expected");
+            // A display keeps helper loading lazy: the loader runs without
+            // opening the display, and a failed load still reports unavailable.
+            cch::tests::EnvVarGuard display{"DISPLAY", std::string{":99"}};
+            bool loader_called = false;
+            auto clipboard = cch::tui::get_native_clipboard([&loader_called] {
+                loader_called = true;
+                return std::make_unique<StubNativeClipboard>();
+            });
+            CHECK(expected.at("helper").get_string() == "object");
+            CHECK(clipboard != nullptr);
+            CHECK(loader_called);
+
+            // The loaded helper reads report unavailable exactly where the
+            // frozen helper does: images without transfer availability. The
+            // stub reports the same outcome the frozen linux-x11 helper
+            // produced against a disconnected display.
+            auto* stub = dynamic_cast<StubNativeClipboard*>(clipboard.get());
+            REQUIRE(stub != nullptr);
+            stub->image_result = Expected<NativeClipboardImageReadVariant>{NativeClipboardUnavailable{}};
+            auto image = consume_ready(clipboard->get_image(std::stop_token{}));
+            CHECK(std::holds_alternative<NativeClipboardUnavailable>(*image));
+            CHECK(expected.at("getImage").get_string() == "undefined");
+
+            // File paths and writes stay unsupported on the Linux helper.
+            CHECK(clipboard->get_file_paths(std::stop_token{}) == std::nullopt);
+            CHECK(expected.at("getFilePathsPresent").get_boolean() == false);
+            CHECK(clipboard->set_text("text") == std::nullopt);
+            CHECK(expected.at("setTextPresent").get_boolean() == false);
+        } else if (name == "the NativeClipboard interface spells the unavailable empty and failed outcomes") {
+            const auto& expected = scenario.at("expected");
+            CHECK(expected.at("getTextUnavailableIsUndefined").get_boolean());
+            CHECK(expected.at("getImageUnavailableIsUndefined").get_boolean());
+            CHECK(expected.at("getFilePathsOptional").get_boolean());
+            CHECK(expected.at("setTextOptional").get_boolean());
+        }
+    }
 }

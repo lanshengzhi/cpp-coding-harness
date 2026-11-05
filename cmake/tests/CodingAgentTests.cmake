@@ -158,6 +158,7 @@ include_guard(GLOBAL)
 )
     target_compile_definitions(cch_tests_coding_agent PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        CCH_PYTHON3="${Python3_EXECUTABLE}"
 )
     target_compile_options(cch_tests_coding_agent PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_coding_agent ADD_TAGS_AS_LABELS)

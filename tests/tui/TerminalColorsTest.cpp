@@ -9,10 +9,13 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/PiTuiEvidence.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
 #include <chrono>
+#include <format>
 #include <future>
 #include <memory>
 #include <string>
@@ -524,4 +527,150 @@ TEST_CASE("color and scheme replies never reach a component's typed input", "[tu
     CHECK(*colors.foreground == tui::RgbColor{.red = 1, .green = 2, .blue = 3});
     REQUIRE(colors.background.has_value());
     CHECK(*colors.background == tui::RgbColor{.red = 4, .green = 5, .blue = 6});
+}
+
+// ---------------------------------------------------------------------------
+// #1201: the recaptured frozen pi-v1.3.0 observations of the terminal color
+// primitives (registered `audit-1201/terminal-colors.json`) replay through
+// the C++ parser and the public color query. The historical pi-v1.0.4 family
+// only recorded the export accounting for these rows; these cases bind the
+// v1.3.0 observation itself, and the palette case discriminates a backend that
+// exposes a partial palette.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+[[nodiscard]] const cch::support::JsonValue* audit1201_scenario(
+        const cch::support::JsonValue& artifact, std::string_view name) {
+    for (const auto& scenario : artifact.at("scenarios").get_array()) {
+        if (scenario.at("name").get_string() == name) return &scenario;
+    }
+    return nullptr;
+}
+
+} // namespace
+
+TEST_CASE("frozen audit-1201 OSC color replies replay through the C++ parser", "[tui][theme][issue1201]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "terminal-colors.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1201_scenario(
+            *artifact, "OSC color replies parse every frozen color form at its per-channel scale");
+    REQUIRE(scenario != nullptr);
+
+    for (const auto& entry : scenario->at("expected").at("parsed").get_array()) {
+        const auto input = entry.at("input").get_string();
+        const auto parsed = tui::parse_osc_color_response(input);
+        INFO("reply: " << input);
+        if (!entry.get_object().contains("result")) {
+            // A non-reply parses to undefined in pi.
+            CHECK_FALSE(parsed.has_value());
+            continue;
+        }
+        const auto& result = entry.at("result");
+        if (result.holds<cch::support::JsonValue::null_t>()) {
+            CHECK_FALSE(parsed.has_value());
+            continue;
+        }
+        REQUIRE(parsed.has_value());
+        const auto& frozenTarget = result.at("target");
+        const auto expectedKey = frozenTarget.holds<std::string>() ? frozenTarget.get_string()
+                                                                     : std::format("{:d}", static_cast<int>(frozenTarget.get_number()));
+        CHECK(parsed->target.key() == expectedKey);
+        if (result.get_object().contains("rgb")) {
+            REQUIRE(parsed->rgb.has_value());
+            CHECK(parsed->rgb->red == static_cast<int>(result.at("rgb").at("r").get_number()));
+            CHECK(parsed->rgb->green == static_cast<int>(result.at("rgb").at("g").get_number()));
+            CHECK(parsed->rgb->blue == static_cast<int>(result.at("rgb").at("b").get_number()));
+        } else {
+            CHECK_FALSE(parsed->rgb.has_value());
+        }
+    }
+}
+
+TEST_CASE("frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+        "[tui][theme][issue1201]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "terminal-colors.json");
+    REQUIRE(artifact);
+    const auto* scenario =
+            audit1201_scenario(*artifact, "the public color query sets the palette only when all sixteen replies arrive");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = scenario->at("expected");
+
+    // Complete run: foreground, background and sixteen palette replies.
+    {
+        ColorQueryHost host;
+        auto future = host.tui().query_terminal_colors(
+                tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
+        host.type("\x1b]10;#ff0000\x07");
+        host.type("\x1b]11;#00ff00\x07");
+        for (int index = 0; index < 16; ++index) {
+            const auto channel = std::format("{:04x}", index * 16);
+            host.type("\x1b]4;" + std::to_string(index) + ";rgb:" + channel + "/" + channel + "/" + channel + "\x07");
+        }
+        host.type("\x1b[?1;2c");
+        REQUIRE(future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready);
+        const auto colors = future.get();
+        const auto& frozenComplete = expected.at("complete");
+        REQUIRE(colors.foreground.has_value());
+        CHECK(colors.foreground->red == static_cast<int>(frozenComplete.at("foreground").at("r").get_number()));
+        CHECK(colors.foreground->green == static_cast<int>(frozenComplete.at("foreground").at("g").get_number()));
+        CHECK(colors.foreground->blue == static_cast<int>(frozenComplete.at("foreground").at("b").get_number()));
+        REQUIRE(colors.background.has_value());
+        CHECK(colors.background->red == static_cast<int>(frozenComplete.at("background").at("r").get_number()));
+        CHECK(colors.background->green == static_cast<int>(frozenComplete.at("background").at("g").get_number()));
+        CHECK(colors.background->blue == static_cast<int>(frozenComplete.at("background").at("b").get_number()));
+        REQUIRE(colors.palette.has_value());
+        const auto& frozenPalette = frozenComplete.at("palette").get_array();
+        REQUIRE(colors.palette->size() == frozenPalette.size());
+        for (std::size_t index = 0; index < frozenPalette.size(); ++index) {
+            INFO("palette index: " << index);
+            CHECK(colors.palette->at(index).red == static_cast<int>(frozenPalette.at(index).at("r").get_number()));
+            CHECK(colors.palette->at(index).green == static_cast<int>(frozenPalette.at(index).at("g").get_number()));
+            CHECK(colors.palette->at(index).blue == static_cast<int>(frozenPalette.at(index).at("b").get_number()));
+        }
+    }
+
+    // Missing slot: fifteen palette replies never expose a partial palette.
+    {
+        ColorQueryHost host;
+        auto future = host.tui().query_terminal_colors(
+                tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
+        host.type("\x1b]10;#123456\x1b\\");
+        host.type("\x1b]11;#654321\x07");
+        for (int index = 0; index < 15; ++index) {
+            host.type("\x1b]4;" + std::to_string(index) + ";#010203\x07");
+        }
+        host.type("\x1b[?1;2c");
+        REQUIRE(future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready);
+        const auto colors = future.get();
+        REQUIRE(colors.foreground.has_value());
+        CHECK(*colors.foreground == tui::RgbColor{.red = 0x12, .green = 0x34, .blue = 0x56});
+        REQUIRE(colors.background.has_value());
+        CHECK(*colors.background == tui::RgbColor{.red = 0x65, .green = 0x43, .blue = 0x21});
+        CHECK_FALSE(colors.palette.has_value());
+    }
+}
+
+TEST_CASE("frozen audit-1201 scheme reports replay through the C++ parser", "[tui][theme][issue1201]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "terminal-colors.json");
+    REQUIRE(artifact);
+    const auto* scenario = audit1201_scenario(
+            *artifact, "terminal color scheme reports resolve dark and light only from complete 997 replies");
+    REQUIRE(scenario != nullptr);
+
+    for (const auto& entry : scenario->at("expected").at("parsed").get_array()) {
+        const auto report = entry.at("report").get_string();
+        const auto& scheme = entry.at("scheme");
+        const auto parsed = tui::parse_terminal_color_scheme_report(report);
+        INFO("report: " << report);
+        if (scheme.holds<cch::support::JsonValue::null_t>()) {
+            CHECK_FALSE(parsed.has_value());
+        } else if (scheme.get_string() == "dark") {
+            REQUIRE(parsed.has_value());
+            CHECK(*parsed == tui::TerminalColorScheme::Dark);
+        } else {
+            REQUIRE(parsed.has_value());
+            CHECK(*parsed == tui::TerminalColorScheme::Light);
+        }
+    }
 }

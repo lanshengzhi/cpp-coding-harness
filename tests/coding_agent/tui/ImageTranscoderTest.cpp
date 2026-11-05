@@ -3,6 +3,7 @@
 
 #include "support/ImageCapabilitiesGuard.hpp"
 #include "support/ImageFixture.hpp"
+#include "support/PiTuiEvidence.hpp"
 
 #include <cch/tui/Image.hpp>
 #include <cch/tui/TerminalImage.hpp>
@@ -155,5 +156,81 @@ TEST_CASE("Kitty placement of a non-PNG image is sized from the converted PNG",
     CHECK(image.region.columns == 2);
     CHECK(image.region.rows == 3);
 
+    cch::tui::clear_image_transcoder();
+}
+
+// #1201: the recaptured frozen pi-v1.3.0 observation of the image transcoder
+// primitive (registered `audit-1201/image-transcoder.json`) replays through
+// the C++ conversion seam. The frozen capture observed the Kitty text
+// fallback without a transcoder, conversion through a working transcoder, a
+// fresh image retrying after a failing transcoder, and the fallback returning
+// once the transcoder is cleared; the C++ registry follows the same
+// set/convert/retry/clear lifecycle (pi parity: a same-epoch failure stays
+// cached, and installing a replacement clears the cache).
+TEST_CASE("frozen audit-1201 transcoder fallback convert retry and clear replay in C++",
+        "[coding_agent][tui][image][transcoder][issue1201]") {
+    const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "image-transcoder.json");
+    REQUIRE(artifact);
+    const std::string fake_jpeg = "QUJDREVGRw==";
+    const std::string fake_png =
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+    const auto* scenario = [&]() -> const cch::support::JsonValue* {
+        for (const auto& item : artifact->at("scenarios").get_array()) {
+            if (item.at("name").get_string() == "without a transcoder a non-PNG image renders the text fallback")
+                return &item;
+        }
+        return nullptr;
+    }();
+    REQUIRE(scenario != nullptr);
+    const auto& fallback_lines = scenario->at("expected").at("lines").get_array();
+    REQUIRE(!fallback_lines.empty());
+
+    cch::tui::clear_image_transcoder();
+
+    // 1. Without a transcoder the text fallback renders and no conversion runs.
+    {
+        cch::tui::clear_image_transcoder();
+        CHECK_FALSE(cch::tui::to_png(fake_jpeg, "image/jpeg"));
+        CHECK(cch::tui::image_fallback("image/jpeg", cch::tui::ImagePixelSize{.width = 800, .height = 600}) ==
+                fallback_lines.at(0).get_string());
+    }
+
+    // 2. A working transcoder converts the non-PNG payload.
+    {
+        std::size_t calls = 0;
+        cch::tui::set_image_transcoder([&](std::string_view, std::string_view) {
+            ++calls;
+            return std::optional<std::string>{fake_png};
+        });
+        CHECK(cch::tui::to_png(fake_jpeg, "image/jpeg") == std::optional<std::string>{fake_png});
+        CHECK(calls == 1);
+    }
+
+    // 3. A failing transcoder keeps the fallback; a replacement clears the
+    //    cache so the same payload converts under the new transcoder.
+    {
+        std::size_t bad_calls = 0;
+        cch::tui::set_image_transcoder([&](std::string_view, std::string_view) {
+            ++bad_calls;
+            return std::optional<std::string>{};
+        });
+        CHECK_FALSE(cch::tui::to_png(fake_jpeg, "image/jpeg"));
+
+        std::size_t good_calls = 0;
+        cch::tui::set_image_transcoder([&](std::string_view, std::string_view) {
+            ++good_calls;
+            return std::optional<std::string>{fake_png};
+        });
+        CHECK(cch::tui::to_png(fake_jpeg, "image/jpeg") == std::optional<std::string>{fake_png});
+        CHECK(bad_calls == 1);
+        CHECK(good_calls == 1);
+    }
+
+    // 4. Clearing the transcoder restores the fallback.
+    {
+        cch::tui::clear_image_transcoder();
+        CHECK_FALSE(cch::tui::to_png(fake_jpeg, "image/jpeg"));
+    }
     cch::tui::clear_image_transcoder();
 }
