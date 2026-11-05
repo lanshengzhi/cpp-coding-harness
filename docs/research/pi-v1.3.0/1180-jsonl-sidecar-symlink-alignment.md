@@ -34,7 +34,7 @@ Pinned by probe against the frozen checkout at `71023aec` and recorded in
 - Sidecars append in commit write order and flush in that same order before
   the main marker — sorted filename order is discriminated by the registered
   two-sidecar capture
-  [fixtures/pi-v1.3.0/audit-1180/sidecar-order.json](../../fixtures/pi-v1.3.0/audit-1180/sidecar-order.json)
+  [fixtures/pi-v1.3.0/audit-1180/sidecar-order.json](../../../fixtures/pi-v1.3.0/audit-1180/sidecar-order.json)
   (`doc 9` create then `doc 3` create yields `appendFile doc-9.jsonl`,
   `appendFile doc-3.jsonl`, `appendFile main.jsonl`, then the two flushes in
   that order when fsync is on).
