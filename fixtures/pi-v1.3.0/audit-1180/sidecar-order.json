@@ -1,0 +1,106 @@
+{
+ "schema": "pike/pi-v1.3.0-audit-evidence/1",
+ "baseline": "pi-v1.3.0",
+ "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+ "ticket": "1180",
+ "family": "audit-1180",
+ "capturedAt": "2026-11-05T01:11:03.251Z",
+ "environment": {
+  "platform": "linux",
+  "arch": "x64",
+  "libc": "glibc",
+  "glibcVersion": "2.44",
+  "node": "v26.13.0",
+  "tsx": "v4.22.1"
+ },
+ "sourceEndpoints": [
+  "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.commit,JsonlStorage.encodeCommit",
+  "packages/durable/src/env/node.ts:NodeExecutionEnv.appendFile,NodeExecutionEnv.flushFile",
+  "packages/durable/test/jsonl-storage.test.ts:Pico JsonlStorage publication and recovery"
+ ],
+ "scenarios": [
+  {
+   "name": "a JSONL commit appends two sidecars in write order before the main marker",
+   "inputs": {
+    "backend": "JsonlStorage",
+    "options": {
+     "fsync": false
+    },
+    "commit": "create document 9 (key k9) then document 3 (key k3) in one batch",
+    "observation": "public FileSystem append and flush order"
+   },
+   "expected": {
+    "appendOrder": [
+     "doc-9.jsonl",
+     "doc-3.jsonl",
+     "main.jsonl"
+    ],
+    "flushOrder": [],
+    "files": [
+     {
+      "name": "doc-3.jsonl",
+      "bytes": 149,
+      "sha256": "04cd82d892332f7660a4b7c4c2e9c61f4604cb7c843a9f30afae9bd682e9eee8",
+      "text": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":1,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"kind\":\"base\",\"version\":1,\"value\":{\"text\":\"three\"}}}}\n"
+     },
+     {
+      "name": "doc-9.jsonl",
+      "bytes": 148,
+      "sha256": "c905140890047c9fbf76771aa6e9226a05fca36d79a09e2398561a82098ed7c2",
+      "text": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":9,\"content\":{\"kind\":\"base\",\"version\":1,\"value\":{\"text\":\"nine\"}}}}\n"
+     },
+     {
+      "name": "main.jsonl",
+      "bytes": 266,
+      "sha256": "8e28596f3943160c5faf9d2a757a04786ffa8717ff3b4875b424370f0e35dd34",
+      "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"document.create\",\"record\":{\"id\":9,\"kind\":\"note\",\"key\":\"k9\",\"scope\":{\"kind\":\"session\"}},\"ordinal\":0},{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"note\",\"key\":\"k3\",\"scope\":{\"kind\":\"session\"}},\"ordinal\":1}]}\n"
+     }
+    ]
+   },
+   "normalizations": []
+  },
+  {
+   "name": "JSONL fsync flushes two sidecars in append order before the main marker",
+   "inputs": {
+    "backend": "JsonlStorage",
+    "options": {
+     "fsync": true
+    },
+    "commit": "create document 9 (key k9) then document 3 (key k3) in one batch",
+    "observation": "public FileSystem append and flush order"
+   },
+   "expected": {
+    "appendOrder": [
+     "doc-9.jsonl",
+     "doc-3.jsonl",
+     "main.jsonl"
+    ],
+    "flushOrder": [
+     "doc-9.jsonl",
+     "doc-3.jsonl"
+    ],
+    "files": [
+     {
+      "name": "doc-3.jsonl",
+      "bytes": 149,
+      "sha256": "04cd82d892332f7660a4b7c4c2e9c61f4604cb7c843a9f30afae9bd682e9eee8",
+      "text": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":1,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"kind\":\"base\",\"version\":1,\"value\":{\"text\":\"three\"}}}}\n"
+     },
+     {
+      "name": "doc-9.jsonl",
+      "bytes": 148,
+      "sha256": "c905140890047c9fbf76771aa6e9226a05fca36d79a09e2398561a82098ed7c2",
+      "text": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":9,\"content\":{\"kind\":\"base\",\"version\":1,\"value\":{\"text\":\"nine\"}}}}\n"
+     },
+     {
+      "name": "main.jsonl",
+      "bytes": 266,
+      "sha256": "8e28596f3943160c5faf9d2a757a04786ffa8717ff3b4875b424370f0e35dd34",
+      "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"document.create\",\"record\":{\"id\":9,\"kind\":\"note\",\"key\":\"k9\",\"scope\":{\"kind\":\"session\"}},\"ordinal\":0},{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"note\",\"key\":\"k3\",\"scope\":{\"kind\":\"session\"}},\"ordinal\":1}]}\n"
+     }
+    ]
+   },
+   "normalizations": []
+  }
+ ]
+}

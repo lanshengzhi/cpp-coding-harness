@@ -1,0 +1,26 @@
+$ PI_CHECKOUT=../pi node --conditions=source docs/research/pi-v1.3.0/1180-sidecar-symlink-parity/pin-symlink-probe.mts
+# frozen pi 71023aec1546d6d677a65669c5665c0927ce0dd0, node v26.13.0
+A-unreferenced-symlink opened task2= undefined
+A-unreferenced-symlink target "complete\npartial"
+B-referenced-symlink-original-bytes error JsonlCorruptionError "Missing confirmed sidecar record task-2.jsonl at sequence 1"
+B-referenced-symlink-original-bytes target "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"start\"}}}}}\n"
+B-referenced-symlink-garbage error JsonlCorruptionError "Missing confirmed sidecar record task-2.jsonl at sequence 1"
+B-referenced-symlink-garbage target "complete\npartial"
+C-commit-through-symlink seq 1
+C-commit-through-symlink target "preexisting\n{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"start\"}}}}}\n"
+C-reopen error JsonlCorruptionError "Missing confirmed sidecar record task-2.jsonl at sequence 1"
+C-reopen target "preexisting\n{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"start\"}}}}}\n"
+D-fsync-commit-through-symlink seq 1
+D-fsync-commit-through-symlink target "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"start\"}}}}}\n"
+E-batch-through-symlink seq 1
+E-batch-through-symlink entry-exists false
+E-batch-through-symlink target "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"task\",\"value\":{\"id\":2,\"conversationId\":1,\"kind\":\"work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"start\"}}}}}\n"
+E-reopen opened task2= {"id":2,"conversationId":1,"kind":"work","version":1,"input":{},"background":false,"abortRequested":false,"state":{"status":"terminal","outcome":{"status":"completed"}}}
+F-main-symlink-reopen task2= {"id":2,"conversationId":1,"kind":"work","version":1,"input":{},"background":false,"abortRequested":false,"state":{"status":"pending","checkpoint":{"phase":"start"}}}
+F-main-symlink marker-grew true link-intact true
+G-intermediate-parent-symlink opened task2= {"id":2,"conversationId":1,"kind":"work","version":1,"input":{},"background":false,"abortRequested":false,"state":{"status":"pending","checkpoint":{"phase":"start"}}}
+H-store-dir-symlink opened task2= {"id":2,"conversationId":1,"kind":"work","version":1,"input":{},"background":false,"abortRequested":false,"state":{"status":"pending","checkpoint":{"phase":"start"}}}
+I-doc-symlink error JsonlCorruptionError "Missing confirmed sidecar record doc-3.jsonl at sequence 1"
+I-doc-symlink target "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"kind\":\"base\",\"version\":1,\"value\":{\"text\":\"hello\"}}}}\n"
+J-hardlink error JsonlCorruptionError "Malformed complete task-2.jsonl line 1"
+J-hardlink target "complete\n"
