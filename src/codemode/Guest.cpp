@@ -1,8 +1,15 @@
+// glibc exposes `tm_gmtoff` (the UTC offset in seconds, positive east) under
+// _DEFAULT_SOURCE; the strict `-std=c++23` mode hides it otherwise. The
+// supported platform is glibc Linux (ADR 0075), and the host-timezone import
+// needs the real offset (#1195).
+#define _DEFAULT_SOURCE
+
 #include "codemode/Guest.hpp"
 
 #include <chrono>
 #include <cstddef>
 #include <cstring>
+#include <ctime>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -199,8 +206,21 @@ WasmEdge_Result HostPromiseRejection(
     return WasmEdge_Result_Success;
 }
 
-WasmEdge_Result HostTimezone(void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value*, WasmEdge_Value* out) {
-    out[0] = gen_i32(0);
+WasmEdge_Result HostTimezone(
+        void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value* in, WasmEdge_Value* out) {
+    // pi's non-deterministic `execute()` reads the host timezone
+    // (quickjs-wasi's default 'host' offset), so `new Date().getTimezoneOffset()`
+    // observes the host's offset; only deterministic `start()` pins UTC (#1195).
+    // The import receives the time as split i32 seconds and returns the UTC
+    // offset in seconds, positive east, like quickjs-wasi's handler.
+    const auto hi = static_cast<std::uint64_t>(static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[0])));
+    const auto lo = static_cast<std::uint64_t>(static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1])));
+    const std::time_t at = static_cast<std::time_t>((hi << 32U) | lo);
+    std::int64_t offset_seconds = 0;
+    if (struct tm local{}; localtime_r(&at, &local) != nullptr) {
+        offset_seconds = static_cast<std::int64_t>(local.tm_gmtoff);
+    }
+    out[0] = gen_i32(static_cast<std::int32_t>(offset_seconds));
     return WasmEdge_Result_Success;
 }
 

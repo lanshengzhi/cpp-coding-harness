@@ -1,7 +1,7 @@
 #include "codemode/Deterministic.hpp"
 
 #include "codemode/Guest.hpp"
-#include "codemode/Prelude.hpp"
+#include <cch/codemode/Prelude.hpp>
 #include "codemode/Shared.hpp"
 #include "support/Json.hpp"
 
@@ -255,8 +255,19 @@ struct GuestRun {
 WasmEdge_Result HostCall(
         void* data, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out);
 
-/// The deterministic run's worker: pi's `startVm` plus the delivery loop of
-/// `Execution`.
+/// The deterministic VM's `host_get_timezone_offset`: pi pins the deterministic
+/// clock to UTC (`timezoneOffset: 0`), so unlike the worker-mode import this
+/// one always reports offset 0 (#1195).
+WasmEdge_Result DeterministicTimezone(
+        void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value*, WasmEdge_Value* out) {
+    out[0] = gen_i32(0);
+    return WasmEdge_Result_Success;
+}
+
+/// The deterministic run's worker state: pi's `startVm` plus the delivery loop
+/// of `Execution`. The worker thread itself is the caller's to start (pi runs
+/// every execution through the sandbox's worker launcher); the destructor
+/// interrupts an abandoned run and never joins a thread it does not own.
 struct DeterministicRun::Impl {
     Impl(WasmEdge_ASTModuleContext* ast, DeterministicStart start, DeterministicHost host);
     ~Impl();
@@ -268,6 +279,7 @@ struct DeterministicRun::Impl {
     void consume(support::AsyncCompletion<CodemodeRunResult, support::Error> completion);
     [[nodiscard]] std::optional<CodemodeDeliveryRejection> deliver(
             std::int64_t seq, double now, std::int64_t id, CodemodeOutcome outcome);
+    void fail(CodemodeError error);
 
     /// The worker thread's whole life: build the VM, run the script, then apply
     /// admitted answers in `seq` order until the run has its outcome.
@@ -277,6 +289,10 @@ struct DeterministicRun::Impl {
     void handle_done(const Guest& guest, const std::vector<Handle>& args);
     /// pi's prelude bridge (`bridge(kind, a, b, c)`), called from inside the VM.
     void handle_bridge(const Guest& guest, const std::vector<Handle>& args);
+
+    /// Settles `terminal` and hands the outcome to a waiting consumer, if any.
+    /// Used by `drive`'s natural end and by `fail`.
+    void publish();
 
     /// pi `issued`: calls issued so far, tools and globals alike. Only the
     /// worker thread touches it, and only the worker reports it.
@@ -297,7 +313,6 @@ struct DeterministicRun::Impl {
     std::map<std::int64_t, std::size_t> records;
     std::optional<CodemodeRunResult> terminal;
     std::optional<support::AsyncCompletion<CodemodeRunResult, support::Error>> completion;
-    std::thread worker;
 };
 
 DeterministicRun::DeterministicRun(WasmEdge_ASTModuleContext* ast, DeterministicStart start, DeterministicHost host)
@@ -330,26 +345,23 @@ DeterministicRun::Impl::Impl(
     shared.stop_notify.emplace(start.stop_token, [&]() { shared.cv.notify_all(); });
     if (start.stop_token.stop_requested()) {
         // pi decides an already-requested abort during `start`, before the
-        // public run handle is returned or its result can be consumed.
-        terminal.emplace();
-        terminal->error = CodemodeError{
-                CodemodeError::Kind::Aborted, start.abort_message.value_or(std::string{"Execution aborted"})};
-        std::lock_guard lock(shared.mutex);
-        shared.finished = true;
-        shared.interrupted = true;
-        shared.outcome_ready = true;
-        return;
+        // public run handle is returned or its result can be consumed. The
+        // run never reaches the worker launcher, so no admission is taken.
+        fail(CodemodeError{
+                CodemodeError::Kind::Aborted, start.abort_message.value_or(std::string{"Execution aborted"})});
     }
-    worker = std::thread([this]() { drive(); });
 }
 
 DeterministicRun::Impl::~Impl() {
+    // The worker thread is the caller's (the sandbox's worker-host seam owns
+    // it), so there is nothing to join here: interrupting lets an abandoned
+    // run settle, and the started worker keeps this object alive by value
+    // until `drive` returns.
     {
         std::lock_guard lock(shared.mutex);
         shared.interrupted = true;
     }
     shared.cv.notify_all();
-    if (worker.joinable()) worker.join();
 }
 
 bool DeterministicRun::Impl::finished() const {
@@ -462,25 +474,37 @@ void DeterministicRun::Impl::handle_done(const Guest& guest, const std::vector<H
     shared.cv.notify_all();
 }
 
+void DeterministicRun::Impl::publish() {
+    std::optional<support::AsyncCompletion<CodemodeRunResult, support::Error>> complete;
+    std::optional<CodemodeRunResult> ready;
+    {
+        std::lock_guard lock(shared.mutex);
+        shared.finished = true;
+        shared.interrupted = true;
+        complete = std::move(completion);
+        completion.reset();
+        shared.outcome_ready = true;
+        if (complete.has_value()) ready = std::move(terminal);
+    }
+    shared.cv.notify_all();
+    if (complete.has_value() && ready.has_value()) {
+        std::move (*complete)(support::Expected<CodemodeRunResult>{std::move(*ready)});
+    }
+}
+
+void DeterministicRun::Impl::fail(CodemodeError error) {
+    if (!terminal.has_value()) terminal.emplace();
+    terminal->error = std::move(error);
+    publish();
+}
+
+void DeterministicRun::drive() { impl_->drive(); }
+
+void DeterministicRun::fail(CodemodeError error) { impl_->fail(std::move(error)); }
+
 void DeterministicRun::Impl::drive() {
     terminal.emplace();
-    auto finish = [this]() {
-        std::optional<support::AsyncCompletion<CodemodeRunResult, support::Error>> complete;
-        std::optional<CodemodeRunResult> ready;
-        {
-            std::lock_guard lock(shared.mutex);
-            shared.finished = true;
-            shared.interrupted = true;
-            complete = std::move(completion);
-            completion.reset();
-            shared.outcome_ready = true;
-            if (complete.has_value()) ready = std::move(terminal);
-        }
-        shared.cv.notify_all();
-        if (complete.has_value() && ready.has_value()) {
-            std::move (*complete)(support::Expected<CodemodeRunResult>{std::move(*ready)});
-        }
-    };
+    auto finish = [this]() { publish(); };
 
     if (start.stop_token.stop_requested()) {
         // pi settles a pre-aborted deterministic run without creating a VM, with
@@ -529,7 +553,10 @@ void DeterministicRun::Impl::drive() {
                     {}));
     add_function(run.env,
             "host_get_timezone_offset",
-            make_function(HostTimezone, nullptr, {WasmEdge_ValType_I32, WasmEdge_ValType_I32}, {WasmEdge_ValType_I32}));
+            make_function(DeterministicTimezone,
+                    nullptr,
+                    {WasmEdge_ValType_I32, WasmEdge_ValType_I32},
+                    {WasmEdge_ValType_I32}));
     add_function(run.env,
             "host_module_normalize",
             make_function(

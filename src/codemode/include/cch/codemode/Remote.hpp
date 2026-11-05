@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/codemode/Portable.hpp>
 #include <cch/codemode/Sandbox.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
@@ -20,101 +21,10 @@
 
 namespace cch::codemode {
 
-/// pi `VmStartData` (`packages/codemode/src/runtime/protocol.ts`):
-/// everything a VM needs to run one script, independent of where it runs.
-struct CodemodeVmStartData {
-    std::string code;
-    std::vector<CodemodeToolDescriptor> tools;
-    std::vector<CodemodeGlobal> globals;
-    std::optional<std::uint64_t> memory_limit_bytes;
-    /// Snapshot for load(): key to JSON text.
-    std::map<std::string, std::string> store;
-    /// Deterministic start inputs (pi `start`). Unset runs the ordinary VM.
-    std::optional<std::int64_t> started_at;
-    std::optional<std::uint64_t> seed;
-    /// The recorded run's fingerprint, when replaying.
-    std::optional<std::string> expected_fingerprint;
-};
-
-/// pi `CodemodeRemoteRequest` (`packages/codemode/src/runtime/remote.ts`):
-/// request sent to remote to execute one script.
-struct CodemodeRemoteRequest {
-    CodemodeVmStartData data;
-    /// Requested interrupt budget. The remote may lower it.
-    std::optional<std::uint64_t> interrupt_budget;
-};
-
-/// Tool or global invocation issued by guest script to caller.
-struct CodemodeRemoteCallMessage {
-    std::int64_t id{0};
-    std::string target{"tool"}; // "tool" or "global"
-    std::string name;
-    std::optional<std::string> args;
-};
-
-/// Output emitted by guest script.
-struct CodemodeRemoteOutputMessage {
-    CodemodeOutputItem item;
-};
-
-/// Terminal outcome of guest script execution.
-struct CodemodeRemoteDoneMessage {
-    bool ok{true};
-    std::optional<std::string> value;
-    std::string writes{"[]"};
-    std::optional<std::string> error;
-    std::optional<CodemodeDuring> during;
-};
-
-/// VM crashed outside guest script control.
-struct CodemodeRemoteCrashMessage {
-    std::string message;
-};
-
-/// Deterministic VM started with fingerprint.
-struct CodemodeRemoteStartedMessage {
-    std::string fingerprint;
-};
-
-/// Deterministic VM became idle awaiting results.
-struct CodemodeRemoteIdleMessage {
-    std::int64_t seq{0};
-    std::int64_t issued{0};
-};
-
-/// Failure reported outside the VM bridge.
-struct CodemodeRemoteFailureMessage {
-    CodemodeError error;
-};
-
-/// Messages sent from remote worker to host across exchange (`WorkerToHostMessage` + failure).
-using CodemodeRemoteMessageVariant = std::variant<CodemodeRemoteCallMessage,
-        CodemodeRemoteOutputMessage,
-        CodemodeRemoteDoneMessage,
-        CodemodeRemoteCrashMessage,
-        CodemodeRemoteStartedMessage,
-        CodemodeRemoteIdleMessage,
-        CodemodeRemoteFailureMessage>;
-
-/// Result of a tool call delivered from caller to remote.
-struct CodemodeRemoteResultReply {
-    std::int64_t id{0};
-    bool ok{false};
-    std::optional<std::string> payload;
-    std::optional<std::int64_t> seq;
-    std::optional<double> now;
-    std::optional<std::string> properties;
-};
-
-/// Stop command sent from caller to remote.
-struct CodemodeRemoteStopReply {};
-
-/// Null reply when exchange carried no call.
-struct CodemodeRemoteNullReply {};
-
-/// Reply sent from caller to remote across exchange (`HostToWorkerMessage` | stop | null).
-using CodemodeRemoteReplyVariant =
-        std::variant<CodemodeRemoteNullReply, CodemodeRemoteResultReply, CodemodeRemoteStopReply>;
+// The Remote protocol types (`CodemodeVmStartData`, `CodemodeRemoteRequest`,
+// the message/reply variants, the flush constants) live in `Portable.hpp`,
+// part of the portable no-Node subset (#1194); this header adds the
+// behavior-coupled Remote surface.
 
 /// pi `CodemodeRemoteExchange`: called repeatedly during execution.
 using CodemodeRemoteExchangeHook = std::move_only_function<support::AsyncResult<CodemodeRemoteReplyVariant>(
@@ -130,10 +40,6 @@ public:
 
 /// Creates a remote worker for one sandbox run.
 using CodemodeRemoteFactoryHook = std::move_only_function<support::Expected<std::shared_ptr<CodemodeRemote>>()>;
-
-/// Remote output batching constants (upstream pi `FLUSH_ITEMS` and `FLUSH_CHARS`).
-inline constexpr std::size_t kRemoteFlushItems = 1000;
-inline constexpr std::size_t kRemoteFlushChars = 1 << 20; // 1 MiB
 
 /// Options for `serve_codemode_remote`.
 struct CodemodeServeOptions {

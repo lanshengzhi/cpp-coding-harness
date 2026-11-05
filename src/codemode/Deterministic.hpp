@@ -97,10 +97,15 @@ struct DeterministicHost {
 };
 
 /// One deterministic VM: pi `startVm` plus the host-side delivery queue of
-/// `Execution`. Construction starts the worker thread; the destructor stops and
-/// joins it, so a run the caller abandons never outlives its handle.
+/// `Execution`. The driver owns no thread of its own: pi runs every execution
+/// (execute and start alike) through the sandbox's worker launcher, so the
+/// caller starts the worker — `CodemodeSandbox::start` routes it through the
+/// worker-host admission seam, and the worker's exit callback releases the
+/// admission at actual exit. The destructor only interrupts an abandoned run;
+/// the started worker keeps the driver alive by value until `drive` returns.
 ///
-/// `ast` is the sandbox's parsed guest module and must outlive this object.
+/// `ast` is the sandbox's parsed guest module and must outlive this object; a
+/// started worker captures the owner's shared state for exactly that.
 class DeterministicRun {
 public:
     DeterministicRun(WasmEdge_ASTModuleContext* ast, DeterministicStart start, DeterministicHost host);
@@ -125,6 +130,16 @@ public:
     /// The run's terminal outcome, delivered exactly once. Called at most once
     /// per run; a run that is already finished completes inline.
     void consume(support::AsyncCompletion<CodemodeRunResult, support::Error> completion);
+
+    /// The worker's whole life, run on the worker the caller started: build the
+    /// VM, run the script, then apply admitted answers in `seq` order until the
+    /// run has its outcome. Returns with the outcome published.
+    void drive();
+
+    /// Settle without a VM: pi reports a launcher failure (admission denial, a
+    /// failing lifetime hook) as the run's sandbox error, so `start` can hand
+    /// out a run whose result is already this failure.
+    void fail(CodemodeError error);
 
     /// The driver's state. Declared here because the `host_call` import is a
     /// free function — WasmEdge's C API takes a plain function pointer — and it

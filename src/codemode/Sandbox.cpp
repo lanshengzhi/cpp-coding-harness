@@ -4,7 +4,7 @@
 
 #include "codemode/Deterministic.hpp"
 #include "codemode/Guest.hpp"
-#include "codemode/Prelude.hpp"
+#include <cch/codemode/Prelude.hpp>
 #include "codemode/Shared.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
@@ -511,6 +511,10 @@ void* join_native_worker(void* data) noexcept {
 struct CodemodeSandbox::Impl {
     std::filesystem::path wasm_path;
     std::vector<CodemodeGlobal> globals;
+    /// pi `CodemodeSandboxBase`'s tool table: registration order preserved,
+    /// names unique (`register_tool` refuses a duplicate).
+    std::vector<CodemodeToolDescriptor> tools;
+    mutable std::mutex tools_mutex;
     CodemodeWorkerHost worker_host;
     std::mutex worker_host_mutex;
     std::mutex lifecycle_mutex;
@@ -527,7 +531,36 @@ struct CodemodeSandbox::Impl {
 
 support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(
         std::filesystem::path wasm_path, std::vector<CodemodeGlobal> globals) {
-    return create(std::move(wasm_path), std::move(globals), {});
+    return create(std::move(wasm_path), std::move(globals), CodemodeWorkerHost{});
+}
+
+support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(std::filesystem::path wasm_path,
+        std::vector<CodemodeGlobal> globals,
+        std::vector<CodemodeToolDescriptor> tools) {
+    return create(std::move(wasm_path), std::move(globals), std::move(tools), {});
+}
+
+support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(std::filesystem::path wasm_path,
+        std::vector<CodemodeGlobal> globals,
+        std::vector<CodemodeToolDescriptor> tools,
+        CodemodeWorkerHost worker_host) {
+    if (auto valid = validate_globals(globals); !valid) {
+        return std::unexpected(std::move(valid.error()));
+    }
+    // pi's constructor registers each tool through `registerTool`, so a
+    // duplicate constructor tool is refused with the same message before the
+    // guest module is considered.
+    for (std::size_t i = 0; i < tools.size(); ++i) {
+        for (std::size_t earlier = 0; earlier < i; ++earlier) {
+            if (tools[earlier].name == tools[i].name) {
+                return std::unexpected(sandbox_error(std::format("Tool \"{}\" is already registered", tools[i].name)));
+            }
+        }
+    }
+    auto created = create(std::move(wasm_path), std::move(globals), std::move(worker_host));
+    if (!created) return std::unexpected(std::move(created.error()));
+    (*created)->impl_->tools = std::move(tools);
+    return created;
 }
 
 support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(
@@ -608,6 +641,32 @@ void CodemodeSandbox::close() {
         active->call_stop->request_stop();
         if (active->link->wake_host) active->link->wake_host();
     }
+}
+
+support::Expected<void> CodemodeSandbox::register_tool(CodemodeToolDescriptor tool) {
+    std::lock_guard lock(impl_->tools_mutex);
+    const auto existing = std::find_if(impl_->tools.begin(), impl_->tools.end(), [&](const auto& registered) {
+        return registered.name == tool.name;
+    });
+    if (existing != impl_->tools.end()) {
+        return std::unexpected(sandbox_error(std::format("Tool \"{}\" is already registered", tool.name)));
+    }
+    impl_->tools.push_back(std::move(tool));
+    return {};
+}
+
+bool CodemodeSandbox::unregister_tool(std::string_view name) {
+    std::lock_guard lock(impl_->tools_mutex);
+    const auto existing = std::find_if(
+            impl_->tools.begin(), impl_->tools.end(), [&](const auto& registered) { return registered.name == name; });
+    if (existing == impl_->tools.end()) return false;
+    impl_->tools.erase(existing);
+    return true;
+}
+
+std::vector<CodemodeToolDescriptor> CodemodeSandbox::registered_tools() const {
+    std::lock_guard lock(impl_->tools_mutex);
+    return impl_->tools;
 }
 
 CodemodeSandbox::~CodemodeSandbox() = default;
@@ -900,7 +959,14 @@ namespace {
                 record.duration_ms = std::chrono::duration<double, std::milli>(
                         std::chrono::steady_clock::now() - state.call_issued[call.record])
                                              .count();
-                const Handle payload_handle = g.new_string(response->payload);
+                // pi's protocol preserves `undefined`: a tool whose value is
+                // undefined crosses with `payload === undefined`, and the VM
+                // settles the script's await with the undefined value rather
+                // than a JSON string (#1195). The deterministic path already
+                // uses the empty-payload spelling; an empty payload is never
+                // valid JSON text, so no legitimate value collides with it.
+                const Handle payload_handle =
+                        response->ok && response->payload.empty() ? g.undefined() : g.new_string(response->payload);
                 (void)g.call(
                         settle_fn, api, {id_handle, response->ok ? g.true_value() : g.false_value(), payload_handle});
                 drain_jobs(g, state);
@@ -964,6 +1030,24 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                                                       abort_message = std::move(abort_message)]() mutable
                                                       -> boost::asio::awaitable<support::Expected<CodemodeRunResult>> {
         auto executor = co_await boost::asio::this_coro::executor;
+        // pi `execute()` snapshots the registered tool table when the run
+        // starts (`const tools = new Map(this.toolsByName)`). The C++ per-run
+        // descriptors overlay that snapshot by name, so a caller can scope an
+        // override for one run without mutating the registered table.
+        std::vector<CodemodeToolDescriptor> effective_tools;
+        {
+            std::lock_guard lock(impl->tools_mutex);
+            effective_tools = impl->tools;
+        }
+        for (auto& tool : tools) {
+            const auto existing = std::find_if(effective_tools.begin(),
+                    effective_tools.end(),
+                    [&](const auto& registered) { return registered.name == tool.name; });
+            if (existing != effective_tools.end())
+                *existing = tool;
+            else
+                effective_tools.push_back(std::move(tool));
+        }
         auto link = std::make_shared<SandboxLink>();
         auto timer = std::make_shared<boost::asio::steady_timer>(executor);
         link->wake_host = [executor, timer]() { boost::asio::post(executor, [timer]() { timer->cancel(); }); };
@@ -977,8 +1061,11 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
         {
             std::lock_guard lock(impl->lifecycle_mutex);
             if (impl->closed) {
+                // pi `execute()` rejects a later run after close with
+                // "Sandbox is closed" (the in-flight abort spelling "Sandbox
+                // closed" is a different observation).
                 CodemodeRunResult closed_result;
-                closed_result.error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox closed"};
+                closed_result.error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox is closed"};
                 co_return closed_result;
             }
             std::erase_if(
@@ -1033,7 +1120,7 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                 release->invoke();
                 monitor_timer->cancel();
                 CodemodeRunResult closed_result;
-                closed_result.error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox closed"};
+                closed_result.error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox is closed"};
                 co_return closed_result;
             }
             std::lock_guard host_lock(impl->worker_host_mutex);
@@ -1041,7 +1128,7 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                     [impl,
                             link,
                             script = std::move(script),
-                            tools = std::move(tools),
+                            tools = std::move(effective_tools),
                             limits,
                             stop_token,
                             globals_list_json = std::move(globals_list_json),
@@ -1190,8 +1277,10 @@ namespace cch::codemode {
 struct CodemodeSandbox::Run::State {
     /// Keeps the AST module alive even if the owning sandbox is destroyed.
     std::shared_ptr<CodemodeSandbox::Impl> owner;
-    /// The run's driver, started when `start` returns.
-    std::unique_ptr<detail::DeterministicRun> driver;
+    /// The run's driver. Shared so the worker the host started keeps the run
+    /// alive by value until `drive` returns, whatever the caller does with the
+    /// handle.
+    std::shared_ptr<detail::DeterministicRun> driver;
     /// Guards `taken`: `result()` is a single-consumption operation (§6.2).
     std::mutex mutex;
     bool taken{false};
@@ -1247,6 +1336,12 @@ support::Expected<CodemodeSandbox::Run> CodemodeSandbox::start(std::string scrip
     if (auto valid = detail::validate_run_options(options); !valid) {
         return std::unexpected(std::move(valid.error()));
     }
+    // pi `start()` throws Error("Sandbox is closed") after close, before any
+    // admission is acquired.
+    {
+        std::lock_guard lock(impl_->lifecycle_mutex);
+        if (impl_->closed) return std::unexpected(sandbox_error("Sandbox is closed"));
+    }
 
     detail::DeterministicStart start;
     start.script = std::move(script);
@@ -1271,9 +1366,52 @@ support::Expected<CodemodeSandbox::Run> CodemodeSandbox::start(std::string scrip
     host.on_call = std::move(options.callbacks.on_call);
     host.on_idle = std::move(options.callbacks.on_idle);
 
+    // pi runs a deterministic execution through the same worker launcher as
+    // `execute` (worker-lifetime.json: execute and start each start one worker
+    // and release it only after actual exit). Admission is acquired after the
+    // option validation and released at the worker's actual exit; a launcher
+    // failure (denied admission, a failing lifetime hook) is the run's sandbox
+    // error, exactly as pi's rejected launch settles the execution.
     auto state = std::make_shared<Run::State>();
     state->owner = impl_;
-    state->driver = std::make_unique<detail::DeterministicRun>(impl_->ast, std::move(start), std::move(host));
+    state->driver = std::make_shared<detail::DeterministicRun>(impl_->ast, std::move(start), std::move(host));
+    if (!state->driver->finished()) {
+        // A pre-aborted run settled during construction and never reaches the
+        // launcher, so it takes no admission (the frozen pre-abort observation).
+        support::Expected<CodemodeWorkerRelease> admission;
+        {
+            std::lock_guard host_lock(impl_->worker_host_mutex);
+            admission = impl_->worker_host.acquire_worker();
+        }
+        if (!admission) {
+            state->driver->fail(CodemodeError{CodemodeError::Kind::Sandbox, admission.error().message});
+        } else {
+            auto release = std::make_shared<WorkerAdmissionRelease>();
+            release->release = std::move(*admission);
+            support::Expected<void> started;
+            {
+                std::lock_guard lifecycle_lock(impl_->lifecycle_mutex);
+                if (impl_->closed) {
+                    release->invoke();
+                    state->driver->fail(CodemodeError{CodemodeError::Kind::Aborted, "Sandbox is closed"});
+                    return Run{std::move(state)};
+                }
+                std::lock_guard host_lock(impl_->worker_host_mutex);
+                started = impl_->worker_host.start_worker(
+                        [driver = state->driver, owner = impl_]() {
+                            // The captures keep the guest module and the run
+                            // alive until the worker's actual exit; the host's
+                            // exit callback releases the admission then.
+                            driver->drive();
+                        },
+                        [release]() { release->invoke(); });
+            }
+            if (!started) {
+                release->invoke();
+                state->driver->fail(CodemodeError{CodemodeError::Kind::Sandbox, started.error().message});
+            }
+        }
+    }
     return Run{std::move(state)};
 }
 

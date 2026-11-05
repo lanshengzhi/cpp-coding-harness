@@ -33,3 +33,39 @@ cch_owner_include_roots(cch_codemode src/codemode/include)
 target_compile_definitions(cch_codemode PRIVATE
     CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+# Portable no-Node entry (#1194): the source options prefix/grammar, the
+# prelude and declaration constants, and the Remote protocol types, without
+# the worker-mode engine's WasmEdge/Boost.Asio/thread dependencies. The
+# application bridge stays in `cch_coding_agent`; the full engine stays in
+# `cch_codemode` above.
+cch_parity_declare_target(
+    TARGET cch_codemode_portable
+    ROLE owner
+    OWNER cch_codemode
+    SOURCES
+        src/codemode/Portable.cpp
+    DEPENDS
+        cch_ai
+        cch_support
+    INTERFACE_DEPENDS
+        cch_ai
+        cch_support
+)
+cch_owner_include_roots(cch_codemode_portable src/codemode/include)
+# Build-level no-Node/no-native check, not only a header-existence assertion:
+# the portable target must not declare or link a native-only runtime. A target
+# that secretly picks up WasmEdge, Boost or Threads fails the configure here,
+# before any source-only constant check could pass.
+foreach(_portable_property LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+    get_target_property(_portable_deps cch_codemode_portable ${_portable_property})
+    if(_portable_deps)
+        foreach(_native_token wasmedge Threads Boost boost asio)
+            if("${_portable_deps}" MATCHES "${_native_token}")
+                message(FATAL_ERROR
+                    "cch_codemode_portable must stay a no-Node/no-native entry; "
+                    "${_portable_property} declares a native-only dependency: ${_portable_deps}")
+            endif()
+        endforeach()
+    endif()
+endforeach()

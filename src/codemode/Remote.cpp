@@ -3,7 +3,7 @@
 
 #include "codemode/Deterministic.hpp"
 #include "codemode/Guest.hpp"
-#include "codemode/Prelude.hpp"
+#include <cch/codemode/Prelude.hpp>
 #include "codemode/Shared.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
@@ -739,13 +739,20 @@ struct RemoteAstOwner {
 /// the driver, the exchange and the queue. The declaration order makes the
 /// driver die before the guest it points at and before the queue its host
 /// callbacks push to; the enclosing `shared_ptr` is what detached exchanges
-/// hold, so no member needs its own.
+/// hold, so no member needs its own. The driver owns no thread (the sandbox's
+/// worker-host seam starts it there), so the serve side drives it on its own
+/// worker member, declared last so destruction joins the thread first.
 struct RemoteDeterministicServe {
     RemoteAstOwner guest;
     RemoteDeterministicQueue queue;
     CodemodeRemoteExchangeHook exchange;
     std::optional<detail::DeterministicRun> run;
     std::stop_source stop;
+    std::thread worker;
+
+    ~RemoteDeterministicServe() {
+        if (worker.joinable()) worker.join();
+    }
 };
 
 /// pi `serveCodemodeRemote` for a deterministic request: the guest and the
@@ -829,6 +836,11 @@ support::AsyncResult<void> serve_deterministic_remote(
         served->run->consume([queue = &served->queue](support::Expected<CodemodeRunResult> outcome) noexcept {
             queue->finish(std::move(outcome));
         });
+        if (!served->run->finished()) {
+            // The remote's worker is this serve's own thread; a pre-aborted run
+            // settled during construction and has no worker to drive.
+            served->worker = std::thread([served]() { served->run->drive(); });
+        }
 
         // pi's `serveCodemodeRemote` buffers `started` and output and
         // flushes them with the next call, idle or terminal message.
@@ -1272,8 +1284,10 @@ support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::run(std::string s
         {
             std::lock_guard lock(impl->mutex);
             if (impl->closed) {
+                // pi `execute()` rejects a later run with "Sandbox is closed";
+                // the in-flight close abort keeps the "Sandbox closed" spelling.
                 CodemodeRunResult result;
-                result.error = CodemodeError{.kind = CodemodeError::Kind::Aborted, .message = "Sandbox closed"};
+                result.error = CodemodeError{.kind = CodemodeError::Kind::Aborted, .message = "Sandbox is closed"};
                 co_return result;
             }
             impl->active_runs.push_back(state);
@@ -1632,7 +1646,8 @@ support::Expected<RemoteCodemodeSandbox::Run> RemoteCodemodeSandbox::start(
     }
     {
         std::lock_guard lock(impl_->mutex);
-        if (impl_->closed) return std::unexpected(sandbox_error("Sandbox closed"));
+        // pi `start()` throws Error("Sandbox is closed") after close.
+        if (impl_->closed) return std::unexpected(sandbox_error("Sandbox is closed"));
     }
     if (!impl_->options.remote) {
         return std::unexpected(sandbox_error("Failed to reach the remote sandbox: no remote configured"));
@@ -1671,7 +1686,7 @@ support::Expected<RemoteCodemodeSandbox::Run> RemoteCodemodeSandbox::start(
     const std::string abort_message = options.abort_message.value_or("This operation was aborted");
     {
         std::lock_guard lock(impl_->mutex);
-        if (impl_->closed) return std::unexpected(sandbox_error("Sandbox closed"));
+        if (impl_->closed) return std::unexpected(sandbox_error("Sandbox is closed"));
         impl_->active_deterministic.push_back(state);
     }
     std::weak_ptr<Run::State> weak = state;

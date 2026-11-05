@@ -316,7 +316,9 @@ support::Expected<std::string> CodemodeDiscovery::handle(std::string_view name, 
                 return write(JsonValue{samples_.at(tool.definition.name)});
             }
         }
-        return support::Expected<std::string>{std::string{"null"}};
+        // pi returns `undefined` for an absent tool; the sandbox bridge maps an
+        // empty payload to the guest's undefined value (#1195).
+        return support::Expected<std::string>{std::string{}};
     }
     if (name == "describeNamespace") {
         const JsonValue* namespace_name = arg_at(0);
@@ -332,7 +334,11 @@ support::Expected<std::string> CodemodeDiscovery::handle(std::string_view name, 
             if (found == nullptr) found = &*tool.name_space;
             names.push_back(to_codemode_identifier(tool.definition.name));
         }
-        if (found == nullptr) return support::Expected<std::string>{std::string{"null"}};
+        if (found == nullptr) {
+            // pi returns `undefined` for an absent namespace, exactly like the
+            // absent-tool case (#1195).
+            return support::Expected<std::string>{std::string{}};
+        }
         JsonValue::object_t described{
                 {"name", found->name},
                 {"tools", std::move(names)},
