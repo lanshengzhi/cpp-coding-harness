@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
+            "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -259,14 +259,14 @@
             "-L",
             "^(issue1090|issue1101|issue1104)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1101.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1101.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:45:53Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1101.xml",
-            "sha256": "a5313f19c01345acee1279d47c4a0cc958a42af45dbcb93e6db21733a3261db2"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1101.xml",
+            "sha256": "19f2502b2d53fbef417524fd32982e951dc6d11da21ccf57423f958aca5bfdc4"
           }
         },
         "rows": [
@@ -664,6 +664,30 @@
               "sha256": "5525aab9f7a48770af43e19ec9e789215f83d9d3ee56b03a63565b3e5ccfd742"
             }
           }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation drops cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering from the TM-durable-delivered-1174 history mapping: the 1180-sidecar-symlink-parity receipt now backs their #1180 tickets (a mapped row may not also carry a delivery-backed ticket), while fsync and main-marker keep the mapping.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1101.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:45:53Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1101.xml",
+              "sha256": "a5313f19c01345acee1279d47c4a0cc958a42af45dbcb93e6db21733a3261db2"
+            }
+          }
         }
       },
       {
@@ -683,14 +707,14 @@
             "-L",
             "^(issue1090|issue1101|issue1104)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1090.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1090.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:39:04Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1090.xml",
-            "sha256": "0fdf6c6cfd9105da994789261bca99126528aa91ee5ec947a35b88e73de7a2f5"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1090.xml",
+            "sha256": "8db7d91f22031c031141c0d41b2c5a2a6d66541ec7012d56181fa06b0c55dce6"
           }
         },
         "inputs": [
@@ -736,7 +760,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
+            "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -1281,6 +1305,30 @@
               "sha256": "69481c11a2d3832f39246df15ba72619f26867f1c80a723b700ae642fc19986e"
             }
           }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1090.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:39:04Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1090.xml",
+              "sha256": "0fdf6c6cfd9105da994789261bca99126528aa91ee5ec947a35b88e73de7a2f5"
+            }
+          }
         }
       },
       {
@@ -1540,11 +1588,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
+            "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
+            "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1567,14 +1615,14 @@
             "-L",
             "issue1118",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1118.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1118.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:39:04Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1118.xml",
-            "sha256": "a54072d59c133706da77233a5f767da32db140b13a26eefabae0b2547e7af191"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1118.xml",
+            "sha256": "4040d7d890b483d3cfc95308003b5232514f0af458133550346927da2433aa8f"
           }
         },
         "rows": [
@@ -2066,6 +2114,31 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1118.xml",
               "sha256": "f3f493b06722f2087d3c106ca62c9411e63eb0ae0774727d53b32aa78ff65b6b"
+            }
+          }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation drops cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering from the TM-durable-delivered-1174 history mapping: the 1180-sidecar-symlink-parity receipt now backs their #1180 tickets (a mapped row may not also carry a delivery-backed ticket), while fsync and main-marker keep the mapping.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1118.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:39:04Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1118.xml",
+              "sha256": "a54072d59c133706da77233a5f767da32db140b13a26eefabae0b2547e7af191"
             }
           }
         }
@@ -3294,7 +3367,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
+            "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3302,7 +3375,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
+            "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
           }
         ],
         "validation": {
@@ -3313,14 +3386,14 @@
             "-R",
             "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1181.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1181.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:41:59Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1181.xml",
-            "sha256": "0940c8057d0b686f8c95fa69941de0a4f636f2ced04a2007c65139d3ac3e518a"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1181.xml",
+            "sha256": "eff3b7e78990ddebb6ea7816ff7464fde4cdfc1b596671a260ad87a2fa2978ea"
           }
         },
         "rows": [
@@ -3804,6 +3877,31 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1181.xml",
               "sha256": "d51db652ed011308bf64c6ee7efa2765499cccc395e81c0e2aa55d8daf4d79b3"
+            }
+          }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation drops cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering from the TM-durable-delivered-1174 history mapping: the 1180-sidecar-symlink-parity receipt now backs their #1180 tickets (a mapped row may not also carry a delivery-backed ticket), while fsync and main-marker keep the mapping.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1181.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:41:59Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1181.xml",
+              "sha256": "0940c8057d0b686f8c95fa69941de0a4f636f2ced04a2007c65139d3ac3e518a"
             }
           }
         }
@@ -4468,14 +4566,14 @@
             "-L",
             "chord",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1186.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1186.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:41:59Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1186.xml",
-            "sha256": "3d899c7d7c2bea2e652cb9163e12f13438578d65f099207c9052bb09b1d643fd"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1186.xml",
+            "sha256": "e1acd715a6644f336f42dce3ee16061075cfb563be1a69cf82a70618de62debc"
           }
         },
         "rows": [
@@ -4649,11 +4747,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
+            "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
+            "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4827,6 +4925,31 @@
               "sha256": "5afab0ad3676b9af5bbed4c9c992d43894b783f161cc7fcdf5b326f413a1544e"
             }
           }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation drops cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering from the TM-durable-delivered-1174 history mapping: the 1180-sidecar-symlink-parity receipt now backs their #1180 tickets (a mapped row may not also carry a delivery-backed ticket), while fsync and main-marker keep the mapping.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1186.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:41:59Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1186.xml",
+              "sha256": "3d899c7d7c2bea2e652cb9163e12f13438578d65f099207c9052bb09b1d643fd"
+            }
+          }
         }
       },
       {
@@ -4845,14 +4968,14 @@
             "-L",
             "chord",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1188.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1188.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:45:53Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1188.xml",
-            "sha256": "ca05ec64b89dbafea1ce9bba87b02c9eca6c10fe725194363564723ad09aaad4"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1188.xml",
+            "sha256": "39c9f78b64c60d0ae7305ce34e4fd8656d19c2fc8f49593304267a653dd71f56"
           }
         },
         "rows": [
@@ -5020,7 +5143,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
+            "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5172,6 +5295,30 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1188.xml",
               "sha256": "d04b79393f69aa0c46d41bc627c3438ffb6f502d3c378ff13334d60d306de7ae"
+            }
+          }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation drops cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering from the TM-durable-delivered-1174 history mapping: the 1180-sidecar-symlink-parity receipt now backs their #1180 tickets (a mapped row may not also carry a delivery-backed ticket), while fsync and main-marker keep the mapping.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1188.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:45:53Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1188.xml",
+              "sha256": "ca05ec64b89dbafea1ce9bba87b02c9eca6c10fe725194363564723ad09aaad4"
             }
           }
         }
@@ -5365,14 +5512,14 @@
             "-L",
             "issue1182",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1182.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1182.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:41:59Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1182.xml",
-            "sha256": "9bbd8fdfa12ab153ae2139bb29529c205d67f038e6758f1acbb34a8bdb085791"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1182.xml",
+            "sha256": "ac9d14a886a380cd7ac86e702b0d0b77fa6993a529902802a7abdd81d9722609"
           }
         },
         "rows": [
@@ -5595,7 +5742,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
+            "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -5619,7 +5766,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
+            "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5773,6 +5920,31 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1182.xml",
               "sha256": "5ab2f026c4a12539d654e91911a96688f2686b59e8ef0bb717c16f7ffc63eead"
+            }
+          }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation drops cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering from the TM-durable-delivered-1174 history mapping: the 1180-sidecar-symlink-parity receipt now backs their #1180 tickets (a mapped row may not also carry a delivery-backed ticket), while fsync and main-marker keep the mapping.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1182.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:41:59Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1182.xml",
+              "sha256": "9bbd8fdfa12ab153ae2139bb29529c205d67f038e6758f1acbb34a8bdb085791"
             }
           }
         }
@@ -5979,11 +6151,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
+            "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
+            "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6916,14 +7088,14 @@
             "-R",
             "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1179.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1179.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:39:04Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 52,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1179.xml",
-            "sha256": "442e5e4346302420dbef360724472a41c05cc0c6d5e266755dbd2573bc4a6cec"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1179.xml",
+            "sha256": "2199c9637122fad2ae26b1e440109ad90ccf98e86208d32c21aa842f6f75fda8"
           }
         },
         "revalidation1179m": {
@@ -7012,6 +7184,31 @@
               "sha256": "8eb1bb6f2e7998bf56ae478e918c4214b925c5a1bd25856253f6882fc9ea8366"
             }
           }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation drops cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering from the TM-durable-delivered-1174 history mapping: the 1180-sidecar-symlink-parity receipt now backs their #1180 tickets (a mapped row may not also carry a delivery-backed ticket), while fsync and main-marker keep the mapping.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1179.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:39:04Z",
+            "selected": 52,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1179.xml",
+              "sha256": "442e5e4346302420dbef360724472a41c05cc0c6d5e266755dbd2573bc4a6cec"
+            }
+          }
         }
       },
       {
@@ -7080,11 +7277,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
+            "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
+            "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7115,14 +7312,14 @@
             "-R",
             "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1176.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1176.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:41:59Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1176.xml",
-            "sha256": "821ab4a3be22c01fbc7ecc019d70d24a5ccfc051bc8928a10a2e7728c31f108a"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1176.xml",
+            "sha256": "c3ee3e2fa0afc7830ddbca235c8899b5e957aae29cbf3977fb742ea77b17486d"
           }
         },
         "rows": [
@@ -7240,6 +7437,31 @@
               "sha256": "d1de6b24a953f661a79d6920d4261f923349eaa9903212481bd893d95aea7313"
             }
           }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation drops cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering from the TM-durable-delivered-1174 history mapping: the 1180-sidecar-symlink-parity receipt now backs their #1180 tickets (a mapped row may not also carry a delivery-backed ticket), while fsync and main-marker keep the mapping.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1176.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:41:59Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1176.xml",
+              "sha256": "821ab4a3be22c01fbc7ecc019d70d24a5ccfc051bc8928a10a2e7728c31f108a"
+            }
+          }
         }
       },
       {
@@ -7304,11 +7526,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
+            "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
+            "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7359,14 +7581,14 @@
             "-R",
             "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1177.xml"
+            "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1177.xml"
           ],
-          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-          "recordedAt": "2026-11-05T01:39:04Z",
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1177.xml",
-            "sha256": "f3055f8ea26ef6a9f9a4ff0699b846667783c6e54fbf9624a453586a1605de61"
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1177.xml",
+            "sha256": "7e2c7cc1d96bd36f8c141167dcb917b9b7b4aa6b30f41b49373ba1af4fd91841"
           }
         },
         "rows": [
@@ -7516,6 +7738,31 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1177.xml",
               "sha256": "063b9f88543fe791e7f57806147452fe17fc0068a6459d265372d22ab85926a1"
+            }
+          }
+        },
+        "revalidation1180": {
+          "reason": "The serial-merger lane registers the audit-1193/audit-1195/audit-1197/audit-1198/audit-1199 families in the shared baseline registry, routes the two refreshed audit-1180 sidecar-order scenarios onto cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering, and classifies the five new families' scenarios as explicit orphans; the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation drops cch_durable:Storage:jsonl:sidecar and cch_durable:Storage:jsonl:ordering from the TM-durable-delivered-1174 history mapping: the 1180-sidecar-symlink-parity receipt now backs their #1180 tickets (a mapped row may not also carry a delivery-backed ticket), while fsync and main-marker keep the mapping.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1177.xml"
+            ],
+            "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+            "recordedAt": "2026-11-05T01:39:04Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1177.xml",
+              "sha256": "f3055f8ea26ef6a9f9a4ff0699b846667783c6e54fbf9624a453586a1605de61"
             }
           }
         }
@@ -7720,6 +7967,100 @@
           }
         ],
         "routingSha256": "df36d324c2169070a20ca0ef74e5cf311755bb8b0457303b2396d1fc72d5ad46"
+      },
+      {
+        "id": "1180-sidecar-symlink-parity",
+        "ticket": "1180",
+        "implementationCommits": [
+          "942d178be50a7dac7e3fb30c513db54a9564a650",
+          "75f602ad5e2ee4d0607499d0b5bd103b1d2072fe"
+        ],
+        "report": "docs/research/pi-v1.3.0/1180-jsonl-sidecar-symlink-alignment.md",
+        "routingSha256": "1d47954e319381b4fcdc8af35c69a53aafe7a7b1fed954c8cae9b4e2f10c621e",
+        "inputs": [
+          {
+            "path": "src/durable/JsonlStorage.cpp",
+            "sha256": "d5357502e47dd642af7d946190ca126bc9515d3628ab4f6e1bc1400ba669b12e"
+          },
+          {
+            "path": "tests/durable/JsonlStorageTest.cpp",
+            "sha256": "fc103e614487a04b465a7638539a3b2514ed27b86b26a88567a067e220b993c7"
+          }
+        ],
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-LE",
+            "architecture",
+            "-R",
+            "^(a JSONL store commits, closes and reopens the same records through the public storage contract|a JSONL commit appends two sidecars in frozen write order before the main marker)$",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1180-sidecar-order.xml"
+          ],
+          "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+          "recordedAt": "2026-11-05T02:39:34Z",
+          "selected": 2,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1180-sidecar-order.xml",
+            "sha256": "aa6262f0e76a7103a3a882ac5467efd8a0bfddb8fc746d575ae8b9806134d5f1"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_durable:Storage:jsonl:sidecar",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1054/jsonl-store.json",
+                "scenario": "a JSONL commit appends every sidecar before the main marker",
+                "test": "a JSONL store commits, closes and reopens the same records through the public storage contract",
+                "testSource": "tests/durable/JsonlStorageTest.cpp"
+              },
+              {
+                "artifact": "audit-1180/sidecar-order.json",
+                "scenario": "a JSONL commit appends two sidecars in write order before the main marker",
+                "test": "a JSONL commit appends two sidecars in frozen write order before the main marker",
+                "testSource": "tests/durable/JsonlStorageTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a JSONL commit appends two sidecars in frozen write order before the main marker",
+              "testSource": "tests/durable/JsonlStorageTest.cpp",
+              "reason": "The two creates run in descending ID order (9 then 3), so a backend that appends sidecars in sorted filename order produces [doc-3, doc-9, main] and fails the recorded frozen append/flush trace and the byte-exact file comparison even though every file exists; the case also fails a flush emitted after the marker or for a commit that reclaims nothing."
+            }
+          },
+          {
+            "id": "cch_durable:Storage:jsonl:ordering",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1054/jsonl-store.json",
+                "scenario": "a JSONL commit appends every sidecar before the main marker",
+                "test": "a JSONL store commits, closes and reopens the same records through the public storage contract",
+                "testSource": "tests/durable/JsonlStorageTest.cpp"
+              },
+              {
+                "artifact": "audit-1180/sidecar-order.json",
+                "scenario": "a JSONL commit appends two sidecars in write order before the main marker",
+                "test": "a JSONL commit appends two sidecars in frozen write order before the main marker",
+                "testSource": "tests/durable/JsonlStorageTest.cpp"
+              },
+              {
+                "artifact": "audit-1180/sidecar-order.json",
+                "scenario": "JSONL fsync flushes two sidecars in append order before the main marker",
+                "test": "a JSONL commit appends two sidecars in frozen write order before the main marker",
+                "testSource": "tests/durable/JsonlStorageTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "a JSONL commit appends two sidecars in frozen write order before the main marker",
+              "testSource": "tests/durable/JsonlStorageTest.cpp",
+              "reason": "The two creates run in descending ID order (9 then 3), so a backend that appends sidecars in sorted filename order produces [doc-3, doc-9, main] and fails the recorded frozen append/flush trace and the byte-exact file comparison even though every file exists; the case also fails a flush emitted after the marker or for a commit that reclaims nothing."
+            }
+          }
+        ]
       }
     ]
   },
@@ -7980,8 +8321,8 @@
         "partial": 47
       },
       "cch_durable": {
-        "implemented": 6,
-        "missing": 121,
+        "implemented": 8,
+        "missing": 119,
         "not-applicable": 2,
         "partial": 83
       },
@@ -8002,16 +8343,16 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1092,
-      "missing": 179,
+      "implemented": 1094,
+      "missing": 177,
       "not-applicable": 18,
       "partial": 175
     },
     "verification": {
       "not-applicable": 28,
       "unverified": 1011,
-      "upstream-captured": 313,
-      "verified": 112
+      "upstream-captured": 311,
+      "verified": 114
     },
     "evidenceRoute": {
       "captured": 425,
@@ -8061,8 +8402,8 @@
     ],
     "missingObservationRows": 1011,
     "scenarioCoverage": {
-      "scenarios": 660,
-      "scenarioNamed": 368,
+      "scenarios": 735,
+      "scenarioNamed": 370,
       "artifactCovered": 56,
       "orphaned": [
         "audit-1105/session-binding.json:real Session reads resources on demand and binds a late tool",
@@ -8299,8 +8640,81 @@
         "audit-1158/positioned-read.json:positioned reads return up to the requested length and stop early only at end of file",
         "audit-1158/positioned-read.json:a read at or past end of file returns the frozen empty result instead of an error",
         "audit-1158/positioned-read.json:a positioned read longer than one internal chunk crosses reads unchanged",
-        "audit-1180/sidecar-order.json:a JSONL commit appends two sidecars in write order before the main marker",
-        "audit-1180/sidecar-order.json:JSONL fsync flushes two sidecars in append order before the main marker"
+        "audit-1193/remote-generic.json:a generic remote exchange runs the script remotely and calls a caller tool",
+        "audit-1193/remote-generic.json:the terminal writes set is empty on success and carries a real write set when the script writes",
+        "audit-1193/remote-generic.json:a rejected silent or unreachable remote keeps three distinct sandbox errors",
+        "audit-1193/sandbox-create.json:a missing guest module fails at the first run in pi, never at construction",
+        "audit-1193/sandbox-create.json:a sandbox that never executes never touches the guest",
+        "audit-1193/sandbox-create.json:a present guest module constructs and runs",
+        "audit-1193/output-budget.json:over-budget output keeps the head and tail and spills the full text to a named file",
+        "audit-1193/output-budget.json:a zero budget truncates over the error text",
+        "audit-1193/output-budget.json:an under-budget output is not truncated and names no spill file",
+        "audit-1195/discovery-absence.json:an absent tool or namespace reads as undefined through the discovery globals",
+        "audit-1195/clock-timezone.json:execute reads the host timezone while deterministic start pins UTC",
+        "audit-1197/read-tool.json:a small file reads whole without truncation",
+        "audit-1197/read-tool.json:a trailing newline does not add an empty line",
+        "audit-1197/read-tool.json:an offset on the line after a trailing newline is past the end",
+        "audit-1197/read-tool.json:carriage returns are line content, not line endings",
+        "audit-1197/read-tool.json:an empty file at offset one reads empty",
+        "audit-1197/read-tool.json:an empty file at offset two is past the end",
+        "audit-1197/read-tool.json:a file without a trailing newline counts its last line",
+        "audit-1197/read-tool.json:offset and limit select one-based lines",
+        "audit-1197/read-tool.json:an offset without a limit reads to the end of the file",
+        "audit-1197/read-tool.json:a limit of zero selects no lines",
+        "audit-1197/read-tool.json:a negative limit counts from the end of the file",
+        "audit-1197/read-tool.json:fractional offsets and limits truncate toward zero",
+        "audit-1197/read-tool.json:a limit past the end reports the remaining-lines continuation",
+        "audit-1197/read-tool.json:a limit ending exactly at the last line reports nothing further",
+        "audit-1197/read-tool.json:an offset at the newline-past line reads empty rather than failing",
+        "audit-1197/read-tool.json:an offset beyond the newline-past line fails with the frozen message",
+        "audit-1197/read-tool.json:the default read stops at 2000 lines and reports continuation",
+        "audit-1197/read-tool.json:the default read stops at 50KB when bytes bind first",
+        "audit-1197/read-tool.json:a single line over the byte limit shows its head with a warning",
+        "audit-1197/read-tool.json:the head cut lands on a character boundary",
+        "audit-1197/read-tool.json:a byte-order mark is stripped and not counted",
+        "audit-1197/read-tool.json:offset and limit bound the selection before the default limits",
+        "audit-1197/read-tool.json:the default limits apply to a selected range that exceeds them",
+        "audit-1197/read-tool.json:the default byte limit applies to a selected range that exceeds it",
+        "audit-1198/ignore-rules.json:comments and blank lines carry no rules",
+        "audit-1198/ignore-rules.json:escaped hash and bang are literal patterns",
+        "audit-1198/ignore-rules.json:trailing spaces are stripped unless escaped",
+        "audit-1198/ignore-rules.json:a negation whitelists a matching name",
+        "audit-1198/ignore-rules.json:a leading slash anchors to the rules directory",
+        "audit-1198/ignore-rules.json:a trailing slash matches directories only",
+        "audit-1198/ignore-rules.json:star does not cross a slash",
+        "audit-1198/ignore-rules.json:a star-star prefix matches at any depth",
+        "audit-1198/ignore-rules.json:a question mark matches one non-slash character",
+        "audit-1198/ignore-rules.json:character classes and ranges match one character",
+        "audit-1198/ignore-rules.json:a negated class matches outside the class",
+        "audit-1198/ignore-rules.json:a middle star-star crosses directories",
+        "audit-1198/ignore-rules.json:a trailing star-star matches everything inside only",
+        "audit-1198/ignore-rules.json:brace alternation is a globset extension over git",
+        "audit-1198/ignore-rules.json:rules are case sensitive on Linux bytes",
+        "audit-1198/ignore-rules.json:the last matching rule in one file wins",
+        "audit-1198/ignore-rules.json:the nearest gitignore overrides the parent in either direction",
+        "audit-1198/ignore-rules.json:gitignore beats info-exclude and the global file",
+        "audit-1198/ignore-rules.json:a whitelist in gitignore suppresses the exclude file",
+        "audit-1198/ignore-rules.json:an ignored directory prunes its subtree and a negation below cannot revive it",
+        "audit-1198/ignore-rules.json:hidden false drops dot names unless a rule whitelists them",
+        "audit-1198/ignore-rules.json:gitignore false disables the rules while hidden filtering stays",
+        "audit-1198/ignore-rules.json:symlinks list as links and a fifo is skipped",
+        "audit-1198/ignore-rules.json:a non-utf8 name lists with replacement characters",
+        "audit-1198/ignore-rules.json:zero exact and over bounds report truncated exactly",
+        "audit-1198/ignore-rules.json:depth-first byte-order traversal with an empty directory",
+        "audit-1199/discovery.json:a root outside any work tree applies no repository rules",
+        "audit-1199/discovery.json:a git directory enables the repository rules",
+        "audit-1199/discovery.json:parent gitignores apply up to the work-tree root and no further",
+        "audit-1199/discovery.json:a git file worktree reads info-exclude from the commondir",
+        "audit-1199/discovery.json:a nested repository applies its own rules and blocks the outer ones",
+        "audit-1199/discovery.json:GIT_DIR and GIT_WORK_TREE do not enable repository rules",
+        "audit-1199/discovery.json:a bare repository layout applies no repository rules",
+        "audit-1199/discovery.json:a git symlink to a directory is a repository marker",
+        "audit-1199/discovery.json:an unreadable gitignore degrades to no rules",
+        "audit-1199/discovery.json:GIT_CONFIG_GLOBAL wins over home xdg and system config",
+        "audit-1199/discovery.json:home gitconfig wins over xdg and system config",
+        "audit-1199/discovery.json:the system config names the excludes file last",
+        "audit-1199/discovery.json:a quoted excludesFile with tilde expands against home",
+        "audit-1199/discovery.json:the xdg default ignore file applies without any config"
       ],
       "uncovered": []
     }
@@ -12842,24 +13256,778 @@
       "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
     },
     {
-      "family": "audit-1180",
-      "artifact": "sidecar-order.json",
-      "scenario": "a JSONL commit appends two sidecars in write order before the main marker",
-      "reason": "Captured by #1180's sidecar-order refresh (942d178be, two-sidecar ordering); no ledger row carries this exact scenario name yet.",
+      "family": "audit-1193",
+      "artifact": "remote-generic.json",
+      "scenario": "a generic remote exchange runs the script remotely and calls a caller tool",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public Remote caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
       "rows": [
-        "cch_durable:Storage:jsonl:sidecar"
+        "cch_codemode:codemode-remote"
       ],
-      "disposition": "Belongs to the durable lane's pending evidence update for cch_durable:Storage:jsonl:sidecar; classified as an orphan until the lane routes it, matching the older sidecar-order orphans."
+      "disposition": "#1193 compares these scenarios through the public Remote caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
     },
     {
-      "family": "audit-1180",
-      "artifact": "sidecar-order.json",
-      "scenario": "JSONL fsync flushes two sidecars in append order before the main marker",
-      "reason": "Captured by #1180's sidecar-order refresh (942d178be, two-sidecar ordering); no ledger row carries this exact scenario name yet.",
+      "family": "audit-1193",
+      "artifact": "remote-generic.json",
+      "scenario": "the terminal writes set is empty on success and carries a real write set when the script writes",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public Remote caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
       "rows": [
-        "cch_durable:Storage:jsonl:fsync"
+        "cch_codemode:codemode-remote"
       ],
-      "disposition": "Belongs to the durable lane's pending evidence update for cch_durable:Storage:jsonl:fsync; classified as an orphan until the lane routes it, matching the older sidecar-order orphans."
+      "disposition": "#1193 compares these scenarios through the public Remote caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "remote-generic.json",
+      "scenario": "a rejected silent or unreachable remote keeps three distinct sandbox errors",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public Remote caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-remote"
+      ],
+      "disposition": "#1193 compares these scenarios through the public Remote caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "sandbox-create.json",
+      "scenario": "a missing guest module fails at the first run in pi, never at construction",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public create and Application source-holder callers; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-sandbox-create-errors"
+      ],
+      "disposition": "#1193 compares these scenarios through the public create/source-holder callers (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "sandbox-create.json",
+      "scenario": "a sandbox that never executes never touches the guest",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public create and Application source-holder callers; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-sandbox-create-errors"
+      ],
+      "disposition": "#1193 compares these scenarios through the public create/source-holder callers (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "sandbox-create.json",
+      "scenario": "a present guest module constructs and runs",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public create and Application source-holder callers; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-sandbox-create-errors"
+      ],
+      "disposition": "#1193 compares these scenarios through the public create/source-holder callers (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "output-budget.json",
+      "scenario": "over-budget output keeps the head and tail and spills the full text to a named file",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the real application output-token budget caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-source-output-token-option"
+      ],
+      "disposition": "#1193 compares these scenarios through the application output-budget caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "output-budget.json",
+      "scenario": "a zero budget truncates over the error text",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the real application output-token budget caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-source-output-token-option"
+      ],
+      "disposition": "#1193 compares these scenarios through the application output-budget caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "output-budget.json",
+      "scenario": "an under-budget output is not truncated and names no spill file",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the real application output-token budget caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-source-output-token-option"
+      ],
+      "disposition": "#1193 compares these scenarios through the application output-budget caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1195",
+      "artifact": "discovery-absence.json",
+      "scenario": "an absent tool or namespace reads as undefined through the discovery globals",
+      "reason": "Captured by #1195 from the frozen pi-v1.3.0 checkout through the real application script caller; the row's recorded audit-1053 scenarios stay with their source ledger and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-script-discovery"
+      ],
+      "disposition": "#1195 compares these scenarios through the script caller (focused [issue1195] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1195-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1195",
+      "artifact": "clock-timezone.json",
+      "scenario": "execute reads the host timezone while deterministic start pins UTC",
+      "reason": "Captured by #1195 from the frozen pi-v1.3.0 checkout through the real host clock caller; the row's recorded audit-1053 scenarios stay with their source ledger and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-script-clock-timezone"
+      ],
+      "disposition": "#1195 compares these scenarios through the host-clock caller (focused [issue1195] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1195-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a small file reads whole without truncation",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a trailing newline does not add an empty line",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an offset on the line after a trailing newline is past the end",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "carriage returns are line content, not line endings",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an empty file at offset one reads empty",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an empty file at offset two is past the end",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a file without a trailing newline counts its last line",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "offset and limit select one-based lines",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an offset without a limit reads to the end of the file",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a limit of zero selects no lines",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a negative limit counts from the end of the file",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "fractional offsets and limits truncate toward zero",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a limit past the end reports the remaining-lines continuation",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a limit ending exactly at the last line reports nothing further",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an offset at the newline-past line reads empty rather than failing",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an offset beyond the newline-past line fails with the frozen message",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the default read stops at 2000 lines and reports continuation",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the default read stops at 50KB when bytes bind first",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a single line over the byte limit shows its head with a warning",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the head cut lands on a character boundary",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a byte-order mark is stripped and not counted",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "offset and limit bound the selection before the default limits",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the default limits apply to a selected range that exceeds them",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the default byte limit applies to a selected range that exceeds it",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "comments and blank lines carry no rules",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "escaped hash and bang are literal patterns",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "trailing spaces are stripped unless escaped",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a negation whitelists a matching name",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a leading slash anchors to the rules directory",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a trailing slash matches directories only",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "star does not cross a slash",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a star-star prefix matches at any depth",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a question mark matches one non-slash character",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "character classes and ranges match one character",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a negated class matches outside the class",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a middle star-star crosses directories",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a trailing star-star matches everything inside only",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "brace alternation is a globset extension over git",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "rules are case sensitive on Linux bytes",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "the last matching rule in one file wins",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "the nearest gitignore overrides the parent in either direction",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "gitignore beats info-exclude and the global file",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a whitelist in gitignore suppresses the exclude file",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "an ignored directory prunes its subtree and a negation below cannot revive it",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "hidden false drops dot names unless a rule whitelists them",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "gitignore false disables the rules while hidden filtering stays",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "symlinks list as links and a fifo is skipped",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a non-utf8 name lists with replacement characters",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "zero exact and over bounds report truncated exactly",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "depth-first byte-order traversal with an empty directory",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a root outside any work tree applies no repository rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a git directory enables the repository rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "parent gitignores apply up to the work-tree root and no further",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a git file worktree reads info-exclude from the commondir",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a nested repository applies its own rules and blocks the outer ones",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "GIT_DIR and GIT_WORK_TREE do not enable repository rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a bare repository layout applies no repository rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a git symlink to a directory is a repository marker",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "an unreadable gitignore degrades to no rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "GIT_CONFIG_GLOBAL wins over home xdg and system config",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "home gitconfig wins over xdg and system config",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "the system config names the excludes file last",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a quoted excludesFile with tilde expands against home",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "the xdg default ignore file applies without any config",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
     }
   ],
   "correctionsIndex": [
@@ -33210,8 +34378,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_durable",
       "consumer": "none (cch_durable owner not introduced)",
       "consumerOwners": [
@@ -33221,7 +34389,9 @@
       "implementation_ticket": "#1180",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
-        "a JSONL commit appends every sidecar before the main marker"
+        "a JSONL commit appends every sidecar before the main marker",
+        "a JSONL commit appends two sidecars in write order before the main marker",
+        "JSONL fsync flushes two sidecars in append order before the main marker"
       ],
       "evidence": {
         "route": "captured",
@@ -33230,15 +34400,12 @@
         "capturedScenarios": [
           "a JSONL commit appends every sidecar before the main marker"
         ],
-        "result": "Append order was doc-4.jsonl then main.jsonl; with fsync the sidecar was flushed before the marker append."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1180-jsonl-sidecar-symlink-alignment.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "Current application journal append order is single-file only.",
-        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1180; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1180-jsonl-sidecar-symlink-alignment.md",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -33251,7 +34418,29 @@
           "verification": "upstream-captured",
           "owner": "cch_durable"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1058-draft",
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a JSONL commit appends every sidecar before the main marker"
+          ],
+          "result": "Append order was doc-4.jsonl then main.jsonl; with fsync the sidecar was flushed before the marker append."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "Current application journal append order is single-file only.",
+          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": ""
+      },
+      "delivery": "1180-sidecar-symlink-parity"
     },
     {
       "id": "cch_durable:Storage:jsonl:poison",
@@ -33467,8 +34656,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_durable",
       "consumer": "none (cch_durable owner not introduced)",
       "consumerOwners": [
@@ -33478,7 +34667,8 @@
       "implementation_ticket": "#1180",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
-        "a JSONL commit appends every sidecar before the main marker"
+        "a JSONL commit appends every sidecar before the main marker",
+        "a JSONL commit appends two sidecars in write order before the main marker"
       ],
       "evidence": {
         "route": "captured",
@@ -33487,15 +34677,12 @@
         "capturedScenarios": [
           "a JSONL commit appends every sidecar before the main marker"
         ],
-        "result": "doc-4.jsonl held one record {format:1,type:'record',seq:2,ordinal:0,payload:{type:'document',...}}."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1180-jsonl-sidecar-symlink-alignment.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "Current Pike has no sidecars at all.",
-        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1180; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1180-jsonl-sidecar-symlink-alignment.md",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -33508,7 +34695,29 @@
           "verification": "upstream-captured",
           "owner": "cch_durable"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": "#1058-draft",
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "a JSONL commit appends every sidecar before the main marker"
+          ],
+          "result": "doc-4.jsonl held one record {format:1,type:'record',seq:2,ordinal:0,payload:{type:'document',...}}."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "Current Pike has no sidecars at all.",
+          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": ""
+      },
+      "delivery": "1180-sidecar-symlink-parity"
     },
     {
       "id": "cch_durable:Storage:memory",

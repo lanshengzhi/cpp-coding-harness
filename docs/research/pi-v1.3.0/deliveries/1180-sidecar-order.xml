@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="2"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-05T11:30:33"
+	>
+	<testcase name="a JSONL commit appends two sidecars in frozen write order before the main marker" classname="a JSONL commit appends two sidecars in frozen write order before the main marker" time="0.0153359" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1180;jsonl;spec"/>
+		</properties>
+		<system-out>Filters: "a JSONL commit appends two sidecars in frozen write order before the main marker"
+Randomness seeded to: 379784172
+===============================================================================
+All tests passed (96 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a JSONL store commits, closes and reopens the same records through the public storage contract" classname="a JSONL store commits, closes and reopens the same records through the public storage contract" time="0.0154262" status="run">
+		<properties>
+			<property name="cmake_labels" value="commit;durable;issue1074;jsonl;reopen;spec"/>
+		</properties>
+		<system-out>Filters: "a JSONL store commits\, closes and reopens the same records through the public storage contract"
+Randomness seeded to: 1827668574
+===============================================================================
+All tests passed (45 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

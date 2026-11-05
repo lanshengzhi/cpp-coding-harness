@@ -812,6 +812,23 @@
         "cch_chord:output:progress"
       ],
       "authority": "#1187 registered frozen capture plus tests/chord/OutputTest.cpp public Output comparisons; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1054",
+      "scenario": "a JSONL commit appends two sidecars in write order before the main marker",
+      "rows": [
+        "cch_durable:Storage:jsonl:sidecar",
+        "cch_durable:Storage:jsonl:ordering"
+      ],
+      "authority": "#1180 registered frozen capture (audit-1180/sidecar-order.json, ADR 0076) plus tests/durable/JsonlStorageTest.cpp [issue1180] public storage comparisons; the rows complete through the 1180-sidecar-symlink-parity receipt"
+    },
+    {
+      "ticket": "1054",
+      "scenario": "JSONL fsync flushes two sidecars in append order before the main marker",
+      "rows": [
+        "cch_durable:Storage:jsonl:ordering"
+      ],
+      "authority": "#1180 registered frozen capture (audit-1180/sidecar-order.json, ADR 0076) plus tests/durable/JsonlStorageTest.cpp [issue1180] public storage comparisons; the rows complete through the 1180-sidecar-symlink-parity receipt"
     }
   ],
   "orphanScenarios": [
@@ -3220,24 +3237,778 @@
       "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
     },
     {
-      "family": "audit-1180",
-      "artifact": "sidecar-order.json",
-      "scenario": "a JSONL commit appends two sidecars in write order before the main marker",
-      "reason": "Captured by #1180's sidecar-order refresh (942d178be, two-sidecar ordering); no ledger row carries this exact scenario name yet.",
+      "family": "audit-1193",
+      "artifact": "remote-generic.json",
+      "scenario": "a generic remote exchange runs the script remotely and calls a caller tool",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public Remote caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
       "rows": [
-        "cch_durable:Storage:jsonl:sidecar"
+        "cch_codemode:codemode-remote"
       ],
-      "disposition": "Belongs to the durable lane's pending evidence update for cch_durable:Storage:jsonl:sidecar; classified as an orphan until the lane routes it, matching the older sidecar-order orphans."
+      "disposition": "#1193 compares these scenarios through the public Remote caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
     },
     {
-      "family": "audit-1180",
-      "artifact": "sidecar-order.json",
-      "scenario": "JSONL fsync flushes two sidecars in append order before the main marker",
-      "reason": "Captured by #1180's sidecar-order refresh (942d178be, two-sidecar ordering); no ledger row carries this exact scenario name yet.",
+      "family": "audit-1193",
+      "artifact": "remote-generic.json",
+      "scenario": "the terminal writes set is empty on success and carries a real write set when the script writes",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public Remote caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
       "rows": [
-        "cch_durable:Storage:jsonl:fsync"
+        "cch_codemode:codemode-remote"
       ],
-      "disposition": "Belongs to the durable lane's pending evidence update for cch_durable:Storage:jsonl:fsync; classified as an orphan until the lane routes it, matching the older sidecar-order orphans."
+      "disposition": "#1193 compares these scenarios through the public Remote caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "remote-generic.json",
+      "scenario": "a rejected silent or unreachable remote keeps three distinct sandbox errors",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public Remote caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-remote"
+      ],
+      "disposition": "#1193 compares these scenarios through the public Remote caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "sandbox-create.json",
+      "scenario": "a missing guest module fails at the first run in pi, never at construction",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public create and Application source-holder callers; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-sandbox-create-errors"
+      ],
+      "disposition": "#1193 compares these scenarios through the public create/source-holder callers (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "sandbox-create.json",
+      "scenario": "a sandbox that never executes never touches the guest",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public create and Application source-holder callers; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-sandbox-create-errors"
+      ],
+      "disposition": "#1193 compares these scenarios through the public create/source-holder callers (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "sandbox-create.json",
+      "scenario": "a present guest module constructs and runs",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the public create and Application source-holder callers; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-sandbox-create-errors"
+      ],
+      "disposition": "#1193 compares these scenarios through the public create/source-holder callers (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "output-budget.json",
+      "scenario": "over-budget output keeps the head and tail and spills the full text to a named file",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the real application output-token budget caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-source-output-token-option"
+      ],
+      "disposition": "#1193 compares these scenarios through the application output-budget caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "output-budget.json",
+      "scenario": "a zero budget truncates over the error text",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the real application output-token budget caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-source-output-token-option"
+      ],
+      "disposition": "#1193 compares these scenarios through the application output-budget caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1193",
+      "artifact": "output-budget.json",
+      "scenario": "an under-budget output is not truncated and names no spill file",
+      "reason": "Captured by #1193 from the frozen pi-v1.3.0 checkout through the real application output-token budget caller; the row's source audit records no scenario for this obligation and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-source-output-token-option"
+      ],
+      "disposition": "#1193 compares these scenarios through the application output-budget caller (focused [issue1193] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1193-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1195",
+      "artifact": "discovery-absence.json",
+      "scenario": "an absent tool or namespace reads as undefined through the discovery globals",
+      "reason": "Captured by #1195 from the frozen pi-v1.3.0 checkout through the real application script caller; the row's recorded audit-1053 scenarios stay with their source ledger and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-script-discovery"
+      ],
+      "disposition": "#1195 compares these scenarios through the script caller (focused [issue1195] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1195-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1195",
+      "artifact": "clock-timezone.json",
+      "scenario": "execute reads the host timezone while deterministic start pins UTC",
+      "reason": "Captured by #1195 from the frozen pi-v1.3.0 checkout through the real host clock caller; the row's recorded audit-1053 scenarios stay with their source ledger and no audit lane routes to this supplemental artifact.",
+      "rows": [
+        "cch_codemode:codemode-script-clock-timezone"
+      ],
+      "disposition": "#1195 compares these scenarios through the host-clock caller (focused [issue1195] selection at testedRevision 2fd077c4dcf3, JUnit deliveries/1195-codemode.xml); the whole-row receipts binding these registered artifacts remain with the codemode verification lane."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a small file reads whole without truncation",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a trailing newline does not add an empty line",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an offset on the line after a trailing newline is past the end",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "carriage returns are line content, not line endings",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an empty file at offset one reads empty",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an empty file at offset two is past the end",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a file without a trailing newline counts its last line",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "offset and limit select one-based lines",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an offset without a limit reads to the end of the file",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a limit of zero selects no lines",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a negative limit counts from the end of the file",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "fractional offsets and limits truncate toward zero",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a limit past the end reports the remaining-lines continuation",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a limit ending exactly at the last line reports nothing further",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an offset at the newline-past line reads empty rather than failing",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "an offset beyond the newline-past line fails with the frozen message",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the default read stops at 2000 lines and reports continuation",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the default read stops at 50KB when bytes bind first",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a single line over the byte limit shows its head with a warning",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the head cut lands on a character boundary",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "a byte-order mark is stripped and not counted",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "offset and limit bound the selection before the default limits",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the default limits apply to a selected range that exceeds them",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1197",
+      "artifact": "read-tool.json",
+      "scenario": "the default byte limit applies to a selected range that exceeds it",
+      "reason": "Captured by #1197 from the frozen pi-v1.3.0 checkout through the public durable read-tool caller; the partial EnvIO slice does not establish the complete built-in-tools/node-filesystem obligations.",
+      "rows": [
+        "cch_durable:builtin-tools",
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1197 compares the frozen read tool through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "comments and blank lines carry no rules",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "escaped hash and bang are literal patterns",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "trailing spaces are stripped unless escaped",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a negation whitelists a matching name",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a leading slash anchors to the rules directory",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a trailing slash matches directories only",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "star does not cross a slash",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a star-star prefix matches at any depth",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a question mark matches one non-slash character",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "character classes and ranges match one character",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a negated class matches outside the class",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a middle star-star crosses directories",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a trailing star-star matches everything inside only",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "brace alternation is a globset extension over git",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "rules are case sensitive on Linux bytes",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "the last matching rule in one file wins",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "the nearest gitignore overrides the parent in either direction",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "gitignore beats info-exclude and the global file",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a whitelist in gitignore suppresses the exclude file",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "an ignored directory prunes its subtree and a negation below cannot revive it",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "hidden false drops dot names unless a rule whitelists them",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "gitignore false disables the rules while hidden filtering stays",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "symlinks list as links and a fifo is skipped",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "a non-utf8 name lists with replacement characters",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "zero exact and over bounds report truncated exactly",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1198",
+      "artifact": "ignore-rules.json",
+      "scenario": "depth-first byte-order traversal with an empty directory",
+      "reason": "Captured by #1198 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1198 compares the frozen ignore-rule engine through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a root outside any work tree applies no repository rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a git directory enables the repository rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "parent gitignores apply up to the work-tree root and no further",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a git file worktree reads info-exclude from the commondir",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a nested repository applies its own rules and blocks the outer ones",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "GIT_DIR and GIT_WORK_TREE do not enable repository rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a bare repository layout applies no repository rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a git symlink to a directory is a repository marker",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "an unreadable gitignore degrades to no rules",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "GIT_CONFIG_GLOBAL wins over home xdg and system config",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "home gitconfig wins over xdg and system config",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "the system config names the excludes file last",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "a quoted excludesFile with tilde expands against home",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
+    },
+    {
+      "family": "audit-1199",
+      "artifact": "discovery.json",
+      "scenario": "the xdg default ignore file applies without any config",
+      "reason": "Captured by #1199 from the frozen pi-v1.3.0 checkout through the public list_files caller; the partial EnvIO slice does not establish the complete node-filesystem obligation.",
+      "rows": [
+        "cch_durable:node-filesystem"
+      ],
+      "disposition": "#1199 compares the frozen repository discovery through the public caller; #1180 owns the whole-row durable receipts."
     }
   ],
   "groups": [
@@ -4300,9 +5071,7 @@
         "note": "Proposal section 2 group 4: #1174 JSONL fsync slice; Storage:jsonl:ordering/sidecar/main-marker stay blocked on the two-sidecar capture ruling (proposal section 3, owner decision 3).",
         "rows": [
           "cch_durable:Storage:jsonl:fsync",
-          "cch_durable:Storage:jsonl:main-marker",
-          "cch_durable:Storage:jsonl:ordering",
-          "cch_durable:Storage:jsonl:sidecar"
+          "cch_durable:Storage:jsonl:main-marker"
         ]
       },
       {
