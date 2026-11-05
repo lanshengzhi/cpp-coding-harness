@@ -39,7 +39,7 @@ unverified with the named blocker below.
 
 - Focused comparison selection: `ctest --preset vcpkg -LE architecture -L issue1213`,
   15/15 passed (`deliveries/1213-issue1213.xml`), run at
-  `bf8e9c304bff398cb76b501016131bcd063b9e6f`.
+  `cace872ea8c25fbb49450766fa114e6e467174d1`.
 - The ten receipts that pin the plan or the registry were revalidated under
   `revalidation1213` (see `1058-deliveries.json`).
 

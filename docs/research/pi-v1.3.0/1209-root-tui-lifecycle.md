@@ -42,7 +42,7 @@ whole-row; none is left unverified.
 
 - Focused comparison selection: `ctest --preset vcpkg -LE architecture -L issue1209`,
   30/30 passed (`deliveries/1213-issue1209.xml`), run at
-  `bf8e9c304bff398cb76b501016131bcd063b9e6f`.
+  `cace872ea8c25fbb49450766fa114e6e467174d1`.
 - The ten receipts that pin the plan or the registry were revalidated under
   `revalidation1213` with their exact selections rerun into fresh JUnit
   artifacts (36/36, 19/19, 5/5, 9/9, 52/52, 16/16, 13/13, 89/89, 8/8, 3/3).

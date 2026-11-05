@@ -42,7 +42,7 @@ the named caller. All 57 batch rows are receipted whole-row.
 
 - Focused comparison selection: `ctest --preset vcpkg -LE architecture -L issue1211`,
   34/34 passed (`deliveries/1213-issue1211.xml`), run at
-  `bf8e9c304bff398cb76b501016131bcd063b9e6f`.
+  `cace872ea8c25fbb49450766fa114e6e467174d1`.
 - The ten receipts that pin the plan or the registry were revalidated under
   `revalidation1213` (see `1058-deliveries.json`).
 
