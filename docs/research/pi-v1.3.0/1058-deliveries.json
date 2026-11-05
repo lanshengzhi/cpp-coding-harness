@@ -3524,7 +3524,7 @@
     },
     {
      "path": "tests/coding_agent/McpOAuthDiscoveryTest.cpp",
-     "sha256": "526135eb702cfc30fc5c4a1f9a65279273f25038364e210e0da7cb0cbb785b88"
+     "sha256": "904098503d67ab946e51e1d6b3b76ff63bd41ece1e7f97d9c3e364eebbe5ba14"
     },
     {
      "path": "tests/coding_agent/McpOAuthFlowTest.cpp",
@@ -3639,14 +3639,14 @@
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml"
+     "docs/research/pi-v1.3.0/deliveries/1231-revalidation-1181.xml"
     ],
-    "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T12:41:32Z",
+    "testedRevision": "0e61747393b2539ff79a26ff40d444189d2654fd",
+    "recordedAt": "2026-11-05T16:44:24Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml",
-     "sha256": "a5f77081d01ebda3363c7b2388a57ea614a392a0a97a44269504047065c8d348"
+     "path": "docs/research/pi-v1.3.0/deliveries/1231-revalidation-1181.xml",
+     "sha256": "6221d8f648a57ca28963a5e066cbddf21f5dcfecb942210ce0fd6a169b9bc1e0"
     }
    },
    "rows": [
@@ -3780,7 +3780,7 @@
      "discriminatingCase": {
       "test": "protected resource discovery retries the bare origin after a path-suffixed miss",
       "testSource": "tests/coding_agent/McpOAuthDiscoveryTest.cpp",
-      "reason": "Discovery actually runs and retries the bare origin on a path-suffixed miss; a cancellation path that never starts discovery, or that stops after the first miss, fails this case."
+      "reason": "Discovery actually runs and retries the bare origin on a path-suffixed miss; a cancellation path that never starts discovery, or that stops after the first miss, fails this case. Evidence gap recorded under #1231: the frozen audit-1052 bundle observes the cancellation, refresh and issuer-mismatch lifecycles only, so the 404 bare-origin retry path has no registered upstream observation; the case's first request is bound to the frozen stalled discovery document and the retry order is asserted against the scripted transport, with no frozen comparison of the retry behavior claimed."
      }
     },
     {
@@ -4253,6 +4253,30 @@
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
     ]
+   },
+   "revalidation1231": {
+    "reason": "#1231 fix 2 retires the discriminating case's redundant substring check against the cancellation scenario's stalledPath: the expected first request is now derived from the frozen stalled discovery document. The receipt records the remaining evidence gap that the frozen audit-1052 bundle has no observation of the 404 bare-origin retry path, so the retry order is discriminated against the scripted transport. The delivered rows, comparison scenarios and routing digest are unchanged; the touched input digest is refreshed and the recorded 16-case selection was rerun into a fresh JUnit artifact.",
+    "changedInputs": [
+     "tests/coding_agent/McpOAuthDiscoveryTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml"
+     ],
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T12:41:32Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml",
+      "sha256": "a5f77081d01ebda3363c7b2388a57ea614a392a0a97a44269504047065c8d348"
+     }
+    }
    }
   },
   {

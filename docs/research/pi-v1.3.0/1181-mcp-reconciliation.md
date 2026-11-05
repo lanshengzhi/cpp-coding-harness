@@ -57,6 +57,19 @@ JUnit result and the resolved scenario routing. Each row's `remainingBoundary` i
 The existing `cch_mcp:mcp-tools-call-structured` receipt (`1101-structured-content`) remains valid
 and is not claimed again.
 
+### Recorded evidence gap: `cch_mcp:mcp-oauth-discovery` discriminating case (#1231)
+
+The row's discriminating case (`protected resource discovery retries the bare origin after a
+path-suffixed miss`, `tests/coding_agent/McpOAuthDiscoveryTest.cpp`) no longer performs the
+redundant substring check against the cancellation scenario's `stalledPath`. The expected first
+request is now derived from the frozen stalled discovery document, so the case stays bound to the
+registered artifact without a C++-literal respelling. The remaining boundary is recorded here and
+in the receipt's `revalidation1231` entry: the frozen `audit-1052/oauth-lifecycle.json` bundle
+observes the cancellation, refresh and issuer-mismatch lifecycles only, so the 404 bare-origin
+retry path has no registered upstream observation. The retry order is discriminated against the
+scripted transport and no frozen comparison of the retry behavior is claimed; a future capture of
+the 404 retry path would close the gap.
+
 ### Strengthened cases
 
 The delivered tests already cited the frozen scenarios, but three did not assert every recorded
