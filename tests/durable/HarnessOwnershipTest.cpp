@@ -1484,10 +1484,12 @@ TEST_CASE("the audit-1203 frozen background-ownership boundary observation repla
     }));
     REQUIRE(commit_res.has_value());
     REQUIRE(harness->resume().has_value());
-    wait_until([&] {
-        const auto record = consume(harness->get_task(child_id));
-        return record.has_value() && record.value().has_value() && record.value()->state.status == "running";
-    }, "background child running");
+    wait_until(
+            [&] {
+                const auto record = consume(harness->get_task(child_id));
+                return record.has_value() && record.value().has_value() && record.value()->state.status == "running";
+            },
+            "background child running");
 
     auto aborted = consume(harness->abort_conversation(root.value()));
     REQUIRE(aborted.has_value());
@@ -1511,4 +1513,3 @@ TEST_CASE("the audit-1203 frozen background-ownership boundary observation repla
 
 } // namespace
 } // namespace cch::tests::durable
-

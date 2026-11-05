@@ -3092,17 +3092,15 @@ class Audit1201Provider final : public cch::tui::AutocompleteProvider {
 public:
     void get_suggestions(const cch::tui::AutocompleteRequest&, cch::tui::AutocompleteResultSink sink) override {
         (void)sink(cch::tui::AutocompleteSuggestions{
-                .items =
-                        {{.value = "alice", .label = "alice", .description = std::string{"first"}},
-                         {.value = "amal", .label = "amal", .description = std::string{"second"}},
-                         {.value = "amanda", .label = "amanda", .description = std::string{"third"}},
-                         {.value = "amber", .label = "amber", .description = std::string{"fourth"}},
-                         {.value = "amy", .label = "amy", .description = std::string{"fifth"}}},
+                .items = {{.value = "alice", .label = "alice", .description = std::string{"first"}},
+                        {.value = "amal", .label = "amal", .description = std::string{"second"}},
+                        {.value = "amanda", .label = "amanda", .description = std::string{"third"}},
+                        {.value = "amber", .label = "amber", .description = std::string{"fourth"}},
+                        {.value = "amy", .label = "amy", .description = std::string{"fifth"}}},
                 .prefix = "@am",
         });
     }
-    cch::tui::AutocompleteApplyResult apply_completion(
-            const std::vector<std::string>& lines,
+    cch::tui::AutocompleteApplyResult apply_completion(const std::vector<std::string>& lines,
             std::size_t cursor_line,
             std::size_t cursor_column,
             const cch::tui::AutocompleteItem& item,
@@ -3127,7 +3125,8 @@ public:
 TEST_CASE("the C++ Editor exposes the frozen EditorComponent capability surface", "[tui][editor][issue1201]") {
     const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "editor-component.json");
     REQUIRE(artifact);
-    const auto* scenario = audit1201_editor_scenario(*artifact, "the editor component exposes every EditorComponent contract member");
+    const auto* scenario =
+            audit1201_editor_scenario(*artifact, "the editor component exposes every EditorComponent contract member");
     REQUIRE(scenario != nullptr);
     const auto& expected = scenario->at("expected");
 
@@ -3149,8 +3148,8 @@ TEST_CASE("the C++ Editor exposes the frozen EditorComponent capability surface"
     CHECK(expected.at("onChange").get_boolean());
 }
 
-TEST_CASE("the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
-        "[tui][editor][issue1201]") {
+TEST_CASE(
+        "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios", "[tui][editor][issue1201]") {
     const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "editor-component.json");
     REQUIRE(artifact);
 
@@ -3164,15 +3163,15 @@ TEST_CASE("the C++ Editor replays the frozen audit-1201 typing history and paste
         std::vector<std::string> changes;
         std::vector<std::string> submitted;
         cch::tui::Editor editor(
-            {},
-            [&changes](std::string text) -> cch::support::ExpectedVoid {
-                changes.push_back(std::move(text));
-                return {};
-            },
-            [&submitted](std::string text) -> cch::support::ExpectedVoid {
-                submitted.push_back(std::move(text));
-                return {};
-            });
+                {},
+                [&changes](std::string text) -> cch::support::ExpectedVoid {
+                    changes.push_back(std::move(text));
+                    return {};
+                },
+                [&submitted](std::string text) -> cch::support::ExpectedVoid {
+                    submitted.push_back(std::move(text));
+                    return {};
+                });
         type(editor, "h");
         type(editor, "\xc3\xa9");
         type(editor, "\xf0\x9f\x98\x80");
@@ -3234,15 +3233,16 @@ TEST_CASE("the C++ Editor replays the frozen audit-1201 typing history and paste
         editor.set_text("AB");
         key(editor, "home");
         key(editor, "right");
-        static_cast<void>(editor.handle_input(cch::tui::PasteEvent{.text = payload, .original_bytes = payload.size(), .lines = 12}));
+        static_cast<void>(editor.handle_input(
+                cch::tui::PasteEvent{.text = payload, .original_bytes = payload.size(), .lines = 12}));
         check_frozen_state(editor, expected.at("collapsed"));
         CHECK(editor.expanded_text() == "A" + payload + "B");
         CHECK(expected.at("expandedEqualsPayload").get_boolean());
     }
 }
 
-TEST_CASE("the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
-        "[tui][editor][issue1201]") {
+TEST_CASE(
+        "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame", "[tui][editor][issue1201]") {
     const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "editor-component.json");
     REQUIRE(artifact);
 
@@ -3268,18 +3268,19 @@ TEST_CASE("the C++ Editor replays the frozen audit-1201 autocomplete cap and pad
         std::size_t visibleItems = 0;
         for (const auto& line : rendered->lines) {
             if (line.find("alice") != std::string::npos || line.find("amal") != std::string::npos ||
-                line.find("amanda") != std::string::npos || line.find("amber") != std::string::npos ||
-                line.find("amy") != std::string::npos) {
+                    line.find("amanda") != std::string::npos || line.find("amber") != std::string::npos ||
+                    line.find("amy") != std::string::npos) {
                 ++visibleItems;
             }
         }
         CHECK(visibleItems == static_cast<std::size_t>(expected.at("visibleCount").get_number()));
         key(editor, "tab");
         CHECK(editor.text() == expected.at("applied").at("text").get_string());
-        CHECK((editor.cursor() == cch::tui::EditorCursor{
-                       .line = static_cast<std::size_t>(expected.at("applied").at("cursor").at("line").get_number()),
-                       .column = 5,
-               }));
+        CHECK((editor.cursor() ==
+                cch::tui::EditorCursor{
+                        .line = static_cast<std::size_t>(expected.at("applied").at("cursor").at("line").get_number()),
+                        .column = 5,
+                }));
     }
 
     // Padding and border styling shape the rendered frame.

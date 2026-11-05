@@ -356,8 +356,7 @@ ai::ModelStream answer_stream(std::string text) {
 // durable seam. The frozen capture admitted one input, resubmitted a changed
 // payload under the same request ID while busy, and observed the existing
 // submission returned with the changed payload never queued.
-TEST_CASE("the audit-1203 frozen duplicate-request observation replays in C++",
-        "[durable][workflow][issue1203]") {
+TEST_CASE("the audit-1203 frozen duplicate-request observation replays in C++", "[durable][workflow][issue1203]") {
     const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1203/steering.json",
             "a duplicate request ID returns the existing submission without queueing the payload twice");
     REQUIRE(frozen.has_value());
@@ -405,8 +404,7 @@ TEST_CASE("the audit-1203 frozen duplicate-request observation replays in C++",
                 for (const auto& item : *blocks) {
                     const auto* block = item.as_object();
                     if (block == nullptr) continue;
-                    if (const auto* text = block->at("text").as_string())
-                        transcript.push_back("pi.user:" + *text);
+                    if (const auto* text = block->at("text").as_string()) transcript.push_back("pi.user:" + *text);
                 }
             }
         }
@@ -2333,4 +2331,3 @@ TEST_CASE("concurrent Harness admissions serialize every submission on the Sessi
 }
 
 } // namespace cch::tests::durable
-

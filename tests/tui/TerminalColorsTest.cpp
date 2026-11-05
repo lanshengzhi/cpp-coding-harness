@@ -553,8 +553,8 @@ namespace {
 TEST_CASE("frozen audit-1201 OSC color replies replay through the C++ parser", "[tui][theme][issue1201]") {
     const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "terminal-colors.json");
     REQUIRE(artifact);
-    const auto* scenario = audit1201_scenario(
-            *artifact, "OSC color replies parse every frozen color form at its per-channel scale");
+    const auto* scenario =
+            audit1201_scenario(*artifact, "OSC color replies parse every frozen color form at its per-channel scale");
     REQUIRE(scenario != nullptr);
 
     for (const auto& entry : scenario->at("expected").at("parsed").get_array()) {
@@ -573,8 +573,9 @@ TEST_CASE("frozen audit-1201 OSC color replies replay through the C++ parser", "
         }
         REQUIRE(parsed.has_value());
         const auto& frozenTarget = result.at("target");
-        const auto expectedKey = frozenTarget.holds<std::string>() ? frozenTarget.get_string()
-                                                                     : std::format("{:d}", static_cast<int>(frozenTarget.get_number()));
+        const auto expectedKey = frozenTarget.holds<std::string>()
+                                         ? frozenTarget.get_string()
+                                         : std::format("{:d}", static_cast<int>(frozenTarget.get_number()));
         CHECK(parsed->target.key() == expectedKey);
         if (result.get_object().contains("rgb")) {
             REQUIRE(parsed->rgb.has_value());
@@ -591,8 +592,8 @@ TEST_CASE("frozen audit-1201 palette assembly binds at sixteen replies through t
         "[tui][theme][issue1201]") {
     const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "terminal-colors.json");
     REQUIRE(artifact);
-    const auto* scenario =
-            audit1201_scenario(*artifact, "the public color query sets the palette only when all sixteen replies arrive");
+    const auto* scenario = audit1201_scenario(
+            *artifact, "the public color query sets the palette only when all sixteen replies arrive");
     REQUIRE(scenario != nullptr);
     const auto& expected = scenario->at("expected");
 

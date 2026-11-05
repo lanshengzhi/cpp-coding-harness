@@ -4020,8 +4020,8 @@ TEST_CASE("a failed attempt publication commit never invokes the model stream", 
 // construction time.
 TEST_CASE("the audit-1203 frozen harness settings defaults replay in the C++ settings",
         "[durable][workflow][issue1203]") {
-    const auto frozen = FrozenScenario::load(
-            "fixtures/pi-v1.3.0/audit-1203/settings.json", "the harness settings defaults resolve with the frozen object-merge rules");
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1203/settings.json",
+            "the harness settings defaults resolve with the frozen object-merge rules");
     REQUIRE(frozen.has_value());
     const auto& defaults = frozen->expected().at("defaults");
 

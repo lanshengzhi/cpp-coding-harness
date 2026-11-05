@@ -4605,7 +4605,7 @@
           },
           {
             "path": "tests/durable/HarnessWorkflowTest.cpp",
-            "sha256": "8e16a672b21fe4cf1886a8c16834e45ccfc5fd9440cd1f2116a54f3b9d2590d1"
+            "sha256": "746304d43e45145cd0bfef1006f920e1611edf73c798c99a601b7b2f3c0f5356"
           },
           {
             "path": "tests/durable/Outcome.hpp",
@@ -8649,11 +8649,11 @@
           },
           {
             "path": "tests/tui/TerminalColorsTest.cpp",
-            "sha256": "32e682963bb5cc634fb0065d6acc9ddb02f05cb2f23f8de4ada99075c11af2e8"
+            "sha256": "eb3c926c99f6ce7f967da7599023622a26f17d5affc412398f038021eaeb084a"
           },
           {
             "path": "tests/tui/EditorTest.cpp",
-            "sha256": "614cccb4852dfece0cab1e54704eef63c1f7f5e414ac4342d8d0adcb989592f6"
+            "sha256": "ddf13b7aaf2bf2ba40de6956b7d8b5627c847c8d6c1c0421207f4892c03e0047"
           },
           {
             "path": "tests/tui/NativeClipboardTest.cpp",
@@ -9286,15 +9286,15 @@
         "inputs": [
           {
             "path": "tests/durable/HarnessOwnershipTest.cpp",
-            "sha256": "c824b4d1d64c05ca752f4da1df5664de007f407b742e3abe9b4855497473eee7"
+            "sha256": "2f1f2a0de7d1f403a8303520721f3369f6e687baf5403b2b89578473c086348f"
           },
           {
             "path": "tests/durable/HarnessSubmissionsTest.cpp",
-            "sha256": "17baa60dfaded2c71acf906a4e54d2486a18d9cbafb2f6ddf8deebf00fd3e9a1"
+            "sha256": "83587b9c7596f07c71486d68cbf516725489f912ffbdee6980878fd6de4b116c"
           },
           {
             "path": "tests/durable/HarnessWorkflowTest.cpp",
-            "sha256": "8e16a672b21fe4cf1886a8c16834e45ccfc5fd9440cd1f2116a54f3b9d2590d1"
+            "sha256": "746304d43e45145cd0bfef1006f920e1611edf73c798c99a601b7b2f3c0f5356"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1203/ownership.json",
