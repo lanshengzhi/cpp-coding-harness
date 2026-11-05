@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="29"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="1"
+	timestamp="2026-11-06T07:10:26"
+	>
+	<testcase name="Input aligns placeholder styling, LF submission, and scrolling with frozen pi" classname="Input aligns placeholder styling, LF submission, and scrolling with frozen pi" time="0.195926" status="run">
+		<properties>
+			<property name="cmake_labels" value="input;issue1216;issue962;tui"/>
+		</properties>
+		<system-out>Filters: "Input aligns placeholder styling\, LF submission\, and scrolling with frozen pi"
+Randomness seeded to: 4162206759
+===============================================================================
+All tests passed (33 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an input press maps grapheme widths and the scrolled window&apos;s start column" classname="pi-v1.3.0 an input press maps grapheme widths and the scrolled window&apos;s start column" time="0.215396" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1216;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an input press maps grapheme widths and the scrolled window's start column"
+Randomness seeded to: 1854880322
+===============================================================================
+All tests passed (129 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an input press past the last grapheme clamps to the value length" classname="pi-v1.3.0 an input press past the last grapheme clamps to the value length" time="0.212154" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1216;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an input press past the last grapheme clamps to the value length"
+Randomness seeded to: 3883710827
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an input press positions the cursor and later gestures stay unhandled" classname="pi-v1.3.0 an input press positions the cursor and later gestures stay unhandled" time="0.21528" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1216;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an input press positions the cursor and later gestures stay unhandled"
+Randomness seeded to: 3439683487
+===============================================================================
+All tests passed (82 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 boundary deletions at empty value are consumed no-ops" classname="pi-v1.3.0 boundary deletions at empty value are consumed no-ops" time="0.224302" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 boundary deletions at empty value are consumed no-ops"
+Randomness seeded to: 112218213
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 input escape cancel and invalidate replay the frozen observation" classname="pi-v1.3.0 input escape cancel and invalidate replay the frozen observation" time="0.227216" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 input escape cancel and invalidate replay the frozen observation"
+Randomness seeded to: 2064868915
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 input grapheme deletion and boundary operations replay the frozen observation" classname="pi-v1.3.0 input grapheme deletion and boundary operations replay the frozen observation" time="0.230478" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 input grapheme deletion and boundary operations replay the frozen observation"
+Randomness seeded to: 618947698
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 input line kill and yank rotation replay the frozen observation" classname="pi-v1.3.0 input line kill and yank rotation replay the frozen observation" time="0.225593" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 input line kill and yank rotation replay the frozen observation"
+Randomness seeded to: 3052666099
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 input paste buffering and normalization replay the frozen observation" classname="pi-v1.3.0 input paste buffering and normalization replay the frozen observation" time="0.221794" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 input paste buffering and normalization replay the frozen observation"
+Randomness seeded to: 2007998628
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 input rebound submit and fallthrough replay the frozen observation" classname="pi-v1.3.0 input rebound submit and fallthrough replay the frozen observation" time="0.224564" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 input rebound submit and fallthrough replay the frozen observation"
+Randomness seeded to: 2610305789
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 input undo coalescing and snapshots replay the frozen observation" classname="pi-v1.3.0 input undo coalescing and snapshots replay the frozen observation" time="0.215962" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 input undo coalescing and snapshots replay the frozen observation"
+Randomness seeded to: 336984658
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 input word navigation and deletion replay the frozen observation" classname="pi-v1.3.0 input word navigation and deletion replay the frozen observation" time="0.220248" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 input word navigation and deletion replay the frozen observation"
+Randomness seeded to: 2797942377
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 input word navigation revisits the frozen boundaries in reverse and clamps at the edges" classname="pi-v1.3.0 input word navigation revisits the frozen boundaries in reverse and clamps at the edges" time="0.213204" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 input word navigation revisits the frozen boundaries in reverse and clamps at the edges"
+Randomness seeded to: 576811683
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 invalidate leaves the rendered frame byte-identical" classname="pi-v1.3.0 invalidate leaves the rendered frame byte-identical" time="0.217321" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 invalidate leaves the rendered frame byte-identical"
+Randomness seeded to: 701248465
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 kill at value edge is a no-op and pushes no undo snapshot" classname="pi-v1.3.0 kill at value edge is a no-op and pushes no undo snapshot" time="0.225595" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 kill at value edge is a no-op and pushes no undo snapshot"
+Randomness seeded to: 842873240
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 prompt boundary width truncates the prompt and renders no placeholder cell" classname="pi-v1.3.0 prompt boundary width truncates the prompt and renders no placeholder cell" time="0.222181" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 prompt boundary width truncates the prompt and renders no placeholder cell"
+Randomness seeded to: 2601622216
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 rebound submit key submits once and inserts no newline or characters" classname="pi-v1.3.0 rebound submit key submits once and inserts no newline or characters" time="0.224438" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 rebound submit key submits once and inserts no newline or characters"
+Randomness seeded to: 3743874313
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 rendering across several widths never mutates the input value" classname="pi-v1.3.0 rendering across several widths never mutates the input value" time="0.225153" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 rendering across several widths never mutates the input value"
+Randomness seeded to: 4263027457
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 sequential pastes insert independently and submit nothing" classname="pi-v1.3.0 sequential pastes insert independently and submit nothing" time="0.220348" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 sequential pastes insert independently and submit nothing"
+Randomness seeded to: 3008186825
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 set_value clamps the cursor and pushes no undo snapshot" classname="pi-v1.3.0 set_value clamps the cursor and pushes no undo snapshot" time="0.229091" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 set_value clamps the cursor and pushes no undo snapshot"
+Randomness seeded to: 715404872
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the input marker pair resolves in order and leaves the frozen visible frame" classname="pi-v1.3.0 the input marker pair resolves in order and leaves the frozen visible frame" time="0.221476" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the input marker pair resolves in order and leaves the frozen visible frame"
+Randomness seeded to: 2300529641
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 typed tab is ignored while pasted tab expands to four spaces" classname="pi-v1.3.0 typed tab is ignored while pasted tab expands to four spaces" time="0.216418" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 typed tab is ignored while pasted tab expands to four spaces"
+Randomness seeded to: 2229485029
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 typing after an escape still inserts text cleanly" classname="pi-v1.3.0 typing after an escape still inserts text cleanly" time="0.214685" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 typing after an escape still inserts text cleanly"
+Randomness seeded to: 1179056868
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 typing between yank and yank-pop breaks yank-pop rotation" classname="pi-v1.3.0 typing between yank and yank-pop breaks yank-pop rotation" time="0.221139" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 typing between yank and yank-pop breaks yank-pop rotation"
+Randomness seeded to: 4162442888
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 undo exhaustion leaves value and cursor untouched" classname="pi-v1.3.0 undo exhaustion leaves value and cursor untouched" time="0.221801" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 undo exhaustion leaves value and cursor untouched"
+Randomness seeded to: 3478088101
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 undo restores the pre-edit cursor column that the frozen observation binds" classname="pi-v1.3.0 undo restores the pre-edit cursor column that the frozen observation binds" time="0.217314" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 undo restores the pre-edit cursor column that the frozen observation binds"
+Randomness seeded to: 2452931144
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 whitespace-only value clamps word navigation at both edges" classname="pi-v1.3.0 whitespace-only value clamps word navigation at both edges" time="0.216306" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 whitespace-only value clamps word navigation at both edges"
+Randomness seeded to: 3415997607
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 yank on an empty kill ring leaves value and undo stack untouched" classname="pi-v1.3.0 yank on an empty kill ring leaves value and undo stack untouched" time="0.217412" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;input;issue1216;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 yank on an empty kill ring leaves value and undo stack untouched"
+Randomness seeded to: 1325491320
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the standalone input draws a strippable fake cursor marker" classname="the standalone input draws a strippable fake cursor marker" time="0.21652" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1216;spec;tui"/>
+		</properties>
+		<system-out>Filters: "the standalone input draws a strippable fake cursor marker"
+Randomness seeded to: 1137893482
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

@@ -796,9 +796,10 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # #1229 withdraws the fourteen unexercised ScreenStateGoldenTest claims from
         # 1209-root-tui-lifecycle (the 182 discriminating-case rows were already
         # reverted and stay reverted as bounded claims). #1215 (route batch B7)
-        # receipted 80 editor rows whole-row: 275. #1216 (route batch B8)
-        # receipted 51 markdown/latex rows whole-row: 356.
-        self.assertEqual(len(delivered), 356)
+        # receipted 80 editor rows whole-row: 275. #1217 (route batch B9)
+        # receipted 51 markdown/latex rows whole-row: 356. #1218 (route batch B10)
+        # receipted 49 color rows whole-row: 405.
+        self.assertEqual(len(delivered), 405)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)
