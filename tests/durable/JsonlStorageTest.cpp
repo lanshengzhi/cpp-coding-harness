@@ -518,7 +518,11 @@ TEST_CASE("a failed C++ task marker recovers for frozen pi continuation", "[dura
     REQUIRE((*final_storage)->close());
 }
 
-TEST_CASE("JSONL recovery rejects a task sidecar symlink without changing its target", "[durable][jsonl][issue1085]") {
+TEST_CASE("JSONL recovery skips an unreferenced task sidecar symlink without changing its target",
+        "[durable][jsonl][issue1085][issue1180]") {
+    // Frozen parity (ADR 0076): recovery enumeration sees the symlinked task
+    // sidecar as absent, so the store opens and the outside target is neither
+    // read nor torn-tail truncated.
     TempWorkspace store;
     TempWorkspace outside;
     outside.write("user-data", "complete\npartial");
@@ -526,7 +530,45 @@ TEST_CASE("JSONL recovery rejects a task sidecar symlink without changing its ta
     std::filesystem::create_symlink(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
     REQUIRE_FALSE(error);
     auto opened = JsonlStorage::open(store.path());
-    CHECK_FALSE(opened.has_value());
+    CHECK(opened.has_value());
+    CHECK(outside.read("user-data") == "complete\npartial");
+    CHECK(std::filesystem::is_symlink(store.path() / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+    if (opened) {
+        REQUIRE((*opened)->close());
+    }
+}
+
+TEST_CASE("JSONL recovery fails a live marker over a symlinked task sidecar without reading its target",
+        "[durable][jsonl][issue1180]") {
+    // Frozen parity (ADR 0076): the symlinked sidecar is absent at recovery
+    // enumeration, so the live marker's confirmed record is missing and the
+    // open fails with the frozen corruption. The outside target is not read
+    // and not torn-tail truncated even though it holds garbage.
+    TempWorkspace store;
+    TempWorkspace outside;
+    outside.write("user-data", "complete\npartial");
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    {
+        auto storage = JsonlStorage::open(store.path());
+        REQUIRE(storage);
+        const std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+        REQUIRE(consume((*storage)->commit(writes)).has_value());
+        REQUIRE((*storage)->close());
+    }
+    std::error_code error;
+    REQUIRE(std::filesystem::remove(store.path() / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+    std::filesystem::create_symlink(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
+    REQUIRE_FALSE(error);
+
+    auto reopened = JsonlStorage::open(store.path());
+    REQUIRE_FALSE(reopened.has_value());
+    CHECK(reopened.error().message == "Missing confirmed sidecar record task-2.jsonl at sequence 1");
     CHECK(outside.read("user-data") == "complete\npartial");
 }
 
@@ -542,19 +584,50 @@ TEST_CASE("JSONL recovery preserves a hard-linked external file", "[durable][jso
     CHECK(outside.read("user-data") == "complete\npartial");
 }
 
-TEST_CASE("JSONL task append rejects external file aliases", "[durable][jsonl][issue1085]") {
+TEST_CASE("JSONL task append follows a final sidecar symlink and fails the next open frozen-closed",
+        "[durable][jsonl][issue1085][issue1180]") {
+    // Frozen parity (ADR 0076): the commit appends through the final symlink
+    // into the outside target, exactly like frozen pi's appendFile. The
+    // following reopen skips the symlink at enumeration and fails closed with
+    // the frozen missing-confirmed-sidecar corruption while the target keeps
+    // the orphan sidecar bytes.
+    TempWorkspace store;
+    TempWorkspace outside;
+    outside.write("user-data", "preexisting\n");
+    auto opened = JsonlStorage::open(store.path());
+    REQUIRE(opened);
+    std::error_code error;
+    std::filesystem::create_symlink(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
+    REQUIRE_FALSE(error);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    const std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    auto result = consume((*opened)->commit(writes));
+    REQUIRE(result.has_value());
+    CHECK(outside.read("user-data").starts_with("preexisting\n"));
+    CHECK(outside.read("user-data").find("\"seq\":1") != std::string::npos);
+    REQUIRE((*opened)->close());
+
+    auto reopened = JsonlStorage::open(store.path());
+    REQUIRE_FALSE(reopened.has_value());
+    CHECK(reopened.error().message == "Missing confirmed sidecar record task-2.jsonl at sequence 1");
+    CHECK(outside.read("user-data").find("\"seq\":1") != std::string::npos);
+}
+
+TEST_CASE("JSONL task append rejects a hard-linked external file", "[durable][jsonl][issue1085][issue1180]") {
+    // Retained boundary (ADR 0076): the singly-linked check still refuses a
+    // hard-link alias before anything is appended, so the outside target is
+    // never modified, unlike frozen pi which follows the link.
     TempWorkspace store;
     TempWorkspace outside;
     outside.write("user-data", "untouched");
     auto opened = JsonlStorage::open(store.path());
     REQUIRE(opened);
     std::error_code error;
-    SECTION("symlink") {
-        std::filesystem::create_symlink(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
-    }
-    SECTION("hard link") {
-        std::filesystem::create_hard_link(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
-    }
+    std::filesystem::create_hard_link(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
     REQUIRE_FALSE(error);
     TaskRecord task{.id = TaskId{.value = 2},
             .kind = "work",
@@ -566,6 +639,46 @@ TEST_CASE("JSONL task append rejects external file aliases", "[durable][jsonl][i
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error().message == "JSONL storage is poisoned and must be reopened");
     CHECK(outside.read("user-data") == "untouched");
+}
+
+TEST_CASE("JSONL terminal reclamation unlinks an adopted symlink entry and keeps the outside bytes",
+        "[durable][jsonl][issue1085][issue1180]") {
+    // Frozen parity (ADR 0076): a live commit adopts and appends through the
+    // symlink; the terminal commit reclaims the entry itself, so the outside
+    // target keeps the orphan sidecar bytes and the reopen reads the inline
+    // terminal record.
+    TempWorkspace store;
+    TempWorkspace outside;
+    outside.write("user-data", "");
+    auto storage = JsonlStorage::open(store.path());
+    REQUIRE(storage);
+    std::error_code error;
+    std::filesystem::create_symlink(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
+    REQUIRE_FALSE(error);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    CHECK(outside.read("user-data").find("\"seq\":1") != std::string::npos);
+
+    task.state = TaskState{.status = "terminal", .outcome = TaskOutcome{.status = "completed"}};
+    writes = {StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    CHECK_FALSE(std::filesystem::exists(store.path() / "task-2.jsonl", error));
+    REQUIRE_FALSE(error);
+    CHECK(outside.read("user-data").find("\"seq\":1") != std::string::npos);
+    REQUIRE((*storage)->close());
+
+    auto reopened = JsonlStorage::open(store.path());
+    REQUIRE(reopened.has_value());
+    const auto restored = (*reopened)->task(TaskId{.value = 2});
+    REQUIRE(restored.has_value());
+    REQUIRE(restored->has_value());
+    CHECK((*restored)->state.status == "terminal");
+    REQUIRE((*reopened)->close());
 }
 
 TEST_CASE("JSONL terminal reclamation keeps an external sidecar through a replaced store directory",
@@ -1843,21 +1956,100 @@ TEST_CASE("JSONL fsync flushes sidecar bytes before the main marker is appended"
     }
 }
 
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1180/sidecar-order.json
+// "a JSONL commit appends two sidecars in write order before the main marker"
+// and "JSONL fsync flushes two sidecars in append order before the main
+// marker", captured under #1180 after the registered audit-1054 observations
+// pinned only one-sidecar commits (ADR 0076).
+//
+// Discriminating case: the creates run in descending ID order (9 then 3), so
+// a backend that appends sidecars in sorted filename order produces
+// [doc-3, doc-9, main] and fails the recorded frozen trace even though every
+// file exists with the right content.
+TEST_CASE("a JSONL commit appends two sidecars in frozen write order before the main marker",
+        "[durable][jsonl][issue1180][spec]") {
+    constexpr std::string_view kArtifact = "fixtures/pi-v1.3.0/audit-1180/sidecar-order.json";
+
+    const auto create_document = [](std::int64_t id, std::string key, std::string text) {
+        return StorageWrite{.type = "document.create",
+                .document_record =
+                        DocumentRecord{.id = DocumentId{.value = id}, .kind = "note", .key = std::move(key)},
+                .document_value = chord::Json{chord::Json::Object{{"text", chord::Json{std::move(text)}}}}};
+    };
+
+    const auto run_shape = [&](bool fsync, std::string_view scenario_name) {
+        const auto loaded = FrozenScenario::load(kArtifact, scenario_name);
+        REQUIRE(loaded.has_value());
+        const auto* expected = loaded->expected().get_if<support::JsonValue::object_t>();
+        REQUIRE(expected != nullptr);
+        const std::vector<std::string> appends = frozen_strings(*expected, "appendOrder");
+        const std::vector<std::string> flushes = frozen_strings(*expected, "flushOrder");
+        CHECK(appends == (std::vector<std::string>{"doc-9.jsonl", "doc-3.jsonl", "main.jsonl"}));
+        if (fsync) {
+            CHECK(flushes == (std::vector<std::string>{"doc-9.jsonl", "doc-3.jsonl"}));
+        } else {
+            CHECK(flushes.empty());
+        }
+
+        TempWorkspace workspace;
+        start_io_trace();
+        auto opened = JsonlStorage::open(workspace.path(), JsonlStorageOptions{.fsync = fsync});
+        REQUIRE(opened.has_value());
+        clear_io_trace();
+        const std::vector<StorageWrite> creates{create_document(9, "k9", "nine"), create_document(3, "k3", "three")};
+        REQUIRE(consume((*opened)->commit(creates)).has_value());
+
+        std::vector<std::string> operations;
+        for (std::size_t index = 0; index + 1 < appends.size(); ++index) {
+            operations.push_back("append:" + appends[index]);
+        }
+        for (const std::string& file : flushes) {
+            operations.push_back("flush:" + file);
+        }
+        operations.push_back("append:" + appends.back());
+        CHECK(jsonl_io_log().operations == operations);
+
+        // The store bytes match the frozen files: the sidecar records, the
+        // marker's write order, and the ordinal numbering are all part of the
+        // value comparison.
+        const auto* frozen_files = support::json_array_member(*expected, "files");
+        REQUIRE(frozen_files != nullptr);
+        for (const support::JsonValue& file_value : *frozen_files) {
+            const auto* file = file_value.get_if<support::JsonValue::object_t>();
+            REQUIRE(file != nullptr);
+            const auto name = support::json_string_member(*file, "name");
+            const auto text = support::json_string_member(*file, "text");
+            REQUIRE(name.has_value());
+            REQUIRE(text.has_value());
+            const auto frozen_lines = json_lines(*text);
+            const auto actual_lines = json_lines(workspace.read(std::string{*name}));
+            REQUIRE(actual_lines.size() == frozen_lines.size());
+            for (std::size_t index = 0; index < frozen_lines.size(); ++index) {
+                CHECK(canonical_text(actual_lines[index]) == canonical_text(frozen_lines[index]));
+            }
+        }
+        stop_io_trace();
+        REQUIRE((*opened)->close());
+    };
+
+    run_shape(false, "a JSONL commit appends two sidecars in write order before the main marker");
+    run_shape(true, "JSONL fsync flushes two sidecars in append order before the main marker");
+}
+
 // Frozen evidence: packages/durable/test/jsonl-storage.test.ts
 // "orders publication flushes exactly and flushes main only to authorize
-// reclamation". The registered audit-1054 observation pins only the single
-// document commit above; this trace extends the same contract over the four
-// publication shapes the frozen test separates.
+// reclamation", plus the registered audit-1180 two-sidecar capture
+// "a JSONL commit appends two sidecars in write order before the main marker".
+// The registered audit-1054 observation pins only the single document commit
+// above; this trace extends the same contract over the four publication shapes
+// the frozen test separates, and the two creates run in descending ID order so
+// frozen write order is discriminated from sorted filename order (ADR 0076).
 //
-// Recorded divergence, not fixed in this ticket: frozen pi appends sidecars in
-// write order, while the C++ encoder emits them in sorted filename order
-// (`EncodedCommit::sidecars`). The trace creates documents in ascending ID
-// order so the two orders coincide; changing the encoder is out of scope here.
-//
-// Discriminating case: a flush emitted after the marker, or one emitted for a
-// commit that reclaims nothing, fails the entry-only and terminal-task traces.
+// Discriminating case: a flush emitted after the marker, one emitted for a
+// commit that reclaims nothing, or a sidecar append in sorted filename order
+// fails the entry-only, terminal-task and two-create traces.
 TEST_CASE("JSONL publication flushes exactly and flushes main only to authorize reclamation",
-        "[durable][jsonl][fsync][issue1174]") {
+        "[durable][jsonl][fsync][issue1174][issue1180]") {
     for (const bool fsync : {false, true}) {
         TempWorkspace workspace;
         start_io_trace();
@@ -1872,8 +2064,10 @@ TEST_CASE("JSONL publication flushes exactly and flushes main only to authorize 
         const std::string first = "doc-" + std::to_string(*first_id) + ".jsonl";
         const std::string second = "doc-" + std::to_string(*second_id) + ".jsonl";
 
-        // Two session-scoped document creates: every sidecar is appended in
-        // order, then flushed in that same order, then the marker is appended.
+        // Two session-scoped document creates in descending ID order: every
+        // sidecar is appended in frozen write order (not sorted filename
+        // order), then flushed in that same order, then the marker is
+        // appended.
         clear_io_trace();
         const auto create_document = [](std::int64_t id, std::string kind) {
             return StorageWrite{.type = "document.create",
@@ -1881,13 +2075,13 @@ TEST_CASE("JSONL publication flushes exactly and flushes main only to authorize 
                     .document_value = chord::Json{chord::Json::Object{}}};
         };
         const std::vector<StorageWrite> creates{
-                create_document(*first_id, "audit1174.first"), create_document(*second_id, "audit1174.second")};
+                create_document(*second_id, "audit1174.second"), create_document(*first_id, "audit1174.first")};
         REQUIRE(consume((*opened)->commit(creates)).has_value());
         const std::vector<std::string> expected_creates = [&] {
-            std::vector<std::string> operations{"append:" + first, "append:" + second};
+            std::vector<std::string> operations{"append:" + second, "append:" + first};
             if (fsync) {
-                operations.push_back("flush:" + first);
                 operations.push_back("flush:" + second);
+                operations.push_back("flush:" + first);
             }
             operations.push_back("append:main.jsonl");
             return operations;

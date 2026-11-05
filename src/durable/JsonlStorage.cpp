@@ -274,12 +274,13 @@ struct OpenedTaskFile {
     FileIdentity identity{};
 };
 
-/// Open a task sidecar relative to the captured store directory. O_NOFOLLOW
-/// rejects a final symlink, and the regular single-link check rejects hard
-/// links before anything is read, truncated, or appended.
+/// Open a task sidecar relative to the captured store directory. A final
+/// symbolic link is followed, mirroring frozen pi (ADR 0076); the regular
+/// single-link check still rejects hard-link aliases before anything is read,
+/// truncated, or appended.
 [[nodiscard]] support::Expected<OpenedTaskFile> open_task_file(int directory_fd, std::string_view name, int flags) {
     const std::string entry{name};
-    const int fd = ::openat(directory_fd, entry.c_str(), flags | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0600);
+    const int fd = ::openat(directory_fd, entry.c_str(), flags | O_CLOEXEC | O_NONBLOCK, 0600);
     if (fd < 0) return std::unexpected(corruption("JSONL task sidecar open failed"));
     support::UniqueFd file{fd};
     struct stat info{};
@@ -289,15 +290,18 @@ struct OpenedTaskFile {
 }
 
 /// Unlink only the task sidecar whose identity was observed while opening the
-/// store. A substituted entry is left alone; a link placed between this check
-/// and unlinkat remains a race outside the single-owner storage contract.
+/// store. The status follows a final symlink so a sidecar adopted and appended
+/// through its link is reclaimed exactly like frozen pi's `remove`: the entry
+/// itself goes and the outside target keeps its bytes (ADR 0076). A
+/// substituted entry is left alone; a link placed between this check and
+/// unlinkat remains a race outside the single-owner storage contract.
 [[nodiscard]] support::ExpectedVoid reclaim_task_file(
         int directory_fd, std::string_view name, std::map<std::string, FileIdentity>& identities) {
     const std::string entry{name};
     const auto known = identities.find(entry);
     if (known == identities.end()) return {};
     struct stat info{};
-    if (::fstatat(directory_fd, entry.c_str(), &info, AT_SYMLINK_NOFOLLOW) != 0) {
+    if (::fstatat(directory_fd, entry.c_str(), &info, 0) != 0) {
         if (errno == ENOENT) {
             identities.erase(entry);
             return {};
@@ -1030,8 +1034,13 @@ struct MainMarker {
 
 struct EncodedCommit {
     std::string marker;
-    std::map<std::string, std::string> sidecars;
-    std::map<std::string, std::string> reclamations;
+    // Publication order is frozen commit write order (ADR 0076): the first
+    // insertion order of each sidecar file, not sorted filename order.
+    std::vector<std::pair<std::string, std::string>> sidecars;
+    // Reclamation order mirrors frozen `planReclamations`: retired
+    // current-only documents, then base replacements, then final tasks, each
+    // in commit write order.
+    std::vector<std::pair<std::string, std::string>> reclamations;
 };
 
 /// Read and parse one existing document sidecar file.
@@ -1054,14 +1063,22 @@ struct EncodedCommit {
         const std::set<std::int64_t>& current_only_documents,
         const std::filesystem::path& directory) {
     std::vector<support::JsonValue> main_writes;
-    std::map<std::string, std::string> sidecars;
+    std::map<std::string, std::string> sidecar_contents;
+    std::vector<std::string> sidecar_order;
     std::set<std::int64_t> retired;
+    std::vector<std::int64_t> retired_order;
+    std::map<std::int64_t, bool> final_task_state;
+    std::vector<std::int64_t> final_task_order;
     std::map<std::string, std::size_t> base_offsets;
+    std::vector<std::string> base_order;
     std::int64_t next_ordinal = 0;
 
     const auto add_sidecar = [&](std::string file, SidecarRecord record) {
         record.ordinal = next_ordinal++;
-        sidecars[file] += sidecar_line(record) + "\n";
+        if (!sidecar_contents.contains(file)) {
+            sidecar_order.push_back(file);
+        }
+        sidecar_contents[file] += sidecar_line(record) + "\n";
         return record.ordinal;
     };
 
@@ -1160,7 +1177,10 @@ struct EncodedCommit {
         } else if (write.type == "document.change") {
             const std::string file = document_file(*write.document_id);
             const bool base = write.document_ops.empty();
-            const std::size_t base_offset = sidecars[file].size();
+            // `find`, not `operator[]`: inserting the entry here would make
+            // the add_sidecar order tracking see the file as already known.
+            const auto existing = sidecar_contents.find(file);
+            const std::size_t base_offset = existing == sidecar_contents.end() ? 0 : existing->second.size();
             const std::int64_t ordinal = add_sidecar(file,
                     SidecarRecord{.seq = seq,
                             .ordinal = 0,
@@ -1169,6 +1189,9 @@ struct EncodedCommit {
                                             .version = write.document_version,
                                             .value = write.document_value.value_or(chord::Json{}),
                                             .ops = write.document_ops}}});
+            if (base && !base_offsets.contains(file)) {
+                base_order.push_back(file);
+            }
             if (base) {
                 base_offsets[file] = base_offset;
             }
@@ -1176,7 +1199,9 @@ struct EncodedCommit {
                     {"id", number(write.document_id->value)},
                     {"ordinal", number(ordinal)}}));
         } else if (write.type == "document.retire") {
-            retired.insert(write.document_id->value);
+            if (retired.insert(write.document_id->value).second) {
+                retired_order.push_back(write.document_id->value);
+            }
             main_writes.push_back(object(
                     {{"type", support::JsonValue{"document.retire"}}, {"id", number(write.document_id->value)}}));
         }
@@ -1192,33 +1217,45 @@ struct EncodedCommit {
             {"seq", number(seq)},
             {"writes", support::JsonValue{std::move(encoded_writes)}}});
     auto marker_text = support::write_json(marker);
-    EncodedCommit encoded{.marker = marker_text ? *marker_text + "\n" : std::string{},
-            .sidecars = std::move(sidecars),
-            .reclamations = {}};
     // Terminal publication makes a live task sidecar reclaimable. Reclaiming
     // only after the marker leaves a published result recoverable on failure.
-    std::map<std::int64_t, bool> final_tasks;
+    // The state map takes the last write per task while the order vector keeps
+    // the first-occurrence write order, mirroring the frozen finalTasks Map.
     for (const StorageWrite& write : writes) {
-        if (write.type == "task" && write.task)
-            final_tasks[write.task->id.value] = write.task->state.status == "terminal";
-    }
-    for (const auto& [id, terminal] : final_tasks) {
-        if (terminal) encoded.reclamations[task_file(TaskId{.value = id})] = {};
-    }
-    // A current-only incarnation keeps no history, so its sidecar is removed
-    // on retirement and replaced by its newest base. A rewindable incarnation
-    // keeps its sidecar so as-of reads still reach earlier revisions.
-    for (const std::int64_t id : retired) {
-        if (current_only_documents.contains(id)) {
-            encoded.reclamations[document_file(DocumentId{.value = id})] = {};
+        if (write.type == "task" && write.task) {
+            const std::int64_t id = write.task->id.value;
+            if (!final_task_state.contains(id)) {
+                final_task_order.push_back(id);
+            }
+            final_task_state[id] = write.task->state.status == "terminal";
         }
     }
-    for (const auto& [file, offset] : base_offsets) {
+
+    EncodedCommit encoded{.marker = marker_text ? *marker_text + "\n" : std::string{}, .sidecars = {}, .reclamations = {}};
+    // A current-only incarnation keeps no history, so its sidecar is removed
+    // on retirement and replaced by its newest base. A rewindable incarnation
+    // keeps its sidecar so as-of reads still reach earlier revisions. The
+    // group and write order mirror frozen planReclamations (ADR 0076).
+    for (const std::int64_t id : retired_order) {
+        if (current_only_documents.contains(id)) {
+            encoded.reclamations.emplace_back(document_file(DocumentId{.value = id}), "");
+        }
+    }
+    for (const std::string& file : base_order) {
         const auto id = document_id_from_file(file);
         if (!id || retired.contains(id->value) || !current_only_documents.contains(id->value)) {
             continue;
         }
-        encoded.reclamations[file] = encoded.sidecars[file].substr(offset);
+        encoded.reclamations.emplace_back(file, sidecar_contents[file].substr(base_offsets[file]));
+    }
+    for (const std::int64_t id : final_task_order) {
+        if (final_task_state[id]) {
+            encoded.reclamations.emplace_back(task_file(TaskId{.value = id}), "");
+        }
+    }
+    encoded.sidecars.reserve(sidecar_order.size());
+    for (const std::string& file : sidecar_order) {
+        encoded.sidecars.emplace_back(file, std::move(sidecar_contents[file]));
     }
     return encoded;
 }
@@ -1256,9 +1293,10 @@ struct JsonlStorage::Impl {
     }
 
     /// Flush one sidecar the store just appended. A task sidecar is reopened
-    /// through the no-follow, single-link boundary and must still be the entry
-    /// observed at append time, so a substituted file is never flushed as if
-    /// the store had written it (#1085).
+    /// through the single-link boundary and must still be the entry observed
+    /// at append time, so a substituted file is never flushed as if the store
+    /// had written it (#1085). A final symlink resolves to the adopted target
+    /// (ADR 0076).
     [[nodiscard]] support::ExpectedVoid flush_sidecar(std::string_view file) {
         if (!task_id_from_file(file)) {
             return flush_file(directory / std::string{file});
@@ -1275,8 +1313,9 @@ struct JsonlStorage::Impl {
     /// Apply one reclamation pass (frozen pi `reclaimSidecars`). The marker
     /// already published this state, so a failure defers the whole pass and
     /// never changes a commit or recovery outcome. With fsync, `main.jsonl` is
-    /// flushed first: its marker bytes authorize every replacement and removal.
-    void reclaim_sidecars(const std::map<std::string, std::string>& replacements) {
+    /// flushed first: its marker bytes authorize every replacement and
+    /// removal. The plan order is the encoder's frozen write order.
+    void reclaim_sidecars(const std::vector<std::pair<std::string, std::string>>& replacements) {
         if (replacements.empty()) {
             return;
         }
@@ -1343,6 +1382,14 @@ struct JsonlStorage::Impl {
         for (const std::filesystem::directory_entry& entry : iterator) {
             const std::string name = entry.path().filename().string();
             if (task_id_from_file(name).has_value()) {
+                // Frozen parity (ADR 0076): recovery enumeration sees a
+                // symlinked task sidecar as absent, so its outside target is
+                // never read or truncated; a live marker then fails closed
+                // with the missing-confirmed-sidecar corruption.
+                std::error_code link_error;
+                if (entry.is_symlink(link_error) && !link_error) {
+                    continue;
+                }
                 sidecar_files.push_back(name);
                 continue;
             }
@@ -1556,7 +1603,10 @@ struct JsonlStorage::Impl {
             }
         }
 
-        std::map<std::string, std::string> reclamations;
+        // Recovery enumerates sidecars in the deterministic sorted order;
+        // the plan keeps that order (frozen pi iterates host directory order,
+        // which no registered scenario observes).
+        std::vector<std::pair<std::string, std::string>> reclamations;
         for (auto& [file, lines] : parsed_files) {
             std::optional<std::size_t> unconfirmed_start;
             for (const ParsedSidecar& line : lines) {
@@ -1617,7 +1667,7 @@ struct JsonlStorage::Impl {
                     // Published state is already established; a cleanup failure
                     // leaves the sidecar for a later retry instead of hiding it
                     // behind an open failure.
-                    reclamations[file] = {};
+                    reclamations.emplace_back(file, "");
                 }
                 continue;
             }
@@ -1626,7 +1676,7 @@ struct JsonlStorage::Impl {
                 continue;
             }
             if (lines.empty() || retired.contains(id->value)) {
-                reclamations[file] = {};
+                reclamations.emplace_back(file, "");
                 continue;
             }
             const auto base = latest_bases.find(id->value);
@@ -1644,14 +1694,14 @@ struct JsonlStorage::Impl {
                 continue;
             }
             if (retained.empty()) {
-                reclamations[file] = {};
+                reclamations.emplace_back(file, "");
                 continue;
             }
             std::string content;
             for (const ParsedSidecar& line : retained) {
                 content += sidecar_line(line.record) + "\n";
             }
-            reclamations[file] = std::move(content);
+            reclamations.emplace_back(file, std::move(content));
         }
         // Truncation is part of recovery and stays ungated; reclamation is
         // retryable maintenance applied once the plan is complete.
@@ -1702,11 +1752,21 @@ struct JsonlStorage::Impl {
                     return std::unexpected(poison_error());
                 }
                 const auto known = task_identities.find(file);
-                // With no observed entry, create exclusively: a sidecar that
-                // reappears after reclamation must not be adopted. With an
-                // observed entry, never create: the file must still exist.
-                const int flags = known == task_identities.end() ? (O_WRONLY | O_APPEND | O_CREAT | O_EXCL)
-                                                                 : (O_WRONLY | O_APPEND);
+                // With no observed entry, create exclusively: a regular file
+                // that reappears after reclamation must not be adopted. A
+                // final symlink is adopted and followed instead, mirroring
+                // frozen pi's appendFile (ADR 0076). With an observed entry,
+                // never create: the file must still exist.
+                int flags = O_WRONLY | O_APPEND;
+                if (known == task_identities.end()) {
+                    struct stat entry_info {};
+                    const bool adopted_link = ::fstatat(directory_fd.get(), file.c_str(), &entry_info,
+                                                     AT_SYMLINK_NOFOLLOW) == 0 &&
+                            S_ISLNK(entry_info.st_mode);
+                    if (!adopted_link) {
+                        flags |= O_CREAT | O_EXCL;
+                    }
+                }
                 auto opened = open_task_file(directory_fd.get(), file, flags);
                 if (!opened) {
                     poisoned = true;
