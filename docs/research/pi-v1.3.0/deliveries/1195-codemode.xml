@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="2"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="2"
+	timestamp="2026-11-05T10:34:12"
+	>
+	<testcase name="a normal codemode run reads the host timezone while deterministic start pins UTC" classname="a normal codemode run reads the host timezone while deterministic start pins UTC" time="2.22317" status="run">
+		<properties>
+			<property name="cmake_labels" value="clock;codemode;issue1195;spec"/>
+		</properties>
+		<system-out>Filters: "a normal codemode run reads the host timezone while deterministic start pins UTC"
+Randomness seeded to: 3072917059
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an absent discovery name reads as undefined through a real script" classname="an absent discovery name reads as undefined through a real script" time="1.17055" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;coding_agent;issue1195;spec"/>
+		</properties>
+		<system-out>Filters: "an absent discovery name reads as undefined through a real script"
+Randomness seeded to: 1618686741
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

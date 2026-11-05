@@ -690,7 +690,9 @@ class ReanchoredLedgerTest(unittest.TestCase):
 
     def test_every_verified_row_is_delivery_backed(self) -> None:
         delivered = [row["id"] for row in self.ledger["rows"] if "delivery" in row]
-        self.assertEqual(len(delivered), 109)
+        # 109 pre-#1192/1194 receipts plus codemode-execute-outcome, codemode-worker-close
+        # (#1192) and codemode-portable-entry (#1194).
+        self.assertEqual(len(delivered), 112)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)

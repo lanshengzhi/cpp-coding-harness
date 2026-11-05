@@ -1,0 +1,255 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T00:50:53.318Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox,serveCodemodeRemote,CodemodeRemoteRequest,CodemodeRemoteExchange",
+    "packages/codemode/src/types.ts:CodemodeResult",
+    "packages/codemode/test/portable.test.ts:reports a failing or vanishing remote as a sandbox error"
+  ],
+  "scenarios": [
+    {
+      "name": "a generic remote exchange runs the script remotely and calls a caller tool",
+      "inputs": {
+        "script": "text('hi'); return await tools.add({ a: 1 })",
+        "tools": [
+          "add"
+        ],
+        "store": {
+          "k": 1
+        }
+      },
+      "expected": {
+        "request": {
+          "code": "text('hi'); return await tools.add({ a: 1 })",
+          "tools": [
+            {
+              "name": "add",
+              "jsName": "add",
+              "description": "Add one."
+            }
+          ],
+          "globals": [],
+          "store": {
+            "k": "1"
+          },
+          "interruptBudget": null
+        },
+        "exchanges": 2,
+        "callMessages": [
+          {
+            "id": 1,
+            "target": "tool",
+            "name": "add",
+            "args": "{\"a\":1}"
+          }
+        ],
+        "terminalTypes": [
+          "done"
+        ],
+        "result": {
+          "ok": true,
+          "value": 2,
+          "output": [
+            {
+              "type": "text",
+              "text": "hi"
+            }
+          ],
+          "calls": [
+            {
+              "name": "add",
+              "status": "ok",
+              "durationMs": 0.15695599999992282
+            }
+          ],
+          "storeWrites": {
+            "set": {},
+            "delete": []
+          }
+        },
+        "seenArgs": [
+          {
+            "a": 1
+          }
+        ]
+      },
+      "observed": {
+        "request": {
+          "code": "text('hi'); return await tools.add({ a: 1 })",
+          "tools": [
+            {
+              "name": "add",
+              "jsName": "add",
+              "description": "Add one."
+            }
+          ],
+          "globals": [],
+          "store": {
+            "k": "1"
+          },
+          "interruptBudget": null
+        },
+        "exchanges": 2,
+        "callMessages": [
+          {
+            "id": 1,
+            "target": "tool",
+            "name": "add",
+            "args": "{\"a\":1}"
+          }
+        ],
+        "terminalTypes": [
+          "done"
+        ],
+        "result": {
+          "ok": true,
+          "value": 2,
+          "output": [
+            {
+              "type": "text",
+              "text": "hi"
+            }
+          ],
+          "calls": [
+            {
+              "name": "add",
+              "status": "ok",
+              "durationMs": 0.15695599999992282
+            }
+          ],
+          "storeWrites": {
+            "set": {},
+            "delete": []
+          }
+        },
+        "seenArgs": [
+          {
+            "a": 1
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the terminal writes set is empty on success and carries a real write set when the script writes",
+      "inputs": {
+        "plainScript": "return 1",
+        "writingScript": "store('a', 1); store('b', { c: 2 }); return load('a');"
+      },
+      "expected": {
+        "plain": {
+          "ok": true,
+          "value": 1,
+          "writes": {
+            "set": {},
+            "delete": []
+          }
+        },
+        "writing": {
+          "ok": true,
+          "value": 1,
+          "writes": {
+            "set": {
+              "a": 1,
+              "b": {
+                "c": 2
+              }
+            },
+            "delete": []
+          }
+        }
+      },
+      "observed": {
+        "plain": {
+          "ok": true,
+          "value": 1,
+          "writes": {
+            "set": {},
+            "delete": []
+          }
+        },
+        "writing": {
+          "ok": true,
+          "value": 1,
+          "writes": {
+            "set": {
+              "a": 1,
+              "b": {
+                "c": 2
+              }
+            },
+            "delete": []
+          }
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a rejected silent or unreachable remote keeps three distinct sandbox errors",
+      "inputs": {
+        "modes": [
+          "rejected",
+          "silent",
+          "unreachable"
+        ]
+      },
+      "expected": {
+        "rejected": {
+          "ok": false,
+          "error": {
+            "kind": "sandbox",
+            "message": "Remote sandbox failed: object reset"
+          }
+        },
+        "silent": {
+          "ok": false,
+          "error": {
+            "kind": "sandbox",
+            "message": "Remote sandbox returned before the script settled"
+          }
+        },
+        "unreachable": {
+          "ok": false,
+          "error": {
+            "kind": "sandbox",
+            "message": "Failed to reach the remote sandbox: no binding"
+          }
+        }
+      },
+      "observed": {
+        "rejected": {
+          "ok": false,
+          "error": {
+            "kind": "sandbox",
+            "message": "Remote sandbox failed: object reset"
+          }
+        },
+        "silent": {
+          "ok": false,
+          "error": {
+            "kind": "sandbox",
+            "message": "Remote sandbox returned before the script settled"
+          }
+        },
+        "unreachable": {
+          "ok": false,
+          "error": {
+            "kind": "sandbox",
+            "message": "Failed to reach the remote sandbox: no binding"
+          }
+        }
+      },
+      "normalizations": []
+    }
+  ]
+}

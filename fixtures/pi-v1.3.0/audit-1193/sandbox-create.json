@@ -1,0 +1,78 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T00:50:53.318Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/runtime/host.ts:CodemodeSandbox,workerLauncher",
+    "packages/codemode/src/wasm.ts:loadQuickJSWasm",
+    "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase",
+    "packages/coding-agent/src/extensions/codemode/execute.lazy.ts:loadCodemodeExecutor"
+  ],
+  "scenarios": [
+    {
+      "name": "a missing guest module fails at the first run in pi, never at construction",
+      "inputs": {
+        "wasm": "rejects: wasm unavailable",
+        "script": "return 1"
+      },
+      "expected": {
+        "constructionOk": true,
+        "error": {
+          "kind": "sandbox",
+          "message": "Failed to load QuickJS: wasm unavailable"
+        }
+      },
+      "observed": {
+        "constructionOk": true,
+        "error": {
+          "kind": "sandbox",
+          "message": "Failed to load QuickJS: wasm unavailable"
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a sandbox that never executes never touches the guest",
+      "inputs": {
+        "wasm": "rejects: wasm unavailable",
+        "executes": 0
+      },
+      "expected": {
+        "constructionOk": true,
+        "closeOk": true,
+        "loadAttempts": 0
+      },
+      "observed": {
+        "constructionOk": true,
+        "closeOk": true,
+        "loadAttempts": 0
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a present guest module constructs and runs",
+      "inputs": {
+        "wasm": "loadQuickJSWasm()",
+        "script": "return 1"
+      },
+      "expected": {
+        "ok": true,
+        "value": 1
+      },
+      "observed": {
+        "ok": true,
+        "value": 1
+      },
+      "normalizations": []
+    }
+  ]
+}

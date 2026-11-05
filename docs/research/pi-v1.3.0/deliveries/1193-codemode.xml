@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="6"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="3"
+	timestamp="2026-11-05T10:34:07"
+	>
+	<testcase name="the generic remote exchange runs the script remotely and calls a caller tool with the frozen contract" classname="the generic remote exchange runs the script remotely and calls a caller tool with the frozen contract" time="1.55365" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1193;remote;spec"/>
+		</properties>
+		<system-out>Filters: "the generic remote exchange runs the script remotely and calls a caller tool with the frozen contract"
+Randomness seeded to: 647106929
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the generic remote keeps three distinct sandbox errors for rejected silent and unreachable remotes" classname="the generic remote keeps three distinct sandbox errors for rejected silent and unreachable remotes" time="0.013938" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1193;remote;spec"/>
+		</properties>
+		<system-out>Filters: "the generic remote keeps three distinct sandbox errors for rejected silent and unreachable remotes"
+Randomness seeded to: 2597961053
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the generic remote terminal writes set is empty on success and carries the script write set" classname="the generic remote terminal writes set is empty on success and carries the script write set" time="2.45817" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1193;remote;spec"/>
+		</properties>
+		<system-out>Filters: "the generic remote terminal writes set is empty on success and carries the script write set"
+Randomness seeded to: 877070070
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode create validates the guest eagerly with an explicit error" classname="the public codemode create validates the guest eagerly with an explicit error" time="1.4707" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;create;issue1193;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode create validates the guest eagerly with an explicit error"
+Randomness seeded to: 2582502849
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the codemode tool source never touches the guest until a script runs" classname="the codemode tool source never touches the guest until a script runs" time="0.011582" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;coding_agent;issue1193;spec"/>
+		</properties>
+		<system-out>Filters: "the codemode tool source never touches the guest until a script runs"
+Randomness seeded to: 2206003324
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the independently captured output-token budget keeps the head and tail and spills the full bytes" classname="the independently captured output-token budget keeps the head and tail and spills the full bytes" time="3.94429" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;coding_agent;issue1193;spec"/>
+		</properties>
+		<system-out>Filters: "the independently captured output-token budget keeps the head and tail and spills the full bytes"
+Randomness seeded to: 1695580744
+===============================================================================
+All tests passed (38 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

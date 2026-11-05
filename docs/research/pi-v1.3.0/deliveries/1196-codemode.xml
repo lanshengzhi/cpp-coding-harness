@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="3"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="2"
+	timestamp="2026-11-05T10:34:14"
+	>
+	<testcase name="a failing codemode worker lifetime hook requests termination and still releases the worker" classname="a failing codemode worker lifetime hook requests termination and still releases the worker" time="0.0350477" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1196;spec;worker"/>
+		</properties>
+		<system-out>Filters: "a failing codemode worker lifetime hook requests termination and still releases the worker"
+Randomness seeded to: 600394201
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a timed-out codemode run releases its worker only after the worker&apos;s actual exit" classname="a timed-out codemode run releases its worker only after the worker&apos;s actual exit" time="1.20011" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1196;spec;worker"/>
+		</properties>
+		<system-out>Filters: "a timed-out codemode run releases its worker only after the worker's actual exit"
+Randomness seeded to: 970821212
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="codemode execute and start each start one worker and release it only after actual exit" classname="codemode execute and start each start one worker and release it only after actual exit" time="2.20476" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1196;spec;worker"/>
+		</properties>
+		<system-out>Filters: "codemode execute and start each start one worker and release it only after actual exit"
+Randomness seeded to: 115945032
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

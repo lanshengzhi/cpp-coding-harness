@@ -1,0 +1,59 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T00:34:45.779Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/runtime/vm.ts:startVm,timezoneOffset",
+    "packages/codemode/test/deterministic.test.ts:execute() is not deterministic while start() is"
+  ],
+  "scenarios": [
+    {
+      "name": "execute reads the host timezone while deterministic start pins UTC",
+      "inputs": {
+        "script": "return [new Date(0).getTimezoneOffset(), new Date('2026-06-01T00:00:00Z').getTimezoneOffset()];",
+        "startedAt": 1768471200000,
+        "seed": 1
+      },
+      "expected": {
+        "executeOffsetsMinutes": [
+          -540,
+          -540
+        ],
+        "startOffsetsMinutes": [
+          0,
+          0
+        ],
+        "hostOffsetMinutes": -540,
+        "executeMatchesHost": true,
+        "startIsUtc": true
+      },
+      "observed": {
+        "executeOffsetsMinutes": [
+          -540,
+          -540
+        ],
+        "startOffsetsMinutes": [
+          0,
+          0
+        ],
+        "hostOffsetMinutes": -540,
+        "executeMatchesHost": true,
+        "startIsUtc": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "execute() is not deterministic while start() is"
+      }
+    }
+  ]
+}

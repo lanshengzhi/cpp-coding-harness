@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
+            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -258,16 +258,15 @@
             "vcpkg",
             "-L",
             "^(issue1090|issue1101|issue1104)$",
-            "--output-on-failure",
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1101.xml"
           ],
-          "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
-          "recordedAt": "2026-11-04T18:49:56Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:45:53Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1101.xml",
-            "sha256": "5525aab9f7a48770af43e19ec9e789215f83d9d3ee56b03a63565b3e5ccfd742"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1101.xml",
+            "sha256": "a5313f19c01345acee1279d47c4a0cc958a42af45dbcb93e6db21733a3261db2"
           }
         },
         "rows": [
@@ -640,6 +639,31 @@
               "sha256": "9b34aafcc652b04156f7121f5bc2f8531b7a2c695c248740cc60f2193ba5645b"
             }
           }
+        },
+        "revalidation1192": {
+          "reason": "The #1192-1196 codemode lane's deliveries backed the tickets of cch_codemode:codemode-execute-outcome and cch_codemode:codemode-portable-entry, so the plan's ticketMappings drop those two rows (the still-open codemode-inline-close keeps its #1192 mapping); the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation also classifies the durable lane's two refreshed audit-1180 sidecar-order scenarios as plan orphans (its session ended before the classification; the receipt's rows are unaffected).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1101.xml"
+            ],
+            "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+            "recordedAt": "2026-11-04T18:49:56Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1101.xml",
+              "sha256": "5525aab9f7a48770af43e19ec9e789215f83d9d3ee56b03a63565b3e5ccfd742"
+            }
+          }
         }
       },
       {
@@ -658,16 +682,15 @@
             "vcpkg",
             "-L",
             "^(issue1090|issue1101|issue1104)$",
-            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1090.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1090.xml"
           ],
-          "testedRevision": "e362f453fa21ea1b5fceb20a2aa39a23348cd871",
-          "recordedAt": "2026-11-04T22:39:50Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:39:04Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1090.xml",
-            "sha256": "69481c11a2d3832f39246df15ba72619f26867f1c80a723b700ae642fc19986e"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1090.xml",
+            "sha256": "0fdf6c6cfd9105da994789261bca99126528aa91ee5ec947a35b88e73de7a2f5"
           }
         },
         "inputs": [
@@ -681,7 +704,7 @@
           },
           {
             "path": "docs/agents/architecture.md",
-            "sha256": "ab6fd86b097d98f4dd9223abed8cfa8929aedf02b3d4f86f99d5a43339148e41"
+            "sha256": "40066b292622f2487efaa38afafaac5f832b5d113553d9ecc3bde90d4e034c97"
           },
           {
             "path": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
@@ -713,7 +736,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -1232,6 +1255,32 @@
               "sha256": "12422e606a7e4ff9ec424846901a000c84ba04067fee05b2cf96f7968bfe4515"
             }
           }
+        },
+        "revalidation1192": {
+          "reason": "75f602ad5 records the durable JSONL task-sidecar symlink ruling (ADR 0076) in docs/agents/architecture.md after the 1090 receipt pinned it; the document records a decision, no image behavior, scenario or source changes. The receipt's baselines.json pin also went stale when the 2026-11-04/05 re-anchor waves registered their families in the shared registry; the 1090 family registration itself is unchanged. The receipt's rows are untouched. The changed input digests are refreshed and the exact 36-case selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made.",
+          "changedInputs": [
+            "docs/agents/architecture.md",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1090.xml"
+            ],
+            "testedRevision": "e362f453fa21ea1b5fceb20a2aa39a23348cd871",
+            "recordedAt": "2026-11-04T22:39:50Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1090.xml",
+              "sha256": "69481c11a2d3832f39246df15ba72619f26867f1c80a723b700ae642fc19986e"
+            }
+          }
         }
       },
       {
@@ -1263,7 +1312,7 @@
           },
           {
             "path": "cmake/targets/Codemode.cmake",
-            "sha256": "c2b1069f80fab8deb195e2f5aa12b866f8a43b8e07984e0e345e58963f5d94d1"
+            "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
           },
           {
             "path": "cmake/targets/AgentCore.cmake",
@@ -1327,7 +1376,7 @@
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp",
-            "sha256": "396b8ffd3c5e3f15375c10068646009adb333e1657ce14a823f2c51714da3c7d"
+            "sha256": "16e0d1e189f357653deb22af9fad22863d64582aaa37b0a09276277279a9c6b9"
           },
           {
             "path": "src/coding_agent/extensions/codemode/CodemodeDiscovery.hpp",
@@ -1411,11 +1460,11 @@
           },
           {
             "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-            "sha256": "a0bc3ef9c60bc9128cb4d86a756cc2c41100c60045cf4a65136096c739a24c6e"
+            "sha256": "b84c571957956bcdfed7b6ad4a0a379f3eb7a19c4b73cd4fedba32e71141d262"
           },
           {
             "path": "tests/coding_agent/CodemodeParityTest.cpp",
-            "sha256": "07c99988b168bddaf650b8b8532a551b6c43f756599b1634cc3ec1896b53c94a"
+            "sha256": "c61c99890f298a4bb6b879b42815e2c3566278635e7c53f03e2e6d4c856c5ea7"
           },
           {
             "path": "tests/coding_agent/McpSessionIntegrationTest.cpp",
@@ -1491,11 +1540,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
+            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1517,16 +1566,15 @@
             "vcpkg",
             "-L",
             "issue1118",
-            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1118.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1118.xml"
           ],
-          "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
-          "recordedAt": "2026-11-04T18:46:43Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:39:04Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1118.xml",
-            "sha256": "f3f493b06722f2087d3c106ca62c9411e63eb0ae0774727d53b32aa78ff65b6b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1118.xml",
+            "sha256": "a54072d59c133706da77233a5f767da32db140b13a26eefabae0b2547e7af191"
           }
         },
         "rows": [
@@ -1986,6 +2034,38 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-issue1118.xml",
               "sha256": "7d524511f00102c486bc9fdc410f4ec9392606300acc913f54525fce3cb64b15"
+            }
+          }
+        },
+        "revalidation1192": {
+          "reason": "#1195 resolves the discovery-absence boundary the 1118 session case documented: an absent describeTool/describeNamespace name now crosses the bridge as the guest's undefined value (the handler returns the empty payload spelling), so the session case pins String(undefined) == \"undefined\" instead of the recorded JSON-null divergence; the application discovery handler and the two session/parity test files change accordingly. The four catalog rows, scenarios and routing digest are unchanged. The exact 19-case selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. 2953743b5 registered further evidence families in the shared baseline registry after this receipt pinned fixtures/pi-v1.3.0/baselines.json; the pin is refreshed under the same revalidation. The #1192-1196 codemode lane's deliveries backed the tickets of cch_codemode:codemode-execute-outcome and cch_codemode:codemode-portable-entry, so the plan's ticketMappings drop those two rows (the still-open codemode-inline-close keeps its #1192 mapping); the receipts' own rows, scenarios and routing digests are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation also classifies the durable lane's two refreshed audit-1180 sidecar-order scenarios as plan orphans (its session ended before the classification; the receipt's rows are unaffected).",
+          "changedInputs": [
+            "cmake/targets/Codemode.cmake",
+            "src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp",
+            "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
+            "src/coding_agent/extensions/codemode/CodemodeExecution.cpp",
+            "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+            "tests/coding_agent/CodemodeParityTest.cpp",
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1118.xml"
+            ],
+            "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+            "recordedAt": "2026-11-04T18:46:43Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1118.xml",
+              "sha256": "f3f493b06722f2087d3c106ca62c9411e63eb0ae0774727d53b32aa78ff65b6b"
             }
           }
         }
@@ -3214,7 +3294,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
+            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3222,7 +3302,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
           }
         ],
         "validation": {
@@ -3232,16 +3312,15 @@
             "vcpkg",
             "-R",
             "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
-            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1181.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1181.xml"
           ],
-          "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
-          "recordedAt": "2026-11-04T18:47:07Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:41:59Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1181.xml",
-            "sha256": "d51db652ed011308bf64c6ee7efa2765499cccc395e81c0e2aa55d8daf4d79b3"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1181.xml",
+            "sha256": "0940c8057d0b686f8c95fa69941de0a4f636f2ced04a2007c65139d3ac3e518a"
           }
         },
         "rows": [
@@ -3701,6 +3780,32 @@
               "sha256": "1d857fbe57e05825b29759651e4c2ff911ebb154397e90c34b214b16a1d7ef6e"
             }
           }
+        },
+        "revalidation1192": {
+          "reason": "2953743b5 registered further evidence families in the shared baseline registry after this receipt pinned fixtures/pi-v1.3.0/baselines.json; the receipt's own families, rows, scenarios and routing digest are unchanged. The stale digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The #1192-1196 codemode lane's deliveries backed the tickets of cch_codemode:codemode-execute-outcome and cch_codemode:codemode-portable-entry, so the plan's ticketMappings drop those two rows (the still-open codemode-inline-close keeps its #1192 mapping); the receipts' own rows, scenarios and routing digests are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation also classifies the durable lane's two refreshed audit-1180 sidecar-order scenarios as plan orphans (its session ended before the classification; the receipt's rows are unaffected).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1181.xml"
+            ],
+            "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+            "recordedAt": "2026-11-04T18:47:07Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1181.xml",
+              "sha256": "d51db652ed011308bf64c6ee7efa2765499cccc395e81c0e2aa55d8daf4d79b3"
+            }
+          }
         }
       },
       {
@@ -4026,16 +4131,15 @@
             "vcpkg",
             "-L",
             "issue1184",
-            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1184.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1184.xml"
           ],
-          "testedRevision": "e362f453fa21ea1b5fceb20a2aa39a23348cd871",
-          "recordedAt": "2026-11-04T22:39:50Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:41:59Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1184.xml",
-            "sha256": "99ed09b1c1737e0e649697f659c62423529778d50fcd48bc82837570e5cdbf33"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1184.xml",
+            "sha256": "1456cc1256d98fdbf58a191e07f1d5050aea4db17e58bc64b5ef5492de876493"
           }
         },
         "rows": [
@@ -4144,7 +4248,7 @@
           },
           {
             "path": "docs/agents/architecture.md",
-            "sha256": "ab6fd86b097d98f4dd9223abed8cfa8929aedf02b3d4f86f99d5a43339148e41"
+            "sha256": "40066b292622f2487efaa38afafaac5f832b5d113553d9ecc3bde90d4e034c97"
           },
           {
             "path": "src/chord/ChordContext.cpp",
@@ -4322,6 +4426,31 @@
               "sha256": "a962dde453f2fc59d7bde12a90b813bf8e5e1942ebd1c1f475cda63df16931a4"
             }
           }
+        },
+        "revalidation1192": {
+          "reason": "75f602ad5 recorded the durable JSONL task-sidecar symlink ruling (ADR 0076) in docs/agents/architecture.md after this receipt pinned it; the document records a decision, no chord behavior, scenario or source changes, and the receipt's rows are untouched. The stale digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made.",
+          "changedInputs": [
+            "docs/agents/architecture.md"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1184.xml"
+            ],
+            "testedRevision": "e362f453fa21ea1b5fceb20a2aa39a23348cd871",
+            "recordedAt": "2026-11-04T22:39:50Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1197-revalidation-1184.xml",
+              "sha256": "99ed09b1c1737e0e649697f659c62423529778d50fcd48bc82837570e5cdbf33"
+            }
+          }
         }
       },
       {
@@ -4338,16 +4467,15 @@
             "vcpkg",
             "-L",
             "chord",
-            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1186.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1186.xml"
           ],
-          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
-          "recordedAt": "2026-11-04T20:01:09Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:41:59Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1186.xml",
-            "sha256": "5afab0ad3676b9af5bbed4c9c992d43894b783f161cc7fcdf5b326f413a1544e"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1186.xml",
+            "sha256": "3d899c7d7c2bea2e652cb9163e12f13438578d65f099207c9052bb09b1d643fd"
           }
         },
         "rows": [
@@ -4521,11 +4649,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
+            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4673,6 +4801,32 @@
               "sha256": "197524680b23ba16d47462759ec9e1bd77a85e258306ebc0bdba09c805deedfd"
             }
           }
+        },
+        "revalidation1192": {
+          "reason": "2953743b5 registered further evidence families in the shared baseline registry after this receipt pinned fixtures/pi-v1.3.0/baselines.json; the receipt's own families, rows, scenarios and routing digest are unchanged. The stale digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The #1192-1196 codemode lane's deliveries backed the tickets of cch_codemode:codemode-execute-outcome and cch_codemode:codemode-portable-entry, so the plan's ticketMappings drop those two rows (the still-open codemode-inline-close keeps its #1192 mapping); the receipts' own rows, scenarios and routing digests are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation also classifies the durable lane's two refreshed audit-1180 sidecar-order scenarios as plan orphans (its session ended before the classification; the receipt's rows are unaffected).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1186.xml"
+            ],
+            "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+            "recordedAt": "2026-11-04T20:01:09Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1186.xml",
+              "sha256": "5afab0ad3676b9af5bbed4c9c992d43894b783f161cc7fcdf5b326f413a1544e"
+            }
+          }
         }
       },
       {
@@ -4690,16 +4844,15 @@
             "vcpkg",
             "-L",
             "chord",
-            "--output-on-failure",
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1188.xml"
           ],
-          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
-          "recordedAt": "2026-11-04T20:01:09Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:45:53Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1188.xml",
-            "sha256": "d04b79393f69aa0c46d41bc627c3438ffb6f502d3c378ff13334d60d306de7ae"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1188.xml",
+            "sha256": "ca05ec64b89dbafea1ce9bba87b02c9eca6c10fe725194363564723ad09aaad4"
           }
         },
         "rows": [
@@ -4867,7 +5020,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
+            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4994,6 +5147,31 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1158-registration-chord.xml",
               "sha256": "197524680b23ba16d47462759ec9e1bd77a85e258306ebc0bdba09c805deedfd"
+            }
+          }
+        },
+        "revalidation1192": {
+          "reason": "The #1192-1196 codemode lane's deliveries backed the tickets of cch_codemode:codemode-execute-outcome and cch_codemode:codemode-portable-entry, so the plan's ticketMappings drop those two rows (the still-open codemode-inline-close keeps its #1192 mapping); the receipt's own rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation also classifies the durable lane's two refreshed audit-1180 sidecar-order scenarios as plan orphans (its session ended before the classification; the receipt's rows are unaffected).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1188.xml"
+            ],
+            "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+            "recordedAt": "2026-11-04T20:01:09Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1188.xml",
+              "sha256": "d04b79393f69aa0c46d41bc627c3438ffb6f502d3c378ff13334d60d306de7ae"
             }
           }
         }
@@ -5186,16 +5364,15 @@
             "vcpkg",
             "-L",
             "issue1182",
-            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1182.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1182.xml"
           ],
-          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
-          "recordedAt": "2026-11-04T20:01:09Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:41:59Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1182.xml",
-            "sha256": "5ab2f026c4a12539d654e91911a96688f2686b59e8ef0bb717c16f7ffc63eead"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1182.xml",
+            "sha256": "9bbd8fdfa12ab153ae2139bb29529c205d67f038e6758f1acbb34a8bdb085791"
           }
         },
         "rows": [
@@ -5418,7 +5595,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -5442,7 +5619,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
+            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5572,6 +5749,32 @@
               "sha256": "b385926b4873d7a60cefb3aa700f6f69516c444dc4880446875205924b644ac5"
             }
           }
+        },
+        "revalidation1192": {
+          "reason": "2953743b5 registered further evidence families in the shared baseline registry after this receipt pinned fixtures/pi-v1.3.0/baselines.json; the receipt's own families, rows, scenarios and routing digest are unchanged. The stale digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The #1192-1196 codemode lane's deliveries backed the tickets of cch_codemode:codemode-execute-outcome and cch_codemode:codemode-portable-entry, so the plan's ticketMappings drop those two rows (the still-open codemode-inline-close keeps its #1192 mapping); the receipts' own rows, scenarios and routing digests are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation also classifies the durable lane's two refreshed audit-1180 sidecar-order scenarios as plan orphans (its session ended before the classification; the receipt's rows are unaffected).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1182.xml"
+            ],
+            "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+            "recordedAt": "2026-11-04T20:01:09Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1182.xml",
+              "sha256": "5ab2f026c4a12539d654e91911a96688f2686b59e8ef0bb717c16f7ffc63eead"
+            }
+          }
         }
       },
       {
@@ -5608,11 +5811,11 @@
           },
           {
             "path": "cmake/targets/Codemode.cmake",
-            "sha256": "c2b1069f80fab8deb195e2f5aa12b866f8a43b8e07984e0e345e58963f5d94d1"
+            "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
           },
           {
             "path": "cmake/tests/CodemodeTests.cmake",
-            "sha256": "ad093240be81f3ab367fd2a843a7adeeaff989d3eb15e4c71ed423090eb1e61b"
+            "sha256": "ee80abcd89060a440d020e17442a29e3bd15f9edda86fb7d0f310e2b5dc0c37b"
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
@@ -5628,31 +5831,31 @@
           },
           {
             "path": "src/codemode/Deterministic.cpp",
-            "sha256": "6170402661c8928eeb6e7d883dee3b3f9f883b64ff6a1d7473c36b410da271c1"
+            "sha256": "55a9f9d2d0c78647355c6ba3541c7cb0136901f7c2f20887e8ad6ae379f8d302"
           },
           {
             "path": "src/codemode/Deterministic.hpp",
-            "sha256": "a2001aa9599da7623ef80dd96758a38fc0c7709e8301dadcc54a609909a89f1f"
+            "sha256": "9f35aaf55d14ec1896b20588ed7605c539f7ecf8a183cd33c4dd341f2b3ac782"
           },
           {
             "path": "src/codemode/Guest.cpp",
-            "sha256": "3d946fb2e658ce51c09c663b89dbc5d378d3bb1641b9b8f1a39332f198dfbf80"
+            "sha256": "8390e4bca761654f83106c412493236b2f246f19993b14bacb505d3d33348a24"
           },
           {
             "path": "src/codemode/Guest.hpp",
             "sha256": "1ed5549788598fe66c93508ab2b9e92f224a8f26a41e4d2ba07296fe0b6c0958"
           },
           {
-            "path": "src/codemode/Prelude.hpp",
+            "path": "src/codemode/include/cch/codemode/Prelude.hpp",
             "sha256": "b051e2bee183e78bf2cdf8b6936bbfeed934e466a9a2e5031485cf6e1a1ceb7a"
           },
           {
             "path": "src/codemode/Remote.cpp",
-            "sha256": "817203201989c8bb3a0e8b9394fe5200f20b7485b1aa26c22a00c80a1f4b9c46"
+            "sha256": "612eb8faaa3a255196dc3498bfbf57f5974a15db07313a7b3cd9942eb7d56e9f"
           },
           {
             "path": "src/codemode/Sandbox.cpp",
-            "sha256": "0d7a8f8ffebd4bc00f388b060ffe5386778df54f71c51005cf0fae1034c331f9"
+            "sha256": "9c08c1fac29a39d135f348c1d3d98c76487b6439d0de8944d31e71f9fa2f0d0a"
           },
           {
             "path": "src/codemode/Shared.cpp",
@@ -5672,11 +5875,11 @@
           },
           {
             "path": "src/codemode/include/cch/codemode/Remote.hpp",
-            "sha256": "3914f525f2fdedf199db890cf20a639b19dfdcb36cf6486bc1d71f9dbabf4515"
+            "sha256": "452d2f10e8dbdfb2edc73f2e6c605a240dc776a348f39b7b64bd08299753c503"
           },
           {
             "path": "src/codemode/include/cch/codemode/Sandbox.hpp",
-            "sha256": "255c6c8d3a2a37e9dfb9c259b96b2e68076e8a339b06ced060cd59835774ada2"
+            "sha256": "ec205ed9a27296035774ab5cfde37ad8d39bd814b427add316a97c3ee7d31192"
           },
           {
             "path": "src/codemode/include/cch/codemode/Source.hpp",
@@ -5724,15 +5927,15 @@
           },
           {
             "path": "tests/codemode/CodemodeOwnerTest.cpp",
-            "sha256": "f6a343188f9bf3615e6df4915c4a76fdb318c8c9a31cc7f1515042e6f03beeda"
+            "sha256": "da1575359133b922cf9d841be282b4f8f6d33bea74df39f17e8f0e6fc050948f"
           },
           {
             "path": "tests/codemode/CodemodeRemoteTest.cpp",
-            "sha256": "c96afb7bcf00c7ce8407aa81c482f13fdf54948dd8cfb4b8c64486cab1bd7fad"
+            "sha256": "374fcde864d6fef3e9a0464a4a0b66bc066f34167cb1f1a89e51285c8bc55ec6"
           },
           {
             "path": "tests/coding_agent/CodemodeSandboxTest.cpp",
-            "sha256": "3b1e6212459146e01b20eae6b9077dfcd579d14b2a08fff8597628312d10576f"
+            "sha256": "09511331d3fe440d352cb4af91daab54e35cc8759ead3b14c2fe4a1fb46d621e"
           },
           {
             "path": "fixtures/codemode/quickjs/prelude.js",
@@ -5776,11 +5979,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
+            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6712,16 +6915,15 @@
             "vcpkg",
             "-R",
             "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
-            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1179.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1179.xml"
           ],
-          "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
-          "recordedAt": "2026-11-04T18:47:37Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:39:04Z",
           "selected": 52,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1179.xml",
-            "sha256": "8eb1bb6f2e7998bf56ae478e918c4214b925c5a1bd25856253f6882fc9ea8366"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1179.xml",
+            "sha256": "442e5e4346302420dbef360724472a41c05cc0c6d5e266755dbd2573bc4a6cec"
           }
         },
         "revalidation1179m": {
@@ -6769,6 +6971,45 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-revalidation-main.xml",
               "sha256": "d5683b47bb87e8cf6ff95135b9d5932f1da59ccde6d002480246fe498bad57b4"
+            }
+          }
+        },
+        "revalidation1192": {
+          "reason": "#1192/#1196 re-route the deterministic run through the worker-host admission seam (Deterministic.cpp, Sandbox.cpp start) and change the worker-mode host timezone import (Guest.cpp); #1194 moves the Remote protocol types into the portable subset (Remote.hpp, Types.hpp/Portable.hpp) with Prelude.hpp relocated unchanged; #1195 changes the run-path bridge settle and the application discovery handler; the close spelling changes to the frozen \"Sandbox is closed\" in Sandbox.cpp/Remote.cpp; the owner's test shard gains the tool-table, lifetime and portable cases. The 39 delivered rows, their scenarios and the routing digest are unchanged. The exact 52-case selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. #1194 also moves Prelude.hpp to the public include root (identical bytes) and touches Deterministic.hpp; the 1192 baselines.json registration note applies here too. The #1192-1196 codemode lane's deliveries backed the tickets of cch_codemode:codemode-execute-outcome and cch_codemode:codemode-portable-entry, so the plan's ticketMappings drop those two rows (the still-open codemode-inline-close keeps its #1192 mapping); the receipts' own rows, scenarios and routing digests are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation also classifies the durable lane's two refreshed audit-1180 sidecar-order scenarios as plan orphans (its session ended before the classification; the receipt's rows are unaffected).",
+          "changedInputs": [
+            "cmake/targets/Codemode.cmake",
+            "cmake/tests/CodemodeTests.cmake",
+            "src/codemode/Deterministic.cpp",
+            "src/codemode/Guest.cpp",
+            "src/codemode/Remote.cpp",
+            "src/codemode/Sandbox.cpp",
+            "src/codemode/include/cch/codemode/Remote.hpp",
+            "src/codemode/include/cch/codemode/Sandbox.hpp",
+            "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
+            "tests/codemode/CodemodeOwnerTest.cpp",
+            "tests/codemode/CodemodeRemoteTest.cpp",
+            "tests/coding_agent/CodemodeSandboxTest.cpp",
+            "fixtures/pi-v1.3.0/baselines.json",
+            "src/codemode/Deterministic.hpp",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1179.xml"
+            ],
+            "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+            "recordedAt": "2026-11-04T18:47:37Z",
+            "selected": 52,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1179.xml",
+              "sha256": "8eb1bb6f2e7998bf56ae478e918c4214b925c5a1bd25856253f6882fc9ea8366"
             }
           }
         }
@@ -6839,11 +7080,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
+            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6873,16 +7114,15 @@
             "vcpkg",
             "-R",
             "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
-            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1176-agent-subset.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1176.xml"
           ],
-          "testedRevision": "12be64a25628304adc47c726ae47f443eada6c1c",
-          "recordedAt": "2026-11-03T00:00:00Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:41:59Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-subset.xml",
-            "sha256": "d1de6b24a953f661a79d6920d4261f923349eaa9903212481bd893d95aea7313"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1176.xml",
+            "sha256": "821ab4a3be22c01fbc7ecc019d70d24a5ccfc051bc8928a10a2e7728c31f108a"
           }
         },
         "rows": [
@@ -6974,6 +7214,32 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
           ]
+        },
+        "revalidation1192": {
+          "reason": "2953743b5 registered further evidence families in the shared baseline registry after this receipt pinned fixtures/pi-v1.3.0/baselines.json; the receipt's own families, rows, scenarios and routing digest are unchanged. The stale digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The #1192-1196 codemode lane's deliveries backed the tickets of cch_codemode:codemode-execute-outcome and cch_codemode:codemode-portable-entry, so the plan's ticketMappings drop those two rows (the still-open codemode-inline-close keeps its #1192 mapping); the receipts' own rows, scenarios and routing digests are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation also classifies the durable lane's two refreshed audit-1180 sidecar-order scenarios as plan orphans (its session ended before the classification; the receipt's rows are unaffected).",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1176-agent-subset.xml"
+            ],
+            "testedRevision": "12be64a25628304adc47c726ae47f443eada6c1c",
+            "recordedAt": "2026-11-03T00:00:00Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-subset.xml",
+              "sha256": "d1de6b24a953f661a79d6920d4261f923349eaa9903212481bd893d95aea7313"
+            }
+          }
         }
       },
       {
@@ -7014,7 +7280,7 @@
           },
           {
             "path": "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
-            "sha256": "a0bc3ef9c60bc9128cb4d86a756cc2c41100c60045cf4a65136096c739a24c6e"
+            "sha256": "b84c571957956bcdfed7b6ad4a0a379f3eb7a19c4b73cd4fedba32e71141d262"
           },
           {
             "path": "tests/coding_agent/tui/ThemeTest.cpp",
@@ -7038,11 +7304,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "6d26bfe1022e41e55534fae0ea68dbc0783133729dd6d1182074f6df7d8958b3"
+            "sha256": "eb648cced6b40c68fb27202dba6b1abd6ab56bd94c92bf4db7fc01a5aec4a9df"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7c069e2e90223215cc56034a8d6e1d489826214e12b8133ffa8db0e5f7cb170f"
+            "sha256": "988cebce62bda3787bcdf9e92262bb7854fa11ef8c3a5b5465d50007d2be9be5"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7092,16 +7358,15 @@
             "vcpkg",
             "-R",
             "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
-            "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1177.xml"
+            "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1177.xml"
           ],
-          "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
-          "recordedAt": "2026-11-04T18:50:11Z",
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:39:04Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1177.xml",
-            "sha256": "063b9f88543fe791e7f57806147452fe17fc0068a6459d265372d22ab85926a1"
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1177.xml",
+            "sha256": "f3055f8ea26ef6a9f9a4ff0699b846667783c6e54fbf9624a453586a1605de61"
           }
         },
         "rows": [
@@ -7225,7 +7490,236 @@
               "sha256": "0accacec69781e31740a07f982293a4072e3d51e056025adcd726bdfa4ae899a"
             }
           }
+        },
+        "revalidation1192": {
+          "reason": "#1195 touches the application tool source's discovery wiring and the 1177 session case that pins the empty-catalog description through the same seam; the three application rows, scenarios and routing digest are unchanged. The exact 9-case selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. 2953743b5 registered further evidence families in the shared baseline registry after this receipt pinned fixtures/pi-v1.3.0/baselines.json; the pin is refreshed under the same revalidation. The #1192-1196 codemode lane's deliveries backed the tickets of cch_codemode:codemode-execute-outcome and cch_codemode:codemode-portable-entry, so the plan's ticketMappings drop those two rows (the still-open codemode-inline-close keeps its #1192 mapping); the receipts' own rows, scenarios and routing digests are unchanged. The changed input digest is refreshed and the exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact; no new claim is made. The same revalidation also classifies the durable lane's two refreshed audit-1180 sidecar-order scenarios as plan orphans (its session ended before the classification; the receipt's rows are unaffected).",
+          "changedInputs": [
+            "tests/coding_agent/CodemodeCatalogSessionTest.cpp",
+            "src/coding_agent/extensions/codemode/CodemodeToolSource.cpp",
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1177.xml"
+            ],
+            "testedRevision": "71064c7dc34b060736537fd409edfc2100698e9f",
+            "recordedAt": "2026-11-04T18:50:11Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1177.xml",
+              "sha256": "063b9f88543fe791e7f57806147452fe17fc0068a6459d265372d22ab85926a1"
+            }
+          }
         }
+      },
+      {
+        "id": "1192-codemode-tool-table-close",
+        "ticket": "1192",
+        "implementationCommits": [
+          "7f27390d05fe435012fd698c4aa74768c1736de8",
+          "2fd077c4dcf3bed89655648e20c214718150387a"
+        ],
+        "report": "docs/research/pi-v1.3.0/1192-codemode-alignment.md",
+        "inputs": [
+          {
+            "path": "cmake/targets/Codemode.cmake",
+            "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+          },
+          {
+            "path": "cmake/tests/CodemodeTests.cmake",
+            "sha256": "ee80abcd89060a440d020e17442a29e3bd15f9edda86fb7d0f310e2b5dc0c37b"
+          },
+          {
+            "path": "src/codemode/Sandbox.cpp",
+            "sha256": "9c08c1fac29a39d135f348c1d3d98c76487b6439d0de8944d31e71f9fa2f0d0a"
+          },
+          {
+            "path": "src/codemode/include/cch/codemode/Remote.hpp",
+            "sha256": "452d2f10e8dbdfb2edc73f2e6c605a240dc776a348f39b7b64bd08299753c503"
+          },
+          {
+            "path": "src/codemode/include/cch/codemode/Sandbox.hpp",
+            "sha256": "ec205ed9a27296035774ab5cfde37ad8d39bd814b427add316a97c3ee7d31192"
+          },
+          {
+            "path": "src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp",
+            "sha256": "16e0d1e189f357653deb22af9fad22863d64582aaa37b0a09276277279a9c6b9"
+          },
+          {
+            "path": "tests/codemode/CodemodeOwnerTest.cpp",
+            "sha256": "da1575359133b922cf9d841be282b4f8f6d33bea74df39f17e8f0e6fc050948f"
+          }
+        ],
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-LE",
+            "architecture",
+            "-R",
+            "^(a public codemode caller executes a script against an injected nested tool|a public codemode caller keeps prior output when an injected tool rejects|the public codemode tool table registers lists and unregisters with the frozen messages|the public codemode start rejects a later run after close with the frozen spelling|closing codemode settles the run before its worker exit releases admission)$",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml"
+          ],
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:39:04Z",
+          "selected": 5,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1192-codemode.xml",
+            "sha256": "511808591343c155d03abec2afa909d1cf3b41d79f20aabcd4fd15f43954e9d6"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_codemode:codemode-execute-outcome",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1053/script-execution.json",
+                "scenario": "a script returns a JSON value after top-level await and collects output in order",
+                "test": "a public codemode caller executes a script against an injected nested tool",
+                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+              },
+              {
+                "artifact": "audit-1053/script-execution.json",
+                "scenario": "a script failure keeps prior output and reports the script error with its line",
+                "test": "a public codemode caller keeps prior output when an injected tool rejects",
+                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+              },
+              {
+                "artifact": "audit-1053/script-execution.json",
+                "scenario": "the public tool table can be registered, listed and unregistered; close rejects later runs",
+                "test": "the public codemode tool table registers lists and unregisters with the frozen messages",
+                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "the public codemode tool table registers lists and unregisters with the frozen messages",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+              "reason": "A check that only covers close passes while register/list/unregister is absent: the case drives the full frozen sequence (constructor tools, duplicate registration message, list, remove true/false, list after removal) and makes the subsequent run fail, so a close-only implementation fails. It also pins the frozen duplicate-registration message, so a silently-idempotent register fails."
+            }
+          },
+          {
+            "id": "cch_codemode:codemode-worker-close",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1053/script-execution.json",
+                "scenario": "the public tool table can be registered, listed and unregistered; close rejects later runs",
+                "test": "the public codemode tool table registers lists and unregisters with the frozen messages",
+                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+              },
+              {
+                "artifact": "audit-1053/worker-lifetime.json",
+                "scenario": "close settles an in-flight run before the worker exit releases admission",
+                "test": "closing codemode settles the run before its worker exit releases admission",
+                "testSource": "tests/codemode/CodemodeOwnerTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "the public codemode start rejects a later run after close with the frozen spelling",
+              "testSource": "tests/codemode/CodemodeOwnerTest.cpp",
+              "reason": "An implementation that only pins the in-flight abort spelling (\"Sandbox closed\") still rejects a later run after close: pi refuses it with \"Sandbox is closed\". The case closes the sandbox and requires the later run and a later start to fail with the frozen spelling, so the two spellings cannot be conflated."
+            }
+          }
+        ],
+        "routingSha256": "1d0c3a12dbb34f23227caa9fa02d5edb5bfd925a9ed833ad66f3fdaf1707c72c"
+      },
+      {
+        "id": "1194-codemode-portable-entry",
+        "ticket": "1194",
+        "implementationCommits": [
+          "7f27390d05fe435012fd698c4aa74768c1736de8",
+          "2fd077c4dcf3bed89655648e20c214718150387a"
+        ],
+        "report": "docs/research/pi-v1.3.0/1192-codemode-alignment.md",
+        "inputs": [
+          {
+            "path": "cmake/targets/Codemode.cmake",
+            "sha256": "d5c1c594ed8c97f5a9d37cf2f462a4a68db039836d5686f120c9eb9755ef939a"
+          },
+          {
+            "path": "cmake/tests/CodemodeTests.cmake",
+            "sha256": "ee80abcd89060a440d020e17442a29e3bd15f9edda86fb7d0f310e2b5dc0c37b"
+          },
+          {
+            "path": "src/codemode/Portable.cpp",
+            "sha256": "3eb6ab69367b9e1dcfc48440b599eb16228f7870459386d2c269b4a8298a08eb"
+          },
+          {
+            "path": "src/codemode/include/cch/codemode/Declarations.hpp",
+            "sha256": "9647acb67bae019d9a87430aa5e465ebc3f3eb5bbe41e3726f420af6b6b5c404"
+          },
+          {
+            "path": "src/codemode/include/cch/codemode/Portable.hpp",
+            "sha256": "bfb6344643129daa0b057ce330f01a993de61645271523e7a48a5ab824952dda"
+          },
+          {
+            "path": "src/codemode/include/cch/codemode/Prelude.hpp",
+            "sha256": "b051e2bee183e78bf2cdf8b6936bbfeed934e466a9a2e5031485cf6e1a1ceb7a"
+          },
+          {
+            "path": "src/codemode/include/cch/codemode/Source.hpp",
+            "sha256": "543bc0215fe1b702dae7141eec2d28016396cb1f7d874027d8d4368939d34e93"
+          },
+          {
+            "path": "src/codemode/include/cch/codemode/Types.hpp",
+            "sha256": "7ef22e6bbfa4cb19fc74b2832161b426b12e8f68bd071dbf4f4a619a8006f9c2"
+          },
+          {
+            "path": "tests/codemode/CodemodePortableTest.cpp",
+            "sha256": "2101cc9076d271ecf848bd5f4037840a47b045ceaa48f82d4a17eea39ffb72f2"
+          }
+        ],
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-LE",
+            "architecture",
+            "-L",
+            "issue1194",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml"
+          ],
+          "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+          "recordedAt": "2026-11-05T01:39:04Z",
+          "selected": 1,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1194-codemode.xml",
+            "sha256": "abae9fc069467315c308991fcbb88869682db769d3f621693adbc5c79469a931"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_codemode:codemode-portable-entry",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1053/source-options.json",
+                "scenario": "the public options prefix and grammar constants are fixed",
+                "test": "the portable codemode entry exposes the frozen source constants and protocol types",
+                "testSource": "tests/codemode/CodemodePortableTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "the portable codemode entry exposes the frozen source constants and protocol types",
+              "testSource": "tests/codemode/CodemodePortableTest.cpp",
+              "reason": "A target that still imports a native-only header or links WasmEdge/Asio/threads passes a source-only constant check: the delivery's check shard links only cch_codemode_portable and compiles the native-header guards (BOOST_ASIO_HPP, WASMEDGE_C_API_H), and cmake/targets/Codemode.cmake fail-closes the declared dependency graph at configure time, so a portable subset that secretly picks up a native runtime fails the build, not just an assertion."
+            }
+          }
+        ],
+        "routingSha256": "df36d324c2169070a20ca0ef74e5cf311755bb8b0457303b2396d1fc72d5ad46"
       }
     ]
   },
@@ -7474,10 +7968,10 @@
         "partial": 1
       },
       "cch_codemode": {
-        "implemented": 45,
-        "missing": 2,
+        "implemented": 47,
+        "missing": 1,
         "not-applicable": 2,
-        "partial": 2
+        "partial": 1
       },
       "cch_coding_agent": {
         "implemented": 90,
@@ -7508,21 +8002,21 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1090,
-      "missing": 180,
+      "implemented": 1092,
+      "missing": 179,
       "not-applicable": 18,
-      "partial": 176
+      "partial": 175
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1012,
-      "upstream-captured": 315,
-      "verified": 109
+      "unverified": 1011,
+      "upstream-captured": 313,
+      "verified": 112
     },
     "evidenceRoute": {
-      "captured": 424,
+      "captured": 425,
       "artifact-only": 0,
-      "related-captured": 23,
+      "related-captured": 22,
       "declared-comparison": 29,
       "cpp-regression-only": 10,
       "unobserved": 50,
@@ -7532,7 +8026,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1012,
+    "unobservedSupported": 1011,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -7565,9 +8059,9 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1012,
+    "missingObservationRows": 1011,
     "scenarioCoverage": {
-      "scenarios": 658,
+      "scenarios": 660,
       "scenarioNamed": 368,
       "artifactCovered": 56,
       "orphaned": [
@@ -7804,7 +8298,9 @@
         "audit-1158/listing.json:listFiles applies hidden and excluded names and never lists .git",
         "audit-1158/positioned-read.json:positioned reads return up to the requested length and stop early only at end of file",
         "audit-1158/positioned-read.json:a read at or past end of file returns the frozen empty result instead of an error",
-        "audit-1158/positioned-read.json:a positioned read longer than one internal chunk crosses reads unchanged"
+        "audit-1158/positioned-read.json:a positioned read longer than one internal chunk crosses reads unchanged",
+        "audit-1180/sidecar-order.json:a JSONL commit appends two sidecars in write order before the main marker",
+        "audit-1180/sidecar-order.json:JSONL fsync flushes two sidecars in append order before the main marker"
       ],
       "uncovered": []
     }
@@ -12344,6 +12840,26 @@
         "cch_durable:node-filesystem"
       ],
       "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1180",
+      "artifact": "sidecar-order.json",
+      "scenario": "a JSONL commit appends two sidecars in write order before the main marker",
+      "reason": "Captured by #1180's sidecar-order refresh (942d178be, two-sidecar ordering); no ledger row carries this exact scenario name yet.",
+      "rows": [
+        "cch_durable:Storage:jsonl:sidecar"
+      ],
+      "disposition": "Belongs to the durable lane's pending evidence update for cch_durable:Storage:jsonl:sidecar; classified as an orphan until the lane routes it, matching the older sidecar-order orphans."
+    },
+    {
+      "family": "audit-1180",
+      "artifact": "sidecar-order.json",
+      "scenario": "JSONL fsync flushes two sidecars in append order before the main marker",
+      "reason": "Captured by #1180's sidecar-order refresh (942d178be, two-sidecar ordering); no ledger row carries this exact scenario name yet.",
+      "rows": [
+        "cch_durable:Storage:jsonl:fsync"
+      ],
+      "disposition": "Belongs to the durable lane's pending evidence update for cch_durable:Storage:jsonl:fsync; classified as an orphan until the lane routes it, matching the older sidecar-order orphans."
     }
   ],
   "correctionsIndex": [
@@ -19185,8 +19701,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_codemode",
       "consumer": "Application `executeCodemode`, direct callers and every TUI result consumer.",
       "consumerOwners": [
@@ -19201,18 +19717,20 @@
         "the public tool table can be registered, listed and unregistered; close rejects later runs"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
-          "a script returns a JSON value after top-level await and collects output in order"
+          "a script returns a JSON value after top-level await and collects output in order",
+          "a script failure keeps prior output and reports the script error with its line",
+          "the public tool table can be registered, listed and unregistered; close rejects later runs"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1192-codemode-alignment.md"
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-      "notes": "Recommendation: Extend the public result struct with call/store/during fields as those seams land; keep `value_json` as storage but expose the captured JSON value semantics.",
+      "remainingWork": null,
+      "notes": "Delivered by #1192; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1192-codemode-alignment.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -19225,7 +19743,26 @@
           "verification": "unverified",
           "owner": "cch_codemode"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "unverified",
+        "evidence": {
+          "route": "related-captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "a script returns a JSON value after top-level await and collects output in order"
+          ],
+          "result": null
+        },
+        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "gaps": [],
+        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+        "notes": "Recommendation: Extend the public result struct with call/store/during fields as those seams land; keep `value_json` as storage but expose the captured JSON value semantics."
+      },
+      "delivery": "1192-codemode-tool-table-close"
     },
     {
       "id": "cch_codemode:codemode-inline-close",
@@ -19540,8 +20077,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_codemode",
       "consumer": "Cloudflare/browser hosts and the library distribution.",
       "consumerOwners": [
@@ -19556,16 +20093,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/source-options.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "the public options prefix and grammar constants are fixed"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1192-codemode-alignment.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Extract the source/declaration/prelude and execution interfaces into a `cch_codemode` library target before adding Inline/Remote. Keep the Application bridge in coding_agent.",
+      "remainingWork": null,
+      "notes": "Delivered by #1194; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1192-codemode-alignment.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -19578,7 +20115,26 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "missing",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/source-options.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "the public options prefix and grammar constants are fixed"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Extract the source/declaration/prelude and execution interfaces into a `cch_codemode` library target before adding Inline/Remote. Keep the Application bridge in coding_agent."
+      },
+      "delivery": "1194-codemode-portable-entry"
     },
     {
       "id": "cch_codemode:codemode-remote",
@@ -21520,14 +22076,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "upstream-captured",
+      "verification": "verified",
       "owner": "cch_codemode",
       "consumer": "Application `finally { await sandbox.close() }`, session teardown and reuse tests.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1192",
       "scenario": "the public tool table can be registered, listed and unregistered; close rejects later runs",
       "comparisonScenarios": [
         "the public tool table can be registered, listed and unregistered; close rejects later runs",
@@ -21536,16 +22092,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-        "scenarioMatch": "direct-global",
+        "scenarioMatch": "direct",
         "capturedScenarios": [
           "the public tool table can be registered, listed and unregistered; close rejects later runs"
         ],
-        "result": null
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1192-codemode-alignment.md"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Keep close idempotent and terminal; callers should close explicitly rather than rely on destruction for cancellation.",
+      "remainingWork": null,
+      "notes": "Delivered by #1192; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1192-codemode-alignment.md",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -21558,7 +22114,26 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "implemented",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
+          "scenarioMatch": "direct-global",
+          "capturedScenarios": [
+            "the public tool table can be registered, listed and unregistered; close rejects later runs"
+          ],
+          "result": null
+        },
+        "missingObservation": null,
+        "gaps": [],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Keep close idempotent and terminal; callers should close explicitly rather than rely on destruction for cancellation."
+      },
+      "delivery": "1192-codemode-tool-table-close"
     },
     {
       "id": "cch_codemode:codemode-worker-construction-failure",

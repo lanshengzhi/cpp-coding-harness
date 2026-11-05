@@ -1,0 +1,110 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T00:50:53.318Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/extensions/codemode/execute.ts:DEFAULT_MAX_OUTPUT_TOKENS,truncateOutput,spillOutput,executeCodemode",
+    "packages/coding-agent/src/utils/output-files.ts:writeOutputFile"
+  ],
+  "scenarios": [
+    {
+      "name": "over-budget output keeps the head and tail and spills the full text to a named file",
+      "inputs": {
+        "script": "// @options: {\"max_output_tokens\": 80}\ntext(\"x\".repeat(500));\nreturn \"done\";",
+        "maxOutputTokens": 80
+      },
+      "expected": {
+        "ok": true,
+        "text": "Script completed\nWall time <N> seconds\nOutput:\n\nWarning: truncated output (original token count: 135)\nTotal output lines: 4\n\n==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…55 tokens truncated…xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone\n\n[Full output: /tmp/pi-codemode-d102b754809380ec.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "/tmp/pi-codemode-d102b754809380ec.txt"
+        },
+        "fullOutputPathNamed": true,
+        "spillBytes": "==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone"
+      },
+      "observed": {
+        "ok": true,
+        "text": "Script completed\nWall time <N> seconds\nOutput:\n\nWarning: truncated output (original token count: 135)\nTotal output lines: 4\n\n==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…55 tokens truncated…xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone\n\n[Full output: /tmp/pi-codemode-d102b754809380ec.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "/tmp/pi-codemode-d102b754809380ec.txt"
+        },
+        "fullOutputPathNamed": true,
+        "spillBytes": "==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone"
+      },
+      "normalizations": [
+        "wall time line"
+      ],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/execute.ts",
+        "case": "executeCodemode,truncateOutput"
+      }
+    },
+    {
+      "name": "a zero budget truncates over the error text",
+      "inputs": {
+        "script": "// @options: {\"max_output_tokens\": 0}\nthrow new Error(\"boom\");",
+        "maxOutputTokens": 0
+      },
+      "expected": {
+        "ok": false,
+        "text": "Script failed\nWall time <N> seconds\nOutput:\n\nWarning: truncated output (original token count: 23)\nTotal output lines: 5\n\n…23 tokens truncated…\n\n[Full output: /tmp/pi-codemode-fd9919616dd8b488.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "/tmp/pi-codemode-fd9919616dd8b488.txt"
+        },
+        "fullOutputPathNamed": true,
+        "spillBytes": "Script error:\nError: boom\n    at <anonymous> (codemode.js:2:11)\n\nNo tool calls were made."
+      },
+      "observed": {
+        "ok": false,
+        "text": "Script failed\nWall time <N> seconds\nOutput:\n\nWarning: truncated output (original token count: 23)\nTotal output lines: 5\n\n…23 tokens truncated…\n\n[Full output: /tmp/pi-codemode-fd9919616dd8b488.txt (read with offset/limit)]",
+        "details": {
+          "calls": [],
+          "fullOutputPath": "/tmp/pi-codemode-fd9919616dd8b488.txt"
+        },
+        "fullOutputPathNamed": true,
+        "spillBytes": "Script error:\nError: boom\n    at <anonymous> (codemode.js:2:11)\n\nNo tool calls were made."
+      },
+      "normalizations": [
+        "wall time line"
+      ]
+    },
+    {
+      "name": "an under-budget output is not truncated and names no spill file",
+      "inputs": {
+        "script": "// @options: {\"max_output_tokens\": 10000}\ntext(\"short\");\nreturn 1;",
+        "maxOutputTokens": 10000
+      },
+      "expected": {
+        "ok": true,
+        "text": "Script completed\nWall time <N> seconds\nOutput:\n\n==> text 1/2 <==\nshort\n==> text 2/2 <==\n1",
+        "details": {
+          "calls": []
+        },
+        "hasTruncationMarker": false
+      },
+      "observed": {
+        "ok": true,
+        "text": "Script completed\nWall time <N> seconds\nOutput:\n\n==> text 1/2 <==\nshort\n==> text 2/2 <==\n1",
+        "details": {
+          "calls": []
+        },
+        "hasTruncationMarker": false
+      },
+      "normalizations": [
+        "wall time line"
+      ]
+    }
+  ]
+}

@@ -3218,6 +3218,26 @@
         "cch_durable:node-filesystem"
       ],
       "disposition": "#1158 retains the remaining listing and read obligations; #1180 owns the whole-row durable receipt."
+    },
+    {
+      "family": "audit-1180",
+      "artifact": "sidecar-order.json",
+      "scenario": "a JSONL commit appends two sidecars in write order before the main marker",
+      "reason": "Captured by #1180's sidecar-order refresh (942d178be, two-sidecar ordering); no ledger row carries this exact scenario name yet.",
+      "rows": [
+        "cch_durable:Storage:jsonl:sidecar"
+      ],
+      "disposition": "Belongs to the durable lane's pending evidence update for cch_durable:Storage:jsonl:sidecar; classified as an orphan until the lane routes it, matching the older sidecar-order orphans."
+    },
+    {
+      "family": "audit-1180",
+      "artifact": "sidecar-order.json",
+      "scenario": "JSONL fsync flushes two sidecars in append order before the main marker",
+      "reason": "Captured by #1180's sidecar-order refresh (942d178be, two-sidecar ordering); no ledger row carries this exact scenario name yet.",
+      "rows": [
+        "cch_durable:Storage:jsonl:fsync"
+      ],
+      "disposition": "Belongs to the durable lane's pending evidence update for cch_durable:Storage:jsonl:fsync; classified as an orphan until the lane routes it, matching the older sidecar-order orphans."
     }
   ],
   "groups": [
@@ -4335,19 +4355,9 @@
         "id": "TM-codemode-tool-table-close",
         "ticket": "#1192",
         "history": false,
-        "note": "Proposal section 1.5/#1192: codemode-execute-outcome and codemode-inline-close map to #1192 (public tool-table and close comparison surface).",
+        "note": "Proposal section 1.5/#1192: codemode-inline-close maps to #1192 (public tool-table and close comparison surface). codemode-execute-outcome left the mapping when the 1192-codemode-tool-table-close delivery (2026-11-05) backed its ticket.",
         "rows": [
-          "cch_codemode:codemode-execute-outcome",
           "cch_codemode:codemode-inline-close"
-        ]
-      },
-      {
-        "id": "TM-codemode-portable-entry",
-        "ticket": "#1194",
-        "history": false,
-        "note": "Proposal section 1.5/#1194: portable no-Node codemode entry.",
-        "rows": [
-          "cch_codemode:codemode-portable-entry"
         ]
       },
       {

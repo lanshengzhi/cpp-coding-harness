@@ -1,0 +1,448 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1193",
+  "family": "audit-1193",
+  "capturedAt": "2026-11-05T00:50:53.318Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1193/capture-1193.mts",
+    "sha256": "2307aca2a70db4aa6336219446bd6510aa0e42f0e919feba7d6180b462751929",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1193/capture-1193.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1193/capture-1193.mts",
+        "sha256": "2307aca2a70db4aa6336219446bd6510aa0e42f0e919feba7d6180b462751929"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "remote-generic.json",
+      "family": "audit-1193",
+      "bytes": 5994,
+      "sha256": "b8174cd775c68dda1bfb1792e148c9cb23b36b4ff583ca8473781ea13ff735bd",
+      "sourceEndpoints": [
+        "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox,serveCodemodeRemote,CodemodeRemoteRequest,CodemodeRemoteExchange",
+        "packages/codemode/src/types.ts:CodemodeResult",
+        "packages/codemode/test/portable.test.ts:reports a failing or vanishing remote as a sandbox error"
+      ],
+      "scenarios": [
+        {
+          "name": "a generic remote exchange runs the script remotely and calls a caller tool",
+          "inputs": {
+            "script": "text('hi'); return await tools.add({ a: 1 })",
+            "tools": [
+              "add"
+            ],
+            "store": {
+              "k": 1
+            }
+          },
+          "expected": {
+            "request": {
+              "code": "text('hi'); return await tools.add({ a: 1 })",
+              "tools": [
+                {
+                  "name": "add",
+                  "jsName": "add",
+                  "description": "Add one."
+                }
+              ],
+              "globals": [],
+              "store": {
+                "k": "1"
+              },
+              "interruptBudget": null
+            },
+            "exchanges": 2,
+            "callMessages": [
+              {
+                "id": 1,
+                "target": "tool",
+                "name": "add",
+                "args": "{\"a\":1}"
+              }
+            ],
+            "terminalTypes": [
+              "done"
+            ],
+            "result": {
+              "ok": true,
+              "value": 2,
+              "output": [
+                {
+                  "type": "text",
+                  "text": "hi"
+                }
+              ],
+              "calls": [
+                {
+                  "name": "add",
+                  "status": "ok",
+                  "durationMs": 0.15695599999992282
+                }
+              ],
+              "storeWrites": {
+                "set": {},
+                "delete": []
+              }
+            },
+            "seenArgs": [
+              {
+                "a": 1
+              }
+            ]
+          },
+          "observed": {
+            "request": {
+              "code": "text('hi'); return await tools.add({ a: 1 })",
+              "tools": [
+                {
+                  "name": "add",
+                  "jsName": "add",
+                  "description": "Add one."
+                }
+              ],
+              "globals": [],
+              "store": {
+                "k": "1"
+              },
+              "interruptBudget": null
+            },
+            "exchanges": 2,
+            "callMessages": [
+              {
+                "id": 1,
+                "target": "tool",
+                "name": "add",
+                "args": "{\"a\":1}"
+              }
+            ],
+            "terminalTypes": [
+              "done"
+            ],
+            "result": {
+              "ok": true,
+              "value": 2,
+              "output": [
+                {
+                  "type": "text",
+                  "text": "hi"
+                }
+              ],
+              "calls": [
+                {
+                  "name": "add",
+                  "status": "ok",
+                  "durationMs": 0.15695599999992282
+                }
+              ],
+              "storeWrites": {
+                "set": {},
+                "delete": []
+              }
+            },
+            "seenArgs": [
+              {
+                "a": 1
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "the terminal writes set is empty on success and carries a real write set when the script writes",
+          "inputs": {
+            "plainScript": "return 1",
+            "writingScript": "store('a', 1); store('b', { c: 2 }); return load('a');"
+          },
+          "expected": {
+            "plain": {
+              "ok": true,
+              "value": 1,
+              "writes": {
+                "set": {},
+                "delete": []
+              }
+            },
+            "writing": {
+              "ok": true,
+              "value": 1,
+              "writes": {
+                "set": {
+                  "a": 1,
+                  "b": {
+                    "c": 2
+                  }
+                },
+                "delete": []
+              }
+            }
+          },
+          "observed": {
+            "plain": {
+              "ok": true,
+              "value": 1,
+              "writes": {
+                "set": {},
+                "delete": []
+              }
+            },
+            "writing": {
+              "ok": true,
+              "value": 1,
+              "writes": {
+                "set": {
+                  "a": 1,
+                  "b": {
+                    "c": 2
+                  }
+                },
+                "delete": []
+              }
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a rejected silent or unreachable remote keeps three distinct sandbox errors",
+          "inputs": {
+            "modes": [
+              "rejected",
+              "silent",
+              "unreachable"
+            ]
+          },
+          "expected": {
+            "rejected": {
+              "ok": false,
+              "error": {
+                "kind": "sandbox",
+                "message": "Remote sandbox failed: object reset"
+              }
+            },
+            "silent": {
+              "ok": false,
+              "error": {
+                "kind": "sandbox",
+                "message": "Remote sandbox returned before the script settled"
+              }
+            },
+            "unreachable": {
+              "ok": false,
+              "error": {
+                "kind": "sandbox",
+                "message": "Failed to reach the remote sandbox: no binding"
+              }
+            }
+          },
+          "observed": {
+            "rejected": {
+              "ok": false,
+              "error": {
+                "kind": "sandbox",
+                "message": "Remote sandbox failed: object reset"
+              }
+            },
+            "silent": {
+              "ok": false,
+              "error": {
+                "kind": "sandbox",
+                "message": "Remote sandbox returned before the script settled"
+              }
+            },
+            "unreachable": {
+              "ok": false,
+              "error": {
+                "kind": "sandbox",
+                "message": "Failed to reach the remote sandbox: no binding"
+              }
+            }
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "sandbox-create.json",
+      "family": "audit-1193",
+      "bytes": 2054,
+      "sha256": "c35561b41aaff144ce743ff1af8e4260d4298656f2e08dd996ec92e7a56d1d09",
+      "sourceEndpoints": [
+        "packages/codemode/src/runtime/host.ts:CodemodeSandbox,workerLauncher",
+        "packages/codemode/src/wasm.ts:loadQuickJSWasm",
+        "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase",
+        "packages/coding-agent/src/extensions/codemode/execute.lazy.ts:loadCodemodeExecutor"
+      ],
+      "scenarios": [
+        {
+          "name": "a missing guest module fails at the first run in pi, never at construction",
+          "inputs": {
+            "wasm": "rejects: wasm unavailable",
+            "script": "return 1"
+          },
+          "expected": {
+            "constructionOk": true,
+            "error": {
+              "kind": "sandbox",
+              "message": "Failed to load QuickJS: wasm unavailable"
+            }
+          },
+          "observed": {
+            "constructionOk": true,
+            "error": {
+              "kind": "sandbox",
+              "message": "Failed to load QuickJS: wasm unavailable"
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a sandbox that never executes never touches the guest",
+          "inputs": {
+            "wasm": "rejects: wasm unavailable",
+            "executes": 0
+          },
+          "expected": {
+            "constructionOk": true,
+            "closeOk": true,
+            "loadAttempts": 0
+          },
+          "observed": {
+            "constructionOk": true,
+            "closeOk": true,
+            "loadAttempts": 0
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a present guest module constructs and runs",
+          "inputs": {
+            "wasm": "loadQuickJSWasm()",
+            "script": "return 1"
+          },
+          "expected": {
+            "ok": true,
+            "value": 1
+          },
+          "observed": {
+            "ok": true,
+            "value": 1
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "output-budget.json",
+      "family": "audit-1193",
+      "bytes": 6081,
+      "sha256": "7f31303d1a2bbd8fa9e53da0494cacac032cbee7db184df8940e27806576290d",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/extensions/codemode/execute.ts:DEFAULT_MAX_OUTPUT_TOKENS,truncateOutput,spillOutput,executeCodemode",
+        "packages/coding-agent/src/utils/output-files.ts:writeOutputFile"
+      ],
+      "scenarios": [
+        {
+          "name": "over-budget output keeps the head and tail and spills the full text to a named file",
+          "inputs": {
+            "script": "// @options: {\"max_output_tokens\": 80}\ntext(\"x\".repeat(500));\nreturn \"done\";",
+            "maxOutputTokens": 80
+          },
+          "expected": {
+            "ok": true,
+            "text": "Script completed\nWall time <N> seconds\nOutput:\n\nWarning: truncated output (original token count: 135)\nTotal output lines: 4\n\n==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…55 tokens truncated…xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone\n\n[Full output: /tmp/pi-codemode-d102b754809380ec.txt (read with offset/limit)]",
+            "details": {
+              "calls": [],
+              "fullOutputPath": "/tmp/pi-codemode-d102b754809380ec.txt"
+            },
+            "fullOutputPathNamed": true,
+            "spillBytes": "==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone"
+          },
+          "observed": {
+            "ok": true,
+            "text": "Script completed\nWall time <N> seconds\nOutput:\n\nWarning: truncated output (original token count: 135)\nTotal output lines: 4\n\n==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…55 tokens truncated…xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone\n\n[Full output: /tmp/pi-codemode-d102b754809380ec.txt (read with offset/limit)]",
+            "details": {
+              "calls": [],
+              "fullOutputPath": "/tmp/pi-codemode-d102b754809380ec.txt"
+            },
+            "fullOutputPathNamed": true,
+            "spillBytes": "==> text 1/2 <==\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n==> text 2/2 <==\ndone"
+          },
+          "normalizations": [
+            "wall time line"
+          ],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/execute.ts",
+            "case": "executeCodemode,truncateOutput"
+          }
+        },
+        {
+          "name": "a zero budget truncates over the error text",
+          "inputs": {
+            "script": "// @options: {\"max_output_tokens\": 0}\nthrow new Error(\"boom\");",
+            "maxOutputTokens": 0
+          },
+          "expected": {
+            "ok": false,
+            "text": "Script failed\nWall time <N> seconds\nOutput:\n\nWarning: truncated output (original token count: 23)\nTotal output lines: 5\n\n…23 tokens truncated…\n\n[Full output: /tmp/pi-codemode-fd9919616dd8b488.txt (read with offset/limit)]",
+            "details": {
+              "calls": [],
+              "fullOutputPath": "/tmp/pi-codemode-fd9919616dd8b488.txt"
+            },
+            "fullOutputPathNamed": true,
+            "spillBytes": "Script error:\nError: boom\n    at <anonymous> (codemode.js:2:11)\n\nNo tool calls were made."
+          },
+          "observed": {
+            "ok": false,
+            "text": "Script failed\nWall time <N> seconds\nOutput:\n\nWarning: truncated output (original token count: 23)\nTotal output lines: 5\n\n…23 tokens truncated…\n\n[Full output: /tmp/pi-codemode-fd9919616dd8b488.txt (read with offset/limit)]",
+            "details": {
+              "calls": [],
+              "fullOutputPath": "/tmp/pi-codemode-fd9919616dd8b488.txt"
+            },
+            "fullOutputPathNamed": true,
+            "spillBytes": "Script error:\nError: boom\n    at <anonymous> (codemode.js:2:11)\n\nNo tool calls were made."
+          },
+          "normalizations": [
+            "wall time line"
+          ]
+        },
+        {
+          "name": "an under-budget output is not truncated and names no spill file",
+          "inputs": {
+            "script": "// @options: {\"max_output_tokens\": 10000}\ntext(\"short\");\nreturn 1;",
+            "maxOutputTokens": 10000
+          },
+          "expected": {
+            "ok": true,
+            "text": "Script completed\nWall time <N> seconds\nOutput:\n\n==> text 1/2 <==\nshort\n==> text 2/2 <==\n1",
+            "details": {
+              "calls": []
+            },
+            "hasTruncationMarker": false
+          },
+          "observed": {
+            "ok": true,
+            "text": "Script completed\nWall time <N> seconds\nOutput:\n\n==> text 1/2 <==\nshort\n==> text 2/2 <==\n1",
+            "details": {
+              "calls": []
+            },
+            "hasTruncationMarker": false
+          },
+          "normalizations": [
+            "wall time line"
+          ]
+        }
+      ]
+    }
+  ]
+}

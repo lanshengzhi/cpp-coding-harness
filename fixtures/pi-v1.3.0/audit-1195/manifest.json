@@ -1,0 +1,140 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1195",
+  "family": "audit-1195",
+  "capturedAt": "2026-11-05T00:34:45.779Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1195/capture-1195.mts",
+    "sha256": "5c97487dfc7dc6912ebb337b65157f675d88902b789c2cbe76d2a5545da17e34",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1195/capture-1195.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1195/capture-1195.mts",
+        "sha256": "5c97487dfc7dc6912ebb337b65157f675d88902b789c2cbe76d2a5545da17e34"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "discovery-absence.json",
+      "family": "audit-1195",
+      "bytes": 2893,
+      "sha256": "98dd578b2ba82134f08d15bbe60e64f7aebfca822f6e8b6a43ee82e319de1aa5",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/extensions/codemode/execute.ts:createDiscoveryGlobals,describeTool,describeNamespace",
+        "packages/coding-agent/src/extensions/codemode/tool.ts:toCodemodeDeclaration"
+      ],
+      "scenarios": [
+        {
+          "name": "an absent tool or namespace reads as undefined through the discovery globals",
+          "inputs": {
+            "script": "const absentTool = await describeTool(\"__missing__\");\nconst absentToolRaw = await describeTool(\"read-nope\");\nconst absentNs = await describeNamespace(\"__missing__\");\nconst present = await describeTool(\"read\");\nconst presentByJsName = await describeTool(\"mcp__docs__search\");\nconst ns = await describeNamespace(\"docs\");\nreturn JSON.stringify({\n\tabsentToolUndefined: absentTool === undefined,\n\tabsentToolType: typeof absentTool,\n\tabsentNsUndefined: absentNs === undefined,\n\tabsentNsType: typeof absentNs,\n\tpresentIsString: typeof present === \"string\",\n\tpresentHasDeclaration: typeof present === \"string\" && present.includes(\"declare const tools\"),\n\tpresentByJsNameIsString: typeof presentByJsName === \"string\",\n\tnsName: ns === undefined ? null : ns.name,\n\tnsTools: ns === undefined ? null : ns.tools,\n\tnsDescription: ns === undefined ? null : ns.description ?? null,\n});",
+            "absent": [
+              "__missing__",
+              "read-nope"
+            ],
+            "present": [
+              "read",
+              "mcp__docs__search"
+            ],
+            "namespace": "docs"
+          },
+          "expected": {
+            "absentToolUndefined": true,
+            "absentToolType": "undefined",
+            "absentNsUndefined": true,
+            "absentNsType": "undefined",
+            "presentIsString": true,
+            "presentHasDeclaration": true,
+            "presentByJsNameIsString": true,
+            "nsName": "docs",
+            "nsTools": [
+              "mcp__docs__search"
+            ],
+            "nsDescription": "Documentation tools"
+          },
+          "observed": {
+            "absentToolUndefined": true,
+            "absentToolType": "undefined",
+            "absentNsUndefined": true,
+            "absentNsType": "undefined",
+            "presentIsString": true,
+            "presentHasDeclaration": true,
+            "presentByJsNameIsString": true,
+            "nsName": "docs",
+            "nsTools": [
+              "mcp__docs__search"
+            ],
+            "nsDescription": "Documentation tools"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/execute.ts",
+            "case": "createDiscoveryGlobals"
+          }
+        }
+      ]
+    },
+    {
+      "path": "clock-timezone.json",
+      "family": "audit-1195",
+      "bytes": 1605,
+      "sha256": "e88521fadbf98fb2843714b7dc770dc3ae8b2be7c4dc33fb722008c61db03e37",
+      "sourceEndpoints": [
+        "packages/codemode/src/runtime/vm.ts:startVm,timezoneOffset",
+        "packages/codemode/test/deterministic.test.ts:execute() is not deterministic while start() is"
+      ],
+      "scenarios": [
+        {
+          "name": "execute reads the host timezone while deterministic start pins UTC",
+          "inputs": {
+            "script": "return [new Date(0).getTimezoneOffset(), new Date('2026-06-01T00:00:00Z').getTimezoneOffset()];",
+            "startedAt": 1768471200000,
+            "seed": 1
+          },
+          "expected": {
+            "executeOffsetsMinutes": [
+              -540,
+              -540
+            ],
+            "startOffsetsMinutes": [
+              0,
+              0
+            ],
+            "hostOffsetMinutes": -540,
+            "executeMatchesHost": true,
+            "startIsUtc": true
+          },
+          "observed": {
+            "executeOffsetsMinutes": [
+              -540,
+              -540
+            ],
+            "startOffsetsMinutes": [
+              0,
+              0
+            ],
+            "hostOffsetMinutes": -540,
+            "executeMatchesHost": true,
+            "startIsUtc": true
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "execute() is not deterministic while start() is"
+          }
+        }
+      ]
+    }
+  ]
+}
