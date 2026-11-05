@@ -151,7 +151,7 @@ TEST_CASE("Overlay defaults to a safe centered anchor for empty and small viewpo
     CHECK(oversized.row == 0);
 }
 
-TEST_CASE("Overlay anchors cover each viewport edge and center", "[tui][overlay][issue981]") {
+TEST_CASE("Overlay anchors cover each viewport edge and center", "[tui][overlay][issue981][issue1209]") {
     const auto position_for = [](cch::tui::OverlayAnchor anchor) {
         cch::tui::OverlayOptions options;
         options.width = cch::tui::SizeValue::absolute(20);
@@ -178,7 +178,7 @@ TEST_CASE("Overlay anchors cover each viewport edge and center", "[tui][overlay]
 }
 
 TEST_CASE("Overlay resolves percentage sizing independent coordinates margins and signed offsets",
-        "[tui][overlay][issue981]") {
+        "[tui][overlay][issue981][issue1209]") {
     cch::tui::OverlayOptions options;
     options.width = cch::tui::SizeValue{"50%"};
     options.min_width = 30;
@@ -288,7 +288,7 @@ TEST_CASE("Tui routes input to overlays before base content", "[tui][overlay][is
     CHECK(base_ptr->received_input.empty());
 }
 
-TEST_CASE("Non-capturing overlay passes input through to base content", "[tui][overlay][issue50][spec]") {
+TEST_CASE("Non-capturing overlay passes input through to base content", "[tui][overlay][issue50][issue1209][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -357,7 +357,7 @@ TEST_CASE("Overlay z-index controls input routing order", "[tui][overlay][issue5
     CHECK(base_ptr->received_input.empty());
 }
 
-TEST_CASE("Hide and restore overlay with focus fallback", "[tui][overlay][issue50][spec]") {
+TEST_CASE("Hide and restore overlay with focus fallback", "[tui][overlay][issue50][issue1209][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
@@ -552,7 +552,7 @@ TEST_CASE("Default cursor_location returns nullopt for non-focusable", "[tui][ov
     CHECK(text.cursor_location() == std::nullopt);
 }
 
-TEST_CASE("Overlay explicit unfocus routes inserted text only to its target", "[tui][overlay][issue982]") {
+TEST_CASE("Overlay explicit unfocus routes inserted text only to its target", "[tui][overlay][issue982][issue1209]") {
     cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 4});
     cch::tui::Tui tui(terminal);
 

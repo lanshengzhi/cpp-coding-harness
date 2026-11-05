@@ -285,7 +285,7 @@ TEST_CASE("Text re-wraps at a new horizontal padding like frozen pi",
 // rendered lines do not depend on the width still re-renders with the new
 // padding. Without the invalidation the cached composition (the old padding)
 // is returned, because the child's own lines are unchanged.
-TEST_CASE("Box padding change invalidates the render cache", "[tui][box][padding][issue1182][issue1121][spec]") {
+TEST_CASE("Box padding change invalidates the render cache", "[tui][box][padding][issue1182][issue1121][issue1209][spec]") {
     cch::tui::Box box(2, 0);
     REQUIRE(box.add_child(std::make_unique<RawLineComponent>("hey")));
 
