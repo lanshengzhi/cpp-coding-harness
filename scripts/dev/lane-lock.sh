@@ -13,8 +13,11 @@
 # Acquisition is atomic through `set -C` noclobber redirection, so exactly one contender's
 # create succeeds. A lock held by a different lane refuses further acquisitions until it is
 # released or goes stale (older than 4 hours), at which point a new lane may take it over.
-# `release` is fail-closed: only the holding lane may release. A lock whose JSON cannot be
-# read is treated as fresh, never stale, so staleness can never silently justify a takeover.
+# The takeover itself is one atomic step: a contender must win a mkdir compare-and-swap on a
+# claim directory beside the lock before unlinking it, so two contenders racing a stale lock
+# can never both unlink-and-recreate it. `release` is fail-closed: only the holding lane may
+# release. A lock whose JSON cannot be read is treated as fresh, never stale, so staleness
+# can never silently justify a takeover.
 #
 # Usage:
 #   scripts/dev/lane-lock.sh acquire <lane-name> [timeout-seconds]
@@ -34,6 +37,8 @@ set -eu
 
 LOCK_FILE_NAME=".lane-lock.json"
 STALE_SECONDS=14400 # 4 hours
+TAKEOVER_CLAIM_SUFFIX=".takeover"
+TAKEOVER_CLAIM_GRACE_SECONDS=60
 
 die() {
     printf 'lane-lock: %s\n' "$*" >&2
@@ -120,6 +125,53 @@ human_age() {
     printf '%dh%02dm\n' $(( $1 / 3600 )) $(( ($1 % 3600) / 60 ))
 }
 
+claim_mtime() {
+    # $1 = takeover claim directory; prints its mtime epoch, or the current time when the
+    # directory vanished or its mtime cannot be read — an unreadable claim always reads as
+    # live, never as a leak.
+    stat -c %Y "$1" 2>/dev/null || date -u +%s
+}
+
+claim_stale_lock() {
+    # $1 = lock file, already sampled older than STALE_SECONDS by the caller. Stale takeover
+    # as a single atomic step: mkdir on the claim path is the compare-and-swap — exactly one
+    # contender creates it, and only the creator unlinks the stale lock. The creator
+    # re-validates staleness while holding the claim, because a rival may have completed its
+    # takeover between the caller's sample and the claim; unlinking that fresh lock is the
+    # exact double-winner race this replaces. Returns 0 once the stale lock is removed (the
+    # caller loops and write_locks its own); returns 1 when a live rival claim exists or the
+    # lock turned fresh, unreadable or vanished mid-takeover, leaving every contender's fresh
+    # lock untouched.
+    lock_file=$1
+    claim="$lock_file$TAKEOVER_CLAIM_SUFFIX"
+    if ! mkdir "$claim" 2>/dev/null; then
+        # Rival claim. A contender that died between claiming and cleanup leaks it; a claim
+        # older than the grace period is treated as leaked — cleared, then retried through
+        # the same single mkdir step. rmdir fails harmlessly when a rival already cleared it,
+        # so mkdir stays the only decider.
+        claim_age=$(( $(date -u +%s) - $(claim_mtime "$claim") ))
+        if [ "$claim_age" -le "$TAKEOVER_CLAIM_GRACE_SECONDS" ]; then
+            return 1
+        fi
+        rmdir "$claim" 2>/dev/null || true
+        if ! mkdir "$claim" 2>/dev/null; then
+            return 1
+        fi
+    fi
+    age=$(lock_age_seconds "$lock_file")
+    if [ -n "$age" ] && [ "$age" -gt "$STALE_SECONDS" ]; then
+        printf 'lane-lock: taking over stale lock (age %s > 4h) held by %s\n' \
+            "$(human_age "$age")" "$(holder_summary "$lock_file")" >&2
+        rm -f "$lock_file"
+        rmdir "$claim" 2>/dev/null || true
+        return 0
+    fi
+    # Fresh, unreadable or already gone: a rival finished first. Drop the claim and let the
+    # caller wait out its deadline; the lock at this path is not ours to unlink.
+    rmdir "$claim" 2>/dev/null || true
+    return 1
+}
+
 cmd_acquire() {
     # $1 = lane, $2 = timeout seconds (default 0: fail immediately while held).
     [ $# -ge 1 ] || die "acquire needs a lane name; see --help"
@@ -144,10 +196,12 @@ cmd_acquire() {
         fi
         age=$(lock_age_seconds "$lock")
         if [ -n "$age" ] && [ "$age" -gt "$STALE_SECONDS" ]; then
-            printf 'lane-lock: taking over stale lock (age %s > 4h) held by %s\n' \
-                "$(human_age "$age")" "$(holder_summary "$lock")" >&2
-            rm -f "$lock"
-            continue
+            # Stale: only the mkdir compare-and-swap winner unlinks it, after re-validating
+            # staleness inside the claim. Rivals fall through to the deadline wait like any
+            # other contender instead of unlinking a lock a rival may just have refreshed.
+            if claim_stale_lock "$lock"; then
+                continue
+            fi
         fi
         now=$(date -u +%s)
         if [ "$now" -ge "$deadline" ]; then

@@ -737,6 +737,13 @@
       "sha256": "b7c4eb8843d70e89998b58ebf8aec8dca25f9c4d02086049e9cd8f2296d716ad"
      }
     }
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
+    ]
    }
   },
   {
@@ -2343,6 +2350,13 @@
       "sha256": "721aeb2454221bee7c9c8b2c386b1b7f2f7e83e899586b1810de00f027da6a63"
      }
     }
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
+    ]
    }
   },
   {
@@ -3219,6 +3233,13 @@
     "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
     ]
    }
   },
@@ -4193,6 +4214,13 @@
       "sha256": "a5f77081d01ebda3363c7b2388a57ea614a392a0a97a44269504047065c8d348"
      }
     }
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
+    ]
    }
   },
   {
@@ -4505,6 +4533,13 @@
     "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
     ]
    }
   },
@@ -4873,6 +4908,13 @@
     "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
     ]
    }
   },
@@ -5355,6 +5397,13 @@
       "sha256": "8c4676d1577f5eada43b6461817a8fc2a5d8ddd0a93099da8e8faf309e5ec44a"
      }
     }
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
+    ]
    }
   },
   {
@@ -5804,6 +5853,13 @@
       "sha256": "edc3886927d1992f9eec0bbd6594d3797543de3479a3c4cb38e26df7f10aa29b"
      }
     }
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
+    ]
    }
   },
   {
@@ -5983,6 +6039,13 @@
     "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
     ]
    }
   },
@@ -6540,6 +6603,13 @@
       "sha256": "2aefa829a77be43e57339c4eba028be87d4392287b6ac9552df820e9209f05e2"
      }
     }
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
+    ]
    }
   },
   {
@@ -7883,6 +7953,13 @@
       "sha256": "d4e469dc8d7e2a9c6bc2294b06d0fb5c3577dc1436b2382e031295d346eeb31c"
      }
     }
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
+    ]
    }
   },
   {
@@ -8216,6 +8293,13 @@
       "sha256": "5a34ef523d360f0af5c242c5b6f8a157962819091641df8ccab48650e9522c5f"
      }
     }
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
+    ]
    }
   },
   {
@@ -8600,6 +8684,13 @@
       "sha256": "a118fe2a5b0d91ef9d71645876f509f364d0ba2360e543919dd8504d11483f42"
      }
     }
+   },
+   "revalidation1228": {
+    "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "scripts/dev/lane-lock.sh",
+     "tests/dev/LaneLockTest.py"
+    ]
    }
   },
   {
