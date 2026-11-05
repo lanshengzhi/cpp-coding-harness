@@ -1,0 +1,115 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/agent.ts:DEFAULT_RETRY_POLICY,DEFAULT_COMPACTION_POLICY,DEFAULT_PROGRESS_POLICY,resolveSettings"
+  ],
+  "scenarios": [
+    {
+      "name": "the harness settings defaults resolve with the frozen object-merge rules",
+      "inputs": {
+        "partialOverride": {
+          "retry": {
+            "maxRetries": 1
+          },
+          "progress": {
+            "partialIntervalMs": 250
+          },
+          "steeringMode": "queue-all"
+        },
+        "explicitUndefined": {
+          "retry": {
+            "enabled": false
+          }
+        }
+      },
+      "expected": {
+        "defaults": {
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3,
+            "baseDelayMs": 2000,
+            "maxAgentDelayMs": 60000
+          },
+          "compaction": {
+            "enabled": true,
+            "reserveTokens": 16384,
+            "keepRecentTokens": 20000,
+            "backgroundTokens": 32768
+          },
+          "progress": {
+            "partialIntervalMs": 100,
+            "outputIntervalMs": 100
+          },
+          "steeringMode": "one-at-a-time",
+          "followUpMode": "one-at-a-time",
+          "toolExecution": "parallel"
+        },
+        "partialOverride": {
+          "retry": {
+            "enabled": true,
+            "maxRetries": 1,
+            "baseDelayMs": 2000,
+            "maxAgentDelayMs": 60000
+          },
+          "progress": {
+            "partialIntervalMs": 250,
+            "outputIntervalMs": 100
+          },
+          "steeringMode": "queue-all",
+          "followUpMode": "one-at-a-time"
+        },
+        "explicitUndefinedEnabled": false
+      },
+      "observed": {
+        "defaults": {
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3,
+            "baseDelayMs": 2000,
+            "maxAgentDelayMs": 60000
+          },
+          "compaction": {
+            "enabled": true,
+            "reserveTokens": 16384,
+            "keepRecentTokens": 20000,
+            "backgroundTokens": 32768
+          },
+          "progress": {
+            "partialIntervalMs": 100,
+            "outputIntervalMs": 100
+          },
+          "steeringMode": "one-at-a-time",
+          "followUpMode": "one-at-a-time",
+          "toolExecution": "parallel"
+        },
+        "partialOverride": {
+          "retry": {
+            "enabled": true,
+            "maxRetries": 1,
+            "baseDelayMs": 2000,
+            "maxAgentDelayMs": 60000
+          },
+          "progress": {
+            "partialIntervalMs": 250,
+            "outputIntervalMs": 100
+          },
+          "steeringMode": "queue-all",
+          "followUpMode": "one-at-a-time"
+        },
+        "explicitUndefinedEnabled": false
+      },
+      "normalizations": []
+    }
+  ]
+}

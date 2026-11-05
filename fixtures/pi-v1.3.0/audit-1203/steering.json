@@ -1,0 +1,121 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/inbox.ts:applyBoundary,prepareBoundary,InboxDoc",
+    "packages/durable/src/harness/submissions.ts:Submissions",
+    "packages/durable/src/types.ts:QueueMode",
+    "packages/durable/src/harness/agent.ts:resolveSettings,steeringMode,followUpMode",
+    "packages/durable/test/harness-inbox.test.ts:boundaries,harness-submissions.test.ts:admission"
+  ],
+  "scenarios": [
+    {
+      "name": "a steer submitted while the run is busy lands at the postTools boundary in one run",
+      "inputs": {
+        "first": "a",
+        "steer": "s (whenBusy steer)"
+      },
+      "expected": {
+        "transcript": [
+          "pi.user:a",
+          "pi.assistant:first",
+          "pi.user:s",
+          "pi.assistant:second"
+        ],
+        "steerStatus": "done",
+        "inputStatus": "done"
+      },
+      "observed": {
+        "transcript": [
+          "pi.user:a",
+          "pi.assistant:first",
+          "pi.user:s",
+          "pi.assistant:second"
+        ],
+        "steerStatus": "done",
+        "inputStatus": "done"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "busy follow-up submissions queue and drain one successor run at a time by default",
+      "inputs": {
+        "first": "a",
+        "followUps": [
+          "f1",
+          "f2"
+        ],
+        "followUpMode": "default (one-at-a-time)"
+      },
+      "expected": {
+        "transcript": [
+          "pi.user:a",
+          "pi.assistant:first",
+          "pi.user:f1",
+          "pi.assistant:second",
+          "pi.user:f2",
+          "pi.assistant:third"
+        ],
+        "lastStatuses": [
+          "done",
+          "done"
+        ]
+      },
+      "observed": {
+        "transcript": [
+          "pi.user:a",
+          "pi.assistant:first",
+          "pi.user:f1",
+          "pi.assistant:second",
+          "pi.user:f2",
+          "pi.assistant:third"
+        ],
+        "lastStatuses": [
+          "done",
+          "done"
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a duplicate request ID returns the existing submission without queueing the payload twice",
+      "inputs": {
+        "requestId": "audit1203-dup-request",
+        "payloads": [
+          "a",
+          "a-changed"
+        ],
+        "whenBusy": "second submit during the first run"
+      },
+      "expected": {
+        "sameSubmission": true,
+        "oneStatus": "done",
+        "twoStatus": "done",
+        "transcript": [
+          "pi.user:a",
+          "pi.assistant:first"
+        ]
+      },
+      "observed": {
+        "sameSubmission": true,
+        "oneStatus": "done",
+        "twoStatus": "done",
+        "transcript": [
+          "pi.user:a",
+          "pi.assistant:first"
+        ]
+      },
+      "normalizations": []
+    }
+  ]
+}

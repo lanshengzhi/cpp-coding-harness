@@ -1,0 +1,54 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/types.ts:Extension,GenerationHooks,ToolHooks,HookApi",
+    "packages/durable/src/harness/registry.ts:createRegistry",
+    "packages/durable/src/harness/define.ts:defineExtension,hook"
+  ],
+  "scenarios": [
+    {
+      "name": "a registered extension fires its generation and tool hooks and the run triggers again through the public submit seam",
+      "inputs": {
+        "extension": "audit1203.ext",
+        "runs": [
+          "go (tool call)",
+          "again"
+        ]
+      },
+      "expected": {
+        "events": [
+          "beforeRequest",
+          "beforeTool:audit_hooked",
+          "afterTool",
+          "beforeRequest",
+          "beforeRequest"
+        ],
+        "runCount": 3
+      },
+      "observed": {
+        "events": [
+          "beforeRequest",
+          "beforeTool:audit_hooked",
+          "afterTool",
+          "beforeRequest",
+          "beforeRequest"
+        ],
+        "runCount": 3
+      },
+      "normalizations": [
+        "request payload capture is not introspected; hook firing order and count are the observation"
+      ]
+    }
+  ]
+}

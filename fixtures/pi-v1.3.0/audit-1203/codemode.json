@@ -1,0 +1,120 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/codemode/codemode.ts:createCodemodeTool,CodemodeRunDoc,CodemodeJournalDoc,OUTPUT_LIMITS",
+    "packages/durable/src/codemode/models.ts:CATALOG_GLOBALS,MODEL_CALLS",
+    "packages/durable/src/codemode/output.ts:formatResult,OutputFile",
+    "packages/durable/test/codemode.test.ts:restart replay,models globals,token budget"
+  ],
+  "scenarios": [
+    {
+      "name": "a durable codemode run over its timeout is interrupted with the frozen error, not a false success",
+      "inputs": {
+        "options": {
+          "timeout_ms": 400
+        },
+        "script": "while (true) {}"
+      },
+      "expected": {
+        "result": {
+          "text": "Script error:\nScript timed out: Execution timed out after 399 ms\n\nNo tool calls were made.",
+          "isError": true
+        }
+      },
+      "observed": {
+        "result": {
+          "text": "Script error:\nScript timed out: Execution timed out after 399 ms\n\nNo tool calls were made.",
+          "isError": true
+        }
+      },
+      "normalizations": [
+        "wall-clock timeout window"
+      ]
+    },
+    {
+      "name": "the codemode models globals are present behind the capability gate and absent when models are disabled",
+      "inputs": {
+        "script": "typeof models / models.classify / models.generateImages",
+        "models": [
+          "default",
+          false
+        ]
+      },
+      "expected": {
+        "enabled": "[\"object\",\"function\",\"function\"]",
+        "disabled": "Script error:\nReferenceError: models is not defined\n    at <anonymous> (codemode.js:1:59)\n\nNo tool calls were made."
+      },
+      "observed": {
+        "enabled": "[\"object\",\"function\",\"function\"]",
+        "disabled": "Script error:\nReferenceError: models is not defined\n    at <anonymous> (codemode.js:1:59)\n\nNo tool calls were made."
+      },
+      "normalizations": []
+    },
+    {
+      "name": "durable codemode keeps ordered text output and formats the returned value through the tool result",
+      "inputs": {
+        "script": "text(\"one\"); text(\"two\"); return 7"
+      },
+      "expected": {
+        "result": {
+          "text": "==> text 1/3 <==\none\n==> text 2/3 <==\ntwo\n==> text 3/3 <==\n7",
+          "isError": false,
+          "hasHeader": true
+        }
+      },
+      "observed": {
+        "result": {
+          "text": "==> text 1/3 <==\none\n==> text 2/3 <==\ntwo\n==> text 3/3 <==\n7",
+          "isError": false,
+          "hasHeader": true
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a durable codemode run resumes after a restart without rerunning its finished calls",
+      "inputs": {
+        "script": "echo a; hold; echo b; return [a, h, b]",
+        "restart": "close and reopen over sqlite"
+      },
+      "expected": {
+        "settledStatus": "done",
+        "result": {
+          "text": "[\"echo a\",\"held\",\"echo b\"]",
+          "isError": false
+        },
+        "echoCounts": {
+          "a": 1,
+          "b": 1
+        },
+        "vmStarts": 2
+      },
+      "observed": {
+        "settledStatus": "done",
+        "result": {
+          "text": "[\"echo a\",\"held\",\"echo b\"]",
+          "isError": false
+        },
+        "echoCounts": {
+          "a": 1,
+          "b": 1
+        },
+        "vmStarts": 2
+      },
+      "normalizations": [
+        "wall-clock guest startup"
+      ]
+    }
+  ]
+}

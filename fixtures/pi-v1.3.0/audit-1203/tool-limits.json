@@ -1,0 +1,61 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/tools/bash.ts:createBashTool,runCommand",
+    "packages/durable/src/truncate.ts:DEFAULT_MAX_BYTES,DEFAULT_MAX_LINES"
+  ],
+  "scenarios": [
+    {
+      "name": "the durable bash tool truncates over-limit output and spills the full text with frozen diagnostics",
+      "inputs": {
+        "command": "seq 1 3000",
+        "limits": {
+          "lines": 2000,
+          "bytes": 51200
+        }
+      },
+      "expected": {
+        "limits": {
+          "lines": 2000,
+          "bytes": 51200
+        },
+        "firstRetainedLine": "1001",
+        "lastContentLine": "3000",
+        "retainedLineCount": 2000,
+        "diagnostics": [
+          "[info] Full output: /tmp/tmp-krANgt/pi-output-506cae82-22c3-44ea-ac26-a8b8ff9c1a0f.log",
+          "[warn] Output truncated to its end: 1000 lines, 3893 bytes dropped"
+        ],
+        "isError": false
+      },
+      "observed": {
+        "limits": {
+          "lines": 2000,
+          "bytes": 51200
+        },
+        "firstRetainedLine": "1001",
+        "lastContentLine": "3000",
+        "retainedLineCount": 2000,
+        "diagnostics": [
+          "[info] Full output: /tmp/tmp-krANgt/pi-output-506cae82-22c3-44ea-ac26-a8b8ff9c1a0f.log",
+          "[warn] Output truncated to its end: 1000 lines, 3893 bytes dropped"
+        ],
+        "isError": false
+      },
+      "normalizations": [
+        "the spill file path inside the [info] Full output diagnostic is a random temp path"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/compaction.ts:CompactionTask,selectCut",
+    "packages/durable/src/harness/generation.ts:GenerationTask",
+    "packages/durable/test/harness-compaction.test.ts:background threshold,overflow"
+  ],
+  "scenarios": [
+    {
+      "name": "a background compaction task starts above the threshold without blocking the run",
+      "inputs": {
+        "policy": {
+          "enabled": true,
+          "reserveTokens": 300,
+          "keepRecentTokens": 150,
+          "backgroundTokens": 1000
+        },
+        "turn": "100-token user over a 2000-token window with a gated summary"
+      },
+      "expected": {
+        "submissionStatus": "done",
+        "task": {
+          "background": true,
+          "reason": "threshold",
+          "owner": null
+        },
+        "liveCompactions": [
+          {
+            "taskId": 23,
+            "reason": "threshold",
+            "blocking": false,
+            "attempt": 1
+          }
+        ],
+        "statusAfterWaitForIdle": "running",
+        "statusAfterAbort": "running",
+        "outcomeStatus": "completed"
+      },
+      "observed": {
+        "submissionStatus": "done",
+        "task": {
+          "background": true,
+          "reason": "threshold",
+          "owner": null
+        },
+        "liveCompactions": [
+          {
+            "taskId": 23,
+            "reason": "threshold",
+            "blocking": false,
+            "attempt": 1
+          }
+        ],
+        "statusAfterWaitForIdle": "running",
+        "statusAfterAbort": "running",
+        "outcomeStatus": "completed"
+      },
+      "normalizations": [
+        "wall-clock timing of the gated summary"
+      ]
+    },
+    {
+      "name": "overflow compaction retries the original request once after the compaction commits",
+      "inputs": {
+        "failure": "prompt is too long: 250000 tokens > 200000 maximum",
+        "history": "3x100-token turns"
+      },
+      "expected": {
+        "status": "done",
+        "attemptAfterRetry": 1,
+        "lastFiveKinds": [
+          "pi.user",
+          "pi.assistant",
+          "pi.compaction",
+          "pi.system",
+          "pi.assistant"
+        ],
+        "compactionReasons": [
+          "overflow"
+        ],
+        "retrySkipsErrorTurn": true,
+        "retryCarriesSummary": false
+      },
+      "observed": {
+        "status": "done",
+        "attemptAfterRetry": 1,
+        "lastFiveKinds": [
+          "pi.user",
+          "pi.assistant",
+          "pi.compaction",
+          "pi.system",
+          "pi.assistant"
+        ],
+        "compactionReasons": [
+          "overflow"
+        ],
+        "retrySkipsErrorTurn": true,
+        "retryCarriesSummary": false
+      },
+      "normalizations": []
+    }
+  ]
+}

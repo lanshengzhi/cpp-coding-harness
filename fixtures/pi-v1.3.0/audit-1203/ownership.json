@@ -1,0 +1,76 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/types.ts:TaskOptions.background,ConversationAbortOptions",
+    "packages/durable/src/harness/scheduler.ts:TaskScheduler,#loadScopes,#walkDown,#settleIdle,waitForTask",
+    "packages/durable/test/harness-ownership.test.ts:background,idle"
+  ],
+  "scenarios": [
+    {
+      "name": "a background child survives a conversation abort while a direct abort reaches it",
+      "inputs": {
+        "placement": {
+          "background": true,
+          "ownership": "conversation"
+        },
+        "aborts": [
+          "conversation",
+          "direct"
+        ]
+      },
+      "expected": {
+        "statusAfterConversationAbort": "running",
+        "statusAfterDirectAbort": "terminal",
+        "outcome": {
+          "status": "aborted",
+          "reason": "test"
+        }
+      },
+      "observed": {
+        "statusAfterConversationAbort": "running",
+        "statusAfterDirectAbort": "terminal",
+        "outcome": {
+          "status": "aborted",
+          "reason": "test"
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "an idle wait resolves with live background work and holds on a live foreground task",
+      "inputs": {
+        "tasks": [
+          "background gated",
+          "foreground gated"
+        ],
+        "waits": [
+          "waitForIdle"
+        ]
+      },
+      "expected": {
+        "idleWithBackground": "resolved",
+        "heldWhileForegroundLive": true,
+        "resolvedAfterForegroundSettled": true
+      },
+      "observed": {
+        "idleWithBackground": "resolved",
+        "heldWhileForegroundLive": true,
+        "resolvedAfterForegroundSettled": true
+      },
+      "normalizations": [
+        "30ms settle observation window for the held idle wait"
+      ]
+    }
+  ]
+}

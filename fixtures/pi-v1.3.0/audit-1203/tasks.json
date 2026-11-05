@@ -1,0 +1,153 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/types.ts:TaskDefinition.hooks,TaskDefinition.migrate,TaskOutcome,TaskState,TaskRecord",
+    "packages/durable/src/harness/define.ts:defineTask,hook",
+    "packages/durable/src/harness/scheduler.ts:TaskScheduler,#decide,#terminate,#finalize",
+    "packages/durable/test/harness-tasks.test.ts:phase hooks,outcomes,migration",
+    "packages/durable/test/harness-tasks-recovery.test.ts:orphaned,migration failure,too-new"
+  ],
+  "scenarios": [
+    {
+      "name": "task hooks run in extension order and a throwing hook reports without vetoing the task",
+      "inputs": {
+        "hooks": [
+          "first",
+          "throwing"
+        ],
+        "task": "audit1203.hooks"
+      },
+      "expected": {
+        "pings": [
+          "first",
+          "throwing"
+        ],
+        "outcome": {
+          "status": "completed",
+          "result": null
+        },
+        "reports": [
+          "Error: hook exploded"
+        ]
+      },
+      "observed": {
+        "pings": [
+          "first",
+          "throwing"
+        ],
+        "outcome": {
+          "status": "completed",
+          "result": null
+        },
+        "reports": [
+          "Error: hook exploded"
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a completing owner holds until its children drain and commits the terminal outcome",
+      "inputs": {
+        "parent": "audit1203.parent",
+        "child": "audit1203.child gated"
+      },
+      "expected": {
+        "parentStatusBeforeChildDrain": "completing",
+        "parentOutcome": {
+          "status": "completed",
+          "result": "parent-result"
+        },
+        "parentTerminalAfterDrain": "terminal"
+      },
+      "observed": {
+        "parentStatusBeforeChildDrain": "completing",
+        "parentOutcome": {
+          "status": "completed",
+          "result": "parent-result"
+        },
+        "parentTerminalAfterDrain": "terminal"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "an aborted task with a missing definition settles orphaned with the frozen reason",
+      "inputs": {
+        "kind": "test.orphan-scratch",
+        "abort": "before registration"
+      },
+      "expected": {
+        "mark": "marked",
+        "outcome": {
+          "status": "orphaned",
+          "reason": "missing_task"
+        },
+        "status": "terminal"
+      },
+      "observed": {
+        "mark": "marked",
+        "outcome": {
+          "status": "orphaned",
+          "reason": "missing_task"
+        },
+        "status": "terminal"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a task definition migrates an old-version record and a too-new definition blocks with the frozen report",
+      "inputs": {
+        "recordVersion": 1,
+        "definitions": [
+          "version 2 without migrate",
+          "version 2 with migrate"
+        ]
+      },
+      "expected": {
+        "tooNew": {
+          "report": "Error: Task test.versioned version 2 has no migration from 1",
+          "status": "pending",
+          "version": 1
+        },
+        "migrated": {
+          "fromVersions": [
+            1
+          ],
+          "outcome": {
+            "status": "completed",
+            "result": "v2"
+          },
+          "version": 2
+        }
+      },
+      "observed": {
+        "tooNew": {
+          "report": "Error: Task test.versioned version 2 has no migration from 1",
+          "status": "pending",
+          "version": 1
+        },
+        "migrated": {
+          "fromVersions": [
+            1
+          ],
+          "outcome": {
+            "status": "completed",
+            "result": "v2"
+          },
+          "version": 2
+        }
+      },
+      "normalizations": []
+    }
+  ]
+}

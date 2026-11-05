@@ -1,0 +1,918 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1203",
+  "family": "audit-1203",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1203/capture-1203.mts",
+    "sha256": "284c6e44130481f9b2912461649c2309c394c1d5b68aaede703be9b79c769319",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1203/capture-1203.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1203/capture-1203.mts",
+        "sha256": "284c6e44130481f9b2912461649c2309c394c1d5b68aaede703be9b79c769319"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "settings.json",
+      "family": "audit-1203",
+      "bytes": 3166,
+      "sha256": "c052f950e7a07e436f0a50e3e2d610d367d7812a7850642ef90a4f9c621447ec",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/agent.ts:DEFAULT_RETRY_POLICY,DEFAULT_COMPACTION_POLICY,DEFAULT_PROGRESS_POLICY,resolveSettings"
+      ],
+      "scenarios": [
+        {
+          "name": "the harness settings defaults resolve with the frozen object-merge rules",
+          "inputs": {
+            "partialOverride": {
+              "retry": {
+                "maxRetries": 1
+              },
+              "progress": {
+                "partialIntervalMs": 250
+              },
+              "steeringMode": "queue-all"
+            },
+            "explicitUndefined": {
+              "retry": {
+                "enabled": false
+              }
+            }
+          },
+          "expected": {
+            "defaults": {
+              "retry": {
+                "enabled": true,
+                "maxRetries": 3,
+                "baseDelayMs": 2000,
+                "maxAgentDelayMs": 60000
+              },
+              "compaction": {
+                "enabled": true,
+                "reserveTokens": 16384,
+                "keepRecentTokens": 20000,
+                "backgroundTokens": 32768
+              },
+              "progress": {
+                "partialIntervalMs": 100,
+                "outputIntervalMs": 100
+              },
+              "steeringMode": "one-at-a-time",
+              "followUpMode": "one-at-a-time",
+              "toolExecution": "parallel"
+            },
+            "partialOverride": {
+              "retry": {
+                "enabled": true,
+                "maxRetries": 1,
+                "baseDelayMs": 2000,
+                "maxAgentDelayMs": 60000
+              },
+              "progress": {
+                "partialIntervalMs": 250,
+                "outputIntervalMs": 100
+              },
+              "steeringMode": "queue-all",
+              "followUpMode": "one-at-a-time"
+            },
+            "explicitUndefinedEnabled": false
+          },
+          "observed": {
+            "defaults": {
+              "retry": {
+                "enabled": true,
+                "maxRetries": 3,
+                "baseDelayMs": 2000,
+                "maxAgentDelayMs": 60000
+              },
+              "compaction": {
+                "enabled": true,
+                "reserveTokens": 16384,
+                "keepRecentTokens": 20000,
+                "backgroundTokens": 32768
+              },
+              "progress": {
+                "partialIntervalMs": 100,
+                "outputIntervalMs": 100
+              },
+              "steeringMode": "one-at-a-time",
+              "followUpMode": "one-at-a-time",
+              "toolExecution": "parallel"
+            },
+            "partialOverride": {
+              "retry": {
+                "enabled": true,
+                "maxRetries": 1,
+                "baseDelayMs": 2000,
+                "maxAgentDelayMs": 60000
+              },
+              "progress": {
+                "partialIntervalMs": 250,
+                "outputIntervalMs": 100
+              },
+              "steeringMode": "queue-all",
+              "followUpMode": "one-at-a-time"
+            },
+            "explicitUndefinedEnabled": false
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "compaction.json",
+      "family": "audit-1203",
+      "bytes": 3107,
+      "sha256": "3d608354015e5345a4d9f74b961528fe7df14ade8f44cc06578a335da9f2ad4e",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/compaction.ts:CompactionTask,selectCut",
+        "packages/durable/src/harness/generation.ts:GenerationTask",
+        "packages/durable/test/harness-compaction.test.ts:background threshold,overflow"
+      ],
+      "scenarios": [
+        {
+          "name": "a background compaction task starts above the threshold without blocking the run",
+          "inputs": {
+            "policy": {
+              "enabled": true,
+              "reserveTokens": 300,
+              "keepRecentTokens": 150,
+              "backgroundTokens": 1000
+            },
+            "turn": "100-token user over a 2000-token window with a gated summary"
+          },
+          "expected": {
+            "submissionStatus": "done",
+            "task": {
+              "background": true,
+              "reason": "threshold",
+              "owner": null
+            },
+            "liveCompactions": [
+              {
+                "taskId": 23,
+                "reason": "threshold",
+                "blocking": false,
+                "attempt": 1
+              }
+            ],
+            "statusAfterWaitForIdle": "running",
+            "statusAfterAbort": "running",
+            "outcomeStatus": "completed"
+          },
+          "observed": {
+            "submissionStatus": "done",
+            "task": {
+              "background": true,
+              "reason": "threshold",
+              "owner": null
+            },
+            "liveCompactions": [
+              {
+                "taskId": 23,
+                "reason": "threshold",
+                "blocking": false,
+                "attempt": 1
+              }
+            ],
+            "statusAfterWaitForIdle": "running",
+            "statusAfterAbort": "running",
+            "outcomeStatus": "completed"
+          },
+          "normalizations": [
+            "wall-clock timing of the gated summary"
+          ]
+        },
+        {
+          "name": "overflow compaction retries the original request once after the compaction commits",
+          "inputs": {
+            "failure": "prompt is too long: 250000 tokens > 200000 maximum",
+            "history": "3x100-token turns"
+          },
+          "expected": {
+            "status": "done",
+            "attemptAfterRetry": 1,
+            "lastFiveKinds": [
+              "pi.user",
+              "pi.assistant",
+              "pi.compaction",
+              "pi.system",
+              "pi.assistant"
+            ],
+            "compactionReasons": [
+              "overflow"
+            ],
+            "retrySkipsErrorTurn": true,
+            "retryCarriesSummary": false
+          },
+          "observed": {
+            "status": "done",
+            "attemptAfterRetry": 1,
+            "lastFiveKinds": [
+              "pi.user",
+              "pi.assistant",
+              "pi.compaction",
+              "pi.system",
+              "pi.assistant"
+            ],
+            "compactionReasons": [
+              "overflow"
+            ],
+            "retrySkipsErrorTurn": true,
+            "retryCarriesSummary": false
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "ownership.json",
+      "family": "audit-1203",
+      "bytes": 2144,
+      "sha256": "bc796e17f1e56b50f2b78cece4de3b76815da26368374510cdf50899600a6683",
+      "sourceEndpoints": [
+        "packages/durable/src/types.ts:TaskOptions.background,ConversationAbortOptions",
+        "packages/durable/src/harness/scheduler.ts:TaskScheduler,#loadScopes,#walkDown,#settleIdle,waitForTask",
+        "packages/durable/test/harness-ownership.test.ts:background,idle"
+      ],
+      "scenarios": [
+        {
+          "name": "a background child survives a conversation abort while a direct abort reaches it",
+          "inputs": {
+            "placement": {
+              "background": true,
+              "ownership": "conversation"
+            },
+            "aborts": [
+              "conversation",
+              "direct"
+            ]
+          },
+          "expected": {
+            "statusAfterConversationAbort": "running",
+            "statusAfterDirectAbort": "terminal",
+            "outcome": {
+              "status": "aborted",
+              "reason": "test"
+            }
+          },
+          "observed": {
+            "statusAfterConversationAbort": "running",
+            "statusAfterDirectAbort": "terminal",
+            "outcome": {
+              "status": "aborted",
+              "reason": "test"
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "an idle wait resolves with live background work and holds on a live foreground task",
+          "inputs": {
+            "tasks": [
+              "background gated",
+              "foreground gated"
+            ],
+            "waits": [
+              "waitForIdle"
+            ]
+          },
+          "expected": {
+            "idleWithBackground": "resolved",
+            "heldWhileForegroundLive": true,
+            "resolvedAfterForegroundSettled": true
+          },
+          "observed": {
+            "idleWithBackground": "resolved",
+            "heldWhileForegroundLive": true,
+            "resolvedAfterForegroundSettled": true
+          },
+          "normalizations": [
+            "30ms settle observation window for the held idle wait"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "tasks.json",
+      "family": "audit-1203",
+      "bytes": 4101,
+      "sha256": "46497be7a20c1bd43da248037b193f1cd0fb083b394269581c42b0347d5611de",
+      "sourceEndpoints": [
+        "packages/durable/src/types.ts:TaskDefinition.hooks,TaskDefinition.migrate,TaskOutcome,TaskState,TaskRecord",
+        "packages/durable/src/harness/define.ts:defineTask,hook",
+        "packages/durable/src/harness/scheduler.ts:TaskScheduler,#decide,#terminate,#finalize",
+        "packages/durable/test/harness-tasks.test.ts:phase hooks,outcomes,migration",
+        "packages/durable/test/harness-tasks-recovery.test.ts:orphaned,migration failure,too-new"
+      ],
+      "scenarios": [
+        {
+          "name": "task hooks run in extension order and a throwing hook reports without vetoing the task",
+          "inputs": {
+            "hooks": [
+              "first",
+              "throwing"
+            ],
+            "task": "audit1203.hooks"
+          },
+          "expected": {
+            "pings": [
+              "first",
+              "throwing"
+            ],
+            "outcome": {
+              "status": "completed",
+              "result": null
+            },
+            "reports": [
+              "Error: hook exploded"
+            ]
+          },
+          "observed": {
+            "pings": [
+              "first",
+              "throwing"
+            ],
+            "outcome": {
+              "status": "completed",
+              "result": null
+            },
+            "reports": [
+              "Error: hook exploded"
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a completing owner holds until its children drain and commits the terminal outcome",
+          "inputs": {
+            "parent": "audit1203.parent",
+            "child": "audit1203.child gated"
+          },
+          "expected": {
+            "parentStatusBeforeChildDrain": "completing",
+            "parentOutcome": {
+              "status": "completed",
+              "result": "parent-result"
+            },
+            "parentTerminalAfterDrain": "terminal"
+          },
+          "observed": {
+            "parentStatusBeforeChildDrain": "completing",
+            "parentOutcome": {
+              "status": "completed",
+              "result": "parent-result"
+            },
+            "parentTerminalAfterDrain": "terminal"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "an aborted task with a missing definition settles orphaned with the frozen reason",
+          "inputs": {
+            "kind": "test.orphan-scratch",
+            "abort": "before registration"
+          },
+          "expected": {
+            "mark": "marked",
+            "outcome": {
+              "status": "orphaned",
+              "reason": "missing_task"
+            },
+            "status": "terminal"
+          },
+          "observed": {
+            "mark": "marked",
+            "outcome": {
+              "status": "orphaned",
+              "reason": "missing_task"
+            },
+            "status": "terminal"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a task definition migrates an old-version record and a too-new definition blocks with the frozen report",
+          "inputs": {
+            "recordVersion": 1,
+            "definitions": [
+              "version 2 without migrate",
+              "version 2 with migrate"
+            ]
+          },
+          "expected": {
+            "tooNew": {
+              "report": "Error: Task test.versioned version 2 has no migration from 1",
+              "status": "pending",
+              "version": 1
+            },
+            "migrated": {
+              "fromVersions": [
+                1
+              ],
+              "outcome": {
+                "status": "completed",
+                "result": "v2"
+              },
+              "version": 2
+            }
+          },
+          "observed": {
+            "tooNew": {
+              "report": "Error: Task test.versioned version 2 has no migration from 1",
+              "status": "pending",
+              "version": 1
+            },
+            "migrated": {
+              "fromVersions": [
+                1
+              ],
+              "outcome": {
+                "status": "completed",
+                "result": "v2"
+              },
+              "version": 2
+            }
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "tool-search.json",
+      "family": "audit-1203",
+      "bytes": 2037,
+      "sha256": "391e5ea5a04f8b89887ce3e3405978454d3221a98a76f0e9eb954e0e684c6843",
+      "sourceEndpoints": [
+        "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool,createToolSearchExtension",
+        "packages/durable/src/harness/agent.ts:addTools",
+        "packages/durable/test/tool-search.test.ts:offers a deferred tool only once tool_search loads it"
+      ],
+      "scenarios": [
+        {
+          "name": "a deferred tool loads through tool_search and persists in the AgentDoc model tools",
+          "inputs": {
+            "tools": [
+              "alpha",
+              "github_get_issue (deferred)"
+            ],
+            "search": {
+              "query": "github issue",
+              "limit": 1
+            }
+          },
+          "expected": {
+            "offeredBefore": [
+              "alpha",
+              "tool_search"
+            ],
+            "deferredBefore": [
+              "github_get_issue"
+            ],
+            "searchText": "Loaded 1 tool. They are available from your next call:\n- github_get_issue: Get a GitHub issue by number",
+            "modelTools": {
+              "add": [
+                "github_get_issue"
+              ]
+            },
+            "offeredAfter": [
+              "alpha",
+              "tool_search",
+              "github_get_issue"
+            ]
+          },
+          "observed": {
+            "offeredBefore": [
+              "alpha",
+              "tool_search"
+            ],
+            "deferredBefore": [
+              "github_get_issue"
+            ],
+            "searchText": "Loaded 1 tool. They are available from your next call:\n- github_get_issue: Get a GitHub issue by number",
+            "modelTools": {
+              "add": [
+                "github_get_issue"
+              ]
+            },
+            "offeredAfter": [
+              "alpha",
+              "tool_search",
+              "github_get_issue"
+            ]
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "steering.json",
+      "family": "audit-1203",
+      "bytes": 3154,
+      "sha256": "a63d885a95e52d9b9bf5a53fd40ae3207ca3d278a239f61807c1d9c60c0b6a89",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/inbox.ts:applyBoundary,prepareBoundary,InboxDoc",
+        "packages/durable/src/harness/submissions.ts:Submissions",
+        "packages/durable/src/types.ts:QueueMode",
+        "packages/durable/src/harness/agent.ts:resolveSettings,steeringMode,followUpMode",
+        "packages/durable/test/harness-inbox.test.ts:boundaries,harness-submissions.test.ts:admission"
+      ],
+      "scenarios": [
+        {
+          "name": "a steer submitted while the run is busy lands at the postTools boundary in one run",
+          "inputs": {
+            "first": "a",
+            "steer": "s (whenBusy steer)"
+          },
+          "expected": {
+            "transcript": [
+              "pi.user:a",
+              "pi.assistant:first",
+              "pi.user:s",
+              "pi.assistant:second"
+            ],
+            "steerStatus": "done",
+            "inputStatus": "done"
+          },
+          "observed": {
+            "transcript": [
+              "pi.user:a",
+              "pi.assistant:first",
+              "pi.user:s",
+              "pi.assistant:second"
+            ],
+            "steerStatus": "done",
+            "inputStatus": "done"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "busy follow-up submissions queue and drain one successor run at a time by default",
+          "inputs": {
+            "first": "a",
+            "followUps": [
+              "f1",
+              "f2"
+            ],
+            "followUpMode": "default (one-at-a-time)"
+          },
+          "expected": {
+            "transcript": [
+              "pi.user:a",
+              "pi.assistant:first",
+              "pi.user:f1",
+              "pi.assistant:second",
+              "pi.user:f2",
+              "pi.assistant:third"
+            ],
+            "lastStatuses": [
+              "done",
+              "done"
+            ]
+          },
+          "observed": {
+            "transcript": [
+              "pi.user:a",
+              "pi.assistant:first",
+              "pi.user:f1",
+              "pi.assistant:second",
+              "pi.user:f2",
+              "pi.assistant:third"
+            ],
+            "lastStatuses": [
+              "done",
+              "done"
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a duplicate request ID returns the existing submission without queueing the payload twice",
+          "inputs": {
+            "requestId": "audit1203-dup-request",
+            "payloads": [
+              "a",
+              "a-changed"
+            ],
+            "whenBusy": "second submit during the first run"
+          },
+          "expected": {
+            "sameSubmission": true,
+            "oneStatus": "done",
+            "twoStatus": "done",
+            "transcript": [
+              "pi.user:a",
+              "pi.assistant:first"
+            ]
+          },
+          "observed": {
+            "sameSubmission": true,
+            "oneStatus": "done",
+            "twoStatus": "done",
+            "transcript": [
+              "pi.user:a",
+              "pi.assistant:first"
+            ]
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "extensions.json",
+      "family": "audit-1203",
+      "bytes": 1494,
+      "sha256": "69fe655e2cebdc3721faba70c00048c0ef668a40109a62dbca67a3cc97247787",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/types.ts:Extension,GenerationHooks,ToolHooks,HookApi",
+        "packages/durable/src/harness/registry.ts:createRegistry",
+        "packages/durable/src/harness/define.ts:defineExtension,hook"
+      ],
+      "scenarios": [
+        {
+          "name": "a registered extension fires its generation and tool hooks and the run triggers again through the public submit seam",
+          "inputs": {
+            "extension": "audit1203.ext",
+            "runs": [
+              "go (tool call)",
+              "again"
+            ]
+          },
+          "expected": {
+            "events": [
+              "beforeRequest",
+              "beforeTool:audit_hooked",
+              "afterTool",
+              "beforeRequest",
+              "beforeRequest"
+            ],
+            "runCount": 3
+          },
+          "observed": {
+            "events": [
+              "beforeRequest",
+              "beforeTool:audit_hooked",
+              "afterTool",
+              "beforeRequest",
+              "beforeRequest"
+            ],
+            "runCount": 3
+          },
+          "normalizations": [
+            "request payload capture is not introspected; hook firing order and count are the observation"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "env-watch.json",
+      "family": "audit-1203",
+      "bytes": 1342,
+      "sha256": "893db1f1d0d554a76eb2751b6eb2eeaa8123475608b400ae8dc3848dbbbf048e",
+      "sourceEndpoints": [
+        "packages/durable/src/env/index.ts:ExecutionEnv.watch,WatchTarget,WatchChange",
+        "packages/durable/src/env/node.ts:NodeExecutionEnv.watch"
+      ],
+      "scenarios": [
+        {
+          "name": "the node execution environment watch reports a real change and close stops the callbacks",
+          "inputs": {
+            "targets": [
+              {
+                "path": "tree",
+                "recursive": true
+              }
+            ],
+            "writes": [
+              "tree/sub/file.txt",
+              "after close: tree/sub/after.txt"
+            ]
+          },
+          "expected": {
+            "changeKinds": [
+              "updated"
+            ],
+            "changeCount": 1,
+            "changesAfterClose": 0
+          },
+          "observed": {
+            "changeKinds": [
+              "updated"
+            ],
+            "changeCount": 1,
+            "changesAfterClose": 0
+          },
+          "normalizations": [
+            "filesystem watch delivery timing; the counts and the after-close silence are the observations"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "tool-limits.json",
+      "family": "audit-1203",
+      "bytes": 1862,
+      "sha256": "6c97684d817ecdb1e9df4e79ba801573b79b3213ec538b1adeca27f9d62dbe4b",
+      "sourceEndpoints": [
+        "packages/durable/src/tools/bash.ts:createBashTool,runCommand",
+        "packages/durable/src/truncate.ts:DEFAULT_MAX_BYTES,DEFAULT_MAX_LINES"
+      ],
+      "scenarios": [
+        {
+          "name": "the durable bash tool truncates over-limit output and spills the full text with frozen diagnostics",
+          "inputs": {
+            "command": "seq 1 3000",
+            "limits": {
+              "lines": 2000,
+              "bytes": 51200
+            }
+          },
+          "expected": {
+            "limits": {
+              "lines": 2000,
+              "bytes": 51200
+            },
+            "firstRetainedLine": "1001",
+            "lastContentLine": "3000",
+            "retainedLineCount": 2000,
+            "diagnostics": [
+              "[info] Full output: /tmp/tmp-krANgt/pi-output-506cae82-22c3-44ea-ac26-a8b8ff9c1a0f.log",
+              "[warn] Output truncated to its end: 1000 lines, 3893 bytes dropped"
+            ],
+            "isError": false
+          },
+          "observed": {
+            "limits": {
+              "lines": 2000,
+              "bytes": 51200
+            },
+            "firstRetainedLine": "1001",
+            "lastContentLine": "3000",
+            "retainedLineCount": 2000,
+            "diagnostics": [
+              "[info] Full output: /tmp/tmp-krANgt/pi-output-506cae82-22c3-44ea-ac26-a8b8ff9c1a0f.log",
+              "[warn] Output truncated to its end: 1000 lines, 3893 bytes dropped"
+            ],
+            "isError": false
+          },
+          "normalizations": [
+            "the spill file path inside the [info] Full output diagnostic is a random temp path"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "codemode.json",
+      "family": "audit-1203",
+      "bytes": 3772,
+      "sha256": "9273ef19e293cdabc808025a1eba25a2638fa12a622b6b39fb8f144ad47de0ca",
+      "sourceEndpoints": [
+        "packages/durable/src/codemode/codemode.ts:createCodemodeTool,CodemodeRunDoc,CodemodeJournalDoc,OUTPUT_LIMITS",
+        "packages/durable/src/codemode/models.ts:CATALOG_GLOBALS,MODEL_CALLS",
+        "packages/durable/src/codemode/output.ts:formatResult,OutputFile",
+        "packages/durable/test/codemode.test.ts:restart replay,models globals,token budget"
+      ],
+      "scenarios": [
+        {
+          "name": "a durable codemode run over its timeout is interrupted with the frozen error, not a false success",
+          "inputs": {
+            "options": {
+              "timeout_ms": 400
+            },
+            "script": "while (true) {}"
+          },
+          "expected": {
+            "result": {
+              "text": "Script error:\nScript timed out: Execution timed out after 399 ms\n\nNo tool calls were made.",
+              "isError": true
+            }
+          },
+          "observed": {
+            "result": {
+              "text": "Script error:\nScript timed out: Execution timed out after 399 ms\n\nNo tool calls were made.",
+              "isError": true
+            }
+          },
+          "normalizations": [
+            "wall-clock timeout window"
+          ]
+        },
+        {
+          "name": "the codemode models globals are present behind the capability gate and absent when models are disabled",
+          "inputs": {
+            "script": "typeof models / models.classify / models.generateImages",
+            "models": [
+              "default",
+              false
+            ]
+          },
+          "expected": {
+            "enabled": "[\"object\",\"function\",\"function\"]",
+            "disabled": "Script error:\nReferenceError: models is not defined\n    at <anonymous> (codemode.js:1:59)\n\nNo tool calls were made."
+          },
+          "observed": {
+            "enabled": "[\"object\",\"function\",\"function\"]",
+            "disabled": "Script error:\nReferenceError: models is not defined\n    at <anonymous> (codemode.js:1:59)\n\nNo tool calls were made."
+          },
+          "normalizations": []
+        },
+        {
+          "name": "durable codemode keeps ordered text output and formats the returned value through the tool result",
+          "inputs": {
+            "script": "text(\"one\"); text(\"two\"); return 7"
+          },
+          "expected": {
+            "result": {
+              "text": "==> text 1/3 <==\none\n==> text 2/3 <==\ntwo\n==> text 3/3 <==\n7",
+              "isError": false,
+              "hasHeader": true
+            }
+          },
+          "observed": {
+            "result": {
+              "text": "==> text 1/3 <==\none\n==> text 2/3 <==\ntwo\n==> text 3/3 <==\n7",
+              "isError": false,
+              "hasHeader": true
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a durable codemode run resumes after a restart without rerunning its finished calls",
+          "inputs": {
+            "script": "echo a; hold; echo b; return [a, h, b]",
+            "restart": "close and reopen over sqlite"
+          },
+          "expected": {
+            "settledStatus": "done",
+            "result": {
+              "text": "[\"echo a\",\"held\",\"echo b\"]",
+              "isError": false
+            },
+            "echoCounts": {
+              "a": 1,
+              "b": 1
+            },
+            "vmStarts": 2
+          },
+          "observed": {
+            "settledStatus": "done",
+            "result": {
+              "text": "[\"echo a\",\"held\",\"echo b\"]",
+              "isError": false
+            },
+            "echoCounts": {
+              "a": 1,
+              "b": 1
+            },
+            "vmStarts": 2
+          },
+          "normalizations": [
+            "wall-clock guest startup"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "tool-task.json",
+      "family": "audit-1203",
+      "bytes": 1170,
+      "sha256": "3a970cc0837a5a1831ae7a44289050aeb4904e503d10da07ac6b08d508602d10",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/tool.ts:ToolTask",
+        "packages/durable/src/harness/scheduler.ts:abortConversation",
+        "packages/durable/test/harness-tools.test.ts:answers an aborted tool with only its durable output"
+      ],
+      "scenarios": [
+        {
+          "name": "cancelling a running tool task keeps only its durable output and commits no false tool result",
+          "inputs": {
+            "tool": "slow (durable + buffered output, abort mid-run)"
+          },
+          "expected": {
+            "toolResultText": "durable|<harness>|[error] Tool slow was aborted|</harness>",
+            "mentionsAbort": true
+          },
+          "observed": {
+            "toolResultText": "durable|<harness>|[error] Tool slow was aborted|</harness>",
+            "mentionsAbort": true
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}

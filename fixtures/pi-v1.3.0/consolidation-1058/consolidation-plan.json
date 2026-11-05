@@ -853,6 +853,174 @@
     "setImageTranscoder"
    ],
    "authority": "#1201 recapture (audit-1201/image-transcoder.json); the row records the setter lifecycle end to end"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "a background compaction task starts above the threshold without blocking the run",
+   "rows": [
+    "background-compaction"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/compaction.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "overflow compaction retries the original request once after the compaction commits",
+   "rows": [
+    "overflow-compaction-retry"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/compaction.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1055",
+   "scenario": "a background child survives a conversation abort while a direct abort reaches it",
+   "rows": [
+    "background-ownership-boundary"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/ownership.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1055",
+   "scenario": "an idle wait resolves with live background work and holds on a live foreground task",
+   "rows": [
+    "idle-waits"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/ownership.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "the harness settings defaults resolve with the frozen object-merge rules",
+   "rows": [
+    "harness-settings-defaults"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/settings.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "task hooks run in extension order and a throwing hook reports without vetoing the task",
+   "rows": [
+    "task-hooks"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/tasks.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "a completing owner holds until its children drain and commits the terminal outcome",
+   "rows": [
+    "task-outcomes"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/tasks.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1055",
+   "scenario": "an aborted task with a missing definition settles orphaned with the frozen reason",
+   "rows": [
+    "task-scheduler-outcomes"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/tasks.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "a task definition migrates an old-version record and a too-new definition blocks with the frozen report",
+   "rows": [
+    "task-versioning"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/tasks.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "cancelling a running tool task keeps only its durable output and commits no false tool result",
+   "rows": [
+    "tool-task-cancellation"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/tool-task.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "a deferred tool loads through tool_search and persists in the AgentDoc model tools",
+   "rows": [
+    "toolsearch-persistence"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/tool-search.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1055",
+   "scenario": "a steer submitted while the run is busy lands at the postTools boundary in one run",
+   "rows": [
+    "steering-boundary-placement"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/steering.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "busy follow-up submissions queue and drain one successor run at a time by default",
+   "rows": [
+    "steering-followup"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/steering.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "a duplicate request ID returns the existing submission without queueing the payload twice",
+   "rows": [
+    "submission-queues"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/steering.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "a registered extension fires its generation and tool hooks and the run triggers again through the public submit seam",
+   "rows": [
+    "native-run-triggering"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/extensions.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "the node execution environment watch reports a real change and close stops the callbacks",
+   "rows": [
+    "node-env-watch"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/env-watch.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "the durable bash tool truncates over-limit output and spills the full text with frozen diagnostics",
+   "rows": [
+    "builtin-tool-limits"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/tool-limits.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "a durable codemode run over its timeout is interrupted with the frozen error, not a false success",
+   "rows": [
+    "codemode-limits"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/codemode.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "the codemode models globals are present behind the capability gate and absent when models are disabled",
+   "rows": [
+    "codemode-models"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/codemode.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "durable codemode keeps ordered text output and formats the returned value through the tool result",
+   "rows": [
+    "codemode-output"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/codemode.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1056",
+   "scenario": "a durable codemode run resumes after a restart without rerunning its finished calls",
+   "rows": [
+    "codemode-replay"
+   ],
+   "authority": "#1203 frozen capture (audit-1203/codemode.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
   }
  ],
  "orphanScenarios": [

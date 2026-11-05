@@ -265,6 +265,10 @@
           "manifest": "audit-1201/manifest.json",
           "manifestSha256": "56ffbd9a224181ba6bfd1fd956e71db603d880c6f42960b08ac7fc9ae2d4a616"
         },
+        "audit-1203": {
+          "manifest": "audit-1203/manifest.json",
+          "manifestSha256": "c2889f693c0d6c4e74292f4c8f88cef1ba10b2efb6892af3a3dcbb7ecdd8e355"
+        },
         "audit-810": {
           "manifest": "audit-810/manifest.json",
           "manifestSha256": "3815cac847e63ef4e1a4780682547c4ab0e9158aead7f7a631a8d44d580822ab"

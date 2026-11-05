@@ -1,0 +1,36 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/tool.ts:ToolTask",
+    "packages/durable/src/harness/scheduler.ts:abortConversation",
+    "packages/durable/test/harness-tools.test.ts:answers an aborted tool with only its durable output"
+  ],
+  "scenarios": [
+    {
+      "name": "cancelling a running tool task keeps only its durable output and commits no false tool result",
+      "inputs": {
+        "tool": "slow (durable + buffered output, abort mid-run)"
+      },
+      "expected": {
+        "toolResultText": "durable|<harness>|[error] Tool slow was aborted|</harness>",
+        "mentionsAbort": true
+      },
+      "observed": {
+        "toolResultText": "durable|<harness>|[error] Tool slow was aborted|</harness>",
+        "mentionsAbort": true
+      },
+      "normalizations": []
+    }
+  ]
+}
