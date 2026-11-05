@@ -46,7 +46,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
+     "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
     },
     {
      "path": "src/mcp/Client.cpp",
@@ -174,7 +174,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -229,14 +229,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1101.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1101.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1101.xml",
-     "sha256": "19f2502b2d53fbef417524fd32982e951dc6d11da21ccf57423f958aca5bfdc4"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1101.xml",
+     "sha256": "0ac7cdeb4faf6badfc3a9d400e982bb6c5b260c528715e83bbbefa131aa9df18"
     }
    },
    "rows": [
@@ -658,6 +658,31 @@
       "sha256": "a5313f19c01345acee1279d47c4a0cc958a42af45dbcb93e6db21733a3261db2"
      }
     }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The cch_tests_coding_agent target also gains the CCH_PYTHON3 definition the shared evidence reader needs for the audit-1201 comparisons; the build declaration carries no behavior, and the receipt makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "cmake/tests/CodingAgentTests.cmake"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1101.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1101.xml",
+      "sha256": "19f2502b2d53fbef417524fd32982e951dc6d11da21ccf57423f958aca5bfdc4"
+     }
+    }
    }
   },
   {
@@ -677,14 +702,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1090.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1090.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1090.xml",
-     "sha256": "8db7d91f22031c031141c0d41b2c5a2a6d66541ec7012d56181fa06b0c55dce6"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1090.xml",
+     "sha256": "bdf88112bd3886b7b52d4e441ef6d558b44fc98a4dddad41dd65adbd500e41d9"
     }
    },
    "inputs": [
@@ -730,7 +755,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
+     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
     },
     {
      "path": "src/durable/CodingTools.cpp",
@@ -1299,6 +1324,30 @@
       "sha256": "0fdf6c6cfd9105da994789261bca99126528aa91ee5ec947a35b88e73de7a2f5"
      }
     }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1090.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1090.xml",
+      "sha256": "8db7d91f22031c031141c0d41b2c5a2a6d66541ec7012d56181fa06b0c55dce6"
+     }
+    }
    }
   },
   {
@@ -1350,7 +1399,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
+     "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
     },
     {
      "path": "src/codemode/Declarations.cpp",
@@ -1558,11 +1607,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
+     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1585,14 +1634,14 @@
      "-L",
      "issue1118",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1118.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1118.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1118.xml",
-     "sha256": "4040d7d890b483d3cfc95308003b5232514f0af458133550346927da2433aa8f"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1118.xml",
+     "sha256": "a669370425d5cb61863db09eab1f8e45f6f43e26c02070827c3b9486f017829f"
     }
    },
    "rows": [
@@ -2109,6 +2158,32 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1118.xml",
       "sha256": "a54072d59c133706da77233a5f767da32db140b13a26eefabae0b2547e7af191"
+     }
+    }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The cch_tests_coding_agent target also gains the CCH_PYTHON3 definition the shared evidence reader needs for the audit-1201 comparisons; the build declaration carries no behavior, and the receipt makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "cmake/tests/CodingAgentTests.cmake"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1118.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1118.xml",
+      "sha256": "4040d7d890b483d3cfc95308003b5232514f0af458133550346927da2433aa8f"
      }
     }
    }
@@ -3033,7 +3108,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
+     "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
     },
     {
      "path": "src/mcp/Client.cpp",
@@ -3337,7 +3412,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -3345,7 +3420,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
+     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
     }
    ],
    "validation": {
@@ -3356,14 +3431,14 @@
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1181.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1181.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1181.xml",
-     "sha256": "eff3b7e78990ddebb6ea7816ff7464fde4cdfc1b596671a260ad87a2fa2978ea"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1181.xml",
+     "sha256": "f9ab7cfc11a4c8b943c263e33c291ded74a3855f197091bdd51280a28ac653c9"
     }
    },
    "rows": [
@@ -3872,6 +3947,32 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1181.xml",
       "sha256": "0940c8057d0b686f8c95fa69941de0a4f636f2ced04a2007c65139d3ac3e518a"
+     }
+    }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The cch_tests_coding_agent target also gains the CCH_PYTHON3 definition the shared evidence reader needs for the audit-1201 comparisons; the build declaration carries no behavior, and the receipt makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "fixtures/pi-v1.3.0/baselines.json",
+     "cmake/tests/CodingAgentTests.cmake"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1181.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1181.xml",
+      "sha256": "eff3b7e78990ddebb6ea7816ff7464fde4cdfc1b596671a260ad87a2fa2978ea"
      }
     }
    }
@@ -4536,14 +4637,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1186.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1186.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1186.xml",
-     "sha256": "e1acd715a6644f336f42dce3ee16061075cfb563be1a69cf82a70618de62debc"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1186.xml",
+     "sha256": "c3d65fd22e763315cd15aa65be508e375f4082aee726f0ab2723ece821541e1a"
     }
    },
    "rows": [
@@ -4717,11 +4818,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
+     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -4920,6 +5021,31 @@
       "sha256": "3d899c7d7c2bea2e652cb9163e12f13438578d65f099207c9052bb09b1d643fd"
      }
     }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1186.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1186.xml",
+      "sha256": "e1acd715a6644f336f42dce3ee16061075cfb563be1a69cf82a70618de62debc"
+     }
+    }
    }
   },
   {
@@ -4938,14 +5064,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1188.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1188.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1188.xml",
-     "sha256": "39c9f78b64c60d0ae7305ce34e4fd8656d19c2fc8f49593304267a653dd71f56"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1188.xml",
+     "sha256": "1526cba0f63f5bb94190ef7105efd6f9361501347ab1bb03ddae3b03fb99bf80"
     }
    },
    "rows": [
@@ -5113,7 +5239,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5289,6 +5415,30 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1188.xml",
       "sha256": "ca05ec64b89dbafea1ce9bba87b02c9eca6c10fe725194363564723ad09aaad4"
+     }
+    }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1188.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1188.xml",
+      "sha256": "39c9f78b64c60d0ae7305ce34e4fd8656d19c2fc8f49593304267a653dd71f56"
      }
     }
    }
@@ -5482,14 +5632,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1182.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1182.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1182.xml",
-     "sha256": "ac9d14a886a380cd7ac86e702b0d0b77fa6993a529902802a7abdd81d9722609"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1182.xml",
+     "sha256": "da4ab725ec1f9264566892d1326429b877ed6c5d461d51ac0e27a7e0e9320ef0"
     }
    },
    "rows": [
@@ -5712,7 +5862,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
+     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -5736,7 +5886,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5917,6 +6067,31 @@
       "sha256": "9bbd8fdfa12ab153ae2139bb29529c205d67f038e6758f1acbb34a8bdb085791"
      }
     }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1182.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1182.xml",
+      "sha256": "ac9d14a886a380cd7ac86e702b0d0b77fa6993a529902802a7abdd81d9722609"
+     }
+    }
    }
   },
   {
@@ -5961,7 +6136,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
+     "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
     },
     {
      "path": "cmake/tests/TestsSetup.cmake",
@@ -6121,11 +6296,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
+     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7058,14 +7233,14 @@
      "-R",
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1179.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1179.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1179.xml",
-     "sha256": "2199c9637122fad2ae26b1e440109ad90ccf98e86208d32c21aa842f6f75fda8"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1179.xml",
+     "sha256": "5a1c17162fbffa8cadeb48cff725199c5a42766c4232048465604a201a1e4776"
     }
    },
    "revalidation1179m": {
@@ -7179,6 +7354,32 @@
       "sha256": "442e5e4346302420dbef360724472a41c05cc0c6d5e266755dbd2573bc4a6cec"
      }
     }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The cch_tests_coding_agent target also gains the CCH_PYTHON3 definition the shared evidence reader needs for the audit-1201 comparisons; the build declaration carries no behavior, and the receipt makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "cmake/tests/CodingAgentTests.cmake"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1179.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1179.xml",
+      "sha256": "2199c9637122fad2ae26b1e440109ad90ccf98e86208d32c21aa842f6f75fda8"
+     }
+    }
    }
   },
   {
@@ -7247,11 +7448,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
+     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7282,14 +7483,14 @@
      "-R",
      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1176.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1176.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1176.xml",
-     "sha256": "c3ee3e2fa0afc7830ddbca235c8899b5e957aae29cbf3977fb742ea77b17486d"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1176.xml",
+     "sha256": "fd2ad96d7754de3931963bd396f6339f369f72a9925a208ed325d6301360fa23"
     }
    },
    "rows": [
@@ -7432,6 +7633,31 @@
       "sha256": "821ab4a3be22c01fbc7ecc019d70d24a5ccfc051bc8928a10a2e7728c31f108a"
      }
     }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1176.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1176.xml",
+      "sha256": "c3ee3e2fa0afc7830ddbca235c8899b5e957aae29cbf3977fb742ea77b17486d"
+     }
+    }
    }
   },
   {
@@ -7456,7 +7682,7 @@
     },
     {
      "path": "cmake/tests/CodingAgentTests.cmake",
-     "sha256": "8cead159e2fb0a9a2175ad9681b9e8b829b9920dcb0981f0a93c9c29637c5154"
+     "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
     },
     {
      "path": "cmake/tests/TestsSetup.cmake",
@@ -7496,11 +7722,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "c2dd10b5197a6e723a232ebcb3f2804f0a16ebb90ea195c2a02f9f7dfcd473eb"
+     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "b1ad3e08808c4fc86b8c3fe4fa806816590e29376e9845dadf48516c24b66aa6"
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7551,14 +7777,14 @@
      "-R",
      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1177.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1177.xml"
     ],
-    "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
-    "recordedAt": "2026-11-05T02:39:34Z",
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:02:35Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1177.xml",
-     "sha256": "7e2c7cc1d96bd36f8c141167dcb917b9b7b4aa6b30f41b49373ba1af4fd91841"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1177.xml",
+     "sha256": "fcd42f0f7d8e505817d58a71d7f5f2153880431c04920259f5e4446aaabf30b6"
     }
    },
    "rows": [
@@ -7733,6 +7959,32 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1177.xml",
       "sha256": "f3055f8ea26ef6a9f9a4ff0699b846667783c6e54fbf9624a453586a1605de61"
+     }
+    }
+   },
+   "revalidation1201": {
+    "reason": "#1201 recaptures the 30 historical pi-v1.0.4 terminal primitives at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1201 family, the 1050 toolkit ledger rows for the 30 primitives name the audit-1201 scenarios, and the consolidation plan links the setImageTranscoder lifecycle scenarios and classifies the four cross-baseline provenance records as explicit orphans. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The cch_tests_coding_agent target also gains the CCH_PYTHON3 definition the shared evidence reader needs for the audit-1201 comparisons; the build declaration carries no behavior, and the receipt makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "cmake/tests/CodingAgentTests.cmake"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1177.xml"
+     ],
+     "testedRevision": "c656c871d764dd5001cb94d5555666f651d7d120",
+     "recordedAt": "2026-11-05T02:39:34Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1177.xml",
+      "sha256": "7e2c7cc1d96bd36f8c141167dcb917b9b7b4aa6b30f41b49373ba1af4fd91841"
      }
     }
    }
@@ -8028,6 +8280,668 @@
       "test": "a JSONL commit appends two sidecars in frozen write order before the main marker",
       "testSource": "tests/durable/JsonlStorageTest.cpp",
       "reason": "The two creates run in descending ID order (9 then 3), so a backend that appends sidecars in sorted filename order produces [doc-3, doc-9, main] and fails the recorded frozen append/flush trace and the byte-exact file comparison even though every file exists; the case also fails a flush emitted after the marker or for a commit that reclaims nothing."
+     }
+    }
+   ]
+  },
+  {
+   "id": "1201-terminal-primitives",
+   "ticket": "1201",
+   "implementationCommits": [
+    "db22fe10c9f9b692c125e3b7a28044fc118784f4",
+    "db59d4bc26582da844c089f84d2e1dcbf3da16a1"
+   ],
+   "report": "docs/research/pi-v1.3.0/1201-terminal-primitives.md",
+   "routingSha256": "b4383bf02ad67851d54d669e8b730f5552bfbccf37f830574ef1338297b04086",
+   "inputs": [
+    {
+     "path": "src/tui/TerminalColors.cpp",
+     "sha256": "ad8eec2f380c3eb6820c2756d5f11ccec2c6a890aee06c19322fe29f9f48f224"
+    },
+    {
+     "path": "src/tui/include/cch/tui/TerminalColors.hpp",
+     "sha256": "0cdee09dd1de5b730d184125832026ab5b0fa0d70ea15fe9a735521625a23050"
+    },
+    {
+     "path": "src/tui/Editor.cpp",
+     "sha256": "478583ff74979e150a5ac7ec2862953d0f51644f220d4d12358fa614ff8fa8ef"
+    },
+    {
+     "path": "src/tui/include/cch/tui/Editor.hpp",
+     "sha256": "a936429d92eb811ac5b623c228a50ade11c69a119b40cd41e7c74072e5918fb5"
+    },
+    {
+     "path": "src/tui/NativeClipboard.cpp",
+     "sha256": "04c70893399c0d0090cc7f28c3ccc0a008858072301adfd95edc8eb2eb988080"
+    },
+    {
+     "path": "src/tui/include/cch/tui/NativeClipboard.hpp",
+     "sha256": "fee6cd3dbcc01ab9de6a151685a3bccdfc9fa4960862445df28f07573bd68eab"
+    },
+    {
+     "path": "src/tui/ImageTranscoder.cpp",
+     "sha256": "657c0bbd5fd59d35e2ac6bd16f2c2bdae741439bd8fb0f6facf01fe3786ab81c"
+    },
+    {
+     "path": "src/tui/TerminalImage.cpp",
+     "sha256": "6e3331440250500686dfbb107935f86df0aba9f79efe25c5e6449e20eaa6887e"
+    },
+    {
+     "path": "src/tui/include/cch/tui/TerminalImage.hpp",
+     "sha256": "778452a3d870dc440b2b02b05c9348b3e27c245f38874ce26140f683d70fba81"
+    },
+    {
+     "path": "src/tui/Image.cpp",
+     "sha256": "110e7955dbdb0865d3423935eefed9680f903151409cbe544b95bb5f88581cbd"
+    },
+    {
+     "path": "src/tui/include/cch/tui/Image.hpp",
+     "sha256": "e9298df8ff57a6e64df37e7c085ab49add4f629f8b91c6df4d0823cdcb7d1f5a"
+    },
+    {
+     "path": "src/coding_agent/tui/LinuxClipboard.cpp",
+     "sha256": "e0dfdbe1655e3a275b59fdaab25b6fc865063fb571315a91a1ddf4c1bdbd9d73"
+    },
+    {
+     "path": "src/coding_agent/tui/LinuxClipboard.hpp",
+     "sha256": "5545f6342fe435177a315335f89d14a0f69d8180441b5516176463690133c351"
+    },
+    {
+     "path": "tests/tui/TerminalColorsTest.cpp",
+     "sha256": "32e682963bb5cc634fb0065d6acc9ddb02f05cb2f23f8de4ada99075c11af2e8"
+    },
+    {
+     "path": "tests/tui/EditorTest.cpp",
+     "sha256": "614cccb4852dfece0cab1e54704eef63c1f7f5e414ac4342d8d0adcb989592f6"
+    },
+    {
+     "path": "tests/tui/NativeClipboardTest.cpp",
+     "sha256": "6e5c22d5f5d609840804924b3941d44c3e5e16a0149c1928d2c037bcbf00bf56"
+    },
+    {
+     "path": "tests/coding_agent/tui/ImageTranscoderTest.cpp",
+     "sha256": "6f57f7efe5e6f50dd91f911adef749a3cf452f82ce3a2f357bcd2f94148a308f"
+    },
+    {
+     "path": "cmake/tests/CodingAgentTests.cmake",
+     "sha256": "4abc90bb29a45ebb81b4d1966659a0b278eb225d2febbfcde79090de1a13c88c"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1201/terminal-colors.json",
+     "sha256": "fe31c6da55d7d079930c2b6d9583f611e317d6680663c68c66a121e0ac5077ff"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1201/editor-component.json",
+     "sha256": "3ef02646c9b23f774ad2c10e38e4e938691cd5bc14d41dba9a897baf7bc4ce1a"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1201/native-clipboard.json",
+     "sha256": "4fe01d00b3636243018880363cd31d6e91210793373d29d738152bd60793a85d"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1201/image-transcoder.json",
+     "sha256": "002bfabf0edb14a61294aa26e7a1e46a739bf25d9471220490882a0096325312"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/baselines.json",
+     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+    },
+    {
+     "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
+     "sha256": "1b80daff3e327a5514a9934b1d6a082a206024d6caccbfb51a13a766f727b4d6"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+    }
+   ],
+   "validation": {
+    "command": [
+     "ctest",
+     "--preset",
+     "vcpkg",
+     "-LE",
+     "architecture",
+     "-L",
+     "issue1201",
+     "--output-junit",
+     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives.xml"
+    ],
+    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+    "recordedAt": "2026-11-05T04:04:06Z",
+    "selected": 8,
+    "junit": {
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives.xml",
+     "sha256": "55d0b53844a0af69cac539d38b4542909754ea31ed652d2e41336a2e33ca74e1"
+    }
+   },
+   "rows": [
+    {
+     "id": "cch_coding_agent:RgbColor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "OSC color replies parse every frozen color form at its per-channel scale",
+       "test": "frozen audit-1201 OSC color replies replay through the C++ parser",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "A parser that only handles six-digit hex still passes the short-hex replies; the sixteen-reply palette case separates per-channel scaling (12-digit and rgb: forms) from assembly, and a partial palette is never exposed."
+     }
+    },
+    {
+     "id": "cch_coding_agent:RgbColor.r",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "OSC color replies parse every frozen color form at its per-channel scale",
+       "test": "frozen audit-1201 OSC color replies replay through the C++ parser",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "The channel rows bind the r/g/b triples the frozen parser emits; the palette-assembly case discriminates a backend that reports a channel without the frozen per-channel scaling."
+     }
+    },
+    {
+     "id": "cch_coding_agent:RgbColor.g",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "OSC color replies parse every frozen color form at its per-channel scale",
+       "test": "frozen audit-1201 OSC color replies replay through the C++ parser",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "The channel rows bind the r/g/b triples the frozen parser emits; the palette-assembly case discriminates a backend that reports a channel without the frozen per-channel scaling."
+     }
+    },
+    {
+     "id": "cch_coding_agent:RgbColor.b",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "OSC color replies parse every frozen color form at its per-channel scale",
+       "test": "frozen audit-1201 OSC color replies replay through the C++ parser",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "The channel rows bind the r/g/b triples the frozen parser emits; the palette-assembly case discriminates a backend that reports a channel without the frozen per-channel scaling."
+     }
+    },
+    {
+     "id": "cch_coding_agent:TerminalColorScheme",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "terminal color scheme reports resolve dark and light only from complete 997 replies",
+       "test": "frozen audit-1201 scheme reports replay through the C++ parser",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 scheme reports replay through the C++ parser",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "A matcher that accepts any single 997 reply passes dark and light but also a concatenated pair or a malformed body; the replay compares the exact parsed set including the two undefined results."
+     }
+    },
+    {
+     "id": "cch_coding_agent:parseTerminalColorSchemeReport",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "terminal color scheme reports resolve dark and light only from complete 997 replies",
+       "test": "frozen audit-1201 scheme reports replay through the C++ parser",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 scheme reports replay through the C++ parser",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "A prefix matcher returns dark for a concatenated dark+light pair; the frozen observation records undefined for it, and the replay binds that."
+     }
+    },
+    {
+     "id": "cch_coding_agent:TerminalColors",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "the public color query sets the palette only when all sixteen replies arrive",
+       "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "A query that resolves on the DA1 reply alone exposes a partial palette; the frozen missing-slot observation requires palette stay unset until all sixteen replies arrive."
+     }
+    },
+    {
+     "id": "cch_coding_agent:TerminalColors.foreground",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "the public color query sets the palette only when all sixteen replies arrive",
+       "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "The foreground-only DA1 case separates the assembled foreground from a query that would also fabricate a background or palette."
+     }
+    },
+    {
+     "id": "cch_coding_agent:TerminalColors.background",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "the public color query sets the palette only when all sixteen replies arrive",
+       "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "The background binding is observed only when its OSC 11 reply arrives; the partial run proves it stays unset otherwise."
+     }
+    },
+    {
+     "id": "cch_coding_agent:TerminalColors.palette",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/terminal-colors.json",
+       "scenario": "the public color query sets the palette only when all sixteen replies arrive",
+       "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+       "testSource": "tests/tui/TerminalColorsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
+      "testSource": "tests/tui/TerminalColorsTest.cpp",
+      "reason": "Fifteen of sixteen replies must not expose a palette; a backend that fills the missing slot or resolves early fails the frozen missing-slot observation even though every other check passes."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "the editor component exposes every EditorComponent contract member",
+       "test": "the C++ Editor exposes the frozen EditorComponent capability surface",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "A component that declares the members but never fires onChange satisfies the surface check; the typing replay requires every callback to carry the frozen change sequence."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.getText",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "typing reports every change through onChange and submits through onSubmit",
+       "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The submitted text must equal the final buffer; a getText that returns a stale copy passes a length check but fails the frozen exact-text replay."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.setText",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "typing reports every change through onChange and submits through onSubmit",
+       "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "setText must clear prior paste state and reset undo; the paste replay separates a plain setter from the frozen reset semantics."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.handleInput",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "typing reports every change through onChange and submits through onSubmit",
+       "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The left/backspace sequence separates raw-byte dispatch from decoded editing; an input seam that misorders the cursor passes typing but fails the frozen left/backspace states."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.onChange",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "typing reports every change through onChange and submits through onSubmit",
+       "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "A callback fired once per frame instead of per change passes the final text; the frozen per-keystroke change sequence discriminates the two."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.onSubmit",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "typing reports every change through onChange and submits through onSubmit",
+       "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "A submit that fires on every Enter including during autocomplete passes a submit-count check; the frozen replay requires exactly the submitted buffer after editing."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.addToHistory",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "added history entries recall with up and restore the edited draft with down",
+       "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "Up-arrow recall that wraps around instead of restoring the draft passes the first recall; the frozen down-arrow draft restoration separates wrap-around recall from the frozen navigation."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.insertTextAtCursor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "a large paste collapses to a marker and getExpandedText restores the full text",
+       "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "Inserting at the end instead of the cursor passes a whole-text check when the buffer is \"AB\" plus paste at the end; the frozen cursor-framed marker placement separates the two."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.getExpandedText",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "a large paste collapses to a marker and getExpandedText restores the full text",
+       "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "Returning the collapsed marker text passes a length check; the frozen expanded-text equality requires the stored paste payload back."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.setAutocompleteProvider",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "A provider that renders all five items passes a presence check; the frozen visible cap of three with the paging indicator separates capped from uncapped rendering."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.setAutocompleteMaxVisible",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
+       "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "The requested cap of two binds at the frozen floor of three; a setter that stores two without clamping fails the rendered-row count even though the stored value matches the request."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.setPaddingX",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "horizontal padding and the border color shape the rendered editor frame",
+       "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "Padding that shifts the border but not the text line passes a width check; the frozen rendered frame requires the two-space text indent."
+     }
+    },
+    {
+     "id": "cch_coding_agent:EditorComponent.borderColor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/editor-component.json",
+       "scenario": "horizontal padding and the border color shape the rendered editor frame",
+       "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
+       "testSource": "tests/tui/EditorTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
+      "testSource": "tests/tui/EditorTest.cpp",
+      "reason": "A colorizer that changes visible width would be rejected by the C++ width validation; the frozen ANSI colorizer keeps the width and carries the styling on the raw border chunk."
+     }
+    },
+    {
+     "id": "cch_coding_agent:NativeClipboard",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/native-clipboard.json",
+       "scenario": "the NativeClipboard interface spells the unavailable empty and failed outcomes",
+       "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+       "testSource": "tests/tui/NativeClipboardTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+      "testSource": "tests/tui/NativeClipboardTest.cpp",
+      "reason": "A clipboard that conflates unavailable with empty passes a null check; the replay requires the unavailable variant to stay distinct from the empty optional."
+     }
+    },
+    {
+     "id": "cch_coding_agent:NativeClipboard.getText",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/native-clipboard.json",
+       "scenario": "a disconnected display keeps the helper loaded and reads report unavailable",
+       "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+       "testSource": "tests/tui/NativeClipboardTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+      "testSource": "tests/tui/NativeClipboardTest.cpp",
+      "reason": "The availability gate separates \"helper absent\" from \"helper loaded but the getText outcome unavailable\"; a factory that eagerly opens the display or caches its failure fails the lazy-load replay."
+     }
+    },
+    {
+     "id": "cch_coding_agent:NativeClipboard.getImage",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/native-clipboard.json",
+       "scenario": "a disconnected display keeps the helper loaded and reads report unavailable",
+       "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+       "testSource": "tests/tui/NativeClipboardTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+      "testSource": "tests/tui/NativeClipboardTest.cpp",
+      "reason": "The availability gate separates \"helper absent\" from \"helper loaded but the getImage outcome unavailable\"; a factory that eagerly opens the display or caches its failure fails the lazy-load replay."
+     }
+    },
+    {
+     "id": "cch_coding_agent:NativeClipboard.getFilePaths",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/native-clipboard.json",
+       "scenario": "a disconnected display keeps the helper loaded and reads report unavailable",
+       "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+       "testSource": "tests/tui/NativeClipboardTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+      "testSource": "tests/tui/NativeClipboardTest.cpp",
+      "reason": "The availability gate separates \"helper absent\" from \"helper loaded but the getFilePaths outcome unavailable\"; a factory that eagerly opens the display or caches its failure fails the lazy-load replay."
+     }
+    },
+    {
+     "id": "cch_coding_agent:NativeClipboard.setText",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/native-clipboard.json",
+       "scenario": "a disconnected display keeps the helper loaded and reads report unavailable",
+       "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+       "testSource": "tests/tui/NativeClipboardTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+      "testSource": "tests/tui/NativeClipboardTest.cpp",
+      "reason": "The availability gate separates \"helper absent\" from \"helper loaded but the setText outcome unavailable\"; a factory that eagerly opens the display or caches its failure fails the lazy-load replay."
+     }
+    },
+    {
+     "id": "cch_coding_agent:getNativeClipboard",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/native-clipboard.json",
+       "scenario": "getNativeClipboard reports no helper when no display variable is set",
+       "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+       "testSource": "tests/tui/NativeClipboardTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++",
+      "testSource": "tests/tui/NativeClipboardTest.cpp",
+      "reason": "A factory that consults the loader even without a display passes the loaded case but fails the frozen no-display observation; the replay requires the loader stay untouched when DISPLAY is unset."
+     }
+    },
+    {
+     "id": "cch_coding_agent:setImageTranscoder",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1201/image-transcoder.json",
+       "scenario": "without a transcoder a non-PNG image renders the text fallback",
+       "test": "frozen audit-1201 transcoder fallback convert retry and clear replay in C++",
+       "testSource": "tests/coding_agent/tui/ImageTranscoderTest.cpp"
+      },
+      {
+       "artifact": "audit-1201/image-transcoder.json",
+       "scenario": "a transcoder converts non-PNG data for the Kitty protocol",
+       "test": "frozen audit-1201 transcoder fallback convert retry and clear replay in C++",
+       "testSource": "tests/coding_agent/tui/ImageTranscoderTest.cpp"
+      },
+      {
+       "artifact": "audit-1201/image-transcoder.json",
+       "scenario": "a failing transcoder keeps the fallback and a fresh image retries with the new transcoder",
+       "test": "frozen audit-1201 transcoder fallback convert retry and clear replay in C++",
+       "testSource": "tests/coding_agent/tui/ImageTranscoderTest.cpp"
+      },
+      {
+       "artifact": "audit-1201/image-transcoder.json",
+       "scenario": "clearing the transcoder restores the text fallback for fresh images",
+       "test": "frozen audit-1201 transcoder fallback convert retry and clear replay in C++",
+       "testSource": "tests/coding_agent/tui/ImageTranscoderTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "frozen audit-1201 transcoder fallback convert retry and clear replay in C++",
+      "testSource": "tests/coding_agent/tui/ImageTranscoderTest.cpp",
+      "reason": "A converter registry that caches the failing result across a replacement passes the fallback and single-conversion checks; the frozen retry observation requires a fresh image to convert under the new transcoder after the cache-clearing setter."
      }
     }
    ]
