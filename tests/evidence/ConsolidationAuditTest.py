@@ -798,8 +798,9 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # reverted and stay reverted as bounded claims). #1215 (route batch B7)
         # receipted 80 editor rows whole-row: 275. #1217 (route batch B9)
         # receipted 51 markdown/latex rows whole-row: 356. #1218 (route batch B10)
-        # receipted 49 color rows whole-row: 405.
-        self.assertEqual(len(delivered), 405)
+        # receipted 49 color rows whole-row: 405. #1219 (route batch B11)
+        # receipted 84 select-list/settings-list rows whole-row: 489.
+        self.assertEqual(len(delivered), 489)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)

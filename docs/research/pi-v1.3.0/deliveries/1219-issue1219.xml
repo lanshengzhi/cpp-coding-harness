@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="32"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="1"
+	timestamp="2026-11-06T07:56:55"
+	>
+	<testcase name="SelectList description truncation never cuts multi-byte graphemes and omits descriptions under minimum width" classname="SelectList description truncation never cuts multi-byte graphemes and omits descriptions under minimum width" time="0.0116585" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "SelectList description truncation never cuts multi-byte graphemes and omits descriptions under minimum width"
+Randomness seeded to: 3411047175
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SelectList filtering resets selection to zero and handles empty item collections" classname="SelectList filtering resets selection to zero and handles empty item collections" time="0.0100002" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "SelectList filtering resets selection to zero and handles empty item collections"
+Randomness seeded to: 1556534397
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SelectList layout bounds clamp inverted minimum and maximum options" classname="SelectList layout bounds clamp inverted minimum and maximum options" time="0.0100123" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "SelectList layout bounds clamp inverted minimum and maximum options"
+Randomness seeded to: 709418771
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SelectList mouse interactions ignore hover gestures and clamp wheel delta at boundary" classname="SelectList mouse interactions ignore hover gestures and clamp wheel delta at boundary" time="0.0103402" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "SelectList mouse interactions ignore hover gestures and clamp wheel delta at boundary"
+Randomness seeded to: 3878725142
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SelectList unbound keys return unhandled and do not fire selection callbacks" classname="SelectList unbound keys return unhandled and do not fire selection callbacks" time="0.0101587" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;negative;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "SelectList unbound keys return unhandled and do not fire selection callbacks"
+Randomness seeded to: 2703690875
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SelectList window centering rejects off-by-one indices and clamps bounds" classname="SelectList window centering rejects off-by-one indices and clamps bounds" time="0.0101964" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "SelectList window centering rejects off-by-one indices and clamps bounds"
+Randomness seeded to: 1842780957
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SettingsList layout caps label padding at thirty-six columns and preserves value column" classname="SettingsList layout caps label padding at thirty-six columns and preserves value column" time="0.0110806" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1219;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "SettingsList layout caps label padding at thirty-six columns and preserves value column"
+Randomness seeded to: 2627379494
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SettingsList search input handles backspace to empty and non-matching queries fail closed" classname="SettingsList search input handles backspace to empty and non-matching queries fail closed" time="0.0128491" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;negative;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "SettingsList search input handles backspace to empty and non-matching queries fail closed"
+Randomness seeded to: 3706637270
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SettingsList search separator row and empty lines are inert to click activation" classname="SettingsList search separator row and empty lines are inert to click activation" time="0.0108069" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;negative;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "SettingsList search separator row and empty lines are inert to click activation"
+Randomness seeded to: 2585652728
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SettingsList space confirms only when search query is empty and ignores non-empty input" classname="SettingsList space confirms only when search query is empty and ignores non-empty input" time="0.0104171" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;negative;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "SettingsList space confirms only when search query is empty and ignores non-empty input"
+Randomness seeded to: 522916525
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SettingsList submenu done callback ignores invalid navigateTo identifiers" classname="SettingsList submenu done callback ignores invalid navigateTo identifiers" time="0.00997642" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;negative;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "SettingsList submenu done callback ignores invalid navigateTo identifiers"
+Randomness seeded to: 3917994715
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SettingsList update_value and select_item ignore unknown identifiers" classname="SettingsList update_value and select_item ignore unknown identifiers" time="0.00993148" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;negative;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "SettingsList update_value and select_item ignore unknown identifiers"
+Randomness seeded to: 823214351
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="SettingsList windowing clamps selection within valid range on item removal" classname="SettingsList windowing clamps selection within valid range on item removal" time="0.010144" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1219;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "SettingsList windowing clamps selection within valid range on item removal"
+Randomness seeded to: 3858492117
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SelectList Unicode description normalization matches frozen observation" classname="pi-v1.3.0 SelectList Unicode description normalization matches frozen observation" time="0.219782" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SelectList Unicode description normalization matches frozen observation"
+Randomness seeded to: 155925463
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SelectList centered five-row window and scroll counters match frozen observation" classname="pi-v1.3.0 SelectList centered five-row window and scroll counters match frozen observation" time="0.216985" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SelectList centered five-row window and scroll counters match frozen observation"
+Randomness seeded to: 2690385049
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SelectList cycling and selection callback order matches frozen observation" classname="pi-v1.3.0 SelectList cycling and selection callback order matches frozen observation" time="0.22091" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SelectList cycling and selection callback order matches frozen observation"
+Randomness seeded to: 1270702850
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SelectList description allocation and wide glyph truncation match frozen observation" classname="pi-v1.3.0 SelectList description allocation and wide glyph truncation match frozen observation" time="0.41685" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SelectList description allocation and wide glyph truncation match frozen observation"
+Randomness seeded to: 3640444601
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SelectList primary column layout and custom truncation match frozen observation" classname="pi-v1.3.0 SelectList primary column layout and custom truncation match frozen observation" time="0.219804" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SelectList primary column layout and custom truncation match frozen observation"
+Randomness seeded to: 2007534687
+===============================================================================
+All tests passed (56 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SelectList unbound key non-mutation matches frozen observation" classname="pi-v1.3.0 SelectList unbound key non-mutation matches frozen observation" time="0.217918" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SelectList unbound key non-mutation matches frozen observation"
+Randomness seeded to: 538198744
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SelectList value-prefix filtering and selection reset match frozen observation" classname="pi-v1.3.0 SelectList value-prefix filtering and selection reset match frozen observation" time="0.223912" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;select-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SelectList value-prefix filtering and selection reset match frozen observation"
+Randomness seeded to: 2449133788
+===============================================================================
+All tests passed (75 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SettingsList centered five-row windowing matches frozen observation" classname="pi-v1.3.0 SettingsList centered five-row windowing matches frozen observation" time="0.219419" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SettingsList centered five-row windowing matches frozen observation"
+Randomness seeded to: 3813242462
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SettingsList description wrapping label padding and hints match frozen observation" classname="pi-v1.3.0 SettingsList description wrapping label padding and hints match frozen observation" time="0.217264" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SettingsList description wrapping label padding and hints match frozen observation"
+Randomness seeded to: 1526131431
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SettingsList search input filtering and empty results match frozen observation" classname="pi-v1.3.0 SettingsList search input filtering and empty results match frozen observation" time="0.219992" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SettingsList search input filtering and empty results match frozen observation"
+Randomness seeded to: 3559365854
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SettingsList submenu lifecycle and navigate-to behavior match frozen observation" classname="pi-v1.3.0 SettingsList submenu lifecycle and navigate-to behavior match frozen observation" time="0.218064" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SettingsList submenu lifecycle and navigate-to behavior match frozen observation"
+Randomness seeded to: 2904886333
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SettingsList value cycling and selection match frozen observation" classname="pi-v1.3.0 SettingsList value cycling and selection match frozen observation" time="0.214402" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SettingsList value cycling and selection match frozen observation"
+Randomness seeded to: 3568488619
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 SettingsList value update and item selection match frozen observation" classname="pi-v1.3.0 SettingsList value update and item selection match frozen observation" time="0.215193" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1219;settings-list;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 SettingsList value update and item selection match frozen observation"
+Randomness seeded to: 1630285285
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a select-list press selects the rendered row and a click activates it" classname="pi-v1.3.0 a select-list press selects the rendered row and a click activates it" time="0.214169" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a select-list press selects the rendered row and a click activates it"
+Randomness seeded to: 2965571192
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a select-list wheel moves one row per notch and hover never moves the selection" classname="pi-v1.3.0 a select-list wheel moves one row per notch and hover never moves the selection" time="0.213572" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a select-list wheel moves one row per notch and hover never moves the selection"
+Randomness seeded to: 976141191
+===============================================================================
+All tests passed (77 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a settings submenu click closes it and keys still reach the visible list" classname="pi-v1.3.0 a settings submenu click closes it and keys still reach the visible list" time="0.216842" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a settings submenu click closes it and keys still reach the visible list"
+Randomness seeded to: 2354821850
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a settings-list press selects the rendered row and a click activates it" classname="pi-v1.3.0 a settings-list press selects the rendered row and a click activates it" time="0.216217" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a settings-list press selects the rendered row and a click activates it"
+Randomness seeded to: 1544748909
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a settings-list wheel moves one row per notch and hover never moves the selection" classname="pi-v1.3.0 a settings-list wheel moves one row per notch and hover never moves the selection" time="0.219354" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a settings-list wheel moves one row per notch and hover never moves the selection"
+Randomness seeded to: 3441421529
+===============================================================================
+All tests passed (101 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the settings search row forwards clicks and the separator row stays inert" classname="pi-v1.3.0 the settings search row forwards clicks and the separator row stays inert" time="0.217997" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the settings search row forwards clicks and the separator row stays inert"
+Randomness seeded to: 4287917072
+===============================================================================
+All tests passed (34 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

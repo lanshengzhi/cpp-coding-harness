@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="25"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="4"
+	timestamp="2026-11-06T08:16:05"
+	>
+	<testcase name="pi-v1.3.0 a disabled submit gate suppresses the frozen submission" classname="pi-v1.3.0 a disabled submit gate suppresses the frozen submission" time="0.196093" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a disabled submit gate suppresses the frozen submission"
+Randomness seeded to: 1234746309
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a third kill accumulates and the ring still yanks the frozen entries newest-first" classname="pi-v1.3.0 a third kill accumulates and the ring still yanks the frozen entries newest-first" time="0.194073" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a third kill accumulates and the ring still yanks the frozen entries newest-first"
+Randomness seeded to: 735782411
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previous one" classname="pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previous one" time="0.202631" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1215;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a wrapped click maps to the frozen grapheme\, not the previous one"
+Randomness seeded to: 1450948268
+===============================================================================
+All tests passed (36 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request" classname="pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request" time="0.196287" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an @ after a letter requests nothing and tab forces a frozen request"
+Randomness seeded to: 201383709
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor" classname="pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor" time="0.197861" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1215;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor"
+Randomness seeded to: 3520404821
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes" classname="pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes" time="0.203594" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1215;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an editor click respects the borders\, the wrapped segments and the wide graphemes"
+Randomness seeded to: 2632715959
+===============================================================================
+All tests passed (100 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an editor drag selects and copies instead of moving the cursor" classname="pi-v1.3.0 an editor drag selects and copies instead of moving the cursor" time="0.198983" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1215;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an editor drag selects and copies instead of moving the cursor"
+Randomness seeded to: 1168252420
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame" classname="pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame" time="0.20089" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1201;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an empty suggestion result clears the autocomplete list and frame"
+Randomness seeded to: 2881092877
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds" classname="pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds" time="0.197522" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an undo restores the pre-edit cursor column the frozen observation binds"
+Randomness seeded to: 2015504007
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft" classname="pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft" time="0.194991" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 editing a recalled entry exits browsing and discards the frozen draft"
+Randomness seeded to: 2015170419
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation" classname="pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation" time="0.195876" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 editor coalesced unicode edit and undo replay the frozen observation"
+Randomness seeded to: 2297850102
+===============================================================================
+All tests passed (47 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 editor completion triggers replay the frozen observation" classname="pi-v1.3.0 editor completion triggers replay the frozen observation" time="0.19793" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 editor completion triggers replay the frozen observation"
+Randomness seeded to: 2051033597
+===============================================================================
+All tests passed (51 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 editor history draft recall and undo replay the frozen observation" classname="pi-v1.3.0 editor history draft recall and undo replay the frozen observation" time="0.199477" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 editor history draft recall and undo replay the frozen observation"
+Randomness seeded to: 618064325
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 editor kill ring accumulation and yank rotation replay the frozen observation" classname="pi-v1.3.0 editor kill ring accumulation and yank rotation replay the frozen observation" time="0.196593" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 editor kill ring accumulation and yank rotation replay the frozen observation"
+Randomness seeded to: 3901192767
+===============================================================================
+All tests passed (43 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation" classname="pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation" time="0.201821" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 editor paste collapse atomic undo and submit replay the frozen observation"
+Randomness seeded to: 2524661313
+===============================================================================
+All tests passed (44 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 editor undo shortcut rebinding replays the frozen observation" classname="pi-v1.3.0 editor undo shortcut rebinding replays the frozen observation" time="0.200165" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 editor undo shortcut rebinding replays the frozen observation"
+Randomness seeded to: 2716079941
+===============================================================================
+All tests passed (27 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 editor word navigation and jump replay the frozen observation" classname="pi-v1.3.0 editor word navigation and jump replay the frozen observation" time="0.198687" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 editor word navigation and jump replay the frozen observation"
+Randomness seeded to: 3102574288
+===============================================================================
+All tests passed (78 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change" classname="pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change" time="0.198612" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change"
+Randomness seeded to: 1374196690
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches" classname="pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches" time="0.216761" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches"
+Randomness seeded to: 205556314
+===============================================================================
+All tests passed (39 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically" classname="pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically" time="0.194595" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 one undo restores the whole pasted span and its cursor atomically"
+Randomness seeded to: 534215066
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame" classname="pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame" time="0.196232" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the editor marker pair resolves in order and leaves the frozen visible frame"
+Randomness seeded to: 2567904484
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the rebound undo leaves the rest of the frozen table intact" classname="pi-v1.3.0 the rebound undo leaves the rest of the frozen table intact" time="0.195337" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the rebound undo leaves the rest of the frozen table intact"
+Randomness seeded to: 2947327636
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 word navigation revisits the frozen boundaries in reverse and clamps at the edges" classname="pi-v1.3.0 word navigation revisits the frozen boundaries in reverse and clamps at the edges" time="0.201448" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 word navigation revisits the frozen boundaries in reverse and clamps at the edges"
+Randomness seeded to: 1088954699
+===============================================================================
+All tests passed (64 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame" classname="the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame" time="0.195703" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;editor;issue1201;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame"
+Randomness seeded to: 3161996615
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the standalone editor draws a strippable fake cursor marker" classname="the standalone editor draws a strippable fake cursor marker" time="0.193367" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1215;spec;tui"/>
+		</properties>
+		<system-out>Filters: "the standalone editor draws a strippable fake cursor marker"
+Randomness seeded to: 2293710664
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>
