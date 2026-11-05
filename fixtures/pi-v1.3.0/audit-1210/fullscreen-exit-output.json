@@ -1,0 +1,255 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T09:16:54.334Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:338",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:874",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:4284",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:7053",
+    "packages/coding-agent/src/core/settings-manager.ts:55",
+    "packages/coding-agent/src/core/settings-manager.ts:1358",
+    "packages/tui/src/tui.ts:970",
+    "packages/tui/src/tui-main-screen.ts:169",
+    "packages/tui/src/tui-alt-screen.ts:399"
+  ],
+  "scenarios": [
+    {
+      "name": "fullscreen-transcript-exit",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "fullscreenExitOutput": "transcript",
+        "initialMainBuffer": [
+          "Header line 1",
+          "Header line 2"
+        ],
+        "documentLines": [
+          "User: prompt text",
+          "Assistant: response text"
+        ],
+        "editorText": "editor text"
+      },
+      "expected": {
+        "bufferActiveTypeBefore": "alternate",
+        "bufferActiveTypeAfter": "normal",
+        "modeBefore": "fullscreen",
+        "modeAfter": "regular",
+        "startCountDelta": 0,
+        "stopCountDelta": 2,
+        "mainBufferLines": [
+          "Header line 1",
+          "Header line 2",
+          "User: prompt text",
+          "Assistant: response text",
+          "editor text"
+        ]
+      }
+    },
+    {
+      "name": "fullscreen-resume-hint-exit",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "fullscreenExitOutput": "resume-hint",
+        "initialMainBuffer": [
+          "Header line 1",
+          "Header line 2"
+        ],
+        "documentLines": [
+          "User: prompt text",
+          "Assistant: response text"
+        ],
+        "editorText": "editor text"
+      },
+      "expected": {
+        "bufferActiveTypeBefore": "alternate",
+        "bufferActiveTypeAfter": "normal",
+        "modeBefore": "fullscreen",
+        "modeAfter": "fullscreen",
+        "startCountDelta": 0,
+        "stopCountDelta": 1,
+        "mainBufferLines": [
+          "Header line 1",
+          "Header line 2"
+        ]
+      }
+    },
+    {
+      "name": "regular-mode-exit",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "fullscreenExitOutput": "transcript",
+        "initialMainBuffer": [
+          "Shell line 1"
+        ],
+        "documentLines": [
+          "User: reg prompt",
+          "Assistant: reg reply"
+        ],
+        "editorText": "reg editor"
+      },
+      "expected": {
+        "bufferActiveTypeBefore": "normal",
+        "bufferActiveTypeAfter": "normal",
+        "modeBefore": "regular",
+        "modeAfter": "regular",
+        "startCountDelta": 0,
+        "stopCountDelta": 1,
+        "mainBufferLines": [
+          "Shell line 1",
+          "User: reg prompt",
+          "Assistant: reg reply",
+          "reg editor"
+        ]
+      }
+    },
+    {
+      "name": "empty-transcript-exit",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "fullscreenExitOutput": "transcript",
+        "initialMainBuffer": [
+          "Top banner"
+        ],
+        "documentLines": [],
+        "editorText": "blank draft"
+      },
+      "expected": {
+        "modeAfter": "regular",
+        "bufferActiveTypeAfter": "normal",
+        "mainBufferLines": [
+          "Top banner",
+          "blank draft"
+        ]
+      }
+    },
+    {
+      "name": "long-transcript-exit",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "fullscreenExitOutput": "transcript",
+        "initialMainBuffer": [
+          "History start"
+        ],
+        "documentLines": [
+          "Turn message #1",
+          "Turn message #2",
+          "Turn message #3",
+          "Turn message #4",
+          "Turn message #5",
+          "Turn message #6",
+          "Turn message #7",
+          "Turn message #8",
+          "Turn message #9",
+          "Turn message #10",
+          "Turn message #11",
+          "Turn message #12"
+        ],
+        "editorText": "bottom editor"
+      },
+      "expected": {
+        "modeAfter": "regular",
+        "bufferActiveTypeAfter": "normal",
+        "mainBufferLines": [
+          "History start",
+          "Turn message #1",
+          "Turn message #2",
+          "Turn message #3",
+          "Turn message #4",
+          "Turn message #5",
+          "Turn message #6",
+          "Turn message #7",
+          "Turn message #8",
+          "Turn message #9",
+          "Turn message #10",
+          "Turn message #11",
+          "Turn message #12",
+          "bottom editor"
+        ]
+      }
+    },
+    {
+      "name": "overlay-dismissal-exit",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "fullscreenExitOutput": "transcript",
+        "overlayText": "active overlay modal"
+      },
+      "expected": {
+        "hasOverlayEntriesAfter": false,
+        "mainBufferLines": [
+          "Main buffer row",
+          "User message",
+          "active prompt"
+        ]
+      }
+    },
+    {
+      "name": "format-resume-command-matrix",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "defaultSession": {
+          "sessionId": "0197f6e4-4cf9-7f44-a2d8-f8f7f49ee9d3"
+        },
+        "customNoSpace": {
+          "sessionDir": "/custom/sessions",
+          "sessionId": "session-abc-123"
+        },
+        "customSpaces": {
+          "sessionDir": "/my custom sessions/dir",
+          "sessionId": "session-spaces-456"
+        },
+        "customSingleQuote": {
+          "sessionDir": "/my user's sessions/dir",
+          "sessionId": "session-quotes-789"
+        }
+      },
+      "expected": {
+        "cmdDefault": "pi --session 0197f6e4-4cf9-7f44-a2d8-f8f7f49ee9d3",
+        "cmdCustomNoSpace": "pi --session-dir /custom/sessions --session session-abc-123",
+        "cmdCustomSpaces": "pi --session-dir '/my custom sessions/dir' --session session-spaces-456",
+        "cmdCustomSingleQuote": "pi --session-dir '/my user'\\''s sessions/dir' --session session-quotes-789",
+        "cmdNotPersisted": null,
+        "cmdMissingFile": null,
+        "cmdNotTTY": null,
+        "styledNotice": "\u001b[2mTo resume this session:\u001b[22m pi --session 0197f6e4-4cf9-7f44-a2d8-f8f7f49ee9d3\n",
+        "chalkDimHeader": "\u001b[2mTo resume this session:\u001b[22m"
+      }
+    }
+  ]
+}

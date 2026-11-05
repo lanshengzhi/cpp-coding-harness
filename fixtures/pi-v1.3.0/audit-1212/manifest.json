@@ -1,0 +1,3631 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1212",
+  "family": "audit-1212",
+  "capturedAt": "2026-11-05T09:16:59.493Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1212/capture-1212.mts",
+    "sha256": "3c8e11838ddd10ed8b4f8ee283c013d6d4f67b3c35ab332dd367fcd6246b9fb5",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1212/capture-1212.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1212/capture-1212.mts",
+        "sha256": "3c8e11838ddd10ed8b4f8ee283c013d6d4f67b3c35ab332dd367fcd6246b9fb5"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/selection-scenarios.mts",
+        "sha256": "48b3eed9a19bc4a305f21d1f8d7b77874a834fe8870fb9d0d50afd3f69cbcf95"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/mouse-components-scenarios.mts",
+        "sha256": "ff24a6de012024fd20df7db391059a7cc9f195a90fb2458d9904d7cddafc773c"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "selection.json",
+      "family": "audit-1212",
+      "bytes": 35776,
+      "sha256": "144a35e11f6ea249db4845bf8e6ffba274cc589b4f979dc0eeab595bb1a82bce",
+      "sourceEndpoints": [
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,handleRightClickPaste,handleViewportInput",
+        "packages/tui/src/utils.ts:getOsc8LinkAtColumn",
+        "packages/tui/src/components/text.ts:Text.render,setText",
+        "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender"
+      ],
+      "scenarios": [
+        {
+          "name": "osc8-click-and-drag-routing",
+          "dimensions": {
+            "columns": 20,
+            "rows": 3
+          },
+          "inputs": {
+            "url": "https://example.com/link",
+            "text": "alpha plain",
+            "click": {
+              "x": 2,
+              "y": 1
+            },
+            "doubleClick": {
+              "x": 2,
+              "y": 1,
+              "advanceMs": 150
+            },
+            "drag": [
+              {
+                "x": 2,
+                "y": 1
+              },
+              {
+                "x": 5,
+                "y": 1
+              }
+            ]
+          },
+          "expected": {
+            "afterClick": [
+              "https://example.com/link"
+            ],
+            "afterWordClick": [
+              "https://example.com/link"
+            ],
+            "afterDrag": [
+              "https://example.com/link"
+            ]
+          }
+        },
+        {
+          "name": "linux-secondary-button-paste",
+          "dimensions": {
+            "columns": 20,
+            "rows": 3
+          },
+          "inputs": {
+            "platform": "linux",
+            "press": {
+              "button": 2,
+              "x": 3,
+              "y": 1
+            },
+            "releaseButton": 2,
+            "motionButton": 34
+          },
+          "expected": {
+            "afterPress": 0,
+            "afterMotion": 0
+          }
+        },
+        {
+          "name": "styled-cjk-wrapped-selection",
+          "dimensions": {
+            "columns": 6,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "\u001b[31mred界abc\u001b[0m",
+            "drag": [
+              {
+                "x": 2,
+                "y": 1
+              },
+              {
+                "x": 2,
+                "y": 2
+              }
+            ],
+            "copyOnSelect": false
+          },
+          "expected": {
+            "before": [
+              "red界",
+              "abc",
+              "",
+              ""
+            ],
+            "hasSelection": true,
+            "highlighted": true,
+            "styledCells": [
+              [
+                {
+                  "text": "r",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": 1
+                },
+                {
+                  "text": "e",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "d",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "界",
+                  "width": 2,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "",
+                  "width": 0,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": " ",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                }
+              ],
+              [
+                {
+                  "text": "a",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "b",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "c",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": 1
+                },
+                {
+                  "text": " ",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": -1
+                },
+                {
+                  "text": " ",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": -1
+                },
+                {
+                  "text": " ",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": -1
+                }
+              ]
+            ],
+            "copyResult": true,
+            "copied": [
+              "ed界\nab"
+            ],
+            "copyOnSelect": false
+          }
+        },
+        {
+          "name": "selection-content-focus-and-clear-lifecycle",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "initialText": "alpha\nbeta\ngamma\ndelta",
+            "drag": [
+              {
+                "x": 1,
+                "y": 1
+              },
+              {
+                "x": 4,
+                "y": 2
+              }
+            ],
+            "updatedText": "omega\nsigma\ngamma\ndelta",
+            "focus": [
+              "out",
+              "in"
+            ],
+            "contentClick": {
+              "x": 1,
+              "y": 3
+            },
+            "copyOnSelect": false
+          },
+          "expected": {
+            "emptyCopyResult": false,
+            "selected": true,
+            "firstCopyResult": true,
+            "afterContentChange": true,
+            "updatedCopyResult": true,
+            "afterFocusChange": true,
+            "afterContentClick": false,
+            "copied": [
+              "alpha\nbeta",
+              "omega\nsigm"
+            ]
+          }
+        },
+        {
+          "name": "selection-copy-specific-failure",
+          "dimensions": {
+            "columns": 80,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "alpha beta",
+            "drag": [
+              {
+                "x": 1,
+                "y": 1
+              },
+              {
+                "x": 5,
+                "y": 1
+              }
+            ],
+            "copyOnSelect": false
+          },
+          "expected": {
+            "copyResult": false,
+            "copied": [
+              "alpha"
+            ],
+            "copyError": "Clipboard unavailable: install wl-clipboard",
+            "failureVisible": true
+          }
+        },
+        {
+          "name": "copy-on-select-default-and-empty-range",
+          "dimensions": {
+            "columns": 20,
+            "rows": 2
+          },
+          "inputs": {
+            "text": "alpha beta",
+            "emptyClick": {
+              "x": 1,
+              "y": 1
+            },
+            "drag": [
+              {
+                "x": 1,
+                "y": 1
+              },
+              {
+                "x": 5,
+                "y": 1
+              }
+            ]
+          },
+          "expected": {
+            "defaultCopyOnSelect": true,
+            "afterEmptyClick": [],
+            "copied": [
+              "alpha"
+            ],
+            "hasSelection": true
+          }
+        },
+        {
+          "name": "multiclick-word-line-cycle",
+          "dimensions": {
+            "columns": 30,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "alpha beta gamma",
+            "steps": [
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 0,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta",
+                  "alpha beta gamma"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "beta",
+                  "alpha beta gamma"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta",
+                  "alpha beta gamma",
+                  "beta"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-word-joiners-and-classes",
+          "dimensions": {
+            "columns": 44,
+            "rows": 6
+          },
+          "inputs": {
+            "text": "src/main-component util\na.b ee_ff 3.14 カタカナ\n中x foo,bar",
+            "steps": [
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "main (joiners merge left and right)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "main (second)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 20,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "util (plain word)"
+              },
+              {
+                "action": "release",
+                "x": 20,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 20,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "util (second)"
+              },
+              {
+                "action": "release",
+                "x": 20,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "a.b (MidNumLet joins letters)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "a.b (second)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "ee_ff (ExtendNumLet joins letters)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "ee_ff (second)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 11,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "3.14 (MidNumLet joins digits)"
+              },
+              {
+                "action": "release",
+                "x": 11,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 11,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "3.14 (second)"
+              },
+              {
+                "action": "release",
+                "x": 11,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 16,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "カタカナ (Katakana run)"
+              },
+              {
+                "action": "release",
+                "x": 16,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 16,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "カタカナ (second)"
+              },
+              {
+                "action": "release",
+                "x": 16,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 3,
+                "advanceMs": 400,
+                "target": "中 (single dictionary-script character)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 3
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 3,
+                "advanceMs": 150,
+                "target": "中 (second)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 3,
+                "advanceMs": 400,
+                "target": "x (letter after a wide character)"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 3
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 3,
+                "advanceMs": 150,
+                "target": "x (second)"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 8,
+                "y": 3,
+                "advanceMs": 400,
+                "target": ", (punctuation selects itself)"
+              },
+              {
+                "action": "release",
+                "x": 8,
+                "y": 3
+              },
+              {
+                "action": "press",
+                "x": 8,
+                "y": 3,
+                "advanceMs": 150,
+                "target": ", (second)"
+              },
+              {
+                "action": "release",
+                "x": 8,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14",
+                  "カタカナ"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14",
+                  "カタカナ",
+                  "中"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14",
+                  "カタカナ",
+                  "中",
+                  "x"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14",
+                  "カタカナ",
+                  "中",
+                  "x",
+                  ","
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-word-drag-expansion",
+          "dimensions": {
+            "columns": 40,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "one two three four",
+            "steps": [
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "two"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "two (second)"
+              },
+              {
+                "action": "motion",
+                "x": 15,
+                "y": 1,
+                "target": "four"
+              },
+              {
+                "action": "release",
+                "x": 15,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 15,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "four"
+              },
+              {
+                "action": "release",
+                "x": 15,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 15,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "four (second)"
+              },
+              {
+                "action": "motion",
+                "x": 1,
+                "y": 1,
+                "target": "one"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 600,
+                "target": "two"
+              },
+              {
+                "action": "motion",
+                "x": 9,
+                "y": 1,
+                "target": "three"
+              },
+              {
+                "action": "release",
+                "x": 9,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": true,
+                "copied": [
+                  "two three four"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "two three four",
+                  "one two three four"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "two three four",
+                  "one two three four",
+                  "two t"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-line-wrapped-rows",
+          "dimensions": {
+            "columns": 10,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "abcdefghij klmnop",
+            "steps": [
+              {
+                "action": "press",
+                "x": 3,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "first wrapped row"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 1,
+                "advanceMs": 150
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 1,
+                "advanceMs": 150
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "second wrapped row"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 2,
+                "advanceMs": 150
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "row one again"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "row two"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "row two (second)"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": true,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij",
+                  "klmnop"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij",
+                  "klmnop"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij",
+                  "klmnop"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij",
+                  "klmnop",
+                  "klmnop"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-expiry-and-word-identity",
+          "dimensions": {
+            "columns": 30,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "alpha beta",
+            "steps": [
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 650,
+                "target": "beta after 650ms"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta again"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "alpha, a different word"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "alpha (second)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta",
+                  "alpha"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-focus-out-cancels",
+          "dimensions": {
+            "columns": 30,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "alpha beta",
+            "steps": [
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "focusOut"
+              },
+              {
+                "action": "focusIn"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta after focus return"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta (second)"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "beta (held)"
+              },
+              {
+                "action": "focusOut"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta after held press"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta (second after held)"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta",
+                  "beta"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-scrollbar-cancels",
+          "dimensions": {
+            "columns": 30,
+            "rows": 3
+          },
+          "inputs": {
+            "layoutText": "one two\nthree four\nfive six\nseven eight\nnine ten\neleven",
+            "layoutScroll": {
+              "follow": "none",
+              "primary": true,
+              "scrollbar": "always",
+              "scrollbarHideDelayMs": 0
+            },
+            "steps": [
+              {
+                "action": "press",
+                "x": 30,
+                "y": 3,
+                "advanceMs": 400,
+                "target": "track bottom"
+              },
+              {
+                "action": "release",
+                "x": 30,
+                "y": 3
+              },
+              {
+                "action": "observeViewport"
+              },
+              {
+                "action": "press",
+                "x": 30,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "track top"
+              },
+              {
+                "action": "release",
+                "x": 30,
+                "y": 1
+              },
+              {
+                "action": "observeViewport"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "two"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 30,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "thumb grab"
+              },
+              {
+                "action": "release",
+                "x": 30,
+                "y": 1
+              },
+              {
+                "action": "observeViewport"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "two after scrollbar"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "two (second)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "two"
+                ]
+              }
+            ],
+            "viewports": [
+              [
+                "seven eight                  │",
+                "nine ten                     █",
+                "eleven                       █"
+              ],
+              [
+                "one two                      █",
+                "three four                   █",
+                "five six                     │"
+              ],
+              [
+                "one two                      █",
+                "three four                   █",
+                "five six                     │"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "multiclick-dictionary-script-runs",
+          "dimensions": {
+            "columns": 40,
+            "rows": 5
+          },
+          "inputs": {
+            "text": "日本語\nこんにちは\nสวัสดีครับ",
+            "steps": [
+              {
+                "action": "press",
+                "x": 2,
+                "y": 1,
+                "advanceMs": 600,
+                "target": "han run first"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "han run second"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 2,
+                "advanceMs": 600,
+                "target": "hiragana run first"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "hiragana run second"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 3,
+                "advanceMs": 600,
+                "target": "thai first word first"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 3,
+                "advanceMs": 150,
+                "target": "thai first word second"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 6,
+                "y": 3,
+                "advanceMs": 600,
+                "target": "thai second word first"
+              },
+              {
+                "action": "release",
+                "x": 6,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 6,
+                "y": 3,
+                "advanceMs": 150,
+                "target": "thai second word second"
+              },
+              {
+                "action": "release",
+                "x": 6,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "日本語"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "日本語"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "日本語",
+                  "こんにちは"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "日本語",
+                  "こんにちは"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "日本語",
+                  "こんにちは",
+                  "สวัสดี"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "日本語",
+                  "こんにちは",
+                  "สวัสดี"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "日本語",
+                  "こんにちは",
+                  "สวัสดี",
+                  "ครับ"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "mouse-components.json",
+      "family": "audit-1212",
+      "bytes": 51866,
+      "sha256": "216de749368515f410666b4465984f918e024d91b347df9b7d8e4c6cb2116479",
+      "sourceEndpoints": [
+        "packages/tui/src/components/input.ts:handleMouse,render,handleInput,setValue,getValue",
+        "packages/tui/src/components/editor.ts:handleMouse,render,setText,setPaddingX,handleInput,getCursor,getText",
+        "packages/tui/src/components/select-list.ts:handleMouse,render,setSelectedIndex,getSelectedItem",
+        "packages/tui/src/components/settings-list.ts:handleMouse,render,selectItem,getSelectedItem,handleInput",
+        "packages/tui/src/tui.ts:Container.handleMouse,dispatchMouseEvent",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.dispatchMouseEvent,TuiAltScreen.getFocusedComponent",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.getViewport"
+      ],
+      "scenarios": [
+        {
+          "name": "input-press-cursor-and-unhandled-gestures",
+          "dimensions": {
+            "columns": 20,
+            "rows": 1
+          },
+          "inputs": {
+            "prompt": "> ",
+            "value": "hello",
+            "width": 20,
+            "typed": "X",
+            "cases": [
+              {
+                "label": "value-column-two",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left"
+              },
+              {
+                "label": "prompt-column-zero",
+                "x": 2,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left"
+              },
+              {
+                "label": "past-line-end",
+                "x": 20,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left"
+              },
+              {
+                "label": "right-button",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "right"
+              },
+              {
+                "label": "release",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "release",
+                "button": "left"
+              },
+              {
+                "label": "move",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "move",
+                "button": "none"
+              },
+              {
+                "label": "wheel",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "wheel",
+                "button": "left"
+              },
+              {
+                "label": "second-row",
+                "x": 4,
+                "y": 1,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left"
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "label": "value-column-two",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorColumn": -1,
+                "row": "> he\u001b_pi:fc\u0007l\u001b_pi:/fc\u0007lo",
+                "valueAfterType": "heXllo"
+              },
+              {
+                "label": "prompt-column-zero",
+                "x": 2,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "past-line-end",
+                "x": 20,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorColumn": -1,
+                "row": "> hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                "valueAfterType": "helloX"
+              },
+              {
+                "label": "right-button",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "right",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "release",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "release",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "move",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "move",
+                "button": "none",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "wheel",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "wheel",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "second-row",
+                "x": 4,
+                "y": 1,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              }
+            ]
+          }
+        },
+        {
+          "name": "input-press-maps-grapheme-widths-and-scrolled-columns",
+          "dimensions": {
+            "columns": 20,
+            "rows": 1
+          },
+          "inputs": {
+            "prompt": "> ",
+            "typed": "X",
+            "cases": [
+              {
+                "label": "cjk-inside-first-grapheme",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  4
+                ]
+              },
+              {
+                "label": "cjk-inside-second-grapheme",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  5
+                ]
+              },
+              {
+                "label": "cjk-past-end",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  6
+                ]
+              },
+              {
+                "label": "scrolled-column-zero",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  2
+                ]
+              },
+              {
+                "label": "scrolled-column-one",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  3
+                ]
+              },
+              {
+                "label": "scrolled-past-end",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  7
+                ]
+              },
+              {
+                "label": "scrolled-wide-grapheme",
+                "value": "一二三四五六七八",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  20,
+                  4
+                ]
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "label": "cjk-inside-first-grapheme",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  4
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 4,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 你\u001b_pi:fc\u0007好\u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "你X好"
+              },
+              {
+                "label": "cjk-inside-second-grapheme",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  5
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 5,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 你\u001b_pi:fc\u0007好\u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "你X好"
+              },
+              {
+                "label": "cjk-past-end",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  6
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 6,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 你好\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "你好X"
+              },
+              {
+                "label": "scrolled-column-zero",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  2
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 7,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> cde\u001b_pi:fc\u0007f\u001b_pi:/fc\u0007gh",
+                    "cursorColumn": -1
+                  },
+                  {
+                    "x": 2,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> ab\u001b_pi:fc\u0007c\u001b_pi:/fc\u0007def",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "abXcdefghij"
+              },
+              {
+                "label": "scrolled-column-one",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  3
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 7,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> cde\u001b_pi:fc\u0007f\u001b_pi:/fc\u0007gh",
+                    "cursorColumn": -1
+                  },
+                  {
+                    "x": 3,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> abc\u001b_pi:fc\u0007d\u001b_pi:/fc\u0007ef",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "abcXdefghij"
+              },
+              {
+                "label": "scrolled-past-end",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  7
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 7,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> cde\u001b_pi:fc\u0007f\u001b_pi:/fc\u0007gh",
+                    "cursorColumn": -1
+                  },
+                  {
+                    "x": 7,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> efg\u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ij",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "abcdefgXhij"
+              },
+              {
+                "label": "scrolled-wide-grapheme",
+                "value": "一二三四五六七八",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  20,
+                  4
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 20,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 七八\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  },
+                  {
+                    "x": 4,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 六\u001b_pi:fc\u0007七\u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "一二三四五六X七八"
+              }
+            ]
+          }
+        },
+        {
+          "name": "select-list-press-selects-and-click-activates",
+          "dimensions": {
+            "columns": 40,
+            "rows": 3
+          },
+          "inputs": {
+            "items": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ],
+            "maxVisible": 3
+          },
+          "expected": {
+            "pressClick": {
+              "maxVisible": 3,
+              "items": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "press": {
+                "x": 1,
+                "y": 2,
+                "width": 40,
+                "height": 3,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "selected": "c"
+              },
+              "click": {
+                "x": 1,
+                "y": 2,
+                "width": 40,
+                "height": 3,
+                "result": {
+                  "handled": true,
+                  "focus": false,
+                  "render": null
+                },
+                "selected": "c"
+              }
+            }
+          }
+        },
+        {
+          "name": "select-list-wheel-hover-and-scrolled-rows",
+          "dimensions": {
+            "columns": 80,
+            "rows": 5
+          },
+          "inputs": {
+            "itemCount": 12,
+            "maxVisible": 5,
+            "selectedIndex": 5,
+            "wheelDelta": 1,
+            "rows": [
+              0,
+              4
+            ]
+          },
+          "expected": {
+            "rows": [
+              {
+                "row": 0,
+                "afterWheel": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": true
+                  },
+                  "selected": "item-6",
+                  "changes": [
+                    "item-6"
+                  ]
+                },
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ],
+                "hover": [
+                  {
+                    "y": 0,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 1,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 3,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 0,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  }
+                ],
+                "press": {
+                  "result": {
+                    "handled": true,
+                    "focus": true,
+                    "render": null
+                  },
+                  "selected": "item-4",
+                  "changes": [
+                    "item-6",
+                    "item-4"
+                  ]
+                },
+                "click": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": null
+                  },
+                  "selected": "item-4",
+                  "changes": [
+                    "item-6",
+                    "item-4"
+                  ]
+                }
+              },
+              {
+                "row": 4,
+                "afterWheel": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": true
+                  },
+                  "selected": "item-6",
+                  "changes": [
+                    "item-6"
+                  ]
+                },
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ],
+                "hover": [
+                  {
+                    "y": 0,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 1,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 3,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  }
+                ],
+                "press": {
+                  "result": {
+                    "handled": true,
+                    "focus": true,
+                    "render": null
+                  },
+                  "selected": "item-8",
+                  "changes": [
+                    "item-6",
+                    "item-8"
+                  ]
+                },
+                "click": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": null
+                  },
+                  "selected": "item-8",
+                  "changes": [
+                    "item-6",
+                    "item-8"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "settings-list-press-selects-and-click-activates",
+          "dimensions": {
+            "columns": 40,
+            "rows": 5
+          },
+          "inputs": {
+            "items": [
+              "mode",
+              "other",
+              "third",
+              "fourth"
+            ],
+            "maxVisible": 3
+          },
+          "expected": {
+            "pressClick": {
+              "maxVisible": 3,
+              "items": [
+                "mode",
+                "other",
+                "third",
+                "fourth"
+              ],
+              "press": {
+                "x": 1,
+                "y": 2,
+                "width": 40,
+                "height": 5,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                }
+              },
+              "click": {
+                "x": 1,
+                "y": 2,
+                "width": 40,
+                "height": 5,
+                "result": {
+                  "handled": true,
+                  "focus": false,
+                  "render": null
+                }
+              },
+              "changes": [
+                {
+                  "id": "third",
+                  "value": "high"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "settings-list-wheel-hover-and-scrolled-rows",
+          "dimensions": {
+            "columns": 80,
+            "rows": 6
+          },
+          "inputs": {
+            "itemCount": 12,
+            "maxVisible": 5,
+            "selectedItem": "item-5",
+            "wheelDelta": 1,
+            "rows": [
+              0,
+              4
+            ]
+          },
+          "expected": {
+            "rows": [
+              {
+                "row": 0,
+                "rowOffset": 2,
+                "afterWheel": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": true
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 4   off",
+                    "  Item 5   off",
+                    "> Item 6   off",
+                    "  Item 7   off",
+                    "  Item 8   off",
+                    "  (7/12)",
+                    "",
+                    "  Description 6",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ]
+                },
+                "hover": [
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 3,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 5,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 6,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  }
+                ],
+                "press": {
+                  "result": {
+                    "handled": true,
+                    "focus": true,
+                    "render": null
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 2   off",
+                    "  Item 3   off",
+                    "> Item 4   off",
+                    "  Item 5   off",
+                    "  Item 6   off",
+                    "  (5/12)",
+                    "",
+                    "  Description 4",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ]
+                },
+                "click": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": null
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 2   off",
+                    "  Item 3   off",
+                    "> Item 4   on",
+                    "  Item 5   off",
+                    "  Item 6   off",
+                    "  (5/12)",
+                    "",
+                    "  Description 4",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ],
+                  "changes": [
+                    {
+                      "id": "item-4",
+                      "value": "on"
+                    }
+                  ]
+                }
+              },
+              {
+                "row": 4,
+                "rowOffset": 2,
+                "afterWheel": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": true
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 4   off",
+                    "  Item 5   off",
+                    "> Item 6   off",
+                    "  Item 7   off",
+                    "  Item 8   off",
+                    "  (7/12)",
+                    "",
+                    "  Description 6",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ]
+                },
+                "hover": [
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 3,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 5,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 6,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 6,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  }
+                ],
+                "press": {
+                  "result": {
+                    "handled": true,
+                    "focus": true,
+                    "render": null
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 6   off",
+                    "  Item 7   off",
+                    "> Item 8   off",
+                    "  Item 9   off",
+                    "  Item 10  off",
+                    "  (9/12)",
+                    "",
+                    "  Description 8",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ]
+                },
+                "click": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": null
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 6   off",
+                    "  Item 7   off",
+                    "> Item 8   on",
+                    "  Item 9   off",
+                    "  Item 10  off",
+                    "  (9/12)",
+                    "",
+                    "  Description 8",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ],
+                  "changes": [
+                    {
+                      "id": "item-8",
+                      "value": "on"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "settings-list-search-row-forwards-and-separator-is-inert",
+          "dimensions": {
+            "columns": 80,
+            "rows": 6
+          },
+          "inputs": {
+            "itemCount": 4,
+            "maxVisible": 5,
+            "typedQuery": "it",
+            "edited": "X",
+            "searchClick": {
+              "x": 3,
+              "y": 0
+            }
+          },
+          "expected": {
+            "search": {
+              "rows": [
+                "> it\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                "",
+                "> Item 0  off",
+                "  Item 1  off",
+                "  Item 2  off",
+                "  Item 3  off",
+                "",
+                "  Type to search · Enter/Space to change · Esc to cancel"
+              ],
+              "typedQuery": "it",
+              "searchRow": {
+                "x": 3,
+                "y": 0,
+                "width": 80,
+                "height": 6,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorColumnBeforeClick": -1,
+                "afterClick": "> i\u001b_pi:fc\u0007t\u001b_pi:/fc\u0007",
+                "cursorColumnAfterClick": -1,
+                "queryAfterType": "iXt",
+                "edited": "X"
+              },
+              "separatorRow": {
+                "x": 3,
+                "y": 1,
+                "width": 80,
+                "height": 6,
+                "result": null
+              },
+              "firstItemRow": {
+                "x": 3,
+                "y": 2,
+                "width": 80,
+                "height": 6,
+                "press": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "rowsAfterPress": [
+                  "> i\u001b_pi:fc\u0007t\u001b_pi:/fc\u0007",
+                  "",
+                  "> Item 0  off",
+                  "  Item 1  off",
+                  "  Item 2  off",
+                  "  Item 3  off",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ],
+                "click": {
+                  "handled": true,
+                  "focus": false,
+                  "render": null
+                },
+                "changesAfterClick": [
+                  {
+                    "id": "item-0",
+                    "value": "on"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "name": "alternate-screen-nested-input-click-keeps-host-focus",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "overlayWidth": 20,
+            "overlayHeight": 4,
+            "value": "hi",
+            "columns": [
+              5,
+              3
+            ],
+            "typed": "!"
+          },
+          "expected": {
+            "overlays": [
+              {
+                "column": 5,
+                "hostFocusedBeforeOverlay": false,
+                "value": "hi!",
+                "hostFocusedAfterClick": true,
+                "screen": [
+                  "> hi!",
+                  "",
+                  "",
+                  ""
+                ]
+              },
+              {
+                "column": 3,
+                "hostFocusedBeforeOverlay": false,
+                "value": "!hi",
+                "hostFocusedAfterClick": true,
+                "screen": [
+                  "> !hi",
+                  "",
+                  "",
+                  ""
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "settings-submenu-click-closes-and-keeps-host-focus",
+          "dimensions": {
+            "columns": 30,
+            "rows": 6
+          },
+          "inputs": {
+            "submenuItems": [
+              "first",
+              "second"
+            ],
+            "settings": [
+              "theme",
+              "other"
+            ]
+          },
+          "expected": {
+            "submenu": {
+              "keys": [
+                "\r",
+                "\u001b[B",
+                "\r"
+              ],
+              "click": {
+                "press": "\u001b[<0;3;2M",
+                "release": "\u001b[<0;3;2m"
+              },
+              "submenuOpen": true,
+              "changesAfterClick": [
+                {
+                  "id": "theme",
+                  "value": "second"
+                }
+              ],
+              "focusedAfterClick": true,
+              "closedAfterClick": true,
+              "changesAfterKeys": [
+                {
+                  "id": "theme",
+                  "value": "second"
+                },
+                {
+                  "id": "other",
+                  "value": "on"
+                }
+              ],
+              "screens": [
+                [
+                  "> Theme  first",
+                  "  Other  off",
+                  "",
+                  "  Enter/Space to change · E...",
+                  "",
+                  ""
+                ],
+                [
+                  "→ First",
+                  "  Second",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                [
+                  "> Theme  second",
+                  "  Other  off",
+                  "",
+                  "  Enter/Space to change · E...",
+                  "",
+                  ""
+                ],
+                [
+                  "  Theme  second",
+                  "> Other  on",
+                  "",
+                  "  Enter/Space to change · E...",
+                  "",
+                  ""
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "name": "editor-alternate-screen-click-positions-cursor",
+          "dimensions": {
+            "columns": 20,
+            "rows": 6
+          },
+          "inputs": {
+            "text": "hello",
+            "typed": "X"
+          },
+          "expected": {
+            "editor": {
+              "text": "hello",
+              "columns": 20,
+              "rows": 6,
+              "click": {
+                "press": "\u001b[<0;3;2M",
+                "release": "\u001b[<0;3;2m"
+              },
+              "resolvedClick": {
+                "x": 2,
+                "y": 1,
+                "width": 20,
+                "height": 3
+              },
+              "cursorAfterClick": {
+                "line": 0,
+                "col": 2
+              },
+              "textAfterType": "heXllo",
+              "focused": true,
+              "screens": [
+                [
+                  "────────────────────",
+                  "hello",
+                  "────────────────────",
+                  "",
+                  "",
+                  ""
+                ],
+                [
+                  "────────────────────",
+                  "heXllo",
+                  "────────────────────",
+                  "",
+                  "",
+                  ""
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "name": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+          "dimensions": {
+            "columns": 20,
+            "rows": 24
+          },
+          "inputs": {
+            "typed": "X",
+            "cases": [
+              {
+                "label": "top-border-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 0,
+                "paddingX": 0
+              },
+              {
+                "label": "content-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 1,
+                "paddingX": 0
+              },
+              {
+                "label": "past-content-end",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 2,
+                "paddingX": 0
+              },
+              {
+                "label": "bottom-border-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 3,
+                "paddingX": 0
+              },
+              {
+                "label": "wrapped-first-segment-past-end",
+                "text": "abcdefghij",
+                "width": 6,
+                "x": 6,
+                "y": 1,
+                "paddingX": 0
+              },
+              {
+                "label": "wrapped-second-segment",
+                "text": "abcdefghij",
+                "width": 6,
+                "x": 2,
+                "y": 2,
+                "paddingX": 0
+              },
+              {
+                "label": "cjk-wide-grapheme",
+                "text": "世界",
+                "width": 20,
+                "x": 3,
+                "y": 1,
+                "paddingX": 0
+              },
+              {
+                "label": "cjk-past-end",
+                "text": "世界",
+                "width": 20,
+                "x": 5,
+                "y": 1,
+                "paddingX": 0
+              },
+              {
+                "label": "padded-content",
+                "text": "hello",
+                "width": 20,
+                "x": 4,
+                "y": 1,
+                "paddingX": 2
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "label": "top-border-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 0,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007              ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 5
+                },
+                "textAfterType": "helloX"
+              },
+              {
+                "label": "content-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 1,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007              ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 3
+                },
+                "textAfterType": "helXlo"
+              },
+              {
+                "label": "past-content-end",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 2,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007              ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 5
+                },
+                "textAfterType": "helloX"
+              },
+              {
+                "label": "bottom-border-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 3,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007              ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 5
+                },
+                "textAfterType": "helloX"
+              },
+              {
+                "label": "wrapped-first-segment-past-end",
+                "text": "abcdefghij",
+                "width": 6,
+                "x": 6,
+                "y": 1,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "──────",
+                  "abcde ",
+                  "fghij\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                  "──────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 10
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 4
+                },
+                "textAfterType": "abcdXefghij"
+              },
+              {
+                "label": "wrapped-second-segment",
+                "text": "abcdefghij",
+                "width": 6,
+                "x": 2,
+                "y": 2,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "──────",
+                  "abcde ",
+                  "fghij\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                  "──────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 10
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 7
+                },
+                "textAfterType": "abcdefgXhij"
+              },
+              {
+                "label": "cjk-wide-grapheme",
+                "text": "世界",
+                "width": 20,
+                "x": 3,
+                "y": 1,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "世界\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007               ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 2
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 1
+                },
+                "textAfterType": "世X界"
+              },
+              {
+                "label": "cjk-past-end",
+                "text": "世界",
+                "width": 20,
+                "x": 5,
+                "y": 1,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "世界\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007               ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 2
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 2
+                },
+                "textAfterType": "世界X"
+              },
+              {
+                "label": "padded-content",
+                "text": "hello",
+                "width": 20,
+                "x": 4,
+                "y": 1,
+                "paddingX": 2,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "  hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007            ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 2
+                },
+                "textAfterType": "heXllo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "editor-drag-selects-and-copies-instead-of-moving-the-cursor",
+          "dimensions": {
+            "columns": 20,
+            "rows": 6
+          },
+          "inputs": {
+            "text": "hello world"
+          },
+          "expected": {
+            "drag": {
+              "text": "hello world",
+              "press": "\u001b[<0;1;2M",
+              "drag": "\u001b[<32;5;2M",
+              "release": "\u001b[<0;5;2m",
+              "copied": [
+                "hello"
+              ],
+              "cursorBefore": {
+                "line": 0,
+                "col": 11
+              },
+              "cursorAfter": {
+                "line": 0,
+                "col": 11
+              },
+              "textAfterDrag": "hello world",
+              "screen": [
+                "─────────── Copied!",
+                "hello world",
+                "────────────────────",
+                "",
+                "",
+                ""
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

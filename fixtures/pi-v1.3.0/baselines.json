@@ -269,6 +269,26 @@
           "manifest": "audit-1203/manifest.json",
           "manifestSha256": "9640129300ec7e2d3c0f65466e9c19f7a4e5cd5d023b40b26e509759e9b16958"
         },
+        "audit-1209": {
+          "manifest": "audit-1209/manifest.json",
+          "manifestSha256": "54e150e547f8f811d039a3bc40111aa1110880c9cac661f3bfaf8d7673e42ef7"
+        },
+        "audit-1210": {
+          "manifest": "audit-1210/manifest.json",
+          "manifestSha256": "3018fb267fe18853c1971e5607d91ceca5f4d16f973b9d6ca30fcfccd68c07d3"
+        },
+        "audit-1211": {
+          "manifest": "audit-1211/manifest.json",
+          "manifestSha256": "aa29b7e168171c365209c706ba01daf11301fb40df6493d30748a7a55788142f"
+        },
+        "audit-1212": {
+          "manifest": "audit-1212/manifest.json",
+          "manifestSha256": "1cbe388c019e28b93fe4cf0eef4507668a2478edc76aee23a596a6475ad32018"
+        },
+        "audit-1213": {
+          "manifest": "audit-1213/manifest.json",
+          "manifestSha256": "2282b5b953475cb0ba119038fe99467d2b42a8a9c24d7dc2eda1c750e6518676"
+        },
         "audit-810": {
           "manifest": "audit-810/manifest.json",
           "manifestSha256": "3815cac847e63ef4e1a4780682547c4ab0e9158aead7f7a631a8d44d580822ab"
