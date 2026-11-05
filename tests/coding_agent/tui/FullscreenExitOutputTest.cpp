@@ -13,6 +13,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include "support/EnvVarGuard.hpp"
+#include "support/ImageEnvironmentGuard.hpp"
 #include "support/ImageFixture.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PiTuiEvidence.hpp"
@@ -2977,6 +2978,15 @@ TEST_CASE("Native TUI fullscreen exit characterizes live artifact 35 fullscreen-
     }
 
     SECTION("ProcessTerminal real PTY byte stream probe") {
+        // The frozen artifact-35 capture ran with every emulator detection
+        // variable disabled (TERM_PROGRAM/KITTY_WINDOW_ID/WEZTERM_PANE/TMUX/
+        // COLORTERM unset, TERM=xterm-256color), so pi detected no image
+        // protocol. Pin the same environment: the real ProcessTerminal probe
+        // otherwise inherits the runner's terminal (e.g. TERM_PROGRAM=herdr
+        // detects Kitty) and the stop path's image cleanup writes diverge
+        // from the captured bytes for reasons the artifact never observed.
+        cch::tests::ImageEnvironmentGuard image_environment;
+        image_environment.set("TERM", "xterm-256color");
         auto pty = tests::open_pseudo_terminal(40, 10);
         REQUIRE(pty);
 
@@ -3214,6 +3224,13 @@ TEST_CASE("Native TUI fullscreen exit characterizes all live artifact 35 scenari
             }
 
             SECTION("ProcessTerminal real PTY byte stream probe") {
+                // Pin the artifact-35 capture environment (every emulator
+                // detection variable disabled, TERM=xterm-256color): the real
+                // ProcessTerminal probe otherwise inherits the runner's
+                // terminal and detects an image protocol the frozen capture
+                // never had, diverging on the stop path's image cleanup.
+                cch::tests::ImageEnvironmentGuard image_environment;
+                image_environment.set("TERM", "xterm-256color");
                 auto pty = tests::open_pseudo_terminal(params.columns, params.rows);
                 REQUIRE(pty);
 
