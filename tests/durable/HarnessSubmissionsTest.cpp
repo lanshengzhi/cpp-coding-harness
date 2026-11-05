@@ -351,6 +351,87 @@ ai::ModelStream answer_stream(std::string text) {
     }}};
 }
 
+// #1203: the recaptured frozen pi-v1.3.0 observation of the duplicate-request
+// admission (registered `audit-1203/steering.json`) replays through the C++
+// durable seam. The frozen capture admitted one input, resubmitted a changed
+// payload under the same request ID while busy, and observed the existing
+// submission returned with the changed payload never queued.
+TEST_CASE("the audit-1203 frozen duplicate-request observation replays in C++",
+        "[durable][workflow][issue1203]") {
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1203/steering.json",
+            "a duplicate request ID returns the existing submission without queueing the payload twice");
+    REQUIRE(frozen.has_value());
+
+    RecordingStorage storage;
+    HeldStep held;
+    HarnessOptions options;
+    options.stream = [&held](ai::Model, ai::AiContext, ai::SimpleStreamOptions s) { return held.step(s.stop_token); };
+
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    auto one = consume(harness->submit(root.value(), text_input("a", std::nullopt, "audit1203-req")));
+    REQUIRE(one.has_value());
+    REQUIRE(held.reached.try_acquire_for(std::chrono::seconds(5)));
+    auto two = consume(harness->submit(root.value(), text_input("a-changed", std::nullopt, "audit1203-req")));
+    REQUIRE(two.has_value());
+
+    held.release();
+    REQUIRE(consume(one.value().wait()).has_value());
+    auto one_status = consume(one.value().status());
+    REQUIRE(one_status.has_value());
+    auto two_status = consume(two.value().status());
+    REQUIRE(two_status.has_value());
+
+    const auto& expected = frozen->expected().get_object();
+    CHECK(two.value().id.value == one.value().id.value);
+    CHECK(one_status.value().status == expected.at("oneStatus").get_string());
+    CHECK(two_status.value().status == expected.at("twoStatus").get_string());
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    std::vector<std::string> transcript;
+    for (const auto& entry : *entries) {
+        if (entry.kind == "pi.user") {
+            const auto* object = entry.model.front().as_object();
+            if (object == nullptr) continue;
+            if (const auto* content = object->at("content").as_string()) {
+                transcript.push_back("pi.user:" + *content);
+                continue;
+            }
+            if (const auto* blocks = object->at("content").as_array()) {
+                for (const auto& item : *blocks) {
+                    const auto* block = item.as_object();
+                    if (block == nullptr) continue;
+                    if (const auto* text = block->at("text").as_string())
+                        transcript.push_back("pi.user:" + *text);
+                }
+            }
+        }
+        if (entry.kind == "pi.assistant") {
+            const auto* content = entry.model.front().as_object()->at("content").as_array();
+            if (content == nullptr) continue;
+            for (const auto& item : *content) {
+                const auto* object = item.as_object();
+                if (object == nullptr) continue;
+                const auto* type = object->at("type").as_string();
+                const auto* text = object->at("text").as_string();
+                if (type != nullptr && *type == "text" && text != nullptr)
+                    transcript.push_back("pi.assistant:" + *text);
+            }
+        }
+    }
+    std::reverse(transcript.begin(), transcript.end());
+    const auto& expected_transcript = expected.at("transcript").get_array();
+    REQUIRE(transcript.size() == expected_transcript.size());
+    for (std::size_t index = 0; index < transcript.size(); ++index) {
+        CHECK(transcript[index] == expected_transcript.at(index).get_string());
+    }
+    REQUIRE(consume(harness->close()).has_value());
+}
+
 } // namespace
 
 // ===========================================================================
@@ -2252,3 +2333,4 @@ TEST_CASE("concurrent Harness admissions serialize every submission on the Sessi
 }
 
 } // namespace cch::tests::durable
+

@@ -1435,5 +1435,80 @@ TEST_CASE("a completing owner holds its terminal outcome until ordinary owned wo
     REQUIRE(consume(harness->close()).has_value());
 }
 
+// #1203: the recaptured frozen pi-v1.3.0 observations of the durable ownership
+// boundary and idle waits (registered `audit-1203/ownership.json`) replay
+// through the C++ Harness. The frozen capture drove the real durable runtime
+// with a background child and a conversation/direct abort pair; these cases
+// bind the same outcomes at the C++ public seam.
+TEST_CASE("the audit-1203 frozen background-ownership boundary observation replays in C++",
+        "[durable][ownership][issue1203]") {
+    const auto scenario = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1203/ownership.json",
+            "a background child survives a conversation abort while a direct abort reaches it");
+    REQUIRE(scenario.has_value());
+
+    auto gate = std::make_shared<Gate>();
+    std::vector<TaskDefinition> tasks;
+    auto builder = TaskDefinitionBuilder("audit1203.bg-child", 1);
+    builder.initial([](const chord::Json&) { return checkpoint_phase("run"); });
+    builder.phase("run", [gate](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        if (!gate->wait(runtime.stop_token())) return support::AsyncResult<void>{support::ExpectedVoid{}};
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed", .result = chord::Json("done")});
+        });
+    });
+    // The frozen capture's default abort settles with the "test" reason.
+    builder.abort([](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "aborted", .reason = "test"});
+        });
+    });
+    auto built = builder.build();
+    REQUIRE(built.has_value());
+    tasks.push_back(std::move(*built));
+
+    MemoryStorage storage;
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(tasks)}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    TaskId child_id;
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto created = tx.create_task(*harness->task_definition("audit1203.bg-child"),
+                chord::Json{},
+                TaskOptions{.conversation_id = root.value(), .background = true});
+        if (!created) return std::unexpected(created.error());
+        child_id = *created;
+        return {};
+    }));
+    REQUIRE(commit_res.has_value());
+    REQUIRE(harness->resume().has_value());
+    wait_until([&] {
+        const auto record = consume(harness->get_task(child_id));
+        return record.has_value() && record.value().has_value() && record.value()->state.status == "running";
+    }, "background child running");
+
+    auto aborted = consume(harness->abort_conversation(root.value()));
+    REQUIRE(aborted.has_value());
+    auto after_conversation = consume(harness->get_task(child_id));
+    REQUIRE(after_conversation.has_value());
+    REQUIRE(after_conversation.value().has_value());
+    CHECK(after_conversation.value()->state.status ==
+            scenario->expected().at("statusAfterConversationAbort").get_string());
+
+    auto marked = consume(harness->abort_task(child_id));
+    REQUIRE(marked.has_value());
+    gate->release();
+    auto receipt = consume(harness->wait_for_task(child_id));
+    REQUIRE(receipt.has_value());
+    REQUIRE(receipt.value().state.outcome.has_value());
+    CHECK(receipt.value().state.status == scenario->expected().at("statusAfterDirectAbort").get_string());
+    const auto& frozen_outcome = scenario->expected().at("outcome");
+    CHECK(receipt.value().state.outcome->status == frozen_outcome.at("status").get_string());
+    CHECK(receipt.value().state.outcome->reason.value() == frozen_outcome.at("reason").get_string());
+}
+
 } // namespace
 } // namespace cch::tests::durable
+

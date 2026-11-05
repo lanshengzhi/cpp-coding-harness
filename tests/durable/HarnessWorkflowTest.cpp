@@ -4013,4 +4013,37 @@ TEST_CASE("a failed attempt publication commit never invokes the model stream", 
     REQUIRE(consume(harness->close()).has_value());
 }
 
+// #1203: the recaptured frozen pi-v1.3.0 observation of the harness settings
+// defaults (registered `audit-1203/settings.json`) binds the C++ passive
+// settings defaults. The frozen capture resolved the defaults through the
+// public Harness; the C++ HarnessSettings carries the same frozen defaults at
+// construction time.
+TEST_CASE("the audit-1203 frozen harness settings defaults replay in the C++ settings",
+        "[durable][workflow][issue1203]") {
+    const auto frozen = FrozenScenario::load(
+            "fixtures/pi-v1.3.0/audit-1203/settings.json", "the harness settings defaults resolve with the frozen object-merge rules");
+    REQUIRE(frozen.has_value());
+    const auto& defaults = frozen->expected().at("defaults");
+
+    const HarnessSettings settings;
+    const auto& frozen_retry = defaults.at("retry").get_object();
+    CHECK(settings.retry.enabled == frozen_retry.at("enabled").get_boolean());
+    CHECK(settings.retry.max_retries == static_cast<std::int64_t>(frozen_retry.at("maxRetries").get_number()));
+    CHECK(settings.retry.base_delay_ms == static_cast<std::int64_t>(frozen_retry.at("baseDelayMs").get_number()));
+    CHECK(settings.retry.max_agent_delay_ms ==
+            static_cast<std::int64_t>(frozen_retry.at("maxAgentDelayMs").get_number()));
+    const auto& frozen_compaction = defaults.at("compaction").get_object();
+    CHECK(settings.compaction.enabled == frozen_compaction.at("enabled").get_boolean());
+    CHECK(settings.compaction.reserve_tokens ==
+            static_cast<std::int64_t>(frozen_compaction.at("reserveTokens").get_number()));
+    CHECK(settings.compaction.keep_recent_tokens ==
+            static_cast<std::int64_t>(frozen_compaction.at("keepRecentTokens").get_number()));
+    CHECK(settings.compaction.background_tokens ==
+            static_cast<std::int64_t>(frozen_compaction.at("backgroundTokens").get_number()));
+    CHECK(settings.steering_mode == QueueMode::OneAtATime);
+    CHECK(settings.follow_up_mode == QueueMode::OneAtATime);
+    CHECK(defaults.at("steeringMode").get_string() == "one-at-a-time");
+    CHECK(defaults.at("followUpMode").get_string() == "one-at-a-time");
+}
+
 } // namespace cch::tests::durable
