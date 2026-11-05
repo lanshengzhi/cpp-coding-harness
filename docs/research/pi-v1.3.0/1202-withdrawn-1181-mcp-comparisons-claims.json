@@ -1,0 +1,11 @@
+{
+  "issue": "#1226",
+  "receipt": "1181-mcp-comparisons",
+  "withdrawnAt": "2026-11-05",
+  "reason": "Per-claim withdrawal under #1226 (retro-review blocker over 6ca7b49..e6e1de4a8): commit 9431f4547 returned this row to verified, but the discriminating case anchored in tests/coding_agent/McpOAuthSessionTest.cpp:1370-1440 executes sham checks against unrelated fixtures/pi-v1.3.0/audit-1052/transports.json redirect scenarios (CHECK(frozen_forwarded) asserts true == true; the stripped-header check compares a local stub's empty header against frozen null), and the actual credential resolution still asserts a hardcoded local string literal via StubRequestAuth, disconnected from frozen-pi behavior. ADR 0075 clauses 2 and 6 require independent frozen-pi evidence accepting the comparison and forbid a self-captured golden standing in for an upstream observation; ADR 0076 forbids silently reinstating a withdrawn claim. The claim is withdrawn from promotion through the checked-in per-claim withdrawal channel and the row reverts to source-audit status pending genuine frozen-pi evidence observing per-request OAuth credential attachment, refresh and rejection.",
+  "claims": [
+    {
+      "id": "cch_mcp:mcp-request-auth"
+    }
+  ]
+}

@@ -209,7 +209,7 @@ boundary and is not part of this reconciliation.
 | `cch_mcp:mcp-oauth-registration-signin` | Dynamic registration, PKCE and sign-in callback | **verified** — whole-row receipt |
 | `cch_mcp:mcp-progress` | Progress notifications and deadline re-arming | B3 — capture + comparison |
 | `cch_mcp:mcp-refresh-cancellation` | Cancellation during refresh never dispatches the request | B1 — refresh completion and timeout case |
-| `cch_mcp:mcp-request-auth` | Request-time authentication and 401 handling | **verified** — whole-row receipt |
+| `cch_mcp:mcp-request-auth` | Request-time authentication and 401 handling | withdrawn by #1226 (sham discriminating case) — see `1202-withdrawn-1181-mcp-comparisons-claims.json`; the consolidated ledger reverts the row to source-audit status |
 | `cch_mcp:mcp-request-cancellation` | Request cancellation and timeout | B3 — capture + comparison |
 | `cch_mcp:mcp-resources-list-read` | Resource listing, templates and reads | **verified** — whole-row receipt |
 | `cch_mcp:mcp-roots-list` | Server-to-client roots/list and ping | B2 — implementation + capture |

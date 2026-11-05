@@ -3715,35 +3715,6 @@
             }
           },
           {
-            "id": "cch_mcp:mcp-request-auth",
-            "remainingBoundary": [],
-            "comparisons": [
-              {
-                "artifact": "audit-1052/transports.json",
-                "scenario": "streamable HTTP transport connects over plain http",
-                "test": "streamable HTTP transport connects over plain http",
-                "testSource": "tests/coding_agent/McpHttpSessionTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/transports.json",
-                "scenario": "same-origin redirect is followed and keeps the request auth header",
-                "test": "a same-origin redirect is followed and keeps the request auth header",
-                "testSource": "tests/coding_agent/McpHttpSessionTest.cpp"
-              },
-              {
-                "artifact": "audit-1052/transports.json",
-                "scenario": "cross-origin redirect is followed without Authorization and is rejected",
-                "test": "cross-origin redirect is followed without Authorization and is rejected",
-                "testSource": "tests/coding_agent/McpHttpSessionTest.cpp"
-              }
-            ],
-            "discriminatingCase": {
-              "test": "the MCP HTTP transport attaches a credential only when the server needs one",
-              "testSource": "tests/coding_agent/McpOAuthSessionTest.cpp",
-              "reason": "A server without an OAuth challenge receives no Authorization header while an OAuth-eligible server does, separating an always-attach or never-attach implementation from per-request credential resolution."
-            }
-          },
-          {
             "id": "cch_mcp:mcp-resources-list-read",
             "remainingBoundary": [],
             "comparisons": [
@@ -11768,10 +11739,10 @@
         "partial": 83
       },
       "cch_mcp": {
-        "implemented": 12,
+        "implemented": 11,
         "missing": 1,
         "not-applicable": 1,
-        "partial": 5
+        "partial": 6
       },
       "cch_tui": {
         "implemented": 883,
@@ -11784,16 +11755,16 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1095,
+      "implemented": 1094,
       "missing": 177,
       "not-applicable": 18,
-      "partial": 174
+      "partial": 175
     },
     "verification": {
       "not-applicable": 28,
       "unverified": 916,
-      "upstream-captured": 310,
-      "verified": 210
+      "upstream-captured": 311,
+      "verified": 209
     },
     "evidenceRoute": {
       "captured": 520,
@@ -46931,15 +46902,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_mcp",
       "consumer": "Generic HTTP transport and application `McpRequestAuthSource`/`McpAuthProvider`.",
       "consumerOwners": [
         "cch_mcp"
       ],
       "boundary": null,
-      "implementation_ticket": "#1181",
+      "implementation_ticket": null,
       "scenario": "streamable HTTP transport connects over plain http",
       "comparisonScenarios": [
         "streamable HTTP transport connects over plain http",
@@ -46949,18 +46920,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1052/transports.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "streamable HTTP transport connects over plain http",
-          "same-origin redirect is followed and keeps the request auth header",
-          "cross-origin redirect is followed without Authorization and is rejected"
+          "streamable HTTP transport connects over plain http"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1181-mcp-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1181; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1181-mcp-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Keep per-request resolution and the explicit OAuth error, but pair it with the refresh single-flight/cancellation slice. Add the captured same-origin (auth preserved) and cross-origin (auth stripped) cases.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -46973,26 +46942,7 @@
           "verification": "upstream-captured",
           "owner": "cch_mcp"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1052/transports.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "streamable HTTP transport connects over plain http"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Keep per-request resolution and the explicit OAuth error, but pair it with the refresh single-flight/cancellation slice. Add the captured same-origin (auth preserved) and cross-origin (auth stripped) cases."
-      },
-      "delivery": "1181-mcp-comparisons"
+      ]
     },
     {
       "id": "cch_mcp:mcp-request-cancellation",

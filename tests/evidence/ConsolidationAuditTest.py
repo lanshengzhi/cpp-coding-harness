@@ -599,9 +599,12 @@ class ReanchoredLedgerTest(unittest.TestCase):
     discriminating cases read the registered artifact, so the four receipts
     (1090-durable-images, 1118-codemode-catalog, 1179-codemode-comparisons,
     1181-mcp-comparisons) pass scripts/evidence/receipt_boundary.py and the
-    per-claim withdrawal records were removed: the full claims promote again and
-    the rows are delivery-backed verified. The #1104/#1189 whole-record
-    withdrawals are unaffected and stay withdrawn.
+    per-claim withdrawal records were removed: the full claims of those 13 rows
+    promote again and the rows are delivery-backed verified. The #1104/#1189 whole-record
+    withdrawals are unaffected and stay withdrawn. The #1236 per-claim
+    withdrawals (182 claims across the seven 1201-1213 receipts) and the #1226
+    withdrawal of cch_mcp:mcp-request-auth stay withdrawn: the effective
+    deliveries embedded in the ledger carry those claims absent.
     """
 
     REANCHORED = {
@@ -626,7 +629,6 @@ class ReanchoredLedgerTest(unittest.TestCase):
         "cch_durable:image-orientation-conversion": "1090-durable-images",
         "cch_mcp:mcp-http-transport": "1181-mcp-comparisons",
         "cch_mcp:mcp-oauth-issuer": "1181-mcp-comparisons",
-        "cch_mcp:mcp-request-auth": "1181-mcp-comparisons",
     }
 
     def setUp(self) -> None:
@@ -671,7 +673,10 @@ class ReanchoredLedgerTest(unittest.TestCase):
             ],
         )
         self.assertEqual(len(self.deliveries["1179-codemode-comparisons"]["rows"]), 39)
-        self.assertEqual(len(self.deliveries["1181-mcp-comparisons"]["rows"]), 7)
+        # 1181-mcp-comparisons embeds six effective rows: #1226 withdraws
+        # cch_mcp:mcp-request-auth (sham discriminating case), so the claim stays
+        # in the full receipt but drops from the ledger's effective deliveries.
+        self.assertEqual(len(self.deliveries["1181-mcp-comparisons"]["rows"]), 6)
         image_processor = next(
             claim
             for claim in self.deliveries["1090-durable-images"]["rows"]
@@ -690,10 +695,10 @@ class ReanchoredLedgerTest(unittest.TestCase):
 
     def test_every_verified_row_is_delivery_backed(self) -> None:
         delivered = [row["id"] for row in self.ledger["rows"] if "delivery" in row]
-        # 109 pre-#1192/1194 receipts plus codemode-execute-outcome, codemode-worker-close
-        # (#1192), codemode-portable-entry (#1194), the durable sidecar/ordering rows
-        # (#1180-sidecar-symlink-parity) and the 245 TUI B1-B5 rows (#1209-#1213).
-        self.assertEqual(len(delivered), 392)
+        # Tripwire on the delivery-backed row count: 392 before the #1236
+        # per-claim withdrawals (182 claims across the seven 1201-1213 receipts)
+        # and this lane's #1226 withdrawal of cch_mcp:mcp-request-auth.
+        self.assertEqual(len(delivered), 209)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)
@@ -718,6 +723,67 @@ class ReanchoredLedgerTest(unittest.TestCase):
         scenario_index = consolidate.build_scenario_index(bundles)
         fresh = consolidate.build_ledger(plan, bundles, scenario_index)
         self.assertEqual(consolidate.json_bytes(fresh), LEDGER.read_bytes())
+
+
+class WithdrawnClaimsLedgerTest(unittest.TestCase):
+    """#1226 withdraws cch_mcp:mcp-request-auth from 1181-mcp-comparisons.
+
+    The full receipt in 1058-deliveries.json keeps the claim (its pins stay valid
+    and receipt_boundary.py checks it like every other claim); the ledger embeds
+    the effective deliveries with the claim absent and the row reverts to its
+    source-audit status (ADR 0075 clauses 2 and 6; ADR 0076: a withdrawn claim
+    must not be silently reinstated).
+    """
+
+    def setUp(self) -> None:
+        self.ledger = load(LEDGER)
+        self.rows = {row["id"]: row for row in self.ledger["rows"]}
+        self.full = load(
+            ROOT / "docs" / "research" / "pi-v1.3.0" / "1058-deliveries.json"
+        )
+
+    def test_withdrawn_row_reverts_to_source_audit_status(self) -> None:
+        row = self.rows["cch_mcp:mcp-request-auth"]
+        self.assertEqual(row["implementation"], "partial")
+        self.assertEqual(row["verification"], "upstream-captured")
+        self.assertIsNone(row["implementation_ticket"])
+        self.assertNotIn("delivery", row)
+        self.assertNotIn("auditStatus", row)
+        self.assertIn(
+            "C++ comparison against the registered artifact is not run",
+            row["remainingWork"],
+        )
+
+    def test_full_receipt_keeps_the_claim_and_the_effective_drops_it(self) -> None:
+        full_record = next(
+            record
+            for record in self.full["records"]
+            if record["id"] == "1181-mcp-comparisons"
+        )
+        self.assertIn(
+            "cch_mcp:mcp-request-auth",
+            [claim["id"] for claim in full_record["rows"]],
+        )
+        effective = {record["id"]: record for record in self.ledger["deliveries"]["records"]}
+        self.assertNotIn(
+            "cch_mcp:mcp-request-auth",
+            [claim["id"] for claim in effective["1181-mcp-comparisons"]["rows"]],
+        )
+
+    def test_withdrawal_record_names_the_claim(self) -> None:
+        record = load(
+            ROOT
+            / "docs"
+            / "research"
+            / "pi-v1.3.0"
+            / "1202-withdrawn-1181-mcp-comparisons-claims.json"
+        )
+        self.assertEqual(record["issue"], "#1226")
+        self.assertEqual(record["receipt"], "1181-mcp-comparisons")
+        self.assertEqual(
+            [claim["id"] for claim in record["claims"]],
+            ["cch_mcp:mcp-request-auth"],
+        )
 
 
 class TicketMappedLedgerTest(unittest.TestCase):
@@ -776,10 +842,34 @@ class TicketMappedLedgerTest(unittest.TestCase):
             if "delivery" in row:
                 self.assertNotIn(row["id"], mapped)
 
-    def test_unreferenced_rows_are_empty_and_the_rulings_are_applied(self) -> None:
+    WITHDRAWN_UNREFERENCED = [
+        "cch_durable:background-ownership-boundary",
+        "cch_durable:harness-settings-defaults",
+        "cch_durable:submission-queues",
+        "cch_mcp:mcp-request-auth",
+    ]
+    UNREFERENCED_1058_DRAFT = [
+        "cch_tui:CURSOR_MARKER",
+        "cch_tui:TUI",
+        "cch_tui:TUI.showOverlay",
+        "cch_tui:TuiAltScreen",
+        "cch_tui:TuiAltScreen.clearTextSelection",
+        "cch_tui:TuiAltScreen.lastClick",
+        "cch_tui:TuiAltScreen.render",
+        "cch_tui:TuiAltScreen.resetTextSelection",
+        "cch_tui:TuiMainScreen.doRender",
+        "cch_tui:renderFakeCursor",
+        "cch_tui:tui:fake-cursor-marker-constants",
+        "cch_tui:tui:resolveFakeCursors",
+    ]
+
+    def test_unreferenced_rows_match_the_recorded_sets_and_the_rulings_are_applied(self) -> None:
         null_refs, draft_refs = consolidate.unreferenced_ticket_rows(self.ledger["rows"])
-        self.assertEqual(null_refs, [])
-        self.assertEqual(draft_refs, [])
+        # Withdrawn claims (#1236 durable-captures, #1226 mcp-request-auth) revert
+        # to source-audit status, so they carry no delivery ticket until a genuine
+        # re-delivery; the #1058-draft TUI rows remain as the check reports them.
+        self.assertEqual(null_refs, self.WITHDRAWN_UNREFERENCED)
+        self.assertEqual(draft_refs, self.UNREFERENCED_1058_DRAFT)
         for row_id in self.RULED_ABORT_ADMISSION_1148:
             with self.subTest(row=row_id):
                 row = self.rows[row_id]
