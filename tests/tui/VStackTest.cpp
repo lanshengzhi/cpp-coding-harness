@@ -320,7 +320,7 @@ TEST_CASE("constrained VStack keeps gap rows between allocated children", "[tui]
 }
 
 TEST_CASE("constrained VStack includes nested minimum sizes in intrinsic stack measurement",
-        "[tui][layout][issue998][spec]") {
+        "[tui][layout][issue998][issue1220][spec]") {
     // Independent frozen pi observation (7c10bd43): `test/layout.test.ts:104-131`
     // measures the dock through `VStack.render`, so the nested `minSize: 3`
     // selector contributes padding rows to the parent's auto basis and every
@@ -345,7 +345,8 @@ TEST_CASE("constrained VStack includes nested minimum sizes in intrinsic stack m
             std::vector<std::string>{"body", "top1", "top2", "top3", "selector", "", "", "below", "footer"});
 }
 
-TEST_CASE("constrained VStack keeps the cursor row visible inside a cropped leaf", "[tui][layout][issue998]") {
+TEST_CASE(
+        "constrained VStack keeps the cursor row visible inside a cropped leaf", "[tui][layout][issue998][issue1220]") {
     // Frozen `layout.ts` leaf layout: when a leaf overflows its allocated
     // height, the rows above its cursor row are dropped (`lineOffset`), and the
     // cursor is translated into the cropped box. The `shrink: 0` footer cannot
@@ -394,7 +395,7 @@ TEST_CASE("constrained VStack carries align without changing the vertical axis",
     }
 }
 
-TEST_CASE("constrained VStack honors the responsive visibility predicate", "[tui][layout][issue998]") {
+TEST_CASE("constrained VStack honors the responsive visibility predicate", "[tui][layout][issue998][issue1220]") {
     // Frozen `visibleStackEntries` evaluates `visible` with the allocation's
     // viewport, so the same stack grows or drops an entry with the frame.
     cch::tui::VStack stack;

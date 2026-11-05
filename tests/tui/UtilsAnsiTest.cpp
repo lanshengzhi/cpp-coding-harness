@@ -176,7 +176,8 @@ TEST_CASE("slice_by_column reproduces the frozen slice-start order and link span
     }
 }
 
-TEST_CASE("slice_by_column keeps the v1.0.0 slice-start ordering fix", "[tui][issue957][ansi][slice][spec]") {
+TEST_CASE(
+        "slice_by_column keeps the v1.0.0 slice-start ordering fix", "[tui][issue957][ansi][slice][issue1220][spec]") {
     // The pre-existing fix stays: codes from before the range precede the codes
     // at the boundary instead of being replaced by them.
     const auto reset = tui::slice_by_column("\x1b[32mfoo\x1b[39m bar", 3, 4, true);
@@ -252,7 +253,8 @@ TEST_CASE("truncate_text drops a control that only styles dropped text", "[tui][
     CHECK(*open_st == std::string{kStLinkOpen} + "a" + std::string{kStLinkClose} + "\x1b[0m...\x1b[0m");
 }
 
-TEST_CASE("truncate_text emits only the part of the ellipsis that fits", "[tui][issue957][ansi][truncate][spec]") {
+TEST_CASE("truncate_text emits only the part of the ellipsis that fits",
+        "[tui][issue957][ansi][truncate][issue1220][spec]") {
     const auto clipped = tui::truncate_text("abcdef", 2, "中");
     REQUIRE(clipped);
     CHECK(*clipped == "\x1b[0m中\x1b[0m");
@@ -276,7 +278,8 @@ TEST_CASE("truncate_text emits only the part of the ellipsis that fits", "[tui][
     CHECK(wide->empty());
 }
 
-TEST_CASE("osc8_link_at_column exposes the frozen link for every cell it covers", "[tui][issue957][hyperlink][spec]") {
+TEST_CASE("osc8_link_at_column exposes the frozen link for every cell it covers",
+        "[tui][issue957][hyperlink][issue1220][spec]") {
     const auto scenario = ansi_evidence_scenario();
     REQUIRE(scenario);
     const auto& rows = scenario->at("expected").at("linkColumns").get_array();
@@ -456,7 +459,8 @@ TEST_CASE("wrap_text keeps the startup help on one row at the wider boot widths"
     }
 }
 
-TEST_CASE("strip_terminal_sequences removes the OSC 8 and OSC title bytes pi removes", "[tui][issue957][ansi][spec]") {
+TEST_CASE("strip_terminal_sequences removes the OSC 8 and OSC title bytes pi removes",
+        "[tui][issue957][ansi][issue1220][spec]") {
     CHECK(tui::strip_terminal_sequences("\x1b]8;;https://x\x07link\x1b]8;;\x07") == "link");
     CHECK(tui::strip_terminal_sequences("\x1b]8;;https://x\x1b\\link\x1b]8;;\x1b\\") == "link");
     CHECK(tui::strip_terminal_sequences("\x1b]0;title\x07"

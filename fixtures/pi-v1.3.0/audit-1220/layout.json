@@ -1,0 +1,1544 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T23:45:24.304Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/stack.ts:allocateStackSizes,visibleStackEntries,Stack.addChild,StackEntryOptions",
+    "packages/tui/src/components/v-stack.ts:VStack.render",
+    "packages/tui/src/components/h-stack.ts:HStack.render",
+    "packages/tui/src/layout.ts:renderLayoutFrame,layoutComponent,LayoutBox",
+    "packages/tui/src/tui.ts:TuiBase.extractCursorPosition,compositeTuiLine,CURSOR_MARKER"
+  ],
+  "scenarios": [
+    {
+      "name": "standalone-unbounded",
+      "dimensions": {
+        "columns": 10,
+        "rows": 8
+      },
+      "inputs": {
+        "gap": 1,
+        "invisibleEntry": true,
+        "clamps": {
+          "basisBelowMinimum": [
+            "a",
+            1,
+            2
+          ],
+          "maxSize": [
+            "b1",
+            "b2",
+            "b3",
+            2
+          ],
+          "basisAboveContent": [
+            "c",
+            3
+          ]
+        }
+      },
+      "expected": {
+        "gapStack": [
+          "one",
+          "",
+          "two"
+        ],
+        "clampStack": [
+          "a",
+          "",
+          "b1",
+          "b2",
+          "c",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "name": "frame-vertical-grow",
+      "dimensions": {
+        "columns": 10,
+        "rows": 4
+      },
+      "inputs": {
+        "entries": [
+          {
+            "text": "top",
+            "basis": 1,
+            "grow": 0,
+            "shrink": 0
+          },
+          {
+            "text": "body",
+            "basis": 0,
+            "grow": 1
+          }
+        ]
+      },
+      "expected": {
+        "children": [
+          {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 1,
+            "lineOffset": 0
+          },
+          {
+            "x": 0,
+            "y": 1,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0
+          }
+        ],
+        "lines": [
+          "top",
+          "body",
+          "",
+          ""
+        ],
+        "cursor": null
+      }
+    },
+    {
+      "name": "frame-vertical-shrink",
+      "dimensions": {
+        "columns": 10,
+        "rows": 4
+      },
+      "inputs": {
+        "entries": [
+          {
+            "text": "a1\na2\na3",
+            "shrink": 1,
+            "minSize": 1
+          },
+          {
+            "text": "b1\nb2\nb3",
+            "shrink": 0
+          }
+        ]
+      },
+      "expected": {
+        "children": [
+          {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 1,
+            "lineOffset": 0
+          },
+          {
+            "x": 0,
+            "y": 1,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0
+          }
+        ],
+        "lines": [
+          "a1",
+          "b1",
+          "b2",
+          "b3"
+        ],
+        "cursor": null
+      }
+    },
+    {
+      "name": "frame-nested-minimums",
+      "dimensions": {
+        "columns": 10,
+        "rows": 9
+      },
+      "inputs": {
+        "entries": [
+          {
+            "text": "body",
+            "basis": 0,
+            "grow": 1,
+            "minSize": 1
+          },
+          {
+            "dock": [
+              {
+                "text": "top1\ntop2\ntop3"
+              },
+              {
+                "text": "selector",
+                "minSize": 3
+              },
+              {
+                "text": "below"
+              },
+              {
+                "text": "footer",
+                "minSize": 1
+              }
+            ],
+            "basis": "auto",
+            "minSize": 1
+          }
+        ]
+      },
+      "expected": {
+        "children": [
+          {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 1,
+            "lineOffset": 0
+          },
+          {
+            "x": 0,
+            "y": 1,
+            "width": 10,
+            "height": 8,
+            "lineOffset": 0
+          }
+        ],
+        "lines": [
+          "body",
+          "top1",
+          "top2",
+          "top3",
+          "selector",
+          "",
+          "",
+          "below",
+          "footer"
+        ],
+        "cursor": null
+      }
+    },
+    {
+      "name": "frame-cursor-crop",
+      "dimensions": {
+        "columns": 10,
+        "rows": 3
+      },
+      "inputs": {
+        "entries": [
+          {
+            "lines": [
+              "a1",
+              "a2",
+              "a3",
+              "a4"
+            ],
+            "cursorLine": 3,
+            "shrink": 1,
+            "minSize": 1
+          },
+          {
+            "text": "b1\nb2",
+            "shrink": 0
+          }
+        ]
+      },
+      "expected": {
+        "children": [
+          {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 1,
+            "lineOffset": 3
+          },
+          {
+            "x": 0,
+            "y": 1,
+            "width": 10,
+            "height": 2,
+            "lineOffset": 0
+          }
+        ],
+        "lines": [
+          "a4",
+          "b1",
+          "b2"
+        ],
+        "cursor": {
+          "row": 0,
+          "column": 2
+        }
+      }
+    },
+    {
+      "name": "frame-responsive-visibility",
+      "dimensions": {
+        "columns": 10,
+        "rows": 2
+      },
+      "inputs": {
+        "visibleAboveHeight": 5,
+        "aligns": [
+          "stretch",
+          "center"
+        ]
+      },
+      "expected": {
+        "shortStretch": {
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 10,
+              "height": 1,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 1,
+              "width": 10,
+              "height": 1,
+              "lineOffset": 0
+            }
+          ],
+          "lines": [
+            "head",
+            "foot"
+          ],
+          "cursor": null
+        },
+        "tallStretch": {
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 10,
+              "height": 1,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 1,
+              "width": 10,
+              "height": 3,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 4,
+              "width": 10,
+              "height": 1,
+              "lineOffset": 0
+            }
+          ],
+          "lines": [
+            "head",
+            "detail",
+            "",
+            "",
+            "foot"
+          ],
+          "cursor": null
+        },
+        "tallCenter": {
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 10,
+              "height": 1,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 1,
+              "width": 10,
+              "height": 3,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 4,
+              "width": 10,
+              "height": 1,
+              "lineOffset": 0
+            }
+          ],
+          "lines": [
+            "head",
+            "detail",
+            "",
+            "",
+            "foot"
+          ],
+          "cursor": null
+        }
+      }
+    },
+    {
+      "name": "frame-dock-growth",
+      "dimensions": {
+        "columns": 8,
+        "rows": 12
+      },
+      "inputs": {
+        "transcript": {
+          "lines": 8,
+          "basis": 0,
+          "grow": 1,
+          "shrink": 1,
+          "minSize": 1
+        },
+        "dock": {
+          "editor": {
+            "shrink": 1,
+            "minSize": 3
+          },
+          "menu": {
+            "shrink": 1,
+            "minSize": 0
+          },
+          "footer": {
+            "basis": 2
+          }
+        }
+      },
+      "expected": {
+        "editorAtMinimum": {
+          "name": "editor-at-minimum",
+          "editorLines": 3,
+          "menuVisible": false,
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 8,
+              "height": 7,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 7,
+              "width": 8,
+              "height": 5,
+              "lineOffset": 0
+            }
+          ],
+          "lines": [
+            "t1",
+            "t2",
+            "t3",
+            "t4",
+            "t5",
+            "t6",
+            "t7",
+            "e1",
+            "e2",
+            "e3",
+            "footer-1",
+            "footer-2"
+          ],
+          "cursor": null
+        },
+        "editorGrown": {
+          "name": "editor-grown",
+          "editorLines": 6,
+          "menuVisible": false,
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 8,
+              "height": 4,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 4,
+              "width": 8,
+              "height": 8,
+              "lineOffset": 0
+            }
+          ],
+          "lines": [
+            "t1",
+            "t2",
+            "t3",
+            "t4",
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5",
+            "e6",
+            "footer-1",
+            "footer-2"
+          ],
+          "cursor": null
+        },
+        "menuOpen": {
+          "name": "menu-open",
+          "editorLines": 6,
+          "menuVisible": true,
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 8,
+              "height": 1,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 1,
+              "width": 8,
+              "height": 11,
+              "lineOffset": 0
+            }
+          ],
+          "lines": [
+            "t1",
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5",
+            "e6",
+            "menu1",
+            "menu2",
+            "menu3",
+            "footer-1",
+            "footer-2"
+          ],
+          "cursor": null
+        },
+        "overConstrained": {
+          "name": "over-constrained",
+          "editorLines": 9,
+          "menuVisible": true,
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 8,
+              "height": 1,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 1,
+              "width": 8,
+              "height": 11,
+              "lineOffset": 0
+            }
+          ],
+          "lines": [
+            "t1",
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5",
+            "e6",
+            "e7",
+            "menu1",
+            "menu2",
+            "footer-1",
+            "footer-2"
+          ],
+          "cursor": null
+        },
+        "shrunkBack": {
+          "name": "shrunk-back",
+          "editorLines": 3,
+          "menuVisible": false,
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 8,
+              "height": 7,
+              "lineOffset": 0
+            },
+            {
+              "x": 0,
+              "y": 7,
+              "width": 8,
+              "height": 5,
+              "lineOffset": 0
+            }
+          ],
+          "lines": [
+            "t1",
+            "t2",
+            "t3",
+            "t4",
+            "t5",
+            "t6",
+            "t7",
+            "e1",
+            "e2",
+            "e3",
+            "footer-1",
+            "footer-2"
+          ],
+          "cursor": null
+        }
+      }
+    },
+    {
+      "name": "hstack-unbounded",
+      "dimensions": {
+        "columns": 12,
+        "rows": 6
+      },
+      "inputs": {
+        "width": 12,
+        "aligns": [
+          "stretch",
+          "start",
+          "center",
+          "end"
+        ],
+        "entries": [
+          {
+            "lines": [
+              "left"
+            ],
+            "basis": 4,
+            "shrink": 0
+          },
+          {
+            "lines": [
+              "x",
+              "y",
+              "z"
+            ],
+            "basis": 2,
+            "grow": 1,
+            "shrink": 0
+          },
+          {
+            "lines": [
+              "hidden"
+            ],
+            "basis": 0,
+            "shrink": 0
+          },
+          {
+            "lines": [
+              "rt"
+            ],
+            "basis": 5,
+            "shrink": 1,
+            "minSize": 1
+          }
+        ],
+        "grow": {
+          "lines": [
+            "a",
+            "bb",
+            ""
+          ],
+          "entries": [
+            "basis:0,grow:1",
+            "basis:2,shrink:0",
+            "basis:0,shrink:0"
+          ],
+          "width": 10
+        },
+        "clamps": {
+          "lines": [
+            "a",
+            "bb"
+          ],
+          "entries": [
+            "basis:0,grow:1,minSize:3",
+            "maxSize:2,shrink:0"
+          ],
+          "width": 8
+        },
+        "zeroOnly": {
+          "lines": [
+            "z"
+          ],
+          "entries": [
+            "basis:0,shrink:0"
+          ],
+          "width": 5
+        }
+      },
+      "expected": {
+        "aligns": {
+          "stretch": {
+            "lines": [
+              "left x   rt",
+              "     y",
+              "     z"
+            ],
+            "renderedAt": [
+              [
+                12,
+                4
+              ],
+              [
+                12,
+                2
+              ],
+              [
+                12
+              ],
+              [
+                12,
+                3
+              ]
+            ]
+          },
+          "start": {
+            "lines": [
+              "left x   rt",
+              "     y",
+              "     z"
+            ],
+            "renderedAt": [
+              [
+                12,
+                4
+              ],
+              [
+                12,
+                2
+              ],
+              [
+                12
+              ],
+              [
+                12,
+                3
+              ]
+            ]
+          },
+          "center": {
+            "lines": [
+              "     x",
+              "left y   rt",
+              "     z"
+            ],
+            "renderedAt": [
+              [
+                12,
+                4
+              ],
+              [
+                12,
+                2
+              ],
+              [
+                12
+              ],
+              [
+                12,
+                3
+              ]
+            ]
+          },
+          "end": {
+            "lines": [
+              "     x",
+              "     y",
+              "left z   rt"
+            ],
+            "renderedAt": [
+              [
+                12,
+                4
+              ],
+              [
+                12,
+                2
+              ],
+              [
+                12
+              ],
+              [
+                12,
+                3
+              ]
+            ]
+          }
+        },
+        "grow": {
+          "lines": [
+            "a      bb"
+          ],
+          "renderedAt": [
+            [
+              10,
+              6
+            ],
+            [
+              10,
+              2
+            ],
+            [
+              10
+            ]
+          ]
+        },
+        "clamps": {
+          "lines": [
+            "a     bb"
+          ],
+          "renderedAt": [
+            [
+              8,
+              6
+            ],
+            [
+              8,
+              2
+            ]
+          ]
+        },
+        "zeroOnly": {
+          "lines": [],
+          "renderedAt": [
+            [
+              5
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "hstack-frame-unequal",
+      "dimensions": {
+        "columns": 12,
+        "rows": 1
+      },
+      "inputs": {
+        "entries": [
+          {
+            "lines": [
+              "lft"
+            ],
+            "basis": 6,
+            "shrink": 1,
+            "minSize": 1
+          },
+          {
+            "lines": [
+              "rgt"
+            ],
+            "basis": 6,
+            "shrink": 1,
+            "minSize": 1
+          }
+        ],
+        "gap": 1,
+        "widths": [
+          12,
+          8
+        ]
+      },
+      "expected": {
+        "wide": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 6,
+                "y": 0,
+                "width": 6,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "lft   rgt"
+          ],
+          "cursor": null,
+          "renderedAt": [
+            [
+              5
+            ],
+            [
+              6
+            ]
+          ]
+        },
+        "narrow": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 1,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 3,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 0,
+                "width": 4,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "lft rgt"
+          ],
+          "cursor": null,
+          "renderedAt": [
+            [
+              3
+            ],
+            [
+              4
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "hstack-frame-align",
+      "dimensions": {
+        "columns": 8,
+        "rows": 4
+      },
+      "inputs": {
+        "entries": [
+          {
+            "lines": [
+              "a1"
+            ],
+            "basis": 4,
+            "shrink": 0
+          },
+          {
+            "lines": [
+              "b1",
+              "b2"
+            ],
+            "basis": 4,
+            "shrink": 0
+          }
+        ],
+        "aligns": [
+          "stretch",
+          "start",
+          "center",
+          "end"
+        ]
+      },
+      "expected": {
+        "stretch": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 4,
+                "height": 4,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 0,
+                "width": 4,
+                "height": 4,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "a1  b1",
+            "    b2",
+            "",
+            ""
+          ],
+          "cursor": null
+        },
+        "start": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 4,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 0,
+                "width": 4,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "a1  b1",
+            "    b2",
+            "",
+            ""
+          ],
+          "cursor": null
+        },
+        "center": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 1,
+                "width": 4,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 1,
+                "width": 4,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "",
+            "a1  b1",
+            "    b2",
+            ""
+          ],
+          "cursor": null
+        },
+        "end": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 3,
+                "width": 4,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 2,
+                "width": 4,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "",
+            "",
+            "    b1",
+            "a1  b2"
+          ],
+          "cursor": null
+        }
+      }
+    },
+    {
+      "name": "hstack-frame-auto-basis",
+      "dimensions": {
+        "columns": 6,
+        "rows": 1
+      },
+      "inputs": {
+        "entries": [
+          {
+            "render": "'x' repeated width times",
+            "basis": "auto"
+          },
+          {
+            "lines": [
+              "ab"
+            ],
+            "basis": "auto",
+            "shrink": 1
+          }
+        ],
+        "gap": 1
+      },
+      "expected": {
+        "tree": {
+          "x": 0,
+          "y": 0,
+          "width": 6,
+          "height": 1,
+          "lineOffset": 0,
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 4,
+              "height": 1,
+              "lineOffset": 0,
+              "children": []
+            },
+            {
+              "x": 5,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "lineOffset": 0,
+              "children": []
+            }
+          ]
+        },
+        "lines": [
+          "xxxx a"
+        ],
+        "cursor": null,
+        "renderedAt": [
+          [
+            6,
+            4
+          ],
+          [
+            6,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "name": "hstack-nested",
+      "dimensions": {
+        "columns": 10,
+        "rows": 3
+      },
+      "inputs": {
+        "inner": {
+          "lines": [
+            "m1",
+            "m2"
+          ],
+          "cursorLine": 1,
+          "minSize": 2
+        },
+        "side": {
+          "lines": [
+            "s1"
+          ],
+          "basis": 3,
+          "shrink": 1,
+          "minSize": 3,
+          "visibleAboveWidth": 10
+        },
+        "mutations": [
+          "wide",
+          "narrow",
+          "grow-inner-lines",
+          "remove-side",
+          "add-auto-basis"
+        ]
+      },
+      "expected": {
+        "wide": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 6,
+                "y": 0,
+                "width": 3,
+                "height": 3,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "m1    s1",
+            "m2",
+            ""
+          ],
+          "cursor": {
+            "row": 1,
+            "column": 2
+          }
+        },
+        "narrow": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          "lines": [
+            "m1",
+            "m2",
+            ""
+          ],
+          "cursor": {
+            "row": 1,
+            "column": 2
+          }
+        },
+        "grown": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 1,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 6,
+                "y": 0,
+                "width": 3,
+                "height": 3,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "m2    s1",
+            "m3",
+            "m4"
+          ],
+          "cursor": {
+            "row": 2,
+            "column": 2
+          }
+        },
+        "removed": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 1,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          "lines": [
+            "m2",
+            "m3",
+            "m4"
+          ],
+          "cursor": {
+            "row": 2,
+            "column": 2
+          }
+        },
+        "readded": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 1,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 6,
+                "y": 0,
+                "width": 2,
+                "height": 3,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "m2    s9",
+            "m3",
+            "m4"
+          ],
+          "cursor": {
+            "row": 2,
+            "column": 2
+          }
+        }
+      }
+    },
+    {
+      "name": "hstack-in-vstack",
+      "dimensions": {
+        "columns": 14,
+        "rows": 4
+      },
+      "inputs": {
+        "entries": [
+          {
+            "lines": [
+              "left",
+              "right"
+            ],
+            "basis": 6,
+            "shrink": 1,
+            "minSize": 1
+          },
+          {
+            "lines": [
+              "f1"
+            ],
+            "basis": 2,
+            "shrink": 0
+          }
+        ],
+        "widths": [
+          14,
+          10
+        ]
+      },
+      "expected": {
+        "wide": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 14,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 14,
+                "height": 2,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 6,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 7,
+                    "y": 0,
+                    "width": 6,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 0,
+                "y": 2,
+                "width": 14,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "left   right",
+            "",
+            "f1",
+            ""
+          ],
+          "cursor": null
+        },
+        "narrow": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 2,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 4,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 5,
+                    "y": 0,
+                    "width": 5,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 0,
+                "y": 2,
+                "width": 10,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "left right",
+            "",
+            "f1",
+            ""
+          ],
+          "cursor": null
+        }
+      }
+    }
+  ]
+}

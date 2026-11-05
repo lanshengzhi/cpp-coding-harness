@@ -1,0 +1,226 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T23:45:24.304Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/text.ts:Text,render,setText,setCustomBgFn,setPaddingX,invalidate",
+    "packages/tui/src/components/box.ts:Box,addChild,removeChild,clear,setBgFn,setPaddingX,invalidate,handleMouse,render",
+    "packages/tui/src/components/spacer.ts:Spacer,render,setLines,invalidate",
+    "packages/tui/src/components/truncated-text.ts:TruncatedText,render,invalidate"
+  ],
+  "scenarios": [
+    {
+      "name": "styled-text-mutation",
+      "dimensions": {
+        "columns": 12,
+        "rows": 6
+      },
+      "inputs": {
+        "text": "\u001b[31mhello\u001b[0m world\n\u001b[32msecond line\u001b[0m\twith tab",
+        "paddingX": 1,
+        "paddingY": 1,
+        "changedText": "changed\nlines\u001b[34m with ansi\u001b[0m"
+      },
+      "expected": {
+        "first": [
+          "            ",
+          " \u001b[31mhello\u001b[0m      ",
+          " world      ",
+          " \u001b[32msecond     ",
+          " \u001b[32mline\u001b[0m       ",
+          " with tab   ",
+          "            "
+        ],
+        "changed": [
+          "            ",
+          " changed    ",
+          " lines\u001b[34m with ",
+          " \u001b[34mansi\u001b[0m       ",
+          "            "
+        ]
+      }
+    },
+    {
+      "name": "text-render-cache-and-bg",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "text": "alpha beta gamma\titem",
+        "paddingX": 1,
+        "paddingY": 1
+      },
+      "expected": {
+        "initial": [
+          "                    ",
+          " alpha beta gamma   ",
+          " item               ",
+          "                    "
+        ],
+        "cached": [
+          "                    ",
+          " alpha beta gamma   ",
+          " item               ",
+          "                    "
+        ],
+        "narrow": [
+          "          ",
+          " alpha    ",
+          " beta     ",
+          " gamma    ",
+          " item     ",
+          "          "
+        ],
+        "withBg": [
+          "\u001b[44m                    \u001b[49m",
+          "\u001b[44m alpha beta gamma   \u001b[49m",
+          "\u001b[44m item               \u001b[49m",
+          "\u001b[44m                    \u001b[49m"
+        ],
+        "padded2": [
+          "\u001b[44m                    \u001b[49m",
+          "\u001b[44m  alpha beta gamma  \u001b[49m",
+          "\u001b[44m  item              \u001b[49m",
+          "\u001b[44m                    \u001b[49m"
+        ],
+        "invalidated": [
+          "\u001b[44m                    \u001b[49m",
+          "\u001b[44m  alpha beta gamma  \u001b[49m",
+          "\u001b[44m  item              \u001b[49m",
+          "\u001b[44m                    \u001b[49m"
+        ]
+      }
+    },
+    {
+      "name": "box-rendering-and-cache",
+      "dimensions": {
+        "columns": 20,
+        "rows": 6
+      },
+      "inputs": {
+        "paddingX": 1,
+        "paddingY": 1,
+        "child1": "first child",
+        "child2": "second child"
+      },
+      "expected": {
+        "initial": [
+          "                    ",
+          " first child        ",
+          " second child       ",
+          "                    "
+        ],
+        "cached": [
+          "                    ",
+          " first child        ",
+          " second child       ",
+          "                    "
+        ],
+        "withBg": [
+          "\u001b[42m                    \u001b[49m",
+          "\u001b[42m first child        \u001b[49m",
+          "\u001b[42m second child       \u001b[49m",
+          "\u001b[42m                    \u001b[49m"
+        ],
+        "padded2": [
+          "\u001b[42m                    \u001b[49m",
+          "\u001b[42m  first child       \u001b[49m",
+          "\u001b[42m  second child      \u001b[49m",
+          "\u001b[42m                    \u001b[49m"
+        ],
+        "removedChild2": [
+          "\u001b[42m                    \u001b[49m",
+          "\u001b[42m  first child       \u001b[49m",
+          "\u001b[42m                    \u001b[49m"
+        ],
+        "invalidated": [
+          "\u001b[42m                    \u001b[49m",
+          "\u001b[42m  first child       \u001b[49m",
+          "\u001b[42m                    \u001b[49m"
+        ],
+        "cleared": []
+      }
+    },
+    {
+      "name": "box-mouse-routing",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "paddingX": 2,
+        "paddingY": 1
+      },
+      "expected": {
+        "resultInsideHandled": true,
+        "childReceivedCoords": {
+          "x": 1,
+          "y": 1
+        },
+        "resultLeftPadHandled": false,
+        "resultTopPadHandled": false
+      }
+    },
+    {
+      "name": "spacer-rendering",
+      "dimensions": {
+        "columns": 15,
+        "rows": 5
+      },
+      "inputs": {
+        "lines": 3
+      },
+      "expected": {
+        "render3": [
+          "",
+          "",
+          ""
+        ],
+        "render1": [
+          ""
+        ],
+        "render0": []
+      }
+    },
+    {
+      "name": "truncated-text-rendering",
+      "dimensions": {
+        "columns": 25,
+        "rows": 3
+      },
+      "inputs": {
+        "text": "first line text\nsecond line is ignored",
+        "paddingX": 1,
+        "paddingY": 1
+      },
+      "expected": {
+        "wide": [
+          "                         ",
+          " first line text         ",
+          "                         "
+        ],
+        "narrow": [
+          "            ",
+          " first l\u001b[0m...\u001b[0m ",
+          "            "
+        ],
+        "ansiRender": [
+          "\u001b[31mhello\u001b[0m...\u001b[0m"
+        ],
+        "zeroWidth": [
+          "\u001b[0m.\u001b[0m"
+        ]
+      }
+    }
+  ]
+}

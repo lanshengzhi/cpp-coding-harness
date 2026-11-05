@@ -1,0 +1,1576 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T23:45:24.304Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
+    "packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.constructor,TuiAltScreen.handleViewportInput,TuiAltScreen.routeWheel,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleMouseEvent,TuiAltScreen.updateSelectionAutoScroll,TuiAltScreen.autoScrollSelection,TuiAltScreen.stopSelectionAutoScroll",
+    "packages/tui/src/wheel-scroll.ts:WheelScrollAccelerator.constructor,WheelScrollAccelerator.setLines,WheelScrollAccelerator.next",
+    "packages/tui/src/keybindings.ts:TUI_KEYBINDINGS,KeybindingsManager,setKeybindings,getKeybindings",
+    "packages/tui/test/tui-alt-screen.test.ts:routes Home and End to the focused component and Ctrl+Home/End to the transcript,shows a clickable jump-to-end indicator on the transcript's last row while scrolled up",
+    "packages/tui/test/wheel-scroll.test.ts:uses fixed line counts regardless of timing,scales auto mode with wheel velocity,does not accelerate bursts of events for a single notch,resets acceleration on direction changes and pauses,carries fractional lines between events",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.resize",
+    "packages/tui/src/components/scroll-view.ts:ScrollView.getContentWidth,ScrollView.setScrollbar,ScrollView.setScrollbarActive,ScrollView.isScrollbarVisible,ScrollView.isScrollbarActive,ScrollView.scrollBy,ScrollView.scrollToEnd,ScrollView.scrollToStart",
+    "packages/tui/src/layout.ts:renderLayoutFrame,getScrollbarGeometry",
+    "packages/tui/src/components/h-stack.ts:HStack.render",
+    "packages/tui/src/components/mouse-region.ts:MouseRegion.handleMouse",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleMouseEvent,TuiAltScreen.handleScrollbarMouseEvent,TuiAltScreen.scrollScrollbarToPointer,TuiAltScreen.getScrollbarTargetAt,TuiAltScreen.updateScrollbarHover,TuiAltScreen.stopScrollbarHover,TuiAltScreen.routeWheel",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
+  ],
+  "scenarios": [
+    {
+      "name": "wheel-accelerator",
+      "dimensions": {
+        "columns": 10,
+        "rows": 3
+      },
+      "inputs": {
+        "fixed": {
+          "lines": 3,
+          "times": [
+            0,
+            10,
+            20,
+            1000
+          ]
+        },
+        "auto": {
+          "lines": "auto",
+          "times": [
+            0,
+            50,
+            100,
+            103,
+            123,
+            373
+          ]
+        },
+        "directionReset": {
+          "lines": "auto",
+          "times": [
+            0,
+            20,
+            40,
+            60,
+            500,
+            520
+          ],
+          "directions": [
+            1,
+            1,
+            1,
+            -1,
+            1,
+            1
+          ]
+        },
+        "fractionalCarry": {
+          "lines": "auto",
+          "times": [
+            0,
+            40,
+            80,
+            120,
+            160
+          ]
+        }
+      },
+      "expected": {
+        "fixed": [
+          3,
+          3,
+          3,
+          3
+        ],
+        "accelerated": [
+          1,
+          2,
+          2,
+          1,
+          2,
+          1
+        ],
+        "directionReset": [
+          1,
+          5,
+          5,
+          1,
+          1,
+          5
+        ],
+        "fractionalCarry": [
+          1,
+          2,
+          3,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "name": "follow-transitions",
+      "dimensions": {
+        "columns": 10,
+        "rows": 3
+      },
+      "inputs": {
+        "contentLines": 6,
+        "options": {
+          "follow": "end",
+          "primary": true
+        },
+        "requests": [
+          null,
+          -2,
+          -3,
+          10
+        ]
+      },
+      "expected": {
+        "window": {
+          "height": 3,
+          "contentHeight": 6,
+          "imageRows": 6
+        },
+        "steps": [
+          {
+            "action": "initial",
+            "remaining": null,
+            "scrollTop": 3,
+            "followingEnd": true,
+            "viewportHeight": 3,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          },
+          {
+            "action": "scroll-by-minus-2",
+            "remaining": 0,
+            "scrollTop": 1,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "lines": [
+              "2",
+              "3",
+              "4"
+            ]
+          },
+          {
+            "action": "scroll-by-minus-3",
+            "remaining": -2,
+            "scrollTop": 0,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "lines": [
+              "1",
+              "2",
+              "3"
+            ]
+          },
+          {
+            "action": "scroll-by-plus-10",
+            "remaining": 7,
+            "scrollTop": 3,
+            "followingEnd": true,
+            "viewportHeight": 3,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "follow-append",
+      "dimensions": {
+        "columns": 6,
+        "rows": 3
+      },
+      "inputs": {
+        "contentLines": 4,
+        "appendedLines": 5,
+        "options": {
+          "follow": "end"
+        }
+      },
+      "expected": {
+        "window": {
+          "height": 3,
+          "contentHeight": 4,
+          "imageRows": 4
+        },
+        "before": {
+          "scrollTop": 1,
+          "followingEnd": true,
+          "viewportHeight": 3,
+          "lines": [
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "after": {
+          "scrollTop": 2,
+          "followingEnd": true,
+          "viewportHeight": 3,
+          "lines": [
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      }
+    },
+    {
+      "name": "scroll-to-disable-follow",
+      "dimensions": {
+        "columns": 10,
+        "rows": 3
+      },
+      "inputs": {
+        "contentLines": 6,
+        "appendedLines": 8,
+        "options": {
+          "follow": "end"
+        },
+        "actions": [
+          {
+            "action": "initial",
+            "target": null,
+            "disableFollow": false
+          },
+          {
+            "action": "scroll-to-1-with-disable-follow",
+            "target": 1,
+            "disableFollow": true
+          },
+          {
+            "action": "scroll-to-last-row-with-disable-follow",
+            "target": 3,
+            "disableFollow": true
+          },
+          {
+            "action": "appended-while-suppressed",
+            "target": null,
+            "disableFollow": false
+          },
+          {
+            "action": "scroll-to-last-row",
+            "target": 5,
+            "disableFollow": false
+          }
+        ]
+      },
+      "expected": {
+        "window": {
+          "height": 3,
+          "contentHeight": 6,
+          "imageRows": 6
+        },
+        "phases": [
+          {
+            "action": "initial",
+            "scrollTop": 3,
+            "followingEnd": true,
+            "viewportHeight": 3,
+            "contentHeight": 6,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          },
+          {
+            "action": "scroll-to-1-with-disable-follow",
+            "scrollTop": 1,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "contentHeight": 6,
+            "lines": [
+              "2",
+              "3",
+              "4"
+            ]
+          },
+          {
+            "action": "scroll-to-last-row-with-disable-follow",
+            "scrollTop": 3,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "contentHeight": 6,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          },
+          {
+            "action": "appended-while-suppressed",
+            "scrollTop": 3,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "contentHeight": 8,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          },
+          {
+            "action": "scroll-to-last-row",
+            "scrollTop": 5,
+            "followingEnd": true,
+            "viewportHeight": 3,
+            "contentHeight": 8,
+            "lines": [
+              "6",
+              "7",
+              "8"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "nested-scroll",
+      "dimensions": {
+        "columns": 10,
+        "rows": 2
+      },
+      "inputs": {
+        "inner": {
+          "contentLines": 6,
+          "viewportRows": 2
+        },
+        "outer": {
+          "innerBasis": 2,
+          "tail": "tail"
+        },
+        "probeDimensions": {
+          "columns": 10,
+          "rows": 3
+        },
+        "probes": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 2
+          },
+          {
+            "x": 10,
+            "y": 0
+          }
+        ]
+      },
+      "expected": {
+        "window": {
+          "height": 2,
+          "contentHeight": 3,
+          "imageRows": 3
+        },
+        "before": {
+          "innerViewportHeight": 2,
+          "innerScrollTop": 0,
+          "outerScrollTop": 0,
+          "outerViewportHeight": 2,
+          "lines": [
+            "1",
+            "2"
+          ]
+        },
+        "after": {
+          "outerScrollTop": 1,
+          "remaining": 9,
+          "lines": [
+            "2",
+            "tail"
+          ]
+        },
+        "viewportsAt": [
+          {
+            "x": 0,
+            "y": 0,
+            "depthFirst": [
+              "inner",
+              "outer"
+            ]
+          },
+          {
+            "x": 0,
+            "y": 2,
+            "depthFirst": [
+              "outer"
+            ]
+          },
+          {
+            "x": 10,
+            "y": 0,
+            "depthFirst": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "scroll-image-crop",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "placement": {
+          "columns": 2,
+          "rows": 3,
+          "widthPx": 100,
+          "heightPx": 100
+        },
+        "lowerBoundary": {
+          "transcriptLines": 5,
+          "dock": "dock",
+          "viewportRows": 3
+        },
+        "scrolled": {
+          "transcriptLines": 5,
+          "viewportRows": 3,
+          "follow": "end"
+        }
+      },
+      "expected": {
+        "lower": {
+          "scrollTop": 0,
+          "viewportHeight": 3,
+          "placementRow": 2,
+          "cropRow": 2,
+          "placedRows": 3,
+          "crop": {
+            "y": 0,
+            "h": 34,
+            "r": 1,
+            "registered": {
+              "columns": 2,
+              "rows": 3,
+              "widthPx": 100,
+              "heightPx": 100
+            }
+          }
+        },
+        "upper": {
+          "scrollTop": 2,
+          "viewportHeight": 3,
+          "placementRow": 0,
+          "cropRow": 0,
+          "placedRows": 3,
+          "crop": {
+            "y": 66,
+            "h": 34,
+            "r": 1,
+            "registered": {
+              "columns": 2,
+              "rows": 3,
+              "widthPx": 100,
+              "heightPx": 100
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "nested-wheel-chaining",
+      "dimensions": {
+        "columns": 30,
+        "rows": 3
+      },
+      "inputs": {
+        "wheelReport": "\u001b[<65;2;2M",
+        "wheelDelta": 5,
+        "viewportRows": {
+          "inner": 2,
+          "outer": 3
+        }
+      },
+      "expected": {
+        "before": {
+          "inner": 0,
+          "outer": 0,
+          "unrelated": 0
+        },
+        "after": {
+          "inner": 2,
+          "outer": 3,
+          "unrelated": 0
+        }
+      }
+    },
+    {
+      "name": "alt-screen-navigation-indicator",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "navigation": [
+          "\u001bOH",
+          "\u001b[F",
+          "\u001b[57423u",
+          "\u001b[5;5~",
+          "\u001b[6;5~",
+          "\u001b[1;5H",
+          "\u001b[1;5F",
+          "\u001b[57423;5:3u"
+        ],
+        "wheelReport": "\u001b[<64;1;1M",
+        "indicatorPress": "\u001b[<0;7;3M",
+        "indicatorWidth": 9
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "scrollTop": 9,
+            "followingEnd": true,
+            "lines": [
+              "10",
+              "11",
+              "12",
+              "editor"
+            ]
+          },
+          {
+            "action": "unmodified-navigation-remains-with-editor",
+            "scrollTop": 9,
+            "followingEnd": true,
+            "lines": [
+              "10",
+              "11",
+              "12",
+              "editor"
+            ]
+          },
+          {
+            "action": "ctrl-home",
+            "scrollTop": 0,
+            "followingEnd": false,
+            "lines": [
+              "1",
+              "2",
+              "3     Jump end",
+              "editor"
+            ]
+          },
+          {
+            "action": "ctrl-end",
+            "scrollTop": 9,
+            "followingEnd": true,
+            "lines": [
+              "10",
+              "11",
+              "12",
+              "editor"
+            ]
+          },
+          {
+            "action": "ctrl-home-release",
+            "scrollTop": 9,
+            "followingEnd": true,
+            "lines": [
+              "10",
+              "11",
+              "12",
+              "editor"
+            ]
+          },
+          {
+            "action": "wheel-up-indicator",
+            "scrollTop": 8,
+            "followingEnd": false,
+            "lines": [
+              "9",
+              "10",
+              "11    Jump end",
+              "editor"
+            ]
+          },
+          {
+            "action": "indicator-click",
+            "scrollTop": 9,
+            "followingEnd": true,
+            "lines": [
+              "10",
+              "11",
+              "12",
+              "editor"
+            ]
+          }
+        ],
+        "editorInputs": [
+          "\u001bOH",
+          "\u001b[F",
+          "\u001b[57423u",
+          "\u001b[5;5~",
+          "\u001b[6;5~"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-implicit-follow",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 10,
+        "appendedLines": 12,
+        "manualDelta": -4,
+        "resizes": [
+          {
+            "columns": 20,
+            "rows": 2
+          },
+          {
+            "columns": 20,
+            "rows": 20
+          }
+        ]
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "viewport": [
+              "7",
+              "8",
+              "9",
+              "10"
+            ],
+            "viewportTop": 6,
+            "isFollowingOutput": true
+          },
+          {
+            "action": "scroll-by-minus-4",
+            "viewport": [
+              "3",
+              "4",
+              "5",
+              "6"
+            ],
+            "viewportTop": 2,
+            "isFollowingOutput": false
+          },
+          {
+            "action": "appended",
+            "viewport": [
+              "3",
+              "4",
+              "5",
+              "6"
+            ],
+            "viewportTop": 2,
+            "isFollowingOutput": false
+          },
+          {
+            "action": "scroll-to-bottom",
+            "viewport": [
+              "9",
+              "10",
+              "11",
+              "12"
+            ],
+            "viewportTop": 8,
+            "isFollowingOutput": true
+          },
+          {
+            "action": "resize-to-2-rows",
+            "viewport": [
+              "11",
+              "12"
+            ],
+            "viewportTop": 10,
+            "isFollowingOutput": true
+          },
+          {
+            "action": "scroll-to-top",
+            "viewport": [
+              "1",
+              "2"
+            ],
+            "viewportTop": 0,
+            "isFollowingOutput": false
+          },
+          {
+            "action": "resize-to-20-rows",
+            "viewport": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5",
+              "6",
+              "7",
+              "8",
+              "9",
+              "10",
+              "11",
+              "12",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "viewportTop": 0,
+            "isFollowingOutput": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-indicator-no-follow-end",
+      "dimensions": {
+        "columns": 30,
+        "rows": 3
+      },
+      "inputs": {
+        "manualDelta": 1,
+        "indicatorLabel": " ↓ Jump to end "
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "scrollTop": 0,
+            "followingEnd": false,
+            "indicatorShown": false,
+            "lines": [
+              "one",
+              "two",
+              "three"
+            ]
+          },
+          {
+            "action": "scrolled-away-from-end",
+            "scrollTop": 1,
+            "followingEnd": false,
+            "indicatorShown": false,
+            "lines": [
+              "two",
+              "three",
+              "four"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-edge",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 10,
+        "press": {
+          "x": 1,
+          "y": 3
+        },
+        "drag": {
+          "x": 1,
+          "y": 1
+        },
+        "holdMs": 130,
+        "release": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "expected": {
+        "initialViewportTop": 6,
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 5,
+            "anchorRow": 8,
+            "anchorCol": 0,
+            "focusRow": 5,
+            "focusCol": 0,
+            "selectionText": "line 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 4,
+            "anchorRow": 8,
+            "anchorCol": 0,
+            "focusRow": 4,
+            "focusCol": 0,
+            "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 3,
+            "viewportTop": 3,
+            "anchorRow": 8,
+            "anchorCol": 0,
+            "focusRow": 3,
+            "focusCol": 0,
+            "selectionText": "line 4\nline 5\nline 6\nline 7\nline 8\nl"
+          }
+        ],
+        "tickCount": 3,
+        "clipboardWrites": [
+          "\u001b]52;c;bGluZSA0CmxpbmUgNQpsaW5lIDYKbGluZSA3CmxpbmUgOAps\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-cancel",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 10,
+        "press": {
+          "x": 1,
+          "y": 3
+        },
+        "firstDrag": {
+          "x": 1,
+          "y": 1
+        },
+        "release": {
+          "x": 1,
+          "y": 1
+        },
+        "secondPress": {
+          "x": 1,
+          "y": 3
+        },
+        "secondDrag": {
+          "x": 1,
+          "y": 2
+        },
+        "secondRelease": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "expected": {
+        "initialViewportTop": 6,
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 5,
+            "anchorRow": 8,
+            "anchorCol": 0,
+            "focusRow": 5,
+            "focusCol": 0,
+            "selectionText": "line 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 4,
+            "anchorRow": 8,
+            "anchorCol": 0,
+            "focusRow": 4,
+            "focusCol": 0,
+            "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+          },
+          {
+            "action": "released",
+            "tick": 2,
+            "viewportTop": 4,
+            "anchorRow": 8,
+            "anchorCol": 0,
+            "focusRow": 4,
+            "focusCol": 0,
+            "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+          },
+          {
+            "action": "direction-zero",
+            "tick": 2,
+            "viewportTop": 4,
+            "anchorRow": 6,
+            "anchorCol": 0,
+            "focusRow": 5,
+            "focusCol": 0,
+            "selectionText": "line 6\nl"
+          }
+        ],
+        "tickCount": 2,
+        "clipboardWrites": [
+          "\u001b]52;c;bGluZSA1CmxpbmUgNgpsaW5lIDcKbGluZSA4Cmw=\u0007",
+          "\u001b]52;c;bGluZSA1CmxpbmUgNgps\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-limit",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 5,
+        "scrollToTop": false,
+        "press": {
+          "x": 1,
+          "y": 4
+        },
+        "drag": {
+          "x": 1,
+          "y": 1
+        },
+        "holdMs": 200,
+        "release": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "expected": {
+        "initialViewportTop": 1,
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 0,
+            "anchorRow": 4,
+            "anchorCol": 0,
+            "focusRow": 0,
+            "focusCol": 0,
+            "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 0,
+            "anchorRow": 4,
+            "anchorCol": 0,
+            "focusRow": 0,
+            "focusCol": 0,
+            "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
+          }
+        ],
+        "tickCount": 2,
+        "clipboardWrites": [
+          "\u001b]52;c;bGluZSAxCmxpbmUgMgpsaW5lIDMKbGluZSA0Cmw=\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-limit-bottom",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 8,
+        "manualScrollDelta": -2,
+        "press": {
+          "x": 1,
+          "y": 1
+        },
+        "drag": {
+          "x": 1,
+          "y": 4
+        },
+        "release": {
+          "x": 1,
+          "y": 4
+        }
+      },
+      "expected": {
+        "initialViewportTop": 2,
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 3,
+            "anchorRow": 2,
+            "anchorCol": 0,
+            "focusRow": 6,
+            "focusCol": 0,
+            "selectionText": "line 3\nline 4\nline 5\nline 6\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 4,
+            "anchorRow": 2,
+            "anchorCol": 0,
+            "focusRow": 7,
+            "focusCol": 0,
+            "selectionText": "line 3\nline 4\nline 5\nline 6\nline 7\nl"
+          },
+          {
+            "tick": 3,
+            "viewportTop": 4,
+            "anchorRow": 2,
+            "anchorCol": 0,
+            "focusRow": 7,
+            "focusCol": 0,
+            "selectionText": "line 3\nline 4\nline 5\nline 6\nline 7\nl"
+          }
+        ],
+        "tickCount": 3,
+        "clipboardWrites": [
+          "\u001b]52;c;bGluZSAzCmxpbmUgNApsaW5lIDUKbGluZSA2CmxpbmUgNwps\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-nested",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "innerLines": 12,
+        "head": "",
+        "headRows": 0,
+        "innerRows": 5,
+        "tail": "",
+        "tailRows": 0,
+        "press": {
+          "x": 1,
+          "y": 3
+        },
+        "drag": {
+          "x": 1,
+          "y": 4
+        },
+        "release": {
+          "x": 1,
+          "y": 4
+        }
+      },
+      "expected": {
+        "initialInnerScrollTop": 0,
+        "initialOuterScrollTop": 1,
+        "trace": [
+          {
+            "tick": 1,
+            "innerScrollTop": 1,
+            "outerScrollTop": 1,
+            "scrolledView": "inner",
+            "anchorRow": 3,
+            "anchorCol": 0,
+            "focusRow": 5,
+            "focusCol": 0,
+            "selectionText": "4\n5\n6"
+          },
+          {
+            "tick": 2,
+            "innerScrollTop": 2,
+            "outerScrollTop": 1,
+            "scrolledView": "inner",
+            "anchorRow": 3,
+            "anchorCol": 0,
+            "focusRow": 6,
+            "focusCol": 0,
+            "selectionText": "4\n5\n6\n7"
+          },
+          {
+            "tick": 3,
+            "innerScrollTop": 3,
+            "outerScrollTop": 1,
+            "scrolledView": "inner",
+            "anchorRow": 3,
+            "anchorCol": 0,
+            "focusRow": 7,
+            "focusCol": 0,
+            "selectionText": "4\n5\n6\n7\n8"
+          },
+          {
+            "tick": 4,
+            "innerScrollTop": 4,
+            "outerScrollTop": 1,
+            "scrolledView": "inner",
+            "anchorRow": 3,
+            "anchorCol": 0,
+            "focusRow": 8,
+            "focusCol": 0,
+            "selectionText": "4\n5\n6\n7\n8\n9"
+          }
+        ],
+        "tickCount": 4,
+        "clipboardWrites": [
+          "\u001b]52;c;NAo1CjYKNwo4Cjk=\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-content-growth",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 10,
+        "manualScrollDelta": -2,
+        "grownDocumentLines": 16,
+        "growAfterTick": 2,
+        "press": {
+          "x": 1,
+          "y": 1
+        },
+        "drag": {
+          "x": 1,
+          "y": 4
+        },
+        "release": {
+          "x": 1,
+          "y": 4
+        }
+      },
+      "expected": {
+        "initialViewportTop": 4,
+        "growthState": {
+          "viewportTop": 6,
+          "anchorRow": 4,
+          "anchorCol": 0,
+          "focusRow": 9,
+          "focusCol": 0,
+          "selectionText": "5\n6\n7\n8\n9\n1"
+        },
+        "afterGrowth": {
+          "viewportTop": 12,
+          "anchorRow": 4,
+          "anchorCol": 0,
+          "focusRow": 9,
+          "focusCol": 0,
+          "selectionText": "5\n6\n7\n8\n9\n1"
+        },
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 5,
+            "anchorRow": 4,
+            "anchorCol": 0,
+            "focusRow": 8,
+            "focusCol": 0,
+            "selectionText": "5\n6\n7\n8\n9"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 6,
+            "anchorRow": 4,
+            "anchorCol": 0,
+            "focusRow": 9,
+            "focusCol": 0,
+            "selectionText": "5\n6\n7\n8\n9\n1"
+          },
+          {
+            "tick": 3,
+            "viewportTop": 12,
+            "anchorRow": 4,
+            "anchorCol": 0,
+            "focusRow": 9,
+            "focusCol": 0,
+            "selectionText": "5\n6\n7\n8\n9\n1"
+          }
+        ],
+        "tickCount": 3,
+        "ticksAfterGrowth": 1,
+        "clipboardWrites": [
+          "\u001b]52;c;NQo2CjcKOAo5CjEwCjExCjEyCjEzCjE0CjE1CjE=\u0007"
+        ]
+      }
+    },
+    {
+      "name": "scrollbar-modes-and-reservation",
+      "dimensions": {
+        "columns": 6,
+        "rows": 2
+      },
+      "inputs": {
+        "content": "123456",
+        "modes": [
+          "hidden",
+          "always",
+          "hidden"
+        ]
+      },
+      "expected": {
+        "hidden": {
+          "contentWidth": 6,
+          "contentWidthAtOne": 1,
+          "lines": [
+            "123456",
+            ""
+          ],
+          "window": {
+            "width": 6,
+            "height": 2,
+            "childWidth": 6,
+            "childHeight": 1
+          },
+          "scrollbar": "hidden",
+          "isScrollbarVisible": false,
+          "isScrollbarActive": false,
+          "scrollTop": 0,
+          "viewportHeight": 2
+        },
+        "always": {
+          "contentWidth": 5,
+          "contentWidthAtOne": 1,
+          "lines": [
+            "12345┃",
+            "6    ┃"
+          ],
+          "window": {
+            "width": 6,
+            "height": 2,
+            "childWidth": 5,
+            "childHeight": 2
+          },
+          "scrollbar": "always",
+          "isScrollbarVisible": true,
+          "isScrollbarActive": false,
+          "scrollTop": 0,
+          "viewportHeight": 2
+        },
+        "restored": {
+          "contentWidth": 6,
+          "lines": [
+            "123456",
+            ""
+          ],
+          "window": {
+            "width": 6,
+            "height": 2,
+            "childWidth": 6,
+            "childHeight": 1
+          },
+          "scrollbar": "hidden",
+          "isScrollbarVisible": false,
+          "isScrollbarActive": false,
+          "scrollTop": 0,
+          "viewportHeight": 2
+        }
+      }
+    },
+    {
+      "name": "scrollbar-transient-timeline",
+      "dimensions": {
+        "columns": 6,
+        "rows": 4
+      },
+      "inputs": {
+        "contentLines": [
+          "abcd界",
+          "abcde2",
+          "abcde3",
+          "abcde4",
+          "abcde5",
+          "abcde6",
+          "abcde7",
+          "abcde8"
+        ],
+        "styles": {
+          "trackColor": "\u001b[38;5;2m",
+          "thumbColor": "\u001b[38;5;1m",
+          "contentBackground": "\u001b[42m"
+        },
+        "options": {
+          "scrollbar": "auto",
+          "scrollbarHideDelayMs": 10
+        },
+        "requests": [
+          2
+        ],
+        "activeToggle": [
+          true,
+          false
+        ],
+        "hideWaitMs": 30,
+        "followedLines": 8,
+        "appendedLines": 9
+      },
+      "expected": {
+        "first": {
+          "lines": [
+            "abcd界",
+            "abcde2",
+            "abcde3",
+            "abcde4"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 8
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": false,
+          "isScrollbarActive": false,
+          "scrollTop": 0,
+          "viewportHeight": 4
+        },
+        "scrolled": {
+          "lines": [
+            "abcde│",
+            "abcde┃",
+            "abcde┃",
+            "abcde│"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 8
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": true,
+          "isScrollbarActive": false,
+          "scrollTop": 2,
+          "viewportHeight": 4,
+          "track": [
+            true,
+            false,
+            false,
+            true
+          ],
+          "thumb": [
+            false,
+            true,
+            true,
+            false
+          ],
+          "preservedBackgroundReemit": [
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        "hovered": {
+          "lines": [
+            "abcde│",
+            "abcde█",
+            "abcde█",
+            "abcde│"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 8
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": true,
+          "isScrollbarActive": true,
+          "scrollTop": 2,
+          "viewportHeight": 4,
+          "track": [
+            true,
+            false,
+            false,
+            true
+          ],
+          "thumb": [
+            false,
+            true,
+            true,
+            false
+          ],
+          "preservedBackgroundReemit": [
+            true,
+            true,
+            true,
+            true
+          ]
+        },
+        "expired": {
+          "lines": [
+            "abcde3",
+            "abcde4",
+            "abcde5",
+            "abcde6"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 8
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": false,
+          "isScrollbarActive": false,
+          "scrollTop": 2,
+          "viewportHeight": 4
+        },
+        "atEnd": {
+          "lines": [
+            "abcde│",
+            "abcde│",
+            "abcde┃",
+            "abcde┃"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 8
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": true,
+          "isScrollbarActive": false,
+          "scrollTop": 4,
+          "viewportHeight": 4
+        },
+        "atStart": {
+          "lines": [
+            "abcd ┃",
+            "abcde┃",
+            "abcde│",
+            "abcde│"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 8
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": true,
+          "isScrollbarActive": false,
+          "scrollTop": 0,
+          "viewportHeight": 4
+        },
+        "followedBefore": {
+          "lines": [
+            "abcde5",
+            "abcde6",
+            "abcde7",
+            "abcde8"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 8
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": false,
+          "isScrollbarActive": false,
+          "scrollTop": 4,
+          "viewportHeight": 4
+        },
+        "followedAfter": {
+          "lines": [
+            "abcde6",
+            "abcde7",
+            "abcde8",
+            "abcde9"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 9
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": false,
+          "isScrollbarActive": false,
+          "scrollTop": 5,
+          "viewportHeight": 4
+        },
+        "fittingBefore": {
+          "lines": [
+            "1",
+            "2",
+            "",
+            ""
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 2
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": false,
+          "isScrollbarActive": false,
+          "scrollTop": 0,
+          "viewportHeight": 4
+        },
+        "fittingAfter": {
+          "lines": [
+            "1",
+            "2",
+            "",
+            ""
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 6,
+            "childHeight": 2
+          },
+          "scrollbar": "auto",
+          "isScrollbarVisible": false,
+          "isScrollbarActive": false,
+          "scrollTop": 0,
+          "viewportHeight": 4
+        },
+        "alwaysFitting": {
+          "lines": [
+            "1    ┃",
+            "2    ┃",
+            "     ┃",
+            "     ┃"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 5,
+            "childHeight": 2
+          },
+          "scrollbar": "always",
+          "isScrollbarVisible": true,
+          "isScrollbarActive": false,
+          "scrollTop": 0,
+          "viewportHeight": 4
+        },
+        "alwaysOverflowing": {
+          "lines": [
+            "abcd ┃",
+            "界   ┃",
+            "abcde│",
+            "2    │"
+          ],
+          "window": {
+            "width": 6,
+            "height": 4,
+            "childWidth": 5,
+            "childHeight": 16
+          },
+          "scrollbar": "always",
+          "isScrollbarVisible": true,
+          "isScrollbarActive": false,
+          "scrollTop": 0,
+          "viewportHeight": 4
+        },
+        "alwaysOverflowingReset": [
+          true,
+          true,
+          true,
+          true
+        ]
+      }
+    }
+  ]
+}

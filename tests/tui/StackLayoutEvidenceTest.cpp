@@ -118,6 +118,10 @@ struct FrozenFrame {
     return cch::tests::read_pi_tui_evidence("layout.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1220_layout_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1220", "layout.json");
+}
+
 [[nodiscard]] const JsonValue& expected_of(const JsonValue& bundle, std::string_view scenario) {
     const auto* found = find_scenario(bundle, scenario);
     REQUIRE(found != nullptr);
@@ -157,18 +161,14 @@ void check_frame(const FrozenFrame& frozen, cch::tui::Component& root, std::size
 
 } // namespace
 
-TEST_CASE("constrained VStack grows and shrinks exactly as the frozen pi frames do",
-        "[tui][layout][issue998][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
+void check_constrained_vstack_grows_and_shrinks(const JsonValue& bundle) {
     {
         cch::tui::VStack root;
         REQUIRE(root.add_child(std::make_unique<TextChild>(std::vector<std::string>{"top"}),
                 cch::tui::StackEntryOptions{.basis = 1, .shrink = 0}));
         REQUIRE(root.add_child(std::make_unique<TextChild>(std::vector<std::string>{"body"}),
                 cch::tui::StackEntryOptions{.basis = 0, .grow = 1}));
-        check_frame(read_frame(expected_of(*bundle, "frame-vertical-grow")), root, 10, 4);
+        check_frame(read_frame(expected_of(bundle, "frame-vertical-grow")), root, 10, 4);
     }
     {
         cch::tui::VStack root;
@@ -176,15 +176,11 @@ TEST_CASE("constrained VStack grows and shrinks exactly as the frozen pi frames 
                 cch::tui::StackEntryOptions{.shrink = 1, .min_size = 1}));
         REQUIRE(root.add_child(std::make_unique<TextChild>(std::vector<std::string>{"b1", "b2", "b3"}),
                 cch::tui::StackEntryOptions{.shrink = 0}));
-        check_frame(read_frame(expected_of(*bundle, "frame-vertical-shrink")), root, 10, 4);
+        check_frame(read_frame(expected_of(bundle, "frame-vertical-shrink")), root, 10, 4);
     }
 }
 
-TEST_CASE("a nested auto-basis dock is measured against minimum sizes as the frozen pi frame does",
-        "[tui][layout][issue998][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
+void check_nested_auto_basis_dock_minimums(const JsonValue& bundle) {
     auto dock = std::make_unique<cch::tui::VStack>();
     REQUIRE(dock->add_child(std::make_unique<TextChild>(std::vector<std::string>{"top1", "top2", "top3"})));
     REQUIRE(dock->add_child(std::make_unique<TextChild>(std::vector<std::string>{"selector"}),
@@ -197,14 +193,11 @@ TEST_CASE("a nested auto-basis dock is measured against minimum sizes as the fro
     REQUIRE(root.add_child(std::make_unique<TextChild>(std::vector<std::string>{"body"}),
             cch::tui::StackEntryOptions{.basis = 0, .grow = 1, .min_size = 1}));
     REQUIRE(root.add_child(std::move(dock), cch::tui::StackEntryOptions{.basis = std::nullopt, .min_size = 1}));
-    check_frame(read_frame(expected_of(*bundle, "frame-nested-minimums")), root, 10, 9);
+    check_frame(read_frame(expected_of(bundle, "frame-nested-minimums")), root, 10, 9);
 }
 
-TEST_CASE("unbounded VStack composition clamps and gaps exactly as the frozen pi stack does",
-        "[tui][layout][issue998][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-    const JsonValue* expected = &expected_of(*bundle, "standalone-unbounded", "clampStack");
+void check_unbounded_vstack_composition_clamps_and_gaps(const JsonValue& bundle) {
+    const JsonValue* expected = &expected_of(bundle, "standalone-unbounded", "clampStack");
 
     cch::tui::VStack gaps({.gap = 1});
     REQUIRE(gaps.add_child(std::make_unique<TextChild>(std::vector<std::string>{"one"})));
@@ -224,29 +217,21 @@ TEST_CASE("unbounded VStack composition clamps and gaps exactly as the frozen pi
     const auto rendered_clamps = clamps.render(10);
     REQUIRE(rendered_gaps);
     REQUIRE(rendered_clamps);
-    CHECK(rendered_gaps->lines == read_lines(expected_of(*bundle, "standalone-unbounded", "gapStack")));
+    CHECK(rendered_gaps->lines == read_lines(expected_of(bundle, "standalone-unbounded", "gapStack")));
     CHECK(rendered_clamps->lines == read_lines(*expected));
 }
 
-TEST_CASE("a constrained VStack crops a leaf and translates its cursor as the frozen pi frame does",
-        "[tui][layout][issue998][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
+void check_constrained_vstack_crops_leaf_and_translates_cursor(const JsonValue& bundle) {
     auto editor = std::make_unique<CursorChild>(std::vector<std::string>{"a1", "a2", "a3", "a4"}, 3, 2);
     editor->set_focused(true);
     cch::tui::VStack root;
     REQUIRE(root.add_child(std::move(editor), cch::tui::StackEntryOptions{.shrink = 1, .min_size = 1}));
     REQUIRE(root.add_child(std::make_unique<TextChild>(std::vector<std::string>{"b1", "b2"}),
             cch::tui::StackEntryOptions{.shrink = 0}));
-    check_frame(read_frame(expected_of(*bundle, "frame-cursor-crop")), root, 10, 3);
+    check_frame(read_frame(expected_of(bundle, "frame-cursor-crop")), root, 10, 3);
 }
 
-TEST_CASE("a constrained VStack evaluates visible entries against the frozen pi viewport",
-        "[tui][layout][issue998][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
+void check_constrained_vstack_evaluates_visible_entries(const JsonValue& bundle) {
     const auto root_of = [](cch::tui::StackAlign align) {
         auto root = std::make_unique<cch::tui::VStack>(cch::tui::StackOptions{.align = align});
         REQUIRE(root->add_child(std::make_unique<TextChild>(std::vector<std::string>{"head"}),
@@ -262,18 +247,14 @@ TEST_CASE("a constrained VStack evaluates visible entries against the frozen pi 
     };
 
     auto short_stretch = root_of(cch::tui::StackAlign::Stretch);
-    check_frame(read_frame(expected_of(*bundle, "frame-responsive-visibility", "shortStretch")), *short_stretch, 10, 2);
+    check_frame(read_frame(expected_of(bundle, "frame-responsive-visibility", "shortStretch")), *short_stretch, 10, 2);
     auto tall_stretch = root_of(cch::tui::StackAlign::Stretch);
-    check_frame(read_frame(expected_of(*bundle, "frame-responsive-visibility", "tallStretch")), *tall_stretch, 10, 5);
+    check_frame(read_frame(expected_of(bundle, "frame-responsive-visibility", "tallStretch")), *tall_stretch, 10, 5);
     auto tall_center = root_of(cch::tui::StackAlign::Center);
-    check_frame(read_frame(expected_of(*bundle, "frame-responsive-visibility", "tallCenter")), *tall_center, 10, 5);
+    check_frame(read_frame(expected_of(bundle, "frame-responsive-visibility", "tallCenter")), *tall_center, 10, 5);
 }
 
-TEST_CASE("the composed dock keeps the editor and footer rows exactly as the frozen pi frames do",
-        "[tui][layout][issue998][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
+void check_composed_dock_keeps_editor_and_footer_rows(const JsonValue& bundle) {
     const auto root_of = [](std::vector<std::string> editor_lines, bool menu_visible) {
         auto dock = std::make_unique<cch::tui::VStack>();
         REQUIRE(dock->add_child(std::make_unique<TextChild>(std::move(editor_lines)),
@@ -307,6 +288,144 @@ TEST_CASE("the composed dock keeps the editor and footer rows exactly as the fro
     for (std::size_t index = 0; index < std::size(groups); ++index) {
         CAPTURE(groups[index]);
         auto root = root_of(editor(editor_rows[index]), menu_visible[index]);
-        check_frame(read_frame(expected_of(*bundle, "frame-dock-growth", std::string(groups[index]))), *root, 8, 12);
+        check_frame(read_frame(expected_of(bundle, "frame-dock-growth", std::string(groups[index]))), *root, 8, 12);
     }
+}
+
+TEST_CASE("constrained VStack grows and shrinks exactly as the frozen pi frames do",
+        "[tui][layout][issue998][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_constrained_vstack_grows_and_shrinks(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 constrained VStack grows and shrinks exactly as the frozen pi frames do",
+        "[tui][layout][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_constrained_vstack_grows_and_shrinks(*bundle);
+}
+
+TEST_CASE("a nested auto-basis dock is measured against minimum sizes as the frozen pi frame does",
+        "[tui][layout][issue998][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_nested_auto_basis_dock_minimums(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a nested auto-basis dock is measured against minimum sizes as the frozen pi frame does",
+        "[tui][layout][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_nested_auto_basis_dock_minimums(*bundle);
+}
+
+TEST_CASE("unbounded VStack composition clamps and gaps exactly as the frozen pi stack does",
+        "[tui][layout][issue998][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_unbounded_vstack_composition_clamps_and_gaps(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 unbounded VStack composition clamps and gaps exactly as the frozen pi stack does",
+        "[tui][layout][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_unbounded_vstack_composition_clamps_and_gaps(*bundle);
+}
+
+TEST_CASE("a constrained VStack crops a leaf and translates its cursor as the frozen pi frame does",
+        "[tui][layout][issue998][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_constrained_vstack_crops_leaf_and_translates_cursor(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a constrained VStack crops a leaf and translates its cursor as the frozen pi frame does",
+        "[tui][layout][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_constrained_vstack_crops_leaf_and_translates_cursor(*bundle);
+}
+
+TEST_CASE("a constrained VStack evaluates visible entries against the frozen pi viewport",
+        "[tui][layout][issue998][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_constrained_vstack_evaluates_visible_entries(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a constrained VStack evaluates visible entries against the frozen pi viewport",
+        "[tui][layout][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_constrained_vstack_evaluates_visible_entries(*bundle);
+}
+
+TEST_CASE("the composed dock keeps the editor and footer rows exactly as the frozen pi frames do",
+        "[tui][layout][issue998][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_composed_dock_keeps_editor_and_footer_rows(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 the composed dock keeps the editor and footer rows exactly as the frozen pi frames do",
+        "[tui][layout][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_composed_dock_keeps_editor_and_footer_rows(*bundle);
+}
+
+TEST_CASE("constrained VStack discriminating leaf crop: keeps cursor row visible inside cropped leaf",
+        "[tui][layout][boundary][issue1220]") {
+    auto editor = std::make_unique<CursorChild>(std::vector<std::string>{"e1", "e2", "e3", "e4", "e5"}, 4, 1);
+    editor->set_focused(true);
+    cch::tui::VStack stack;
+    REQUIRE(stack.add_child(std::move(editor), cch::tui::StackEntryOptions{.shrink = 1, .min_size = 3}));
+    REQUIRE(stack.add_child(std::make_unique<TextChild>(std::vector<std::string>{"f1", "f2"}),
+            cch::tui::StackEntryOptions{.shrink = 0}));
+    const auto frame = cch::tui::detail::LayoutEngine::render(stack, 6, 4);
+    REQUIRE(frame);
+    REQUIRE(frame->cursor);
+    CHECK(frame->cursor->row == 2);
+    CHECK(frame->cursor->column == 1);
+}
+
+TEST_CASE("constrained VStack discriminating visibility: honors responsive visibility predicate",
+        "[tui][layout][boundary][issue1220]") {
+    cch::tui::VStack stack;
+    REQUIRE(stack.add_child(std::make_unique<TextChild>(std::vector<std::string>{"head"})));
+    REQUIRE(stack.add_child(std::make_unique<TextChild>(std::vector<std::string>{"menu"}),
+            cch::tui::StackEntryOptions{
+                    .visible = [](const cch::tui::LayoutViewport& viewport) { return viewport.height >= 5; }}));
+    REQUIRE(stack.add_child(std::make_unique<TextChild>(std::vector<std::string>{"foot"})));
+
+    const auto short_frame = cch::tui::detail::LayoutEngine::render(stack, 10, 3);
+    REQUIRE(short_frame);
+    CHECK(short_frame->root.children.size() == 2);
+
+    const auto tall_frame = cch::tui::detail::LayoutEngine::render(stack, 10, 6);
+    REQUIRE(tall_frame);
+    CHECK(tall_frame->root.children.size() == 3);
+}
+
+TEST_CASE("constrained VStack discriminating minimums: includes nested minimum sizes in intrinsic stack measurement",
+        "[tui][layout][boundary][issue1220]") {
+    auto dock = std::make_unique<cch::tui::VStack>();
+    REQUIRE(dock->add_child(std::make_unique<TextChild>(std::vector<std::string>{"top1", "top2", "top3"})));
+    REQUIRE(dock->add_child(std::make_unique<TextChild>(std::vector<std::string>{"selector"}),
+            cch::tui::StackEntryOptions{.min_size = 3}));
+    REQUIRE(dock->add_child(std::make_unique<TextChild>(std::vector<std::string>{"below"})));
+    REQUIRE(dock->add_child(std::make_unique<TextChild>(std::vector<std::string>{"footer"}),
+            cch::tui::StackEntryOptions{.min_size = 1}));
+
+    cch::tui::VStack stack;
+    REQUIRE(stack.add_child(std::make_unique<TextChild>(std::vector<std::string>{"body"}),
+            cch::tui::StackEntryOptions{.basis = 0, .grow = 1, .min_size = 1}));
+    REQUIRE(stack.add_child(std::move(dock), cch::tui::StackEntryOptions{.basis = std::nullopt, .min_size = 1}));
+
+    const auto frame = cch::tui::detail::LayoutEngine::render(stack, 10, 9);
+    REQUIRE(frame);
+    CHECK(frame->root.children[0].rect.height == 1);
+    CHECK(frame->root.children[1].rect.height == 8);
 }

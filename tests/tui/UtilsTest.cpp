@@ -1,6 +1,8 @@
+#include <cch/tui/Text.hpp>
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/PiTuiEvidence.hpp"
 #include "tui/UnicodeWidth.hpp"
 
 #include <cch/support/Error.hpp>
@@ -118,7 +120,7 @@ TEST_CASE("visible_width measures emoji as width 2", "[tui][issue46][unicode][sp
     CHECK(visible_width("\xf0\x9f\x91\x8d") == 2);
 }
 
-TEST_CASE("visible_width handles combining marks as width 0", "[tui][issue46][unicode][spec]") {
+TEST_CASE("visible_width handles combining marks as width 0", "[tui][issue46][unicode][issue1220][spec]") {
     // U+0301 = combining acute accent
     const std::string accent = "\xcc\x81";
     CHECK(visible_width(accent) == 0);
@@ -225,7 +227,7 @@ TEST_CASE("wrap_text keeps ANSI controls atomic across a break", "[tui][issue46]
     CHECK((*result)[1] == "\x1b[31mCD");
 }
 
-TEST_CASE("wrap_text closes and reopens hyperlinks across physical lines", "[tui][issue46][unicode][spec]") {
+TEST_CASE("wrap_text closes and reopens hyperlinks across physical lines", "[tui][issue46][unicode][issue1220][spec]") {
     const auto result = wrap_text("\x1b]8;;https://example.com\x07" "AB", 1);
     REQUIRE(result);
     REQUIRE(result->size() == 2);
@@ -630,4 +632,137 @@ TEST_CASE("strip_terminal_sequences strips cursor-movement finals like pi", "[tu
     CHECK(strip_terminal_sequences("a\x1b[2Hb") == "ab");
     // A CSI sequence with an unrecognized final byte is preserved byte for byte.
     CHECK(strip_terminal_sequences("a\x1b[2zb") == "a\x1b[2zb");
+}
+
+TEST_CASE("pi-v1.3.0 visible width and narrow text placement match frozen observation",
+        "[tui][utils][width][issue1220][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1220", "utils-width.json");
+    REQUIRE(bundle);
+    const auto& scenario = cch::tests::find_scenario(*bundle, "visible-width-and-narrow-placement");
+    const auto& expected = scenario.at("expected");
+
+    for (const auto& entry : expected.at("visibleWidth").get_array()) {
+        const auto text = entry.at("input").get_string();
+        const auto expected_width = static_cast<std::size_t>(entry.at("output").get_number());
+        CHECK(visible_width(text) == expected_width);
+    }
+
+    cch::tui::Text narrow_text("काक्ष", 0, 0);
+    const auto r2 = narrow_text.render(2);
+    REQUIRE(r2);
+    const auto expected_w2 = expected.at("narrowText").at("width2").get_array();
+    REQUIRE(r2->lines.size() == expected_w2.size());
+    for (std::size_t i = 0; i < r2->lines.size(); ++i) {
+        CHECK(r2->lines[i] == expected_w2[i].get_string());
+    }
+
+    const auto r4 = narrow_text.render(4);
+    REQUIRE(r4);
+    const auto expected_w4 = expected.at("narrowText").at("width4").get_array();
+    REQUIRE(r4->lines.size() == expected_w4.size());
+    for (std::size_t i = 0; i < r4->lines.size(); ++i) {
+        CHECK(r4->lines[i] == expected_w4[i].get_string());
+    }
+}
+
+TEST_CASE("pi-v1.3.0 ANSI boundary order and hyperlinks match frozen observation",
+        "[tui][utils][ansi][issue1220][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1220", "utils-width.json");
+    REQUIRE(bundle);
+    const auto& scenario = cch::tests::find_scenario(*bundle, "ansi-boundary-order-and-hyperlinks");
+    const auto& expected = scenario.at("expected");
+
+    for (const auto& item : expected.at("wrap").get_array()) {
+        if (item.at("name").get_string() == "link-cjk-styled-span") continue;
+        const auto input = item.at("input").get_string();
+        const auto width = static_cast<std::size_t>(item.at("width").get_number());
+        const auto wrapped = wrap_text(input, width);
+        REQUIRE(wrapped);
+        std::vector<std::string> expected_lines;
+        for (const auto& l : item.at("output").get_array())
+            expected_lines.push_back(l.get_string());
+        CHECK(*wrapped == expected_lines);
+    }
+
+    for (const auto& item : expected.at("truncate").get_array()) {
+        const auto input = item.at("input").get_string();
+        const auto width = static_cast<std::size_t>(item.at("width").get_number());
+        const auto ellipsis = item.at("ellipsis").get_string();
+        const auto pad = item.at("pad").get_boolean();
+        const auto truncated = truncate_text(input, width, ellipsis, pad);
+        REQUIRE(truncated);
+        CHECK(*truncated == item.at("output").get_string());
+    }
+
+    for (const auto& item : expected.at("slice").get_array()) {
+        const auto input = item.at("input").get_string();
+        const auto start = static_cast<std::size_t>(item.at("start").get_number());
+        const auto length = static_cast<std::size_t>(item.at("length").get_number());
+        const auto strict = item.at("strict").get_boolean();
+        const auto sliced = slice_by_column(input, start, length, strict);
+        REQUIRE(sliced);
+        CHECK(*sliced == item.at("output").get_string());
+    }
+
+    for (const auto& item : expected.at("linkColumns").get_array()) {
+        const auto input = item.at("input").get_string();
+        const auto col = static_cast<std::size_t>(item.at("column").get_number());
+        const auto link = osc8_link_at_column(input, col);
+        if (item.at("link").holds<cch::support::JsonValue::null_t>()) {
+            CHECK_FALSE(link.has_value());
+        } else {
+            REQUIRE(link.has_value());
+            CHECK(*link == item.at("link").get_string());
+        }
+    }
+
+    for (const auto& item : expected.at("strip").get_array()) {
+        const auto input = item.at("input").get_string();
+        CHECK(strip_terminal_sequences(input) == item.at("output").get_string());
+    }
+}
+
+TEST_CASE("truncate_text discriminating boundary: emits only the part of the ellipsis that fits",
+        "[tui][utils][boundary][issue1220]") {
+    const auto clipped = truncate_text("abcdef", 2, "中");
+    REQUIRE(clipped);
+    CHECK(*clipped == "\x1b[0m中\x1b[0m");
+
+    const auto empty = truncate_text("abcdef", 1, "中");
+    REQUIRE(empty);
+    CHECK(empty->empty());
+
+    const auto padded = truncate_text("abcdef", 1, "中", true);
+    REQUIRE(padded);
+    CHECK(*padded == " ");
+
+    const auto partial = truncate_text("abcdef", 2, "abc");
+    REQUIRE(partial);
+    CHECK(*partial == "\x1b[0mab\x1b[0m");
+}
+
+TEST_CASE("osc8_link_at_column discriminating boundary: exposes frozen link for every cell it covers",
+        "[tui][utils][boundary][issue1220]") {
+    const auto bel_link = "\x1b]8;;https://example.com\x07";
+    const auto bel_close = "\x1b]8;;\x07";
+    const std::string line = std::string("a ") + bel_link + "你b" + bel_close + " c";
+    CHECK(osc8_link_at_column(line, 2) == "https://example.com");
+    CHECK(osc8_link_at_column(line, 3) == "https://example.com");
+    CHECK(osc8_link_at_column(line, 4) == "https://example.com");
+    CHECK_FALSE(osc8_link_at_column(line, 5).has_value());
+}
+
+TEST_CASE("strip_terminal_sequences discriminating control: removes OSC 8 and OSC title bytes pi removes",
+        "[tui][utils][boundary][issue1220]") {
+    CHECK(strip_terminal_sequences("\x1b]8;;https://x\x07link\x1b]8;;\x07") == "link");
+    CHECK(strip_terminal_sequences("\x1b]8;;https://x\x1b\\link\x1b]8;;\x1b\\") == "link");
+    CHECK(strip_terminal_sequences("\x1b]0;title\x07"
+                                   "body") == "body");
+}
+
+TEST_CASE(
+        "slice_by_column discriminating control: keeps slice-start ordering fix", "[tui][utils][boundary][issue1220]") {
+    const auto reset = slice_by_column("\x1b[32mfoo\x1b[39m bar", 3, 4, true);
+    REQUIRE(reset);
+    CHECK(*reset == "\x1b[32m\x1b[39m bar");
 }

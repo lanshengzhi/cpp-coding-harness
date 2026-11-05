@@ -4308,29 +4308,22 @@
     "packages/tui/src/components/box.ts:Box"
    ],
    "membership": "supported",
-   "implementation": "partial",
-   "verification": "upstream-captured",
+   "implementation": "implemented",
+   "verification": "unverified",
    "owner": "cch_tui",
    "sourceOwner": "cch_tui",
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": "#1058-draft",
-   "scenario": "box-set-padding-x-rerenders-dynamic-width",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-v1.3.0/audit-1050/padding-and-selection-reset.json",
-    "scenario": "box-set-padding-x-rerenders-dynamic-width",
-    "result": "frozen setPaddingX invalidates the cache and re-renders the padded box at the new width",
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "export name appears in changed source hunks; not individually re-audited against v1.3.0",
-    "C++ Box only takes padding at construction; no set_padding_x",
-    "C++ application outputPad/tool renderers cannot update Box padding dynamically",
-    "member name appears in changed source hunks; not individually re-audited against v1.3.0",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4 and the diff names this export; no dedicated v1.3.0 observation was captured for its unchanged operations.",
    "kind": "class",
    "export": "Box",
@@ -4369,7 +4362,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "box-set-padding-x-rerenders-dynamic-width"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.children",
@@ -4385,19 +4378,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4409,7 +4398,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4419,7 +4408,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.paddingX",
@@ -4435,12 +4424,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
-   "evidence": null,
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "member name appears in changed source hunks; not individually re-audited against v1.3.0"
-   ],
+   "scenario": "box-rendering-and-cache",
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4 and the diff names this member; no dedicated v1.3.0 observation was captured for it.",
    "kind": "method/field",
    "export": "Box",
@@ -4452,7 +4444,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4462,7 +4454,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.paddingY",
@@ -4478,19 +4470,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4502,7 +4490,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4512,7 +4500,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.bgFn",
@@ -4528,19 +4516,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4552,7 +4536,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4562,7 +4546,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.mouseLayout",
@@ -4578,19 +4562,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-mouse-routing",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-mouse-routing",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4602,7 +4582,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4612,7 +4592,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-mouse-routing"
   },
   {
    "id": "Box.constructor",
@@ -4628,19 +4608,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4652,7 +4628,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4662,7 +4638,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.addChild",
@@ -4678,19 +4654,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4702,7 +4674,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4712,7 +4684,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.removeChild",
@@ -4728,19 +4700,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4752,7 +4720,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4762,7 +4730,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.clear",
@@ -4778,19 +4746,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4802,7 +4766,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4812,7 +4776,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.setBgFn",
@@ -4828,19 +4792,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4852,7 +4812,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4862,7 +4822,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.invalidateCache",
@@ -4878,12 +4838,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
-   "evidence": null,
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "member name appears in changed source hunks; not individually re-audited against v1.3.0"
-   ],
+   "scenario": "box-rendering-and-cache",
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4 and the diff names this member; no dedicated v1.3.0 observation was captured for it.",
    "kind": "method/field",
    "export": "Box",
@@ -4895,7 +4858,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4905,7 +4868,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.matchCache",
@@ -4921,19 +4884,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4945,7 +4904,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -4955,7 +4914,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.invalidate",
@@ -4971,19 +4930,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -4995,7 +4950,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -5005,7 +4960,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.handleMouse",
@@ -5021,19 +4976,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-mouse-routing",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-mouse-routing",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -5045,7 +4996,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -5055,7 +5006,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-mouse-routing"
   },
   {
    "id": "Box.render",
@@ -5071,19 +5022,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -5095,7 +5042,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -5105,7 +5052,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.applyBg",
@@ -5121,19 +5068,15 @@
    "consumer": "composition",
    "boundary": "Box",
    "implementation_ticket": null,
-   "scenario": "E07 Box mutation/cache",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Box mutation/cache",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Box",
@@ -5145,7 +5088,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Box",
     "consumer": "composition",
@@ -5155,7 +5098,7 @@
      "tests/tui/ContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Box mutation/cache"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "Box.setPaddingX",
@@ -5164,26 +5107,22 @@
     "packages/tui/src/components/box.ts:Box.setPaddingX"
    ],
    "membership": "supported",
-   "implementation": "missing",
-   "verification": "upstream-captured",
+   "implementation": "implemented",
+   "verification": "unverified",
    "owner": "cch_tui",
    "sourceOwner": null,
    "consumer": "none (C++ Box has no setter; application outputPad callers are #1051 rows)",
    "boundary": null,
    "implementation_ticket": "#1058-draft",
-   "scenario": "box-set-padding-x-rerenders-dynamic-width",
+   "scenario": "box-rendering-and-cache",
    "evidence": {
-    "artifact": "fixtures/pi-v1.3.0/audit-1050/padding-and-selection-reset.json",
-    "scenario": "box-set-padding-x-rerenders-dynamic-width",
-    "result": "frozen setPaddingX invalidates the cache and re-renders the padded box at the new width",
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "box-rendering-and-cache",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "C++ Box only takes padding at construction; no set_padding_x",
-    "C++ application outputPad/tool renderers cannot update Box padding dynamically",
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
    "kind": "method/field",
    "export": "Box",
@@ -5202,7 +5141,7 @@
     ]
    },
    "defaults": "paddingX=1, paddingY=1",
-   "comparisonCase": "box-set-padding-x-rerenders-dynamic-width"
+   "comparisonCase": "box-rendering-and-cache"
   },
   {
    "id": "CancellableLoader",
@@ -10424,19 +10363,15 @@
    "consumer": "fullscreen layout",
    "boundary": "HStack",
    "implementation_ticket": null,
-   "scenario": "E13 HStack",
+   "scenario": "hstack-frame-align",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 HStack",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "hstack-frame-align",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "class",
    "export": "HStack",
@@ -10451,7 +10386,7 @@
    ],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "HStack",
     "consumer": "fullscreen layout",
@@ -10461,7 +10396,7 @@
      "tests/tui/HStackTest.cpp"
     ]
    },
-   "comparisonCase": "E13 HStack"
+   "comparisonCase": "hstack-frame-align"
   },
   {
    "id": "HStack.constructor",
@@ -10477,18 +10412,15 @@
    "consumer": "fullscreen layout",
    "boundary": "HStack",
    "implementation_ticket": null,
-   "scenario": "E13 HStack",
+   "scenario": "hstack-unbounded",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 HStack",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "hstack-unbounded",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "HStack",
@@ -10500,7 +10432,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "HStack",
     "consumer": "fullscreen layout",
@@ -10510,7 +10442,7 @@
      "tests/tui/HStackTest.cpp"
     ]
    },
-   "comparisonCase": "E13 HStack"
+   "comparisonCase": "hstack-unbounded"
   },
   {
    "id": "HStack.render",
@@ -10526,18 +10458,15 @@
    "consumer": "fullscreen layout",
    "boundary": "HStack",
    "implementation_ticket": null,
-   "scenario": "E13 HStack",
+   "scenario": "hstack-frame-unequal",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 HStack",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "hstack-frame-unequal",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "HStack",
@@ -10549,7 +10478,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "HStack",
     "consumer": "fullscreen layout",
@@ -10559,7 +10488,7 @@
      "tests/tui/HStackTest.cpp"
     ]
    },
-   "comparisonCase": "E13 HStack"
+   "comparisonCase": "hstack-frame-unequal"
   },
   {
    "id": "Image",
@@ -16932,19 +16861,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "class",
    "export": "ScrollView",
@@ -16992,7 +16917,7 @@
    ],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17002,7 +16927,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollView.child",
@@ -17018,18 +16943,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17044,7 +16966,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17054,7 +16976,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollView.followEnd",
@@ -17070,18 +16992,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "follow-transitions",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "follow-transitions",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17096,7 +17015,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17106,7 +17025,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "follow-transitions"
   },
   {
    "id": "ScrollView.primary",
@@ -17122,18 +17041,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "alt-screen-navigation-indicator",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "alt-screen-navigation-indicator",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17148,7 +17064,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17158,7 +17074,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "alt-screen-navigation-indicator"
   },
   {
    "id": "ScrollView.overscroll",
@@ -17174,18 +17090,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17200,7 +17113,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17210,7 +17123,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollView.scrollbarTrackStyle",
@@ -17226,18 +17139,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17252,7 +17162,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17262,7 +17172,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollView.scrollbarThumbStyle",
@@ -17278,18 +17188,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17304,7 +17211,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17314,7 +17221,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollView.currentScrollbar",
@@ -17330,18 +17237,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-modes-and-reservation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-modes-and-reservation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17356,7 +17260,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17366,7 +17270,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-modes-and-reservation"
   },
   {
    "id": "ScrollView.scrollbarHideDelayMs",
@@ -17382,18 +17286,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17408,7 +17309,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17418,7 +17319,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollView.followingEnd",
@@ -17434,18 +17335,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "follow-append",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "follow-append",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17460,7 +17358,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17470,7 +17368,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "follow-append"
   },
   {
    "id": "ScrollView.requestRenderCallback",
@@ -17486,18 +17384,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "follow-transitions",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "follow-transitions",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17512,7 +17407,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17522,7 +17417,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "follow-transitions"
   },
   {
    "id": "ScrollView.scrollbarHideTimer",
@@ -17538,18 +17433,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17564,7 +17456,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17574,7 +17466,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollView.constructor",
@@ -17590,18 +17482,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17616,7 +17505,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17626,7 +17515,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollView.scrollTop",
@@ -17642,18 +17531,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "wheel-accelerator",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "wheel-accelerator",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17668,7 +17554,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17678,7 +17564,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "wheel-accelerator"
   },
   {
    "id": "ScrollView.isFollowingEnd",
@@ -17694,18 +17580,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "follow-transitions",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "follow-transitions",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17720,7 +17603,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17730,7 +17613,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "follow-transitions"
   },
   {
    "id": "ScrollView.viewportHeight",
@@ -17746,18 +17629,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scroll-image-crop",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scroll-image-crop",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17772,7 +17652,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17782,7 +17662,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scroll-image-crop"
   },
   {
    "id": "ScrollView.scrollbar",
@@ -17798,18 +17678,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-modes-and-reservation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-modes-and-reservation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17824,7 +17701,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17834,7 +17711,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-modes-and-reservation"
   },
   {
    "id": "ScrollView.isScrollbarVisible",
@@ -17850,18 +17727,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-modes-and-reservation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-modes-and-reservation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17876,7 +17750,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17886,7 +17760,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-modes-and-reservation"
   },
   {
    "id": "ScrollView.isScrollbarActive",
@@ -17902,18 +17776,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17928,7 +17799,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17938,7 +17809,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollView.setScrollbar",
@@ -17954,18 +17825,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-modes-and-reservation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-modes-and-reservation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -17980,7 +17848,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -17990,7 +17858,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-modes-and-reservation"
   },
   {
    "id": "ScrollView.getContentWidth",
@@ -18006,18 +17874,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-modes-and-reservation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-modes-and-reservation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18032,7 +17897,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18042,7 +17907,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-modes-and-reservation"
   },
   {
    "id": "ScrollView.markScrollbarActivity",
@@ -18058,18 +17923,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18084,7 +17946,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18094,7 +17956,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollView.hideTransientScrollbar",
@@ -18110,18 +17972,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-modes-and-reservation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-modes-and-reservation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18136,7 +17995,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18146,7 +18005,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-modes-and-reservation"
   },
   {
    "id": "ScrollView.setScrollbarActive",
@@ -18162,18 +18021,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18188,7 +18044,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18198,7 +18054,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollView.scrollTo",
@@ -18214,18 +18070,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scroll-to-disable-follow",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scroll-to-disable-follow",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18240,7 +18093,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18250,7 +18103,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scroll-to-disable-follow"
   },
   {
    "id": "ScrollView.scrollBy",
@@ -18266,18 +18119,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-wheel-chaining",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-wheel-chaining",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18292,7 +18142,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18302,7 +18152,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-wheel-chaining"
   },
   {
    "id": "ScrollView.scrollToStart",
@@ -18318,18 +18168,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18344,7 +18191,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18354,7 +18201,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollView.scrollToEnd",
@@ -18370,18 +18217,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "alt-screen-auto-scroll-limit-bottom",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "alt-screen-auto-scroll-limit-bottom",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18396,7 +18240,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18406,7 +18250,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "alt-screen-auto-scroll-limit-bottom"
   },
   {
    "id": "ScrollView.updateLayout",
@@ -18422,18 +18266,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "alt-screen-auto-scroll-content-growth",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "alt-screen-auto-scroll-content-growth",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18448,7 +18289,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18458,7 +18299,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "alt-screen-auto-scroll-content-growth"
   },
   {
    "id": "ScrollView.addChild",
@@ -18474,18 +18315,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18500,7 +18338,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18510,7 +18348,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollView.removeChild",
@@ -18526,18 +18364,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18552,7 +18387,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18562,7 +18397,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollView.clear",
@@ -18578,18 +18413,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18604,7 +18436,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18614,7 +18446,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollView.render",
@@ -18630,18 +18462,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scroll-image-crop",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scroll-image-crop",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollView",
@@ -18656,7 +18485,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18666,7 +18495,7 @@
      "tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scroll-image-crop"
   },
   {
    "id": "ScrollViewOptions",
@@ -18682,19 +18511,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "interface",
    "export": "ScrollViewOptions",
@@ -18718,7 +18543,7 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18728,7 +18553,7 @@
      "tests/tui/AltScreenSearchTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollViewOptions.axis",
@@ -18744,18 +18569,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollViewOptions",
@@ -18770,7 +18592,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18780,7 +18602,7 @@
      "tests/tui/AltScreenSearchTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollViewOptions.follow",
@@ -18796,18 +18618,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "follow-transitions",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "follow-transitions",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollViewOptions",
@@ -18822,7 +18641,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18832,7 +18651,7 @@
      "tests/tui/AltScreenSearchTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "follow-transitions"
   },
   {
    "id": "ScrollViewOptions.primary",
@@ -18848,18 +18667,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "alt-screen-navigation-indicator",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "alt-screen-navigation-indicator",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollViewOptions",
@@ -18874,7 +18690,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18884,7 +18700,7 @@
      "tests/tui/AltScreenSearchTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "alt-screen-navigation-indicator"
   },
   {
    "id": "ScrollViewOptions.overscroll",
@@ -18900,18 +18716,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "nested-scroll",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "nested-scroll",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollViewOptions",
@@ -18926,7 +18739,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18936,7 +18749,7 @@
      "tests/tui/AltScreenSearchTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "nested-scroll"
   },
   {
    "id": "ScrollViewOptions.scrollbar",
@@ -18952,18 +18765,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-modes-and-reservation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-modes-and-reservation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollViewOptions",
@@ -18978,7 +18788,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -18988,7 +18798,7 @@
      "tests/tui/AltScreenSearchTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-modes-and-reservation"
   },
   {
    "id": "ScrollViewOptions.scrollbarTrackStyle",
@@ -19004,18 +18814,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollViewOptions",
@@ -19030,7 +18837,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -19040,7 +18847,7 @@
      "tests/tui/AltScreenSearchTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollViewOptions.scrollbarThumbStyle",
@@ -19056,18 +18863,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollViewOptions",
@@ -19082,7 +18886,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -19092,7 +18896,7 @@
      "tests/tui/AltScreenSearchTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollViewOptions.scrollbarHideDelayMs",
@@ -19108,18 +18912,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-transient-timeline",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-transient-timeline",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollViewOptions",
@@ -19134,7 +18935,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
@@ -19144,7 +18945,7 @@
      "tests/tui/AltScreenSearchTest.cpp"
     ]
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-transient-timeline"
   },
   {
    "id": "ScrollViewScrollbar",
@@ -19160,19 +18961,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scrollbar-modes-and-reservation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scrollbar-modes-and-reservation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "type",
    "export": "ScrollViewScrollbar",
@@ -19187,13 +18984,13 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
     "tests": []
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scrollbar-modes-and-reservation"
   },
   {
    "id": "ScrollViewScrollToOptions",
@@ -19209,19 +19006,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scroll-to-disable-follow",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scroll-to-disable-follow",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "interface",
    "export": "ScrollViewScrollToOptions",
@@ -19238,13 +19031,13 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
     "tests": []
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scroll-to-disable-follow"
   },
   {
    "id": "ScrollViewScrollToOptions.disableFollow",
@@ -19260,18 +19053,15 @@
    "consumer": "fullscreen layout",
    "boundary": "ScrollView",
    "implementation_ticket": null,
-   "scenario": "E13/E14 ScrollView",
+   "scenario": "scroll-to-disable-follow",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 ScrollView",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "scroll-to-disable-follow",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "ScrollViewScrollToOptions",
@@ -19286,13 +19076,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "ScrollView",
     "consumer": "fullscreen layout",
     "tests": []
    },
-   "comparisonCase": "E13/E14 ScrollView"
+   "comparisonCase": "scroll-to-disable-follow"
   },
   {
    "id": "SelectItem",
@@ -23494,19 +23284,15 @@
    "consumer": "layout composition",
    "boundary": "Spacer",
    "implementation_ticket": null,
-   "scenario": "E07 Spacer",
+   "scenario": "spacer-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Spacer",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "spacer-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "class",
    "export": "Spacer",
@@ -23524,7 +23310,7 @@
    ],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Spacer",
     "consumer": "layout composition",
@@ -23534,7 +23320,7 @@
      "tests/coding_agent/tui/ChatContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Spacer"
+   "comparisonCase": "spacer-rendering"
   },
   {
    "id": "Spacer.lines",
@@ -23550,18 +23336,15 @@
    "consumer": "layout composition",
    "boundary": "Spacer",
    "implementation_ticket": null,
-   "scenario": "E07 Spacer",
+   "scenario": "spacer-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Spacer",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "spacer-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "Spacer",
@@ -23573,7 +23356,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Spacer",
     "consumer": "layout composition",
@@ -23583,7 +23366,7 @@
      "tests/coding_agent/tui/ChatContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Spacer"
+   "comparisonCase": "spacer-rendering"
   },
   {
    "id": "Spacer.constructor",
@@ -23599,18 +23382,15 @@
    "consumer": "layout composition",
    "boundary": "Spacer",
    "implementation_ticket": null,
-   "scenario": "E07 Spacer",
+   "scenario": "spacer-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Spacer",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "spacer-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "Spacer",
@@ -23622,7 +23402,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Spacer",
     "consumer": "layout composition",
@@ -23632,7 +23412,7 @@
      "tests/coding_agent/tui/ChatContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Spacer"
+   "comparisonCase": "spacer-rendering"
   },
   {
    "id": "Spacer.setLines",
@@ -23648,18 +23428,15 @@
    "consumer": "layout composition",
    "boundary": "Spacer",
    "implementation_ticket": null,
-   "scenario": "E07 Spacer",
+   "scenario": "spacer-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Spacer",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "spacer-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "Spacer",
@@ -23671,7 +23448,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Spacer",
     "consumer": "layout composition",
@@ -23681,7 +23458,7 @@
      "tests/coding_agent/tui/ChatContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Spacer"
+   "comparisonCase": "spacer-rendering"
   },
   {
    "id": "Spacer.invalidate",
@@ -23697,18 +23474,15 @@
    "consumer": "layout composition",
    "boundary": "Spacer",
    "implementation_ticket": null,
-   "scenario": "E07 Spacer",
+   "scenario": "spacer-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Spacer",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "spacer-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "Spacer",
@@ -23720,7 +23494,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Spacer",
     "consumer": "layout composition",
@@ -23730,7 +23504,7 @@
      "tests/coding_agent/tui/ChatContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Spacer"
+   "comparisonCase": "spacer-rendering"
   },
   {
    "id": "Spacer.render",
@@ -23746,18 +23520,15 @@
    "consumer": "layout composition",
    "boundary": "Spacer",
    "implementation_ticket": null,
-   "scenario": "E07 Spacer",
+   "scenario": "spacer-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Spacer",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "spacer-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "Spacer",
@@ -23769,7 +23540,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Spacer",
     "consumer": "layout composition",
@@ -23779,7 +23550,7 @@
      "tests/coding_agent/tui/ChatContainerTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Spacer"
+   "comparisonCase": "spacer-rendering"
   },
   {
    "id": "Text",
@@ -23856,12 +23627,15 @@
    "consumer": "boxes/loaders/markdown chrome",
    "boundary": "Text render/setText",
    "implementation_ticket": null,
-   "scenario": "E07 Text",
-   "evidence": null,
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "member name appears in changed source hunks; not individually re-audited against v1.3.0"
-   ],
+   "scenario": "styled-text-mutation",
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "styled-text-mutation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4 and the diff names this member; no dedicated v1.3.0 observation was captured for it.",
    "kind": "method/field",
    "export": "Text",
@@ -23873,7 +23647,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Text render/setText",
     "consumer": "boxes/loaders/markdown chrome",
@@ -23883,7 +23657,7 @@
      "tests/cli/ListModelsTest.cpp"
     ]
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": "styled-text-mutation"
   },
   {
    "id": "Text.paddingX",
@@ -23899,12 +23673,15 @@
    "consumer": "boxes/loaders/markdown chrome",
    "boundary": "Text render/setText",
    "implementation_ticket": null,
-   "scenario": "E07 Text",
-   "evidence": null,
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "member name appears in changed source hunks; not individually re-audited against v1.3.0"
-   ],
+   "scenario": "styled-text-mutation",
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "styled-text-mutation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4 and the diff names this member; no dedicated v1.3.0 observation was captured for it.",
    "kind": "method/field",
    "export": "Text",
@@ -23916,7 +23693,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Text render/setText",
     "consumer": "boxes/loaders/markdown chrome",
@@ -23926,7 +23703,7 @@
      "tests/cli/ListModelsTest.cpp"
     ]
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": "styled-text-mutation"
   },
   {
    "id": "Text.cachedWidth",
@@ -23942,19 +23719,15 @@
    "consumer": "boxes/loaders/markdown chrome",
    "boundary": "Text render/setText",
    "implementation_ticket": null,
-   "scenario": "E07 Text",
+   "scenario": "text-render-cache-and-bg",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Text",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "text-render-cache-and-bg",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Text",
@@ -23966,7 +23739,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Text render/setText",
     "consumer": "boxes/loaders/markdown chrome",
@@ -23976,7 +23749,7 @@
      "tests/cli/ListModelsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Text"
+   "comparisonCase": "text-render-cache-and-bg"
   },
   {
    "id": "Text.cachedLines",
@@ -23992,19 +23765,15 @@
    "consumer": "boxes/loaders/markdown chrome",
    "boundary": "Text render/setText",
    "implementation_ticket": null,
-   "scenario": "E07 Text",
+   "scenario": "text-render-cache-and-bg",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Text",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "text-render-cache-and-bg",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Text",
@@ -24016,7 +23785,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Text render/setText",
     "consumer": "boxes/loaders/markdown chrome",
@@ -24026,7 +23795,7 @@
      "tests/cli/ListModelsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Text"
+   "comparisonCase": "text-render-cache-and-bg"
   },
   {
    "id": "Text.constructor",
@@ -24042,19 +23811,15 @@
    "consumer": "boxes/loaders/markdown chrome",
    "boundary": "Text render/setText",
    "implementation_ticket": null,
-   "scenario": "E07 Text",
+   "scenario": "styled-text-mutation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Text",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "styled-text-mutation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Text",
@@ -24066,7 +23831,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Text render/setText",
     "consumer": "boxes/loaders/markdown chrome",
@@ -24076,7 +23841,7 @@
      "tests/cli/ListModelsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Text"
+   "comparisonCase": "styled-text-mutation"
   },
   {
    "id": "Text.setText",
@@ -24092,19 +23857,15 @@
    "consumer": "boxes/loaders/markdown chrome",
    "boundary": "Text render/setText",
    "implementation_ticket": null,
-   "scenario": "E07 Text",
+   "scenario": "styled-text-mutation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Text",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "styled-text-mutation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Text",
@@ -24116,7 +23877,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Text render/setText",
     "consumer": "boxes/loaders/markdown chrome",
@@ -24126,7 +23887,7 @@
      "tests/cli/ListModelsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Text"
+   "comparisonCase": "styled-text-mutation"
   },
   {
    "id": "Text.setCustomBgFn",
@@ -24142,19 +23903,15 @@
    "consumer": "boxes/loaders/markdown chrome",
    "boundary": "Text render/setText",
    "implementation_ticket": null,
-   "scenario": "E07 Text",
+   "scenario": "text-render-cache-and-bg",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Text",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "text-render-cache-and-bg",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Text",
@@ -24166,7 +23923,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Text render/setText",
     "consumer": "boxes/loaders/markdown chrome",
@@ -24176,7 +23933,7 @@
      "tests/cli/ListModelsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Text"
+   "comparisonCase": "text-render-cache-and-bg"
   },
   {
    "id": "Text.invalidate",
@@ -24192,12 +23949,15 @@
    "consumer": "boxes/loaders/markdown chrome",
    "boundary": "Text render/setText",
    "implementation_ticket": null,
-   "scenario": "E07 Text",
-   "evidence": null,
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "member name appears in changed source hunks; not individually re-audited against v1.3.0"
-   ],
+   "scenario": "text-render-cache-and-bg",
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "text-render-cache-and-bg",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4 and the diff names this member; no dedicated v1.3.0 observation was captured for it.",
    "kind": "method/field",
    "export": "Text",
@@ -24209,7 +23969,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Text render/setText",
     "consumer": "boxes/loaders/markdown chrome",
@@ -24219,7 +23979,7 @@
      "tests/cli/ListModelsTest.cpp"
     ]
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": "text-render-cache-and-bg"
   },
   {
    "id": "Text.render",
@@ -24235,19 +23995,15 @@
    "consumer": "boxes/loaders/markdown chrome",
    "boundary": "Text render/setText",
    "implementation_ticket": null,
-   "scenario": "E07 Text",
+   "scenario": "styled-text-mutation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 Text",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "styled-text-mutation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
    "kind": "method/field",
    "export": "Text",
@@ -24259,7 +24015,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Text render/setText",
     "consumer": "boxes/loaders/markdown chrome",
@@ -24269,7 +24025,7 @@
      "tests/cli/ListModelsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 Text"
+   "comparisonCase": "styled-text-mutation"
   },
   {
    "id": "Text.setPaddingX",
@@ -24330,19 +24086,15 @@
    "consumer": "selectors/lists",
    "boundary": "TruncatedText",
    "implementation_ticket": null,
-   "scenario": "E07 TruncatedText",
+   "scenario": "truncated-text-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 TruncatedText",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "truncated-text-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "class",
    "export": "TruncatedText",
@@ -24362,7 +24114,7 @@
    ],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "TruncatedText",
     "consumer": "selectors/lists",
@@ -24372,7 +24124,7 @@
      "tests/tui/TruncatedTextTest.cpp"
     ]
    },
-   "comparisonCase": "E07 TruncatedText"
+   "comparisonCase": "truncated-text-rendering"
   },
   {
    "id": "TruncatedText.text",
@@ -24388,18 +24140,15 @@
    "consumer": "selectors/lists",
    "boundary": "TruncatedText",
    "implementation_ticket": null,
-   "scenario": "E07 TruncatedText",
+   "scenario": "truncated-text-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 TruncatedText",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "truncated-text-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "TruncatedText",
@@ -24412,7 +24161,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "TruncatedText",
     "consumer": "selectors/lists",
@@ -24422,7 +24171,7 @@
      "tests/tui/TruncatedTextTest.cpp"
     ]
    },
-   "comparisonCase": "E07 TruncatedText"
+   "comparisonCase": "truncated-text-rendering"
   },
   {
    "id": "TruncatedText.paddingX",
@@ -24438,18 +24187,15 @@
    "consumer": "selectors/lists",
    "boundary": "TruncatedText",
    "implementation_ticket": null,
-   "scenario": "E07 TruncatedText",
+   "scenario": "truncated-text-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 TruncatedText",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "truncated-text-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "TruncatedText",
@@ -24462,7 +24208,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "TruncatedText",
     "consumer": "selectors/lists",
@@ -24472,7 +24218,7 @@
      "tests/tui/TruncatedTextTest.cpp"
     ]
    },
-   "comparisonCase": "E07 TruncatedText"
+   "comparisonCase": "truncated-text-rendering"
   },
   {
    "id": "TruncatedText.paddingY",
@@ -24488,18 +24234,15 @@
    "consumer": "selectors/lists",
    "boundary": "TruncatedText",
    "implementation_ticket": null,
-   "scenario": "E07 TruncatedText",
+   "scenario": "truncated-text-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 TruncatedText",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "truncated-text-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "TruncatedText",
@@ -24512,7 +24255,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "TruncatedText",
     "consumer": "selectors/lists",
@@ -24522,7 +24265,7 @@
      "tests/tui/TruncatedTextTest.cpp"
     ]
    },
-   "comparisonCase": "E07 TruncatedText"
+   "comparisonCase": "truncated-text-rendering"
   },
   {
    "id": "TruncatedText.constructor",
@@ -24538,18 +24281,15 @@
    "consumer": "selectors/lists",
    "boundary": "TruncatedText",
    "implementation_ticket": null,
-   "scenario": "E07 TruncatedText",
+   "scenario": "truncated-text-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 TruncatedText",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "truncated-text-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "TruncatedText",
@@ -24562,7 +24302,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "TruncatedText",
     "consumer": "selectors/lists",
@@ -24572,7 +24312,7 @@
      "tests/tui/TruncatedTextTest.cpp"
     ]
    },
-   "comparisonCase": "E07 TruncatedText"
+   "comparisonCase": "truncated-text-rendering"
   },
   {
    "id": "TruncatedText.invalidate",
@@ -24588,18 +24328,15 @@
    "consumer": "selectors/lists",
    "boundary": "TruncatedText",
    "implementation_ticket": null,
-   "scenario": "E07 TruncatedText",
+   "scenario": "truncated-text-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 TruncatedText",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "truncated-text-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "TruncatedText",
@@ -24612,7 +24349,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "TruncatedText",
     "consumer": "selectors/lists",
@@ -24622,7 +24359,7 @@
      "tests/tui/TruncatedTextTest.cpp"
     ]
    },
-   "comparisonCase": "E07 TruncatedText"
+   "comparisonCase": "truncated-text-rendering"
   },
   {
    "id": "TruncatedText.render",
@@ -24638,18 +24375,15 @@
    "consumer": "selectors/lists",
    "boundary": "TruncatedText",
    "implementation_ticket": null,
-   "scenario": "E07 TruncatedText",
+   "scenario": "truncated-text-rendering",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 TruncatedText",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/component.json",
+    "scenario": "truncated-text-rendering",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "TruncatedText",
@@ -24662,7 +24396,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "TruncatedText",
     "consumer": "selectors/lists",
@@ -24672,7 +24406,7 @@
      "tests/tui/TruncatedTextTest.cpp"
     ]
    },
-   "comparisonCase": "E07 TruncatedText"
+   "comparisonCase": "truncated-text-rendering"
   },
   {
    "id": "StackChild",
@@ -24688,19 +24422,15 @@
    "consumer": "fullscreen fixed editor/footer",
    "boundary": "VStack/StackEntry",
    "implementation_ticket": null,
-   "scenario": "E13 VStack",
+   "scenario": "frame-nested-minimums",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 VStack",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "frame-nested-minimums",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "type",
    "export": "StackChild",
@@ -24713,13 +24443,13 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "VStack/StackEntry",
     "consumer": "fullscreen fixed editor/footer",
     "tests": []
    },
-   "comparisonCase": "E13 VStack"
+   "comparisonCase": "frame-nested-minimums"
   },
   {
    "id": "StackEntry",
@@ -24735,19 +24465,15 @@
    "consumer": "fullscreen fixed editor/footer",
    "boundary": "VStack/StackEntry",
    "implementation_ticket": null,
-   "scenario": "E13 VStack",
+   "scenario": "frame-cursor-crop",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 VStack",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "frame-cursor-crop",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "type",
    "export": "StackEntry",
@@ -24760,13 +24486,13 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "VStack/StackEntry",
     "consumer": "fullscreen fixed editor/footer",
     "tests": []
    },
-   "comparisonCase": "E13 VStack"
+   "comparisonCase": "frame-cursor-crop"
   },
   {
    "id": "StackEntryOptions",
@@ -24782,19 +24508,15 @@
    "consumer": "fullscreen fixed editor/footer",
    "boundary": "VStack/StackEntry",
    "implementation_ticket": null,
-   "scenario": "E13 VStack",
+   "scenario": "frame-responsive-visibility",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 VStack",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "frame-responsive-visibility",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "type",
    "export": "StackEntryOptions",
@@ -24807,7 +24529,7 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "VStack/StackEntry",
     "consumer": "fullscreen fixed editor/footer",
@@ -24817,7 +24539,7 @@
      "tests/tui/FullscreenLayoutTest.cpp"
     ]
    },
-   "comparisonCase": "E13 VStack"
+   "comparisonCase": "frame-responsive-visibility"
   },
   {
    "id": "StackOptions",
@@ -24833,19 +24555,15 @@
    "consumer": "fullscreen fixed editor/footer",
    "boundary": "VStack/StackEntry",
    "implementation_ticket": null,
-   "scenario": "E13 VStack",
+   "scenario": "standalone-unbounded",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 VStack",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "standalone-unbounded",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "type",
    "export": "StackOptions",
@@ -24858,7 +24576,7 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "VStack/StackEntry",
     "consumer": "fullscreen fixed editor/footer",
@@ -24868,7 +24586,7 @@
      "tests/tui/StackLayoutEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E13 VStack"
+   "comparisonCase": "standalone-unbounded"
   },
   {
    "id": "VStack",
@@ -24884,19 +24602,15 @@
    "consumer": "fullscreen fixed editor/footer",
    "boundary": "VStack/StackEntry",
    "implementation_ticket": null,
-   "scenario": "E13 VStack",
+   "scenario": "frame-vertical-grow",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 VStack",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "frame-vertical-grow",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "class",
    "export": "VStack",
@@ -24912,7 +24626,7 @@
    ],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "VStack/StackEntry",
     "consumer": "fullscreen fixed editor/footer",
@@ -24922,7 +24636,7 @@
      "tests/tui/AltScreenViewportTest.cpp"
     ]
    },
-   "comparisonCase": "E13 VStack"
+   "comparisonCase": "frame-vertical-grow"
   },
   {
    "id": "VStack.constructor",
@@ -24938,18 +24652,15 @@
    "consumer": "fullscreen fixed editor/footer",
    "boundary": "VStack/StackEntry",
    "implementation_ticket": null,
-   "scenario": "E13 VStack",
+   "scenario": "standalone-unbounded",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 VStack",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "standalone-unbounded",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "VStack",
@@ -24962,7 +24673,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "VStack/StackEntry",
     "consumer": "fullscreen fixed editor/footer",
@@ -24972,7 +24683,7 @@
      "tests/tui/AltScreenViewportTest.cpp"
     ]
    },
-   "comparisonCase": "E13 VStack"
+   "comparisonCase": "standalone-unbounded"
   },
   {
    "id": "VStack.render",
@@ -24988,18 +24699,15 @@
    "consumer": "fullscreen fixed editor/footer",
    "boundary": "VStack/StackEntry",
    "implementation_ticket": null,
-   "scenario": "E13 VStack",
+   "scenario": "frame-vertical-shrink",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13 VStack",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "frame-vertical-shrink",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded"
-   ],
+   "gaps": [],
    "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "method/field",
    "export": "VStack",
@@ -25012,7 +24720,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "VStack/StackEntry",
     "consumer": "fullscreen fixed editor/footer",
@@ -25022,7 +24730,7 @@
      "tests/tui/AltScreenViewportTest.cpp"
     ]
    },
-   "comparisonCase": "E13 VStack"
+   "comparisonCase": "frame-vertical-shrink"
   },
   {
    "id": "EditorComponent",
@@ -48682,19 +48390,15 @@
    "consumer": "layout/markdown/selectors",
    "boundary": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
    "implementation_ticket": null,
-   "scenario": "E04 width/ANSI/slice/truncate/OSC8",
+   "scenario": "ansi-boundary-order-and-hyperlinks",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E04 width/ANSI/slice/truncate/OSC8",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/utils-width.json",
+    "scenario": "ansi-boundary-order-and-hyperlinks",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this export"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the v1.0.4..v1.3.0 diff does not name this export; historical implementation carried with the diff as comparison route.",
    "kind": "function",
    "export": "getOsc8LinkAtColumn",
@@ -48707,13 +48411,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
     "consumer": "layout/markdown/selectors",
     "tests": []
    },
-   "comparisonCase": "E04 width/ANSI/slice/truncate/OSC8"
+   "comparisonCase": "ansi-boundary-order-and-hyperlinks"
   },
   {
    "id": "sliceByColumn",
@@ -48729,19 +48433,15 @@
    "consumer": "layout/markdown/selectors",
    "boundary": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
    "implementation_ticket": null,
-   "scenario": "E04 width/ANSI/slice/truncate/OSC8",
+   "scenario": "ansi-boundary-order-and-hyperlinks",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E04 width/ANSI/slice/truncate/OSC8",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/utils-width.json",
+    "scenario": "ansi-boundary-order-and-hyperlinks",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this export"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the v1.0.4..v1.3.0 diff does not name this export; historical implementation carried with the diff as comparison route.",
    "kind": "function",
    "export": "sliceByColumn",
@@ -48754,13 +48454,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
     "consumer": "layout/markdown/selectors",
     "tests": []
    },
-   "comparisonCase": "E04 width/ANSI/slice/truncate/OSC8"
+   "comparisonCase": "ansi-boundary-order-and-hyperlinks"
   },
   {
    "id": "stripTerminalSequences",
@@ -48776,19 +48476,15 @@
    "consumer": "layout/markdown/selectors",
    "boundary": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
    "implementation_ticket": null,
-   "scenario": "E04 width/ANSI/slice/truncate/OSC8",
+   "scenario": "ansi-boundary-order-and-hyperlinks",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E04 width/ANSI/slice/truncate/OSC8",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/utils-width.json",
+    "scenario": "ansi-boundary-order-and-hyperlinks",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this export"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the v1.0.4..v1.3.0 diff does not name this export; historical implementation carried with the diff as comparison route.",
    "kind": "function",
    "export": "stripTerminalSequences",
@@ -48801,7 +48497,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
     "consumer": "layout/markdown/selectors",
@@ -48809,7 +48505,7 @@
      "tests/tui/SelectionEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E04 width/ANSI/slice/truncate/OSC8"
+   "comparisonCase": "ansi-boundary-order-and-hyperlinks"
   },
   {
    "id": "truncateToWidth",
@@ -48825,19 +48521,15 @@
    "consumer": "layout/markdown/selectors",
    "boundary": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
    "implementation_ticket": null,
-   "scenario": "E04 width/ANSI/slice/truncate/OSC8",
+   "scenario": "ansi-boundary-order-and-hyperlinks",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E04 width/ANSI/slice/truncate/OSC8",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/utils-width.json",
+    "scenario": "ansi-boundary-order-and-hyperlinks",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this export"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the v1.0.4..v1.3.0 diff does not name this export; historical implementation carried with the diff as comparison route.",
    "kind": "function",
    "export": "truncateToWidth",
@@ -48850,13 +48542,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
     "consumer": "layout/markdown/selectors",
     "tests": []
    },
-   "comparisonCase": "E04 width/ANSI/slice/truncate/OSC8"
+   "comparisonCase": "ansi-boundary-order-and-hyperlinks"
   },
   {
    "id": "visibleWidth",
@@ -48872,19 +48564,15 @@
    "consumer": "layout/markdown/selectors",
    "boundary": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
    "implementation_ticket": null,
-   "scenario": "E04 width/ANSI/slice/truncate/OSC8",
+   "scenario": "visible-width-and-narrow-placement",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E04 width/ANSI/slice/truncate/OSC8",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/utils-width.json",
+    "scenario": "visible-width-and-narrow-placement",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this export"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the v1.0.4..v1.3.0 diff does not name this export; historical implementation carried with the diff as comparison route.",
    "kind": "function",
    "export": "visibleWidth",
@@ -48897,7 +48585,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
     "consumer": "layout/markdown/selectors",
@@ -48907,7 +48595,7 @@
      "tests/tui/PiTuiDifferentialTest.cpp"
     ]
    },
-   "comparisonCase": "E04 width/ANSI/slice/truncate/OSC8"
+   "comparisonCase": "visible-width-and-narrow-placement"
   },
   {
    "id": "wrapTextWithAnsi",
@@ -48923,19 +48611,15 @@
    "consumer": "layout/markdown/selectors",
    "boundary": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
    "implementation_ticket": null,
-   "scenario": "E04 width/ANSI/slice/truncate/OSC8",
+   "scenario": "ansi-boundary-order-and-hyperlinks",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E04 width/ANSI/slice/truncate/OSC8",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/utils-width.json",
+    "scenario": "ansi-boundary-order-and-hyperlinks",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this export"
-   ],
+   "gaps": [],
    "notes": "Frozen source file changed since v1.0.4, but the v1.0.4..v1.3.0 diff does not name this export; historical implementation carried with the diff as comparison route.",
    "kind": "function",
    "export": "wrapTextWithAnsi",
@@ -48948,13 +48632,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "visibleWidth/wrap/slice/truncate/getOsc8LinkAtColumn/strip",
     "consumer": "layout/markdown/selectors",
     "tests": []
    },
-   "comparisonCase": "E04 width/ANSI/slice/truncate/OSC8"
+   "comparisonCase": "ansi-boundary-order-and-hyperlinks"
   },
   {
    "id": "WheelScrollLines",
@@ -48970,19 +48654,15 @@
    "consumer": "fullscreen wheel",
    "boundary": "WheelScrollLines setting type",
    "implementation_ticket": null,
-   "scenario": "E14 wheel lines",
+   "scenario": "wheel-accelerator",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E14 wheel lines",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/scroll-view.json",
+    "scenario": "wheel-accelerator",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "Frozen source file is identical between v1.0.4 and v1.3.0; implementation state is carried from the v1.0.4 delivery without relabelling its observation.",
    "kind": "type",
    "export": "WheelScrollLines",
@@ -48995,7 +48675,7 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "WheelScrollLines setting type",
     "consumer": "fullscreen wheel",
@@ -49004,7 +48684,7 @@
      "tests/tui/ScrollViewEvidenceTest.cpp"
     ]
    },
-   "comparisonCase": "E14 wheel lines"
+   "comparisonCase": "wheel-accelerator"
   },
   {
    "id": "cch_tui:tui:resolveFakeCursors",
@@ -49099,8 +48779,8 @@
     "packages/tui/src/utils.ts:extractSegments"
    ],
    "membership": "supported",
-   "implementation": "partial",
-   "verification": "upstream-captured",
+   "implementation": "implemented",
+   "verification": "unverified",
    "owner": "cch_tui",
    "sourceOwner": null,
    "consumer": "cch_tui sliceByColumn/truncateToWidth callers",
@@ -49110,14 +48790,11 @@
    "evidence": {
     "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
     "scenario": "truncated-line-drops-unterminated-fake-cursor",
-    "result": "frozen keeps a zero-width APC marker at the slice boundary so the cursor position survives truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "C++ slice_by_column has no marker-boundary case because the cursor is out of band",
-    "no v1.3.0 C++ comparison for the truncated-cursor outcome"
-   ],
+   "gaps": [],
    "notes": "v1.3.0 change row without a v1.0.4 export/member identity.",
    "kind": "internal-helper",
    "export": null,
@@ -49783,19 +49460,15 @@
    "consumer": "fullscreen layout/hit-testing",
    "boundary": "covered by VStack/HStack/ScrollView/mouse public contracts",
    "implementation_ticket": null,
-   "scenario": "E13/E14 layout geometry",
+   "scenario": "frame-dock-growth",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E13/E14 layout geometry",
-    "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1220/layout.json",
+    "scenario": "frame-dock-growth",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1220",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
-   ],
+   "gaps": [],
    "notes": "not a package index export Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
    "kind": "internal-helper",
    "export": "internal.layout",
@@ -49805,13 +49478,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "covered by VStack/HStack/ScrollView/mouse public contracts",
     "consumer": "fullscreen layout/hit-testing",
     "tests": []
    },
-   "comparisonCase": "E13/E14 layout geometry"
+   "comparisonCase": "frame-dock-growth"
   },
   {
    "id": "internal.kill-ring",

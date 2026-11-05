@@ -111,6 +111,10 @@ private:
     return cch::tests::read_pi_v130_audit_evidence("audit-1213", "scroll-view.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1220_scroll_view_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1220", "scroll-view.json");
+}
+
 [[nodiscard]] const JsonValue& scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
         if (scenario.at("name").get_string() == name) return scenario;
@@ -149,6 +153,9 @@ private:
 };
 
 } // namespace
+
+void check_scrollbar_modes_reserve_the_frozen_content_column_and_re_wra(const cch::support::JsonValue& bundle);
+void check_the_transient_scrollbar_follows_the_frozen_timeline_and_over(const cch::support::JsonValue& bundle);
 
 void check_scroll_viewports_follow_the_content_end_and_report_unused_de(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "follow-transitions");
@@ -771,3 +778,167 @@ TEST_CASE("pi-v1.3.0 a primary scroll view without follow-end never shows the ju
     check_a_primary_scroll_view_without_follow_end_never_shows_the_jum(*bundle);
 }
 
+TEST_CASE("pi-v1.3.0 B12 scroll viewports follow the content end and report unused deltas as the pi frame does",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_scroll_viewports_follow_the_content_end_and_report_unused_de(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 appended rows move a followed viewport as the pi frame does",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_appended_rows_move_a_followed_viewport_as_the_frozen_pi_fram(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 an absolute scroll with disableFollow holds the last row until follow is restored",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_an_absolute_scroll_with_disableFollow_holds_the_last_row_unt(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 nested viewport measurement, delta ownership and depth order match the pi frame",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_nested_viewport_measurement_delta_ownership_and_depth_order_(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 scrolled image placements match the pi crop geometry",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_scrolled_image_placements_match_the_frozen_pi_crop_geometry(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 the implicit alternate-screen viewport matches the pi phases",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_the_implicit_alternate_screen_viewport_matches_the_frozen_pi(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 wheel policy drives fixed, accelerated, burst, reset, and fractional deltas",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_wheel_accelerator(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 nested wheel routing consumes the child then chains only to its enclosing viewport",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_frozen_nested_wheel_routing_consumes_the_child_then_chains_o(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 fullscreen navigation, releases, and indicator clicks match frozen pi",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_fullscreen_navigation_indicator(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 a primary scroll view without follow-end never shows the jump-to-end indicator",
+        "[tui][scroll-view][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_a_primary_scroll_view_without_follow_end_never_shows_the_jum(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 scrollbar presentation modes and reservation match frozen observation",
+        "[tui][scroll-view][scrollbar][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_scrollbar_modes_reserve_the_frozen_content_column_and_re_wra(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 B12 scrollbar transient timeline and style hooks match frozen observation",
+        "[tui][scroll-view][scrollbar][issue1220][compat-pi]") {
+    const auto bundle = audit1220_scroll_view_bundle();
+    REQUIRE(bundle);
+    check_the_transient_scrollbar_follows_the_frozen_timeline_and_over(*bundle);
+}
+
+TEST_CASE("ScrollView discriminating control: follows appended rows at the end and keeps a manual position away",
+        "[tui][scroll-view][boundary][issue1220]") {
+    auto text = std::make_unique<cch::tui::Text>("1\n2\n3\n4\n5", 0, 0);
+    auto* text_ptr = text.get();
+    cch::tui::ScrollView view(std::move(text), cch::tui::ScrollViewOptions{.follow_end = true});
+
+    auto frame = cch::tui::detail::LayoutEngine::render(view, 6, 3);
+    REQUIRE(frame);
+    CHECK(view.scroll_top() == 2);
+
+    text_ptr->set_text("1\n2\n3\n4\n5\n6");
+    frame = cch::tui::detail::LayoutEngine::render(view, 6, 3);
+    REQUIRE(frame);
+    CHECK(view.scroll_top() == 3);
+
+    view.scroll_to(1);
+    CHECK_FALSE(view.following_end());
+    text_ptr->set_text("1\n2\n3\n4\n5\n6\n7");
+    frame = cch::tui::detail::LayoutEngine::render(view, 6, 3);
+    REQUIRE(frame);
+    CHECK(view.scroll_top() == 1);
+}
+
+TEST_CASE("ScrollView discriminating boundary: clamps programmatic scrolls and follows the content end",
+        "[tui][scroll-view][boundary][issue1220]") {
+    cch::tui::ScrollView view(
+            std::make_unique<cch::tui::Text>(numbered_text(6), 0, 0), cch::tui::ScrollViewOptions{.follow_end = true});
+    view.update_layout(6, 3);
+    CHECK(view.scroll_top() == 3);
+    CHECK(view.following_end());
+
+    view.scroll_to(99);
+    CHECK(view.scroll_top() == 3);
+    CHECK(view.following_end());
+
+    view.scroll_to(-4);
+    CHECK(view.scroll_top() == 0);
+    CHECK_FALSE(view.following_end());
+
+    view.scroll_to(3);
+    CHECK(view.scroll_top() == 3);
+    CHECK(view.following_end());
+}
+
+TEST_CASE("ScrollView discriminating overscroll: nested viewports propagate delta deepest first and stop at contain",
+        "[tui][scroll-view][boundary][issue1220]") {
+    auto inner = std::make_unique<cch::tui::ScrollView>(std::make_unique<cch::tui::Text>("1\n2\n3\n4", 0, 0),
+            cch::tui::ScrollViewOptions{.follow_end = true, .overscroll = cch::tui::ScrollOverscroll::Contain});
+    auto* inner_ptr = inner.get();
+    cch::tui::VStack content;
+    REQUIRE(content.add_child(std::make_unique<cch::tui::Text>("head", 0, 0)));
+    REQUIRE(content.add_child(std::move(inner), cch::tui::StackEntryOptions{.basis = 2}));
+    REQUIRE(content.add_child(std::make_unique<cch::tui::Text>("tail", 0, 0)));
+    cch::tui::ScrollView outer(std::make_unique<cch::tui::VStack>(std::move(content)));
+
+    auto frame = cch::tui::detail::LayoutEngine::render(outer, 10, 3);
+    REQUIRE(frame);
+    CHECK(inner_ptr->scroll_top() == 2);
+    CHECK(outer.scroll_top() == 0);
+}
+
+TEST_CASE("ScrollView discriminating column reservation: reserves column only when scrollbar is always and width "
+          "exceeds one",
+        "[tui][scroll-view][boundary][issue1220]") {
+    cch::tui::ScrollView view_always(std::make_unique<cch::tui::Text>("content", 0, 0),
+            cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Always});
+    CHECK(view_always.content_width(10) == 9);
+    CHECK(view_always.content_width(1) == 1);
+    CHECK(view_always.content_width(0) == 0);
+
+    cch::tui::ScrollView view_hidden(std::make_unique<cch::tui::Text>("content", 0, 0),
+            cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Hidden});
+    CHECK(view_hidden.content_width(10) == 10);
+    CHECK(view_hidden.content_width(1) == 1);
+
+    cch::tui::ScrollView view_auto(std::make_unique<cch::tui::Text>("content", 0, 0),
+            cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Auto});
+    CHECK(view_auto.content_width(10) == 10);
+    CHECK_FALSE(view_auto.is_scrollbar_visible());
+}

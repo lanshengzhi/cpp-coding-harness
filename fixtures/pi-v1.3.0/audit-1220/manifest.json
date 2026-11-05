@@ -1,0 +1,3831 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1220",
+  "family": "audit-1220",
+  "capturedAt": "2026-11-05T23:45:24.304Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1220/capture-1220.mts",
+    "sha256": "98c1f6f7d30c6d9060e2b4169b3ae9d2f5767687f4a0a78693cc66c5f7c3a960",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1220/capture-1220.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1220/capture-1220.mts",
+        "sha256": "98c1f6f7d30c6d9060e2b4169b3ae9d2f5767687f4a0a78693cc66c5f7c3a960"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/stack-layout-scenarios.mts",
+        "sha256": "757ffbc94c9ce54f179108a9f4a7a499bc239670a0c66a85bb5b87c9d0846e33"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/scroll-view-scenarios.mts",
+        "sha256": "a84ce2669e735c356a1a44b0a2154bcf18e399c63a33d85637d5cc5bb733f18c"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/scrollbar-scenarios.mts",
+        "sha256": "4d6ae3f86529856808bc9efdb98171947e388544bbb9444e4289e5b211293ab7"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/component-scenarios.mts",
+        "sha256": "924a9dd41ef5dc6be77776dac71e0de052105753c89eacc2af2f89376f81705f"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/utils-width-scenarios.mts",
+        "sha256": "f48884d9394af3541a781aca0f68f41797c2d62c9e554b65e639c380881571a2"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "layout.json",
+      "family": "audit-1220",
+      "bytes": 31915,
+      "sha256": "02d6ffc18cfa7b31b1e582912205be0a0b4adc1da8fee0cbb4fc8a4d5bb188ac",
+      "sourceEndpoints": [
+        "packages/tui/src/components/stack.ts:allocateStackSizes,visibleStackEntries,Stack.addChild,StackEntryOptions",
+        "packages/tui/src/components/v-stack.ts:VStack.render",
+        "packages/tui/src/components/h-stack.ts:HStack.render",
+        "packages/tui/src/layout.ts:renderLayoutFrame,layoutComponent,LayoutBox",
+        "packages/tui/src/tui.ts:TuiBase.extractCursorPosition,compositeTuiLine,CURSOR_MARKER"
+      ],
+      "scenarios": [
+        {
+          "name": "standalone-unbounded",
+          "dimensions": {
+            "columns": 10,
+            "rows": 8
+          },
+          "inputs": {
+            "gap": 1,
+            "invisibleEntry": true,
+            "clamps": {
+              "basisBelowMinimum": [
+                "a",
+                1,
+                2
+              ],
+              "maxSize": [
+                "b1",
+                "b2",
+                "b3",
+                2
+              ],
+              "basisAboveContent": [
+                "c",
+                3
+              ]
+            }
+          },
+          "expected": {
+            "gapStack": [
+              "one",
+              "",
+              "two"
+            ],
+            "clampStack": [
+              "a",
+              "",
+              "b1",
+              "b2",
+              "c",
+              "",
+              ""
+            ]
+          }
+        },
+        {
+          "name": "frame-vertical-grow",
+          "dimensions": {
+            "columns": 10,
+            "rows": 4
+          },
+          "inputs": {
+            "entries": [
+              {
+                "text": "top",
+                "basis": 1,
+                "grow": 0,
+                "shrink": 0
+              },
+              {
+                "text": "body",
+                "basis": 0,
+                "grow": 1
+              }
+            ]
+          },
+          "expected": {
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 1,
+                "lineOffset": 0
+              },
+              {
+                "x": 0,
+                "y": 1,
+                "width": 10,
+                "height": 3,
+                "lineOffset": 0
+              }
+            ],
+            "lines": [
+              "top",
+              "body",
+              "",
+              ""
+            ],
+            "cursor": null
+          }
+        },
+        {
+          "name": "frame-vertical-shrink",
+          "dimensions": {
+            "columns": 10,
+            "rows": 4
+          },
+          "inputs": {
+            "entries": [
+              {
+                "text": "a1\na2\na3",
+                "shrink": 1,
+                "minSize": 1
+              },
+              {
+                "text": "b1\nb2\nb3",
+                "shrink": 0
+              }
+            ]
+          },
+          "expected": {
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 1,
+                "lineOffset": 0
+              },
+              {
+                "x": 0,
+                "y": 1,
+                "width": 10,
+                "height": 3,
+                "lineOffset": 0
+              }
+            ],
+            "lines": [
+              "a1",
+              "b1",
+              "b2",
+              "b3"
+            ],
+            "cursor": null
+          }
+        },
+        {
+          "name": "frame-nested-minimums",
+          "dimensions": {
+            "columns": 10,
+            "rows": 9
+          },
+          "inputs": {
+            "entries": [
+              {
+                "text": "body",
+                "basis": 0,
+                "grow": 1,
+                "minSize": 1
+              },
+              {
+                "dock": [
+                  {
+                    "text": "top1\ntop2\ntop3"
+                  },
+                  {
+                    "text": "selector",
+                    "minSize": 3
+                  },
+                  {
+                    "text": "below"
+                  },
+                  {
+                    "text": "footer",
+                    "minSize": 1
+                  }
+                ],
+                "basis": "auto",
+                "minSize": 1
+              }
+            ]
+          },
+          "expected": {
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 1,
+                "lineOffset": 0
+              },
+              {
+                "x": 0,
+                "y": 1,
+                "width": 10,
+                "height": 8,
+                "lineOffset": 0
+              }
+            ],
+            "lines": [
+              "body",
+              "top1",
+              "top2",
+              "top3",
+              "selector",
+              "",
+              "",
+              "below",
+              "footer"
+            ],
+            "cursor": null
+          }
+        },
+        {
+          "name": "frame-cursor-crop",
+          "dimensions": {
+            "columns": 10,
+            "rows": 3
+          },
+          "inputs": {
+            "entries": [
+              {
+                "lines": [
+                  "a1",
+                  "a2",
+                  "a3",
+                  "a4"
+                ],
+                "cursorLine": 3,
+                "shrink": 1,
+                "minSize": 1
+              },
+              {
+                "text": "b1\nb2",
+                "shrink": 0
+              }
+            ]
+          },
+          "expected": {
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 1,
+                "lineOffset": 3
+              },
+              {
+                "x": 0,
+                "y": 1,
+                "width": 10,
+                "height": 2,
+                "lineOffset": 0
+              }
+            ],
+            "lines": [
+              "a4",
+              "b1",
+              "b2"
+            ],
+            "cursor": {
+              "row": 0,
+              "column": 2
+            }
+          }
+        },
+        {
+          "name": "frame-responsive-visibility",
+          "dimensions": {
+            "columns": 10,
+            "rows": 2
+          },
+          "inputs": {
+            "visibleAboveHeight": 5,
+            "aligns": [
+              "stretch",
+              "center"
+            ]
+          },
+          "expected": {
+            "shortStretch": {
+              "children": [
+                {
+                  "x": 0,
+                  "y": 0,
+                  "width": 10,
+                  "height": 1,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 1,
+                  "width": 10,
+                  "height": 1,
+                  "lineOffset": 0
+                }
+              ],
+              "lines": [
+                "head",
+                "foot"
+              ],
+              "cursor": null
+            },
+            "tallStretch": {
+              "children": [
+                {
+                  "x": 0,
+                  "y": 0,
+                  "width": 10,
+                  "height": 1,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 1,
+                  "width": 10,
+                  "height": 3,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 4,
+                  "width": 10,
+                  "height": 1,
+                  "lineOffset": 0
+                }
+              ],
+              "lines": [
+                "head",
+                "detail",
+                "",
+                "",
+                "foot"
+              ],
+              "cursor": null
+            },
+            "tallCenter": {
+              "children": [
+                {
+                  "x": 0,
+                  "y": 0,
+                  "width": 10,
+                  "height": 1,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 1,
+                  "width": 10,
+                  "height": 3,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 4,
+                  "width": 10,
+                  "height": 1,
+                  "lineOffset": 0
+                }
+              ],
+              "lines": [
+                "head",
+                "detail",
+                "",
+                "",
+                "foot"
+              ],
+              "cursor": null
+            }
+          }
+        },
+        {
+          "name": "frame-dock-growth",
+          "dimensions": {
+            "columns": 8,
+            "rows": 12
+          },
+          "inputs": {
+            "transcript": {
+              "lines": 8,
+              "basis": 0,
+              "grow": 1,
+              "shrink": 1,
+              "minSize": 1
+            },
+            "dock": {
+              "editor": {
+                "shrink": 1,
+                "minSize": 3
+              },
+              "menu": {
+                "shrink": 1,
+                "minSize": 0
+              },
+              "footer": {
+                "basis": 2
+              }
+            }
+          },
+          "expected": {
+            "editorAtMinimum": {
+              "name": "editor-at-minimum",
+              "editorLines": 3,
+              "menuVisible": false,
+              "children": [
+                {
+                  "x": 0,
+                  "y": 0,
+                  "width": 8,
+                  "height": 7,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 7,
+                  "width": 8,
+                  "height": 5,
+                  "lineOffset": 0
+                }
+              ],
+              "lines": [
+                "t1",
+                "t2",
+                "t3",
+                "t4",
+                "t5",
+                "t6",
+                "t7",
+                "e1",
+                "e2",
+                "e3",
+                "footer-1",
+                "footer-2"
+              ],
+              "cursor": null
+            },
+            "editorGrown": {
+              "name": "editor-grown",
+              "editorLines": 6,
+              "menuVisible": false,
+              "children": [
+                {
+                  "x": 0,
+                  "y": 0,
+                  "width": 8,
+                  "height": 4,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 4,
+                  "width": 8,
+                  "height": 8,
+                  "lineOffset": 0
+                }
+              ],
+              "lines": [
+                "t1",
+                "t2",
+                "t3",
+                "t4",
+                "e1",
+                "e2",
+                "e3",
+                "e4",
+                "e5",
+                "e6",
+                "footer-1",
+                "footer-2"
+              ],
+              "cursor": null
+            },
+            "menuOpen": {
+              "name": "menu-open",
+              "editorLines": 6,
+              "menuVisible": true,
+              "children": [
+                {
+                  "x": 0,
+                  "y": 0,
+                  "width": 8,
+                  "height": 1,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 1,
+                  "width": 8,
+                  "height": 11,
+                  "lineOffset": 0
+                }
+              ],
+              "lines": [
+                "t1",
+                "e1",
+                "e2",
+                "e3",
+                "e4",
+                "e5",
+                "e6",
+                "menu1",
+                "menu2",
+                "menu3",
+                "footer-1",
+                "footer-2"
+              ],
+              "cursor": null
+            },
+            "overConstrained": {
+              "name": "over-constrained",
+              "editorLines": 9,
+              "menuVisible": true,
+              "children": [
+                {
+                  "x": 0,
+                  "y": 0,
+                  "width": 8,
+                  "height": 1,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 1,
+                  "width": 8,
+                  "height": 11,
+                  "lineOffset": 0
+                }
+              ],
+              "lines": [
+                "t1",
+                "e1",
+                "e2",
+                "e3",
+                "e4",
+                "e5",
+                "e6",
+                "e7",
+                "menu1",
+                "menu2",
+                "footer-1",
+                "footer-2"
+              ],
+              "cursor": null
+            },
+            "shrunkBack": {
+              "name": "shrunk-back",
+              "editorLines": 3,
+              "menuVisible": false,
+              "children": [
+                {
+                  "x": 0,
+                  "y": 0,
+                  "width": 8,
+                  "height": 7,
+                  "lineOffset": 0
+                },
+                {
+                  "x": 0,
+                  "y": 7,
+                  "width": 8,
+                  "height": 5,
+                  "lineOffset": 0
+                }
+              ],
+              "lines": [
+                "t1",
+                "t2",
+                "t3",
+                "t4",
+                "t5",
+                "t6",
+                "t7",
+                "e1",
+                "e2",
+                "e3",
+                "footer-1",
+                "footer-2"
+              ],
+              "cursor": null
+            }
+          }
+        },
+        {
+          "name": "hstack-unbounded",
+          "dimensions": {
+            "columns": 12,
+            "rows": 6
+          },
+          "inputs": {
+            "width": 12,
+            "aligns": [
+              "stretch",
+              "start",
+              "center",
+              "end"
+            ],
+            "entries": [
+              {
+                "lines": [
+                  "left"
+                ],
+                "basis": 4,
+                "shrink": 0
+              },
+              {
+                "lines": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "basis": 2,
+                "grow": 1,
+                "shrink": 0
+              },
+              {
+                "lines": [
+                  "hidden"
+                ],
+                "basis": 0,
+                "shrink": 0
+              },
+              {
+                "lines": [
+                  "rt"
+                ],
+                "basis": 5,
+                "shrink": 1,
+                "minSize": 1
+              }
+            ],
+            "grow": {
+              "lines": [
+                "a",
+                "bb",
+                ""
+              ],
+              "entries": [
+                "basis:0,grow:1",
+                "basis:2,shrink:0",
+                "basis:0,shrink:0"
+              ],
+              "width": 10
+            },
+            "clamps": {
+              "lines": [
+                "a",
+                "bb"
+              ],
+              "entries": [
+                "basis:0,grow:1,minSize:3",
+                "maxSize:2,shrink:0"
+              ],
+              "width": 8
+            },
+            "zeroOnly": {
+              "lines": [
+                "z"
+              ],
+              "entries": [
+                "basis:0,shrink:0"
+              ],
+              "width": 5
+            }
+          },
+          "expected": {
+            "aligns": {
+              "stretch": {
+                "lines": [
+                  "left x   rt",
+                  "     y",
+                  "     z"
+                ],
+                "renderedAt": [
+                  [
+                    12,
+                    4
+                  ],
+                  [
+                    12,
+                    2
+                  ],
+                  [
+                    12
+                  ],
+                  [
+                    12,
+                    3
+                  ]
+                ]
+              },
+              "start": {
+                "lines": [
+                  "left x   rt",
+                  "     y",
+                  "     z"
+                ],
+                "renderedAt": [
+                  [
+                    12,
+                    4
+                  ],
+                  [
+                    12,
+                    2
+                  ],
+                  [
+                    12
+                  ],
+                  [
+                    12,
+                    3
+                  ]
+                ]
+              },
+              "center": {
+                "lines": [
+                  "     x",
+                  "left y   rt",
+                  "     z"
+                ],
+                "renderedAt": [
+                  [
+                    12,
+                    4
+                  ],
+                  [
+                    12,
+                    2
+                  ],
+                  [
+                    12
+                  ],
+                  [
+                    12,
+                    3
+                  ]
+                ]
+              },
+              "end": {
+                "lines": [
+                  "     x",
+                  "     y",
+                  "left z   rt"
+                ],
+                "renderedAt": [
+                  [
+                    12,
+                    4
+                  ],
+                  [
+                    12,
+                    2
+                  ],
+                  [
+                    12
+                  ],
+                  [
+                    12,
+                    3
+                  ]
+                ]
+              }
+            },
+            "grow": {
+              "lines": [
+                "a      bb"
+              ],
+              "renderedAt": [
+                [
+                  10,
+                  6
+                ],
+                [
+                  10,
+                  2
+                ],
+                [
+                  10
+                ]
+              ]
+            },
+            "clamps": {
+              "lines": [
+                "a     bb"
+              ],
+              "renderedAt": [
+                [
+                  8,
+                  6
+                ],
+                [
+                  8,
+                  2
+                ]
+              ]
+            },
+            "zeroOnly": {
+              "lines": [],
+              "renderedAt": [
+                [
+                  5
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "name": "hstack-frame-unequal",
+          "dimensions": {
+            "columns": 12,
+            "rows": 1
+          },
+          "inputs": {
+            "entries": [
+              {
+                "lines": [
+                  "lft"
+                ],
+                "basis": 6,
+                "shrink": 1,
+                "minSize": 1
+              },
+              {
+                "lines": [
+                  "rgt"
+                ],
+                "basis": 6,
+                "shrink": 1,
+                "minSize": 1
+              }
+            ],
+            "gap": 1,
+            "widths": [
+              12,
+              8
+            ]
+          },
+          "expected": {
+            "wide": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 12,
+                "height": 1,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 1,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 6,
+                    "y": 0,
+                    "width": 6,
+                    "height": 1,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "lft   rgt"
+              ],
+              "cursor": null,
+              "renderedAt": [
+                [
+                  5
+                ],
+                [
+                  6
+                ]
+              ]
+            },
+            "narrow": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 1,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 3,
+                    "height": 1,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 4,
+                    "y": 0,
+                    "width": 4,
+                    "height": 1,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "lft rgt"
+              ],
+              "cursor": null,
+              "renderedAt": [
+                [
+                  3
+                ],
+                [
+                  4
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "name": "hstack-frame-align",
+          "dimensions": {
+            "columns": 8,
+            "rows": 4
+          },
+          "inputs": {
+            "entries": [
+              {
+                "lines": [
+                  "a1"
+                ],
+                "basis": 4,
+                "shrink": 0
+              },
+              {
+                "lines": [
+                  "b1",
+                  "b2"
+                ],
+                "basis": 4,
+                "shrink": 0
+              }
+            ],
+            "aligns": [
+              "stretch",
+              "start",
+              "center",
+              "end"
+            ]
+          },
+          "expected": {
+            "stretch": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 4,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 4,
+                    "height": 4,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 4,
+                    "y": 0,
+                    "width": 4,
+                    "height": 4,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "a1  b1",
+                "    b2",
+                "",
+                ""
+              ],
+              "cursor": null
+            },
+            "start": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 4,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 4,
+                    "height": 1,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 4,
+                    "y": 0,
+                    "width": 4,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "a1  b1",
+                "    b2",
+                "",
+                ""
+              ],
+              "cursor": null
+            },
+            "center": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 4,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 4,
+                    "height": 1,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 4,
+                    "y": 1,
+                    "width": 4,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "",
+                "a1  b1",
+                "    b2",
+                ""
+              ],
+              "cursor": null
+            },
+            "end": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 4,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 3,
+                    "width": 4,
+                    "height": 1,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 4,
+                    "y": 2,
+                    "width": 4,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "",
+                "",
+                "    b1",
+                "a1  b2"
+              ],
+              "cursor": null
+            }
+          }
+        },
+        {
+          "name": "hstack-frame-auto-basis",
+          "dimensions": {
+            "columns": 6,
+            "rows": 1
+          },
+          "inputs": {
+            "entries": [
+              {
+                "render": "'x' repeated width times",
+                "basis": "auto"
+              },
+              {
+                "lines": [
+                  "ab"
+                ],
+                "basis": "auto",
+                "shrink": 1
+              }
+            ],
+            "gap": 1
+          },
+          "expected": {
+            "tree": {
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 1,
+              "lineOffset": 0,
+              "children": [
+                {
+                  "x": 0,
+                  "y": 0,
+                  "width": 4,
+                  "height": 1,
+                  "lineOffset": 0,
+                  "children": []
+                },
+                {
+                  "x": 5,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "lineOffset": 0,
+                  "children": []
+                }
+              ]
+            },
+            "lines": [
+              "xxxx a"
+            ],
+            "cursor": null,
+            "renderedAt": [
+              [
+                6,
+                4
+              ],
+              [
+                6,
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "hstack-nested",
+          "dimensions": {
+            "columns": 10,
+            "rows": 3
+          },
+          "inputs": {
+            "inner": {
+              "lines": [
+                "m1",
+                "m2"
+              ],
+              "cursorLine": 1,
+              "minSize": 2
+            },
+            "side": {
+              "lines": [
+                "s1"
+              ],
+              "basis": 3,
+              "shrink": 1,
+              "minSize": 3,
+              "visibleAboveWidth": 10
+            },
+            "mutations": [
+              "wide",
+              "narrow",
+              "grow-inner-lines",
+              "remove-side",
+              "add-auto-basis"
+            ]
+          },
+          "expected": {
+            "wide": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 0,
+                    "children": [
+                      {
+                        "x": 0,
+                        "y": 0,
+                        "width": 5,
+                        "height": 2,
+                        "lineOffset": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "x": 6,
+                    "y": 0,
+                    "width": 3,
+                    "height": 3,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "m1    s1",
+                "m2",
+                ""
+              ],
+              "cursor": {
+                "row": 1,
+                "column": 2
+              }
+            },
+            "narrow": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 0,
+                    "children": [
+                      {
+                        "x": 0,
+                        "y": 0,
+                        "width": 5,
+                        "height": 2,
+                        "lineOffset": 0,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              "lines": [
+                "m1",
+                "m2",
+                ""
+              ],
+              "cursor": {
+                "row": 1,
+                "column": 2
+              }
+            },
+            "grown": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 0,
+                    "children": [
+                      {
+                        "x": 0,
+                        "y": 0,
+                        "width": 5,
+                        "height": 3,
+                        "lineOffset": 1,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "x": 6,
+                    "y": 0,
+                    "width": 3,
+                    "height": 3,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "m2    s1",
+                "m3",
+                "m4"
+              ],
+              "cursor": {
+                "row": 2,
+                "column": 2
+              }
+            },
+            "removed": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 0,
+                    "children": [
+                      {
+                        "x": 0,
+                        "y": 0,
+                        "width": 5,
+                        "height": 3,
+                        "lineOffset": 1,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              "lines": [
+                "m2",
+                "m3",
+                "m4"
+              ],
+              "cursor": {
+                "row": 2,
+                "column": 2
+              }
+            },
+            "readded": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 0,
+                    "children": [
+                      {
+                        "x": 0,
+                        "y": 0,
+                        "width": 5,
+                        "height": 3,
+                        "lineOffset": 1,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "x": 6,
+                    "y": 0,
+                    "width": 2,
+                    "height": 3,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "m2    s9",
+                "m3",
+                "m4"
+              ],
+              "cursor": {
+                "row": 2,
+                "column": 2
+              }
+            }
+          }
+        },
+        {
+          "name": "hstack-in-vstack",
+          "dimensions": {
+            "columns": 14,
+            "rows": 4
+          },
+          "inputs": {
+            "entries": [
+              {
+                "lines": [
+                  "left",
+                  "right"
+                ],
+                "basis": 6,
+                "shrink": 1,
+                "minSize": 1
+              },
+              {
+                "lines": [
+                  "f1"
+                ],
+                "basis": 2,
+                "shrink": 0
+              }
+            ],
+            "widths": [
+              14,
+              10
+            ]
+          },
+          "expected": {
+            "wide": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 14,
+                "height": 4,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 14,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": [
+                      {
+                        "x": 0,
+                        "y": 0,
+                        "width": 6,
+                        "height": 2,
+                        "lineOffset": 0,
+                        "children": []
+                      },
+                      {
+                        "x": 7,
+                        "y": 0,
+                        "width": 6,
+                        "height": 2,
+                        "lineOffset": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "x": 0,
+                    "y": 2,
+                    "width": 14,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "left   right",
+                "",
+                "f1",
+                ""
+              ],
+              "cursor": null
+            },
+            "narrow": {
+              "tree": {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 4,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 10,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": [
+                      {
+                        "x": 0,
+                        "y": 0,
+                        "width": 4,
+                        "height": 2,
+                        "lineOffset": 0,
+                        "children": []
+                      },
+                      {
+                        "x": 5,
+                        "y": 0,
+                        "width": 5,
+                        "height": 2,
+                        "lineOffset": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "x": 0,
+                    "y": 2,
+                    "width": 10,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              "lines": [
+                "left right",
+                "",
+                "f1",
+                ""
+              ],
+              "cursor": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "scroll-view.json",
+      "family": "audit-1220",
+      "bytes": 37002,
+      "sha256": "f68e4e4130ba9ed0e7edad2cf660e43121ae3f20f0fa447be03adf51edcf16e9",
+      "sourceEndpoints": [
+        "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
+        "packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.constructor,TuiAltScreen.handleViewportInput,TuiAltScreen.routeWheel,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleMouseEvent,TuiAltScreen.updateSelectionAutoScroll,TuiAltScreen.autoScrollSelection,TuiAltScreen.stopSelectionAutoScroll",
+        "packages/tui/src/wheel-scroll.ts:WheelScrollAccelerator.constructor,WheelScrollAccelerator.setLines,WheelScrollAccelerator.next",
+        "packages/tui/src/keybindings.ts:TUI_KEYBINDINGS,KeybindingsManager,setKeybindings,getKeybindings",
+        "packages/tui/test/tui-alt-screen.test.ts:routes Home and End to the focused component and Ctrl+Home/End to the transcript,shows a clickable jump-to-end indicator on the transcript's last row while scrolled up",
+        "packages/tui/test/wheel-scroll.test.ts:uses fixed line counts regardless of timing,scales auto mode with wheel velocity,does not accelerate bursts of events for a single notch,resets acceleration on direction changes and pauses,carries fractional lines between events",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.resize",
+        "packages/tui/src/components/scroll-view.ts:ScrollView.getContentWidth,ScrollView.setScrollbar,ScrollView.setScrollbarActive,ScrollView.isScrollbarVisible,ScrollView.isScrollbarActive,ScrollView.scrollBy,ScrollView.scrollToEnd,ScrollView.scrollToStart",
+        "packages/tui/src/layout.ts:renderLayoutFrame,getScrollbarGeometry",
+        "packages/tui/src/components/h-stack.ts:HStack.render",
+        "packages/tui/src/components/mouse-region.ts:MouseRegion.handleMouse",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleMouseEvent,TuiAltScreen.handleScrollbarMouseEvent,TuiAltScreen.scrollScrollbarToPointer,TuiAltScreen.getScrollbarTargetAt,TuiAltScreen.updateScrollbarHover,TuiAltScreen.stopScrollbarHover,TuiAltScreen.routeWheel",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
+      ],
+      "scenarios": [
+        {
+          "name": "wheel-accelerator",
+          "dimensions": {
+            "columns": 10,
+            "rows": 3
+          },
+          "inputs": {
+            "fixed": {
+              "lines": 3,
+              "times": [
+                0,
+                10,
+                20,
+                1000
+              ]
+            },
+            "auto": {
+              "lines": "auto",
+              "times": [
+                0,
+                50,
+                100,
+                103,
+                123,
+                373
+              ]
+            },
+            "directionReset": {
+              "lines": "auto",
+              "times": [
+                0,
+                20,
+                40,
+                60,
+                500,
+                520
+              ],
+              "directions": [
+                1,
+                1,
+                1,
+                -1,
+                1,
+                1
+              ]
+            },
+            "fractionalCarry": {
+              "lines": "auto",
+              "times": [
+                0,
+                40,
+                80,
+                120,
+                160
+              ]
+            }
+          },
+          "expected": {
+            "fixed": [
+              3,
+              3,
+              3,
+              3
+            ],
+            "accelerated": [
+              1,
+              2,
+              2,
+              1,
+              2,
+              1
+            ],
+            "directionReset": [
+              1,
+              5,
+              5,
+              1,
+              1,
+              5
+            ],
+            "fractionalCarry": [
+              1,
+              2,
+              3,
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "name": "follow-transitions",
+          "dimensions": {
+            "columns": 10,
+            "rows": 3
+          },
+          "inputs": {
+            "contentLines": 6,
+            "options": {
+              "follow": "end",
+              "primary": true
+            },
+            "requests": [
+              null,
+              -2,
+              -3,
+              10
+            ]
+          },
+          "expected": {
+            "window": {
+              "height": 3,
+              "contentHeight": 6,
+              "imageRows": 6
+            },
+            "steps": [
+              {
+                "action": "initial",
+                "remaining": null,
+                "scrollTop": 3,
+                "followingEnd": true,
+                "viewportHeight": 3,
+                "lines": [
+                  "4",
+                  "5",
+                  "6"
+                ]
+              },
+              {
+                "action": "scroll-by-minus-2",
+                "remaining": 0,
+                "scrollTop": 1,
+                "followingEnd": false,
+                "viewportHeight": 3,
+                "lines": [
+                  "2",
+                  "3",
+                  "4"
+                ]
+              },
+              {
+                "action": "scroll-by-minus-3",
+                "remaining": -2,
+                "scrollTop": 0,
+                "followingEnd": false,
+                "viewportHeight": 3,
+                "lines": [
+                  "1",
+                  "2",
+                  "3"
+                ]
+              },
+              {
+                "action": "scroll-by-plus-10",
+                "remaining": 7,
+                "scrollTop": 3,
+                "followingEnd": true,
+                "viewportHeight": 3,
+                "lines": [
+                  "4",
+                  "5",
+                  "6"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "follow-append",
+          "dimensions": {
+            "columns": 6,
+            "rows": 3
+          },
+          "inputs": {
+            "contentLines": 4,
+            "appendedLines": 5,
+            "options": {
+              "follow": "end"
+            }
+          },
+          "expected": {
+            "window": {
+              "height": 3,
+              "contentHeight": 4,
+              "imageRows": 4
+            },
+            "before": {
+              "scrollTop": 1,
+              "followingEnd": true,
+              "viewportHeight": 3,
+              "lines": [
+                "2",
+                "3",
+                "4"
+              ]
+            },
+            "after": {
+              "scrollTop": 2,
+              "followingEnd": true,
+              "viewportHeight": 3,
+              "lines": [
+                "3",
+                "4",
+                "5"
+              ]
+            }
+          }
+        },
+        {
+          "name": "scroll-to-disable-follow",
+          "dimensions": {
+            "columns": 10,
+            "rows": 3
+          },
+          "inputs": {
+            "contentLines": 6,
+            "appendedLines": 8,
+            "options": {
+              "follow": "end"
+            },
+            "actions": [
+              {
+                "action": "initial",
+                "target": null,
+                "disableFollow": false
+              },
+              {
+                "action": "scroll-to-1-with-disable-follow",
+                "target": 1,
+                "disableFollow": true
+              },
+              {
+                "action": "scroll-to-last-row-with-disable-follow",
+                "target": 3,
+                "disableFollow": true
+              },
+              {
+                "action": "appended-while-suppressed",
+                "target": null,
+                "disableFollow": false
+              },
+              {
+                "action": "scroll-to-last-row",
+                "target": 5,
+                "disableFollow": false
+              }
+            ]
+          },
+          "expected": {
+            "window": {
+              "height": 3,
+              "contentHeight": 6,
+              "imageRows": 6
+            },
+            "phases": [
+              {
+                "action": "initial",
+                "scrollTop": 3,
+                "followingEnd": true,
+                "viewportHeight": 3,
+                "contentHeight": 6,
+                "lines": [
+                  "4",
+                  "5",
+                  "6"
+                ]
+              },
+              {
+                "action": "scroll-to-1-with-disable-follow",
+                "scrollTop": 1,
+                "followingEnd": false,
+                "viewportHeight": 3,
+                "contentHeight": 6,
+                "lines": [
+                  "2",
+                  "3",
+                  "4"
+                ]
+              },
+              {
+                "action": "scroll-to-last-row-with-disable-follow",
+                "scrollTop": 3,
+                "followingEnd": false,
+                "viewportHeight": 3,
+                "contentHeight": 6,
+                "lines": [
+                  "4",
+                  "5",
+                  "6"
+                ]
+              },
+              {
+                "action": "appended-while-suppressed",
+                "scrollTop": 3,
+                "followingEnd": false,
+                "viewportHeight": 3,
+                "contentHeight": 8,
+                "lines": [
+                  "4",
+                  "5",
+                  "6"
+                ]
+              },
+              {
+                "action": "scroll-to-last-row",
+                "scrollTop": 5,
+                "followingEnd": true,
+                "viewportHeight": 3,
+                "contentHeight": 8,
+                "lines": [
+                  "6",
+                  "7",
+                  "8"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "nested-scroll",
+          "dimensions": {
+            "columns": 10,
+            "rows": 2
+          },
+          "inputs": {
+            "inner": {
+              "contentLines": 6,
+              "viewportRows": 2
+            },
+            "outer": {
+              "innerBasis": 2,
+              "tail": "tail"
+            },
+            "probeDimensions": {
+              "columns": 10,
+              "rows": 3
+            },
+            "probes": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 0,
+                "y": 2
+              },
+              {
+                "x": 10,
+                "y": 0
+              }
+            ]
+          },
+          "expected": {
+            "window": {
+              "height": 2,
+              "contentHeight": 3,
+              "imageRows": 3
+            },
+            "before": {
+              "innerViewportHeight": 2,
+              "innerScrollTop": 0,
+              "outerScrollTop": 0,
+              "outerViewportHeight": 2,
+              "lines": [
+                "1",
+                "2"
+              ]
+            },
+            "after": {
+              "outerScrollTop": 1,
+              "remaining": 9,
+              "lines": [
+                "2",
+                "tail"
+              ]
+            },
+            "viewportsAt": [
+              {
+                "x": 0,
+                "y": 0,
+                "depthFirst": [
+                  "inner",
+                  "outer"
+                ]
+              },
+              {
+                "x": 0,
+                "y": 2,
+                "depthFirst": [
+                  "outer"
+                ]
+              },
+              {
+                "x": 10,
+                "y": 0,
+                "depthFirst": []
+              }
+            ]
+          }
+        },
+        {
+          "name": "scroll-image-crop",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "placement": {
+              "columns": 2,
+              "rows": 3,
+              "widthPx": 100,
+              "heightPx": 100
+            },
+            "lowerBoundary": {
+              "transcriptLines": 5,
+              "dock": "dock",
+              "viewportRows": 3
+            },
+            "scrolled": {
+              "transcriptLines": 5,
+              "viewportRows": 3,
+              "follow": "end"
+            }
+          },
+          "expected": {
+            "lower": {
+              "scrollTop": 0,
+              "viewportHeight": 3,
+              "placementRow": 2,
+              "cropRow": 2,
+              "placedRows": 3,
+              "crop": {
+                "y": 0,
+                "h": 34,
+                "r": 1,
+                "registered": {
+                  "columns": 2,
+                  "rows": 3,
+                  "widthPx": 100,
+                  "heightPx": 100
+                }
+              }
+            },
+            "upper": {
+              "scrollTop": 2,
+              "viewportHeight": 3,
+              "placementRow": 0,
+              "cropRow": 0,
+              "placedRows": 3,
+              "crop": {
+                "y": 66,
+                "h": 34,
+                "r": 1,
+                "registered": {
+                  "columns": 2,
+                  "rows": 3,
+                  "widthPx": 100,
+                  "heightPx": 100
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "nested-wheel-chaining",
+          "dimensions": {
+            "columns": 30,
+            "rows": 3
+          },
+          "inputs": {
+            "wheelReport": "\u001b[<65;2;2M",
+            "wheelDelta": 5,
+            "viewportRows": {
+              "inner": 2,
+              "outer": 3
+            }
+          },
+          "expected": {
+            "before": {
+              "inner": 0,
+              "outer": 0,
+              "unrelated": 0
+            },
+            "after": {
+              "inner": 2,
+              "outer": 3,
+              "unrelated": 0
+            }
+          }
+        },
+        {
+          "name": "alt-screen-navigation-indicator",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "navigation": [
+              "\u001bOH",
+              "\u001b[F",
+              "\u001b[57423u",
+              "\u001b[5;5~",
+              "\u001b[6;5~",
+              "\u001b[1;5H",
+              "\u001b[1;5F",
+              "\u001b[57423;5:3u"
+            ],
+            "wheelReport": "\u001b[<64;1;1M",
+            "indicatorPress": "\u001b[<0;7;3M",
+            "indicatorWidth": 9
+          },
+          "expected": {
+            "phases": [
+              {
+                "action": "initial",
+                "scrollTop": 9,
+                "followingEnd": true,
+                "lines": [
+                  "10",
+                  "11",
+                  "12",
+                  "editor"
+                ]
+              },
+              {
+                "action": "unmodified-navigation-remains-with-editor",
+                "scrollTop": 9,
+                "followingEnd": true,
+                "lines": [
+                  "10",
+                  "11",
+                  "12",
+                  "editor"
+                ]
+              },
+              {
+                "action": "ctrl-home",
+                "scrollTop": 0,
+                "followingEnd": false,
+                "lines": [
+                  "1",
+                  "2",
+                  "3     Jump end",
+                  "editor"
+                ]
+              },
+              {
+                "action": "ctrl-end",
+                "scrollTop": 9,
+                "followingEnd": true,
+                "lines": [
+                  "10",
+                  "11",
+                  "12",
+                  "editor"
+                ]
+              },
+              {
+                "action": "ctrl-home-release",
+                "scrollTop": 9,
+                "followingEnd": true,
+                "lines": [
+                  "10",
+                  "11",
+                  "12",
+                  "editor"
+                ]
+              },
+              {
+                "action": "wheel-up-indicator",
+                "scrollTop": 8,
+                "followingEnd": false,
+                "lines": [
+                  "9",
+                  "10",
+                  "11    Jump end",
+                  "editor"
+                ]
+              },
+              {
+                "action": "indicator-click",
+                "scrollTop": 9,
+                "followingEnd": true,
+                "lines": [
+                  "10",
+                  "11",
+                  "12",
+                  "editor"
+                ]
+              }
+            ],
+            "editorInputs": [
+              "\u001bOH",
+              "\u001b[F",
+              "\u001b[57423u",
+              "\u001b[5;5~",
+              "\u001b[6;5~"
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-implicit-follow",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "documentLines": 10,
+            "appendedLines": 12,
+            "manualDelta": -4,
+            "resizes": [
+              {
+                "columns": 20,
+                "rows": 2
+              },
+              {
+                "columns": 20,
+                "rows": 20
+              }
+            ]
+          },
+          "expected": {
+            "phases": [
+              {
+                "action": "initial",
+                "viewport": [
+                  "7",
+                  "8",
+                  "9",
+                  "10"
+                ],
+                "viewportTop": 6,
+                "isFollowingOutput": true
+              },
+              {
+                "action": "scroll-by-minus-4",
+                "viewport": [
+                  "3",
+                  "4",
+                  "5",
+                  "6"
+                ],
+                "viewportTop": 2,
+                "isFollowingOutput": false
+              },
+              {
+                "action": "appended",
+                "viewport": [
+                  "3",
+                  "4",
+                  "5",
+                  "6"
+                ],
+                "viewportTop": 2,
+                "isFollowingOutput": false
+              },
+              {
+                "action": "scroll-to-bottom",
+                "viewport": [
+                  "9",
+                  "10",
+                  "11",
+                  "12"
+                ],
+                "viewportTop": 8,
+                "isFollowingOutput": true
+              },
+              {
+                "action": "resize-to-2-rows",
+                "viewport": [
+                  "11",
+                  "12"
+                ],
+                "viewportTop": 10,
+                "isFollowingOutput": true
+              },
+              {
+                "action": "scroll-to-top",
+                "viewport": [
+                  "1",
+                  "2"
+                ],
+                "viewportTop": 0,
+                "isFollowingOutput": false
+              },
+              {
+                "action": "resize-to-20-rows",
+                "viewport": [
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6",
+                  "7",
+                  "8",
+                  "9",
+                  "10",
+                  "11",
+                  "12",
+                  "",
+                  "",
+                  "",
+                  "",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "viewportTop": 0,
+                "isFollowingOutput": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-indicator-no-follow-end",
+          "dimensions": {
+            "columns": 30,
+            "rows": 3
+          },
+          "inputs": {
+            "manualDelta": 1,
+            "indicatorLabel": " ↓ Jump to end "
+          },
+          "expected": {
+            "phases": [
+              {
+                "action": "initial",
+                "scrollTop": 0,
+                "followingEnd": false,
+                "indicatorShown": false,
+                "lines": [
+                  "one",
+                  "two",
+                  "three"
+                ]
+              },
+              {
+                "action": "scrolled-away-from-end",
+                "scrollTop": 1,
+                "followingEnd": false,
+                "indicatorShown": false,
+                "lines": [
+                  "two",
+                  "three",
+                  "four"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-auto-scroll-edge",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "documentLines": 10,
+            "press": {
+              "x": 1,
+              "y": 3
+            },
+            "drag": {
+              "x": 1,
+              "y": 1
+            },
+            "holdMs": 130,
+            "release": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "expected": {
+            "initialViewportTop": 6,
+            "trace": [
+              {
+                "tick": 1,
+                "viewportTop": 5,
+                "anchorRow": 8,
+                "anchorCol": 0,
+                "focusRow": 5,
+                "focusCol": 0,
+                "selectionText": "line 6\nline 7\nline 8\nl"
+              },
+              {
+                "tick": 2,
+                "viewportTop": 4,
+                "anchorRow": 8,
+                "anchorCol": 0,
+                "focusRow": 4,
+                "focusCol": 0,
+                "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+              },
+              {
+                "tick": 3,
+                "viewportTop": 3,
+                "anchorRow": 8,
+                "anchorCol": 0,
+                "focusRow": 3,
+                "focusCol": 0,
+                "selectionText": "line 4\nline 5\nline 6\nline 7\nline 8\nl"
+              }
+            ],
+            "tickCount": 3,
+            "clipboardWrites": [
+              "\u001b]52;c;bGluZSA0CmxpbmUgNQpsaW5lIDYKbGluZSA3CmxpbmUgOAps\u0007"
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-auto-scroll-cancel",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "documentLines": 10,
+            "press": {
+              "x": 1,
+              "y": 3
+            },
+            "firstDrag": {
+              "x": 1,
+              "y": 1
+            },
+            "release": {
+              "x": 1,
+              "y": 1
+            },
+            "secondPress": {
+              "x": 1,
+              "y": 3
+            },
+            "secondDrag": {
+              "x": 1,
+              "y": 2
+            },
+            "secondRelease": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "expected": {
+            "initialViewportTop": 6,
+            "trace": [
+              {
+                "tick": 1,
+                "viewportTop": 5,
+                "anchorRow": 8,
+                "anchorCol": 0,
+                "focusRow": 5,
+                "focusCol": 0,
+                "selectionText": "line 6\nline 7\nline 8\nl"
+              },
+              {
+                "tick": 2,
+                "viewportTop": 4,
+                "anchorRow": 8,
+                "anchorCol": 0,
+                "focusRow": 4,
+                "focusCol": 0,
+                "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+              },
+              {
+                "action": "released",
+                "tick": 2,
+                "viewportTop": 4,
+                "anchorRow": 8,
+                "anchorCol": 0,
+                "focusRow": 4,
+                "focusCol": 0,
+                "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+              },
+              {
+                "action": "direction-zero",
+                "tick": 2,
+                "viewportTop": 4,
+                "anchorRow": 6,
+                "anchorCol": 0,
+                "focusRow": 5,
+                "focusCol": 0,
+                "selectionText": "line 6\nl"
+              }
+            ],
+            "tickCount": 2,
+            "clipboardWrites": [
+              "\u001b]52;c;bGluZSA1CmxpbmUgNgpsaW5lIDcKbGluZSA4Cmw=\u0007",
+              "\u001b]52;c;bGluZSA1CmxpbmUgNgps\u0007"
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-auto-scroll-limit",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "documentLines": 5,
+            "scrollToTop": false,
+            "press": {
+              "x": 1,
+              "y": 4
+            },
+            "drag": {
+              "x": 1,
+              "y": 1
+            },
+            "holdMs": 200,
+            "release": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "expected": {
+            "initialViewportTop": 1,
+            "trace": [
+              {
+                "tick": 1,
+                "viewportTop": 0,
+                "anchorRow": 4,
+                "anchorCol": 0,
+                "focusRow": 0,
+                "focusCol": 0,
+                "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
+              },
+              {
+                "tick": 2,
+                "viewportTop": 0,
+                "anchorRow": 4,
+                "anchorCol": 0,
+                "focusRow": 0,
+                "focusCol": 0,
+                "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
+              }
+            ],
+            "tickCount": 2,
+            "clipboardWrites": [
+              "\u001b]52;c;bGluZSAxCmxpbmUgMgpsaW5lIDMKbGluZSA0Cmw=\u0007"
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-auto-scroll-limit-bottom",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "documentLines": 8,
+            "manualScrollDelta": -2,
+            "press": {
+              "x": 1,
+              "y": 1
+            },
+            "drag": {
+              "x": 1,
+              "y": 4
+            },
+            "release": {
+              "x": 1,
+              "y": 4
+            }
+          },
+          "expected": {
+            "initialViewportTop": 2,
+            "trace": [
+              {
+                "tick": 1,
+                "viewportTop": 3,
+                "anchorRow": 2,
+                "anchorCol": 0,
+                "focusRow": 6,
+                "focusCol": 0,
+                "selectionText": "line 3\nline 4\nline 5\nline 6\nl"
+              },
+              {
+                "tick": 2,
+                "viewportTop": 4,
+                "anchorRow": 2,
+                "anchorCol": 0,
+                "focusRow": 7,
+                "focusCol": 0,
+                "selectionText": "line 3\nline 4\nline 5\nline 6\nline 7\nl"
+              },
+              {
+                "tick": 3,
+                "viewportTop": 4,
+                "anchorRow": 2,
+                "anchorCol": 0,
+                "focusRow": 7,
+                "focusCol": 0,
+                "selectionText": "line 3\nline 4\nline 5\nline 6\nline 7\nl"
+              }
+            ],
+            "tickCount": 3,
+            "clipboardWrites": [
+              "\u001b]52;c;bGluZSAzCmxpbmUgNApsaW5lIDUKbGluZSA2CmxpbmUgNwps\u0007"
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-auto-scroll-nested",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "innerLines": 12,
+            "head": "",
+            "headRows": 0,
+            "innerRows": 5,
+            "tail": "",
+            "tailRows": 0,
+            "press": {
+              "x": 1,
+              "y": 3
+            },
+            "drag": {
+              "x": 1,
+              "y": 4
+            },
+            "release": {
+              "x": 1,
+              "y": 4
+            }
+          },
+          "expected": {
+            "initialInnerScrollTop": 0,
+            "initialOuterScrollTop": 1,
+            "trace": [
+              {
+                "tick": 1,
+                "innerScrollTop": 1,
+                "outerScrollTop": 1,
+                "scrolledView": "inner",
+                "anchorRow": 3,
+                "anchorCol": 0,
+                "focusRow": 5,
+                "focusCol": 0,
+                "selectionText": "4\n5\n6"
+              },
+              {
+                "tick": 2,
+                "innerScrollTop": 2,
+                "outerScrollTop": 1,
+                "scrolledView": "inner",
+                "anchorRow": 3,
+                "anchorCol": 0,
+                "focusRow": 6,
+                "focusCol": 0,
+                "selectionText": "4\n5\n6\n7"
+              },
+              {
+                "tick": 3,
+                "innerScrollTop": 3,
+                "outerScrollTop": 1,
+                "scrolledView": "inner",
+                "anchorRow": 3,
+                "anchorCol": 0,
+                "focusRow": 7,
+                "focusCol": 0,
+                "selectionText": "4\n5\n6\n7\n8"
+              },
+              {
+                "tick": 4,
+                "innerScrollTop": 4,
+                "outerScrollTop": 1,
+                "scrolledView": "inner",
+                "anchorRow": 3,
+                "anchorCol": 0,
+                "focusRow": 8,
+                "focusCol": 0,
+                "selectionText": "4\n5\n6\n7\n8\n9"
+              }
+            ],
+            "tickCount": 4,
+            "clipboardWrites": [
+              "\u001b]52;c;NAo1CjYKNwo4Cjk=\u0007"
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-auto-scroll-content-growth",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "documentLines": 10,
+            "manualScrollDelta": -2,
+            "grownDocumentLines": 16,
+            "growAfterTick": 2,
+            "press": {
+              "x": 1,
+              "y": 1
+            },
+            "drag": {
+              "x": 1,
+              "y": 4
+            },
+            "release": {
+              "x": 1,
+              "y": 4
+            }
+          },
+          "expected": {
+            "initialViewportTop": 4,
+            "growthState": {
+              "viewportTop": 6,
+              "anchorRow": 4,
+              "anchorCol": 0,
+              "focusRow": 9,
+              "focusCol": 0,
+              "selectionText": "5\n6\n7\n8\n9\n1"
+            },
+            "afterGrowth": {
+              "viewportTop": 12,
+              "anchorRow": 4,
+              "anchorCol": 0,
+              "focusRow": 9,
+              "focusCol": 0,
+              "selectionText": "5\n6\n7\n8\n9\n1"
+            },
+            "trace": [
+              {
+                "tick": 1,
+                "viewportTop": 5,
+                "anchorRow": 4,
+                "anchorCol": 0,
+                "focusRow": 8,
+                "focusCol": 0,
+                "selectionText": "5\n6\n7\n8\n9"
+              },
+              {
+                "tick": 2,
+                "viewportTop": 6,
+                "anchorRow": 4,
+                "anchorCol": 0,
+                "focusRow": 9,
+                "focusCol": 0,
+                "selectionText": "5\n6\n7\n8\n9\n1"
+              },
+              {
+                "tick": 3,
+                "viewportTop": 12,
+                "anchorRow": 4,
+                "anchorCol": 0,
+                "focusRow": 9,
+                "focusCol": 0,
+                "selectionText": "5\n6\n7\n8\n9\n1"
+              }
+            ],
+            "tickCount": 3,
+            "ticksAfterGrowth": 1,
+            "clipboardWrites": [
+              "\u001b]52;c;NQo2CjcKOAo5CjEwCjExCjEyCjEzCjE0CjE1CjE=\u0007"
+            ]
+          }
+        },
+        {
+          "name": "scrollbar-modes-and-reservation",
+          "dimensions": {
+            "columns": 6,
+            "rows": 2
+          },
+          "inputs": {
+            "content": "123456",
+            "modes": [
+              "hidden",
+              "always",
+              "hidden"
+            ]
+          },
+          "expected": {
+            "hidden": {
+              "contentWidth": 6,
+              "contentWidthAtOne": 1,
+              "lines": [
+                "123456",
+                ""
+              ],
+              "window": {
+                "width": 6,
+                "height": 2,
+                "childWidth": 6,
+                "childHeight": 1
+              },
+              "scrollbar": "hidden",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 0,
+              "viewportHeight": 2
+            },
+            "always": {
+              "contentWidth": 5,
+              "contentWidthAtOne": 1,
+              "lines": [
+                "12345┃",
+                "6    ┃"
+              ],
+              "window": {
+                "width": 6,
+                "height": 2,
+                "childWidth": 5,
+                "childHeight": 2
+              },
+              "scrollbar": "always",
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "scrollTop": 0,
+              "viewportHeight": 2
+            },
+            "restored": {
+              "contentWidth": 6,
+              "lines": [
+                "123456",
+                ""
+              ],
+              "window": {
+                "width": 6,
+                "height": 2,
+                "childWidth": 6,
+                "childHeight": 1
+              },
+              "scrollbar": "hidden",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 0,
+              "viewportHeight": 2
+            }
+          }
+        },
+        {
+          "name": "scrollbar-transient-timeline",
+          "dimensions": {
+            "columns": 6,
+            "rows": 4
+          },
+          "inputs": {
+            "contentLines": [
+              "abcd界",
+              "abcde2",
+              "abcde3",
+              "abcde4",
+              "abcde5",
+              "abcde6",
+              "abcde7",
+              "abcde8"
+            ],
+            "styles": {
+              "trackColor": "\u001b[38;5;2m",
+              "thumbColor": "\u001b[38;5;1m",
+              "contentBackground": "\u001b[42m"
+            },
+            "options": {
+              "scrollbar": "auto",
+              "scrollbarHideDelayMs": 10
+            },
+            "requests": [
+              2
+            ],
+            "activeToggle": [
+              true,
+              false
+            ],
+            "hideWaitMs": 30,
+            "followedLines": 8,
+            "appendedLines": 9
+          },
+          "expected": {
+            "first": {
+              "lines": [
+                "abcd界",
+                "abcde2",
+                "abcde3",
+                "abcde4"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 8
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 0,
+              "viewportHeight": 4
+            },
+            "scrolled": {
+              "lines": [
+                "abcde│",
+                "abcde┃",
+                "abcde┃",
+                "abcde│"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 8
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "scrollTop": 2,
+              "viewportHeight": 4,
+              "track": [
+                true,
+                false,
+                false,
+                true
+              ],
+              "thumb": [
+                false,
+                true,
+                true,
+                false
+              ],
+              "preservedBackgroundReemit": [
+                true,
+                true,
+                true,
+                true
+              ]
+            },
+            "hovered": {
+              "lines": [
+                "abcde│",
+                "abcde█",
+                "abcde█",
+                "abcde│"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 8
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": true,
+              "isScrollbarActive": true,
+              "scrollTop": 2,
+              "viewportHeight": 4,
+              "track": [
+                true,
+                false,
+                false,
+                true
+              ],
+              "thumb": [
+                false,
+                true,
+                true,
+                false
+              ],
+              "preservedBackgroundReemit": [
+                true,
+                true,
+                true,
+                true
+              ]
+            },
+            "expired": {
+              "lines": [
+                "abcde3",
+                "abcde4",
+                "abcde5",
+                "abcde6"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 8
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 2,
+              "viewportHeight": 4
+            },
+            "atEnd": {
+              "lines": [
+                "abcde│",
+                "abcde│",
+                "abcde┃",
+                "abcde┃"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 8
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "scrollTop": 4,
+              "viewportHeight": 4
+            },
+            "atStart": {
+              "lines": [
+                "abcd ┃",
+                "abcde┃",
+                "abcde│",
+                "abcde│"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 8
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "scrollTop": 0,
+              "viewportHeight": 4
+            },
+            "followedBefore": {
+              "lines": [
+                "abcde5",
+                "abcde6",
+                "abcde7",
+                "abcde8"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 8
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 4,
+              "viewportHeight": 4
+            },
+            "followedAfter": {
+              "lines": [
+                "abcde6",
+                "abcde7",
+                "abcde8",
+                "abcde9"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 9
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 5,
+              "viewportHeight": 4
+            },
+            "fittingBefore": {
+              "lines": [
+                "1",
+                "2",
+                "",
+                ""
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 2
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 0,
+              "viewportHeight": 4
+            },
+            "fittingAfter": {
+              "lines": [
+                "1",
+                "2",
+                "",
+                ""
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 6,
+                "childHeight": 2
+              },
+              "scrollbar": "auto",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 0,
+              "viewportHeight": 4
+            },
+            "alwaysFitting": {
+              "lines": [
+                "1    ┃",
+                "2    ┃",
+                "     ┃",
+                "     ┃"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 5,
+                "childHeight": 2
+              },
+              "scrollbar": "always",
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "scrollTop": 0,
+              "viewportHeight": 4
+            },
+            "alwaysOverflowing": {
+              "lines": [
+                "abcd ┃",
+                "界   ┃",
+                "abcde│",
+                "2    │"
+              ],
+              "window": {
+                "width": 6,
+                "height": 4,
+                "childWidth": 5,
+                "childHeight": 16
+              },
+              "scrollbar": "always",
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "scrollTop": 0,
+              "viewportHeight": 4
+            },
+            "alwaysOverflowingReset": [
+              true,
+              true,
+              true,
+              true
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "component.json",
+      "family": "audit-1220",
+      "bytes": 6135,
+      "sha256": "e42041941b89e76a01e54aa7d8136d386d5117ebf44a79481d488a09ea9bcce5",
+      "sourceEndpoints": [
+        "packages/tui/src/components/text.ts:Text,render,setText,setCustomBgFn,setPaddingX,invalidate",
+        "packages/tui/src/components/box.ts:Box,addChild,removeChild,clear,setBgFn,setPaddingX,invalidate,handleMouse,render",
+        "packages/tui/src/components/spacer.ts:Spacer,render,setLines,invalidate",
+        "packages/tui/src/components/truncated-text.ts:TruncatedText,render,invalidate"
+      ],
+      "scenarios": [
+        {
+          "name": "styled-text-mutation",
+          "dimensions": {
+            "columns": 12,
+            "rows": 6
+          },
+          "inputs": {
+            "text": "\u001b[31mhello\u001b[0m world\n\u001b[32msecond line\u001b[0m\twith tab",
+            "paddingX": 1,
+            "paddingY": 1,
+            "changedText": "changed\nlines\u001b[34m with ansi\u001b[0m"
+          },
+          "expected": {
+            "first": [
+              "            ",
+              " \u001b[31mhello\u001b[0m      ",
+              " world      ",
+              " \u001b[32msecond     ",
+              " \u001b[32mline\u001b[0m       ",
+              " with tab   ",
+              "            "
+            ],
+            "changed": [
+              "            ",
+              " changed    ",
+              " lines\u001b[34m with ",
+              " \u001b[34mansi\u001b[0m       ",
+              "            "
+            ]
+          }
+        },
+        {
+          "name": "text-render-cache-and-bg",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "text": "alpha beta gamma\titem",
+            "paddingX": 1,
+            "paddingY": 1
+          },
+          "expected": {
+            "initial": [
+              "                    ",
+              " alpha beta gamma   ",
+              " item               ",
+              "                    "
+            ],
+            "cached": [
+              "                    ",
+              " alpha beta gamma   ",
+              " item               ",
+              "                    "
+            ],
+            "narrow": [
+              "          ",
+              " alpha    ",
+              " beta     ",
+              " gamma    ",
+              " item     ",
+              "          "
+            ],
+            "withBg": [
+              "\u001b[44m                    \u001b[49m",
+              "\u001b[44m alpha beta gamma   \u001b[49m",
+              "\u001b[44m item               \u001b[49m",
+              "\u001b[44m                    \u001b[49m"
+            ],
+            "padded2": [
+              "\u001b[44m                    \u001b[49m",
+              "\u001b[44m  alpha beta gamma  \u001b[49m",
+              "\u001b[44m  item              \u001b[49m",
+              "\u001b[44m                    \u001b[49m"
+            ],
+            "invalidated": [
+              "\u001b[44m                    \u001b[49m",
+              "\u001b[44m  alpha beta gamma  \u001b[49m",
+              "\u001b[44m  item              \u001b[49m",
+              "\u001b[44m                    \u001b[49m"
+            ]
+          }
+        },
+        {
+          "name": "box-rendering-and-cache",
+          "dimensions": {
+            "columns": 20,
+            "rows": 6
+          },
+          "inputs": {
+            "paddingX": 1,
+            "paddingY": 1,
+            "child1": "first child",
+            "child2": "second child"
+          },
+          "expected": {
+            "initial": [
+              "                    ",
+              " first child        ",
+              " second child       ",
+              "                    "
+            ],
+            "cached": [
+              "                    ",
+              " first child        ",
+              " second child       ",
+              "                    "
+            ],
+            "withBg": [
+              "\u001b[42m                    \u001b[49m",
+              "\u001b[42m first child        \u001b[49m",
+              "\u001b[42m second child       \u001b[49m",
+              "\u001b[42m                    \u001b[49m"
+            ],
+            "padded2": [
+              "\u001b[42m                    \u001b[49m",
+              "\u001b[42m  first child       \u001b[49m",
+              "\u001b[42m  second child      \u001b[49m",
+              "\u001b[42m                    \u001b[49m"
+            ],
+            "removedChild2": [
+              "\u001b[42m                    \u001b[49m",
+              "\u001b[42m  first child       \u001b[49m",
+              "\u001b[42m                    \u001b[49m"
+            ],
+            "invalidated": [
+              "\u001b[42m                    \u001b[49m",
+              "\u001b[42m  first child       \u001b[49m",
+              "\u001b[42m                    \u001b[49m"
+            ],
+            "cleared": []
+          }
+        },
+        {
+          "name": "box-mouse-routing",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "paddingX": 2,
+            "paddingY": 1
+          },
+          "expected": {
+            "resultInsideHandled": true,
+            "childReceivedCoords": {
+              "x": 1,
+              "y": 1
+            },
+            "resultLeftPadHandled": false,
+            "resultTopPadHandled": false
+          }
+        },
+        {
+          "name": "spacer-rendering",
+          "dimensions": {
+            "columns": 15,
+            "rows": 5
+          },
+          "inputs": {
+            "lines": 3
+          },
+          "expected": {
+            "render3": [
+              "",
+              "",
+              ""
+            ],
+            "render1": [
+              ""
+            ],
+            "render0": []
+          }
+        },
+        {
+          "name": "truncated-text-rendering",
+          "dimensions": {
+            "columns": 25,
+            "rows": 3
+          },
+          "inputs": {
+            "text": "first line text\nsecond line is ignored",
+            "paddingX": 1,
+            "paddingY": 1
+          },
+          "expected": {
+            "wide": [
+              "                         ",
+              " first line text         ",
+              "                         "
+            ],
+            "narrow": [
+              "            ",
+              " first l\u001b[0m...\u001b[0m ",
+              "            "
+            ],
+            "ansiRender": [
+              "\u001b[31mhello\u001b[0m...\u001b[0m"
+            ],
+            "zeroWidth": [
+              "\u001b[0m.\u001b[0m"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "utils-width.json",
+      "family": "audit-1220",
+      "bytes": 13457,
+      "sha256": "f8a8e6cc8274956eb902f5e6a4c25fa05ae81ab8c557c3373e11c99139263ebd",
+      "sourceEndpoints": [
+        "packages/tui/src/utils.ts:visibleWidth,wrapTextWithAnsi,truncateToWidth,sliceByColumn,getOsc8LinkAtColumn,stripTerminalSequences",
+        "packages/tui/src/components/text.ts:Text,render",
+        "packages/tui/src/components/input.ts:Input,render,setValue"
+      ],
+      "scenarios": [
+        {
+          "name": "visible-width-and-narrow-placement",
+          "dimensions": {
+            "columns": 6,
+            "rows": 4
+          },
+          "inputs": {
+            "visibleWidth": [
+              {
+                "name": "ka",
+                "input": "का",
+                "output": 2
+              },
+              {
+                "name": "ksha",
+                "input": "क्ष",
+                "output": 2
+              },
+              {
+                "name": "ka-newline-ksha",
+                "input": "का\nक्ष",
+                "output": 4
+              },
+              {
+                "name": "hello-newline-world",
+                "input": "hello\nworld",
+                "output": 10
+              },
+              {
+                "name": "ansi-newline-ansi",
+                "input": "\u001b[31mred\u001b[0m\n\u001b[32mtail\u001b[0m",
+                "output": 7
+              },
+              {
+                "name": "emoji-combining-flag",
+                "input": "a😀b",
+                "output": 4
+              }
+            ],
+            "narrowText": {
+              "text": "काक्ष",
+              "width": 2
+            },
+            "narrowInput": {
+              "value": "काक्ष",
+              "width": 6
+            }
+          },
+          "expected": {
+            "visibleWidth": [
+              {
+                "name": "ka",
+                "input": "का",
+                "output": 2
+              },
+              {
+                "name": "ksha",
+                "input": "क्ष",
+                "output": 2
+              },
+              {
+                "name": "ka-newline-ksha",
+                "input": "का\nक्ष",
+                "output": 4
+              },
+              {
+                "name": "hello-newline-world",
+                "input": "hello\nworld",
+                "output": 10
+              },
+              {
+                "name": "ansi-newline-ansi",
+                "input": "\u001b[31mred\u001b[0m\n\u001b[32mtail\u001b[0m",
+                "output": 7
+              },
+              {
+                "name": "emoji-combining-flag",
+                "input": "a😀b",
+                "output": 4
+              }
+            ],
+            "narrowText": {
+              "width2": [
+                "का",
+                "क्ष"
+              ],
+              "width4": [
+                "काक्ष"
+              ]
+            },
+            "narrowInput": {
+              "width6": [
+                "> \u001b_pi:fc\u0007का\u001b_pi:/fc\u0007क्ष"
+              ]
+            }
+          }
+        },
+        {
+          "name": "ansi-boundary-order-and-hyperlinks",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "wrap": [
+              {
+                "name": "staged-control-after-content",
+                "input": "中文\u001b[31mABCDEFGHIJ",
+                "width": 4
+              },
+              {
+                "name": "staged-underline-after-content",
+                "input": "中文\u001b[4mABCDEFGH",
+                "width": 4
+              },
+              {
+                "name": "staged-hyperlink-after-content",
+                "input": "中文\u001b]8;;u\u0007ABCDEFGH",
+                "width": 4
+              },
+              {
+                "name": "st-terminated-link-across-break",
+                "input": "\u001b]8;;u\u001b\\hello world\u001b]8;;\u001b\\",
+                "width": 7
+              },
+              {
+                "name": "link-cjk-styled-span",
+                "input": "ab \u001b]8;;u\u0007\u001b[31m中文\u001b[0m\u001b]8;;\u0007 cd",
+                "width": 4
+              },
+              {
+                "name": "control-before-logical-newline",
+                "input": "abc\u001b[31m\ndef",
+                "width": 20
+              }
+            ],
+            "truncate": [
+              {
+                "name": "fits-open-underline-pads-inside",
+                "input": "\u001b[4mabc",
+                "width": 8,
+                "ellipsis": "",
+                "pad": true
+              },
+              {
+                "name": "pending-control-styles-dropped-text",
+                "input": "\u001b[4ma\u001b[31mbcdef",
+                "width": 4,
+                "ellipsis": "...",
+                "pad": false
+              },
+              {
+                "name": "pending-link-styles-dropped-text",
+                "input": "\u001b[4ma\u001b]8;;u\u0007bcdef",
+                "width": 4,
+                "ellipsis": "...",
+                "pad": false
+              },
+              {
+                "name": "st-terminated-link-closes-before-reset",
+                "input": "\u001b]8;;u\u001b\\abcdefgh",
+                "width": 4,
+                "ellipsis": "...",
+                "pad": false
+              },
+              {
+                "name": "ellipsis-does-not-fit",
+                "input": "abcdef",
+                "width": 2,
+                "ellipsis": "中",
+                "pad": false
+              },
+              {
+                "name": "ellipsis-clipped-to-fit",
+                "input": "abcdef",
+                "width": 2,
+                "ellipsis": "abc",
+                "pad": false
+              },
+              {
+                "name": "ellipsis-clipped-away",
+                "input": "abcdef",
+                "width": 1,
+                "ellipsis": "中中",
+                "pad": false
+              }
+            ],
+            "slice": [
+              {
+                "name": "slice-start-code-order",
+                "input": "\u001b[32mfoo\u001b[39m bar",
+                "start": 3,
+                "length": 4,
+                "strict": true
+              },
+              {
+                "name": "slice-inside-open-link",
+                "input": "\u001b]8;;u\u0007abcdefgh\u001b]8;;\u0007",
+                "start": 2,
+                "length": 3,
+                "strict": false
+              },
+              {
+                "name": "slice-spanning-cjk-link",
+                "input": "\u001b]8;;u\u0007a你bcd\u001b]8;;\u0007",
+                "start": 1,
+                "length": 3,
+                "strict": false
+              }
+            ],
+            "linkColumns": [
+              {
+                "name": "cjk-link-first-cell",
+                "input": "a \u001b]8;;https://x\u0007你b\u001b]8;;\u0007 c",
+                "column": 2
+              },
+              {
+                "name": "cjk-link-second-cell",
+                "input": "a \u001b]8;;https://x\u0007你b\u001b]8;;\u0007 c",
+                "column": 3
+              },
+              {
+                "name": "styled-link-cell",
+                "input": "\u001b[31m\u001b]8;;https://x\u0007ab\u001b]8;;\u0007\u001b[0m",
+                "column": 0
+              },
+              {
+                "name": "cell-after-link-close",
+                "input": "\u001b]8;;https://x\u0007ab\u001b]8;;\u0007",
+                "column": 3
+              }
+            ],
+            "strip": [
+              {
+                "name": "plain",
+                "input": "hello world"
+              },
+              {
+                "name": "sgr-colors",
+                "input": "\u001b[31mred\u001b[0m text \u001b[1mbold\u001b[22m"
+              },
+              {
+                "name": "osc8-link",
+                "input": "prefix \u001b]8;;https://example.com\u0007link text\u001b]8;;\u0007 suffix"
+              },
+              {
+                "name": "osc-title",
+                "input": "\u001b]0;terminal title\u0007visible text"
+              }
+            ]
+          },
+          "expected": {
+            "wrap": [
+              {
+                "name": "staged-control-after-content",
+                "input": "中文\u001b[31mABCDEFGHIJ",
+                "width": 4,
+                "output": [
+                  "中文",
+                  "\u001b[31mABCD",
+                  "\u001b[31mEFGH",
+                  "\u001b[31mIJ"
+                ]
+              },
+              {
+                "name": "staged-underline-after-content",
+                "input": "中文\u001b[4mABCDEFGH",
+                "width": 4,
+                "output": [
+                  "中文",
+                  "\u001b[4mABCD\u001b[24m",
+                  "\u001b[4mEFGH"
+                ]
+              },
+              {
+                "name": "staged-hyperlink-after-content",
+                "input": "中文\u001b]8;;u\u0007ABCDEFGH",
+                "width": 4,
+                "output": [
+                  "中文",
+                  "\u001b]8;;u\u0007ABCD\u001b]8;;\u0007",
+                  "\u001b]8;;u\u0007EFGH"
+                ]
+              },
+              {
+                "name": "st-terminated-link-across-break",
+                "input": "\u001b]8;;u\u001b\\hello world\u001b]8;;\u001b\\",
+                "width": 7,
+                "output": [
+                  "\u001b]8;;u\u001b\\hello\u001b]8;;\u001b\\",
+                  "\u001b]8;;u\u001b\\world\u001b]8;;\u001b\\"
+                ]
+              },
+              {
+                "name": "link-cjk-styled-span",
+                "input": "ab \u001b]8;;u\u0007\u001b[31m中文\u001b[0m\u001b]8;;\u0007 cd",
+                "width": 4,
+                "output": [
+                  "ab",
+                  "\u001b]8;;u\u0007\u001b[31m中文\u001b]8;;\u0007",
+                  "\u001b[31m\u001b]8;;u\u0007\u001b[0m\u001b]8;;\u0007 cd"
+                ]
+              },
+              {
+                "name": "control-before-logical-newline",
+                "input": "abc\u001b[31m\ndef",
+                "width": 20,
+                "output": [
+                  "abc\u001b[31m",
+                  "\u001b[31mdef"
+                ]
+              }
+            ],
+            "truncate": [
+              {
+                "name": "fits-open-underline-pads-inside",
+                "input": "\u001b[4mabc",
+                "width": 8,
+                "ellipsis": "",
+                "pad": true,
+                "output": "\u001b[4mabc     "
+              },
+              {
+                "name": "pending-control-styles-dropped-text",
+                "input": "\u001b[4ma\u001b[31mbcdef",
+                "width": 4,
+                "ellipsis": "...",
+                "pad": false,
+                "output": "\u001b[4ma\u001b[0m...\u001b[0m"
+              },
+              {
+                "name": "pending-link-styles-dropped-text",
+                "input": "\u001b[4ma\u001b]8;;u\u0007bcdef",
+                "width": 4,
+                "ellipsis": "...",
+                "pad": false,
+                "output": "\u001b[4ma\u001b[0m...\u001b[0m"
+              },
+              {
+                "name": "st-terminated-link-closes-before-reset",
+                "input": "\u001b]8;;u\u001b\\abcdefgh",
+                "width": 4,
+                "ellipsis": "...",
+                "pad": false,
+                "output": "\u001b]8;;u\u001b\\a\u001b]8;;\u001b\\\u001b[0m...\u001b[0m"
+              },
+              {
+                "name": "ellipsis-does-not-fit",
+                "input": "abcdef",
+                "width": 2,
+                "ellipsis": "中",
+                "pad": false,
+                "output": "\u001b[0m中\u001b[0m"
+              },
+              {
+                "name": "ellipsis-clipped-to-fit",
+                "input": "abcdef",
+                "width": 2,
+                "ellipsis": "abc",
+                "pad": false,
+                "output": "\u001b[0mab\u001b[0m"
+              },
+              {
+                "name": "ellipsis-clipped-away",
+                "input": "abcdef",
+                "width": 1,
+                "ellipsis": "中中",
+                "pad": false,
+                "output": ""
+              }
+            ],
+            "slice": [
+              {
+                "name": "slice-start-code-order",
+                "input": "\u001b[32mfoo\u001b[39m bar",
+                "start": 3,
+                "length": 4,
+                "strict": true,
+                "output": "\u001b[32m\u001b[39m bar"
+              },
+              {
+                "name": "slice-inside-open-link",
+                "input": "\u001b]8;;u\u0007abcdefgh\u001b]8;;\u0007",
+                "start": 2,
+                "length": 3,
+                "strict": false,
+                "output": "\u001b]8;;u\u0007cde"
+              },
+              {
+                "name": "slice-spanning-cjk-link",
+                "input": "\u001b]8;;u\u0007a你bcd\u001b]8;;\u0007",
+                "start": 1,
+                "length": 3,
+                "strict": false,
+                "output": "\u001b]8;;u\u0007你b"
+              }
+            ],
+            "linkColumns": [
+              {
+                "name": "cjk-link-first-cell",
+                "input": "a \u001b]8;;https://x\u0007你b\u001b]8;;\u0007 c",
+                "column": 2,
+                "link": "https://x"
+              },
+              {
+                "name": "cjk-link-second-cell",
+                "input": "a \u001b]8;;https://x\u0007你b\u001b]8;;\u0007 c",
+                "column": 3,
+                "link": "https://x"
+              },
+              {
+                "name": "styled-link-cell",
+                "input": "\u001b[31m\u001b]8;;https://x\u0007ab\u001b]8;;\u0007\u001b[0m",
+                "column": 0,
+                "link": "https://x"
+              },
+              {
+                "name": "cell-after-link-close",
+                "input": "\u001b]8;;https://x\u0007ab\u001b]8;;\u0007",
+                "column": 3,
+                "link": null
+              }
+            ],
+            "strip": [
+              {
+                "name": "plain",
+                "input": "hello world",
+                "output": "hello world"
+              },
+              {
+                "name": "sgr-colors",
+                "input": "\u001b[31mred\u001b[0m text \u001b[1mbold\u001b[22m",
+                "output": "red text bold"
+              },
+              {
+                "name": "osc8-link",
+                "input": "prefix \u001b]8;;https://example.com\u0007link text\u001b]8;;\u0007 suffix",
+                "output": "prefix link text suffix"
+              },
+              {
+                "name": "osc-title",
+                "input": "\u001b]0;terminal title\u0007visible text",
+                "output": "visible text"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

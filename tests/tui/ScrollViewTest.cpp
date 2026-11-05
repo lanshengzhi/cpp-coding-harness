@@ -185,7 +185,8 @@ TEST_CASE("ScrollView forwards one child's output, invalidation, containment, an
     CHECK(cursor->column == 2);
 }
 
-TEST_CASE("ScrollView clamps programmatic scrolls and follows the content end", "[tui][scroll-view][issue1000]") {
+TEST_CASE("ScrollView clamps programmatic scrolls and follows the content end",
+        "[tui][scroll-view][issue1000][issue1220]") {
     // pi `scroll-view.ts:127-146` (`scrollTo`): the target clamps to
     // `[0, contentHeight - viewportHeight]`, a target at the content end with
     // `disableFollow` suppresses follow until the viewport leaves the end, and a
@@ -279,7 +280,7 @@ TEST_CASE(
 }
 
 TEST_CASE("ScrollView follows appended rows at the end and keeps a manual position away from it",
-        "[tui][scroll-view][issue1000]") {
+        "[tui][scroll-view][issue1000][issue1220]") {
     // Frozen `packages/tui/test/layout.test.ts:250-258`: appending one row while
     // following moves the window down by one row.
     auto text = std::make_unique<cch::tui::Text>("1\n2\n3\n4\n5", 0, 0);
@@ -377,7 +378,7 @@ TEST_CASE("Nested ScrollViews measure the inner window and return the unused del
 }
 
 TEST_CASE("Nested viewports propagate a scroll delta deepest first and stop at overscroll contain",
-        "[tui][scroll-view][issue1000]") {
+        "[tui][scroll-view][issue1000][issue1220]") {
     // pi `layout.ts:436-448` (`getScrollViewsAt`) orders the viewports deepest
     // first and `tui-alt-screen.ts:983-996` (`routeWheel`) offers the delta to
     // each in that order, stopping when a viewport declares `contain`.
@@ -612,4 +613,23 @@ TEST_CASE("AltScreen reports a cursor only while its row is inside the implicit 
     CHECK(terminal.modes().cursor_visible);
     CHECK(terminal.cursor().row == 0);
     CHECK(terminal.cursor().column == 3);
+}
+
+TEST_CASE("ScrollView reserves column only when scrollbar is always and width exceeds one",
+        "[tui][scroll-view][scrollbar][boundary][issue1220]") {
+    cch::tui::ScrollView view_always(std::make_unique<cch::tui::Text>("content", 0, 0),
+            cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Always});
+    CHECK(view_always.content_width(10) == 9);
+    CHECK(view_always.content_width(1) == 1);
+    CHECK(view_always.content_width(0) == 0);
+
+    cch::tui::ScrollView view_hidden(std::make_unique<cch::tui::Text>("content", 0, 0),
+            cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Hidden});
+    CHECK(view_hidden.content_width(10) == 10);
+    CHECK(view_hidden.content_width(1) == 1);
+
+    cch::tui::ScrollView view_auto(std::make_unique<cch::tui::Text>("content", 0, 0),
+            cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Auto});
+    CHECK(view_auto.content_width(10) == 10);
+    CHECK_FALSE(view_auto.is_scrollbar_visible());
 }

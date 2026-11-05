@@ -440,7 +440,7 @@ TEST_CASE("a constrained frame skips zero-width horizontal children", "[tui][hst
                                                    BoxTree{.x = 0, .y = 0, .width = 5, .height = 1}}});
 }
 
-TEST_CASE("a constrained frame measures an auto basis at the frame width", "[tui][hstack][issue999]") {
+TEST_CASE("a constrained frame measures an auto basis at the frame width", "[tui][hstack][issue999][issue1220]") {
     // Frozen `layout.ts:200-206`: an absent basis is measured at the frame
     // width while every child height is measured at its own allocated width, so
     // a width-dependent component reports two different renders.

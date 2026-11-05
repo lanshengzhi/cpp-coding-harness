@@ -56,7 +56,7 @@ TEST_CASE("TruncatedText applies padding", "[tui][truncated][issue966][spec]") {
 }
 
 TEST_CASE("TruncatedText clamps padding to a one-column content width like frozen pi",
-        "[tui][truncated][issue966][spec]") {
+        "[tui][truncated][issue966][issue1220][spec]") {
     cch::tui::TruncatedText text("hello world", 2, 1);
     const auto result = text.render(4);
     REQUIRE(result);

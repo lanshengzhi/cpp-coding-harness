@@ -242,7 +242,7 @@ TEST_CASE("Box re-renders at a new horizontal padding like frozen pi", "[tui][bo
 }
 
 TEST_CASE("Text re-wraps at a new horizontal padding like frozen pi",
-        "[tui][text][padding][issue1121][issue1182][spec]") {
+        "[tui][text][padding][issue1121][issue1182][issue1220][spec]") {
     // The expected rows are the frozen observation, read from the registered artifact rather than
     // copied here, so an edited frozen row fails this comparison.
     const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "padding-and-selection-reset.json");
@@ -285,7 +285,8 @@ TEST_CASE("Text re-wraps at a new horizontal padding like frozen pi",
 // rendered lines do not depend on the width still re-renders with the new
 // padding. Without the invalidation the cached composition (the old padding)
 // is returned, because the child's own lines are unchanged.
-TEST_CASE("Box padding change invalidates the render cache", "[tui][box][padding][issue1182][issue1121][issue1209][spec]") {
+TEST_CASE("Box padding change invalidates the render cache",
+        "[tui][box][padding][issue1182][issue1121][issue1209][issue1220][spec]") {
     cch::tui::Box box(2, 0);
     REQUIRE(box.add_child(std::make_unique<RawLineComponent>("hey")));
 
@@ -300,7 +301,7 @@ TEST_CASE("Box padding change invalidates the render cache", "[tui][box][padding
 }
 
 TEST_CASE("Box cache keeps full padding and clamps narrow content to one column like frozen pi",
-        "[tui][container][issue966][spec]") {
+        "[tui][container][issue966][issue1220][spec]") {
     cch::tui::Box box(2, 1);
     REQUIRE(box.add_child(std::make_unique<cch::tui::Text>("hi", 0, 0)));
 
@@ -314,8 +315,8 @@ TEST_CASE("Box cache keeps full padding and clamps narrow content to one column 
     CHECK(zero_width->lines == std::vector<std::string>{"", "  h", "  i", ""});
 }
 
-TEST_CASE(
-        "Text omits whitespace-only content and clamps narrow padding like frozen pi", "[tui][text][issue966][spec]") {
+TEST_CASE("Text omits whitespace-only content and clamps narrow padding like frozen pi",
+        "[tui][text][issue966][issue1220][spec]") {
     cch::tui::Text whitespace("  \t\n\r \xC2\xA0", 1, 1);
     const auto blank = whitespace.render(8);
     REQUIRE(blank);
@@ -354,7 +355,7 @@ TEST_CASE("Box containing empty or whitespace Text has no rows", "[tui][box][iss
 // Frozen pi removeChild splices the matching child and leaves the object
 // reference held by its caller usable. C++ returns the same ownership as a
 // unique_ptr so that retained lifetime can be explicitly transferred back.
-TEST_CASE("Container removes and reattaches a nonterminal child", "[tui][container][issue966][spec]") {
+TEST_CASE("Container removes and reattaches a nonterminal child", "[tui][container][issue966][issue1220][spec]") {
     cch::tui::Container container;
     REQUIRE(container.add_child(std::make_unique<cch::tui::Text>("first", 0, 0)));
     auto spacer = std::make_unique<cch::tui::Spacer>(2);
@@ -586,4 +587,297 @@ TEST_CASE("Box background covers every cell of a styled row", "[tui][box][backgr
         }
         CHECK(terminal.output()[i] == expected_output[i]);
     }
+}
+
+TEST_CASE("pi-v1.3.0 Text styled mutation matches frozen observation", "[tui][text][component][issue1220][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1220", "component.json");
+    REQUIRE(bundle);
+    const auto& scenario = cch::tests::find_scenario(*bundle, "styled-text-mutation");
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
+
+    const auto to_lines = [](const cch::support::JsonValue& val) {
+        std::vector<std::string> lines;
+        for (const auto& item : val.get_array())
+            lines.push_back(item.get_string());
+        return lines;
+    };
+
+    cch::tui::Text text(inputs.at("text").get_string(), 1, 1);
+    const auto first = text.render(12);
+    REQUIRE(first);
+    CHECK(first->lines == to_lines(expected.at("first")));
+
+    text.set_text(inputs.at("changedText").get_string());
+    const auto changed = text.render(12);
+    REQUIRE(changed);
+    CHECK(changed->lines == to_lines(expected.at("changed")));
+}
+
+TEST_CASE("pi-v1.3.0 Text render cache and background hook match frozen observation",
+        "[tui][text][component][issue1220][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1220", "component.json");
+    REQUIRE(bundle);
+    const auto& scenario = cch::tests::find_scenario(*bundle, "text-render-cache-and-bg");
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
+
+    const auto to_lines = [](const cch::support::JsonValue& val) {
+        std::vector<std::string> lines;
+        for (const auto& item : val.get_array())
+            lines.push_back(item.get_string());
+        return lines;
+    };
+
+    cch::tui::Text text(inputs.at("text").get_string(), 1, 1);
+    const auto initial = text.render(20);
+    REQUIRE(initial);
+    CHECK(initial->lines == to_lines(expected.at("initial")));
+
+    // Re-rendering with identical width hits cache
+    const auto cached = text.render(20);
+    REQUIRE(cached);
+    CHECK(cached->lines == to_lines(expected.at("cached")));
+
+    // Re-rendering at narrow width recomputes
+    const auto narrow = text.render(10);
+    REQUIRE(narrow);
+    CHECK(narrow->lines == to_lines(expected.at("narrow")));
+
+    text.set_background_hook([](std::string s) { return "\x1b[44m" + s + "\x1b[49m"; });
+    const auto with_bg = text.render(20);
+    REQUIRE(with_bg);
+    CHECK(with_bg->lines == to_lines(expected.at("withBg")));
+
+    text.set_padding_x(2);
+    const auto padded2 = text.render(20);
+    REQUIRE(padded2);
+    CHECK(padded2->lines == to_lines(expected.at("padded2")));
+
+    text.invalidate();
+    const auto invalidated = text.render(20);
+    REQUIRE(invalidated);
+    CHECK(invalidated->lines == to_lines(expected.at("invalidated")));
+}
+
+TEST_CASE("pi-v1.3.0 Box rendering padding background and cache match frozen observation",
+        "[tui][box][component][issue1220][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1220", "component.json");
+    REQUIRE(bundle);
+    const auto& scenario = cch::tests::find_scenario(*bundle, "box-rendering-and-cache");
+    const auto& expected = scenario.at("expected");
+
+    const auto to_lines = [](const cch::support::JsonValue& val) {
+        std::vector<std::string> lines;
+        for (const auto& item : val.get_array())
+            lines.push_back(item.get_string());
+        return lines;
+    };
+
+    cch::tui::Box box(1, 1);
+    auto child1 = std::make_unique<cch::tui::Text>("first child", 0, 0);
+    auto child2 = std::make_unique<cch::tui::Text>("second child", 0, 0);
+    auto* child2_ptr = child2.get();
+
+    REQUIRE(box.add_child(std::move(child1)));
+    REQUIRE(box.add_child(std::move(child2)));
+
+    const auto initial = box.render(20);
+    REQUIRE(initial);
+    CHECK(initial->lines == to_lines(expected.at("initial")));
+
+    const auto cached = box.render(20);
+    REQUIRE(cached);
+    CHECK(cached->lines == to_lines(expected.at("cached")));
+
+    box.set_background_hook([](std::string s) { return "\x1b[42m" + s + "\x1b[49m"; });
+    const auto with_bg = box.render(20);
+    REQUIRE(with_bg);
+    CHECK(with_bg->lines == to_lines(expected.at("withBg")));
+
+    box.set_padding_x(2);
+    const auto padded2 = box.render(20);
+    REQUIRE(padded2);
+    CHECK(padded2->lines == to_lines(expected.at("padded2")));
+
+    auto removed = box.remove_child(child2_ptr);
+    REQUIRE(removed);
+    const auto without_child2 = box.render(20);
+    REQUIRE(without_child2);
+    CHECK(without_child2->lines == to_lines(expected.at("removedChild2")));
+
+    box.invalidate();
+    const auto invalidated = box.render(20);
+    REQUIRE(invalidated);
+    CHECK(invalidated->lines == to_lines(expected.at("invalidated")));
+
+    box.clear();
+    const auto cleared = box.render(20);
+    REQUIRE(cleared);
+    CHECK(cleared->lines == to_lines(expected.at("cleared")));
+}
+
+TEST_CASE("pi-v1.3.0 Box mouse event routing through padding matches frozen observation",
+        "[tui][box][component][issue1220][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1220", "component.json");
+    REQUIRE(bundle);
+    const auto& scenario = cch::tests::find_scenario(*bundle, "box-mouse-routing");
+    const auto& expected = scenario.at("expected");
+
+    class ClickableChild final : public cch::tui::Component, public cch::tui::MouseHandler {
+    public:
+        [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+            return cch::tui::RenderResult{.lines = {"row 0", "row 1"}};
+        }
+        void invalidate() override {}
+        [[nodiscard]] std::optional<cch::tui::MouseDispatchResult> handle_mouse_forwarded(
+                const cch::tui::MouseEvent& event) override {
+            last_event = event;
+            return cch::tui::MouseDispatchResult{.handled = true};
+        }
+        std::optional<cch::tui::MouseEvent> last_event{};
+    };
+
+    cch::tui::Box box(2, 1);
+    auto child = std::make_unique<ClickableChild>();
+    auto* child_ptr = child.get();
+    REQUIRE(box.add_child(std::move(child)));
+    const auto rendered = box.render(20);
+    REQUIRE(rendered);
+
+    // Event inside child: (x=3, y=2)
+    const auto event_inside = cch::tui::MouseEvent{
+            .type = cch::tui::MouseEventType::Press, .button = cch::tui::MouseButton::Left, .x = 3, .y = 2};
+    const auto result_inside = box.handle_mouse_forwarded(event_inside);
+    CHECK(result_inside.has_value() == expected.at("resultInsideHandled").get_boolean());
+    REQUIRE(child_ptr->last_event.has_value());
+    CHECK(child_ptr->last_event->x ==
+            static_cast<std::ptrdiff_t>(expected.at("childReceivedCoords").at("x").get_number()));
+    CHECK(child_ptr->last_event->y ==
+            static_cast<std::ptrdiff_t>(expected.at("childReceivedCoords").at("y").get_number()));
+
+    // Event in left padding: (x=1, y=2)
+    const auto event_left_pad = cch::tui::MouseEvent{
+            .type = cch::tui::MouseEventType::Press, .button = cch::tui::MouseButton::Left, .x = 1, .y = 2};
+    const auto result_left_pad = box.handle_mouse_forwarded(event_left_pad);
+    CHECK(result_left_pad.has_value() == expected.at("resultLeftPadHandled").get_boolean());
+
+    // Event in top padding: (x=3, y=0)
+    const auto event_top_pad = cch::tui::MouseEvent{
+            .type = cch::tui::MouseEventType::Press, .button = cch::tui::MouseButton::Left, .x = 3, .y = 0};
+    const auto result_top_pad = box.handle_mouse_forwarded(event_top_pad);
+    CHECK(result_top_pad.has_value() == expected.at("resultTopPadHandled").get_boolean());
+}
+
+TEST_CASE("pi-v1.3.0 Spacer rendering and line update match frozen observation",
+        "[tui][spacer][component][issue1220][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1220", "component.json");
+    REQUIRE(bundle);
+    const auto& scenario = cch::tests::find_scenario(*bundle, "spacer-rendering");
+    const auto& expected = scenario.at("expected");
+
+    const auto to_lines = [](const cch::support::JsonValue& val) {
+        std::vector<std::string> lines;
+        for (const auto& item : val.get_array())
+            lines.push_back(item.get_string());
+        return lines;
+    };
+
+    cch::tui::Spacer spacer(3);
+    const auto render3 = spacer.render(15);
+    REQUIRE(render3);
+    CHECK(render3->lines == to_lines(expected.at("render3")));
+
+    spacer.set_lines(1);
+    const auto render1 = spacer.render(15);
+    REQUIRE(render1);
+    CHECK(render1->lines == to_lines(expected.at("render1")));
+
+    spacer.set_lines(0);
+    const auto render0 = spacer.render(15);
+    REQUIRE(render0);
+    CHECK(render0->lines == to_lines(expected.at("render0")));
+
+    spacer.invalidate();
+}
+
+TEST_CASE("pi-v1.3.0 TruncatedText single-line truncation and padding match frozen observation",
+        "[tui][truncated][component][issue1220][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1220", "component.json");
+    REQUIRE(bundle);
+    const auto& scenario = cch::tests::find_scenario(*bundle, "truncated-text-rendering");
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
+
+    const auto to_lines = [](const cch::support::JsonValue& val) {
+        std::vector<std::string> lines;
+        for (const auto& item : val.get_array())
+            lines.push_back(item.get_string());
+        return lines;
+    };
+
+    cch::tui::TruncatedText trunc(inputs.at("text").get_string(), 1, 1);
+    const auto wide = trunc.render(25);
+    REQUIRE(wide);
+    CHECK(wide->lines == to_lines(expected.at("wide")));
+
+    const auto narrow = trunc.render(12);
+    REQUIRE(narrow);
+    CHECK(narrow->lines == to_lines(expected.at("narrow")));
+
+    cch::tui::TruncatedText ansi_trunc("\x1b[31mhello\x1b[0m world", 0, 0);
+    const auto ansi_render = ansi_trunc.render(8);
+    REQUIRE(ansi_render);
+    CHECK(ansi_render->lines == to_lines(expected.at("ansiRender")));
+
+    const auto zero_width = ansi_trunc.render(0);
+    REQUIRE(zero_width);
+    CHECK(zero_width->lines == to_lines(expected.at("zeroWidth")));
+
+    trunc.invalidate();
+}
+
+TEST_CASE("Spacer zero lines renders empty vector", "[tui][spacer][boundary][issue1220]") {
+    cch::tui::Spacer spacer(0);
+    const auto render0 = spacer.render(20);
+    REQUIRE(render0);
+    CHECK(render0->lines.empty());
+
+    spacer.set_lines(2);
+    const auto render2 = spacer.render(20);
+    REQUIRE(render2);
+    CHECK(render2->lines.size() == 2);
+
+    spacer.set_lines(0);
+    const auto render_empty = spacer.render(20);
+    REQUIRE(render_empty);
+    CHECK(render_empty->lines.empty());
+}
+
+TEST_CASE(
+        "Box mouse routing rejects coordinates outside content bounds and padding", "[tui][box][boundary][issue1220]") {
+    cch::tui::Box box(2, 2);
+    auto child = std::make_unique<cch::tui::Text>("hello", 0, 0);
+    REQUIRE(box.add_child(std::move(child)));
+    REQUIRE(box.render(10));
+
+    // Coordinates past the right boundary
+    const auto past_right = cch::tui::MouseEvent{
+            .type = cch::tui::MouseEventType::Press, .button = cch::tui::MouseButton::Left, .x = 15, .y = 2};
+    CHECK_FALSE(box.handle_mouse_forwarded(past_right).has_value());
+
+    // Negative coordinates
+    const auto negative = cch::tui::MouseEvent{
+            .type = cch::tui::MouseEventType::Press, .button = cch::tui::MouseButton::Left, .x = -1, .y = 2};
+    CHECK_FALSE(box.handle_mouse_forwarded(negative).has_value());
+}
+
+TEST_CASE("TruncatedText discriminating boundary: clamps padding to one column content width",
+        "[tui][truncated][boundary][issue1220]") {
+    cch::tui::TruncatedText text("hello world", 2, 1);
+    const auto result = text.render(4);
+    REQUIRE(result);
+    REQUIRE(result->lines.size() == 3);
+    CHECK(result->lines[1] == "  \x1b[0m.\x1b[0m  ");
+    CHECK(cch::tui::visible_width(result->lines[1]) == 5);
 }

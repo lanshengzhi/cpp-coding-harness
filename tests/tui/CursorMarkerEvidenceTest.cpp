@@ -393,7 +393,7 @@ TEST_CASE("hardware cursor mode omits the focused fake cursor while the unfocuse
 }
 
 TEST_CASE("a truncated line drops the unterminated fake cursor marker",
-        "[tui][cursor-marker][issue1120][issue1209][compat-pi][spec]") {
+        "[tui][cursor-marker][issue1120][issue1209][issue1220][compat-pi][spec]") {
     const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "cursor-composition.json");
     REQUIRE(bundle.has_value());
     const auto& scenario = find_scenario(*bundle, "truncated-line-drops-unterminated-fake-cursor");
@@ -433,7 +433,7 @@ TEST_CASE("a truncated line drops the unterminated fake cursor marker",
 }
 
 TEST_CASE("an overlay's focused fake cursor resolves before it is spliced",
-        "[tui][cursor-marker][issue1120][issue1209][issue1210][issue1211][compat-pi][spec]") {
+        "[tui][cursor-marker][issue1120][issue1209][issue1210][issue1211][issue1220][compat-pi][spec]") {
     // Frozen pi resolves an overlay's own rendered lines before splicing them
     // (pi `tui.ts` `compositeOverlays`: `this.resolveFakeCursors(component.render(width))`).
     // Without that stage the overlay's marker bytes reach the terminal and its

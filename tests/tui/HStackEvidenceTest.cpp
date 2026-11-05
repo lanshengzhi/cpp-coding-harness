@@ -182,6 +182,10 @@ struct BoxTree {
     return cch::tests::read_pi_tui_evidence("layout.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1220_layout_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1220", "layout.json");
+}
+
 [[nodiscard]] const JsonValue& expected_of(const JsonValue& bundle, std::string_view scenario) {
     const auto* found = find_scenario(bundle, scenario);
     REQUIRE(found != nullptr);
@@ -226,12 +230,8 @@ void check_frame(const JsonValue& expected, cch::tui::Component& root, std::size
 
 } // namespace
 
-TEST_CASE("a standalone HStack allocates and aligns exactly as the frozen pi stack does",
-        "[tui][hstack][issue999][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
-    const auto& unbounded = expected_of(*bundle, "hstack-unbounded");
+void check_standalone_hstack_allocates_and_aligns(const JsonValue& bundle) {
+    const auto& unbounded = expected_of(bundle, "hstack-unbounded");
     for (const auto name : {"stretch", "start", "center", "end"}) {
         const auto& frozen = unbounded.at("aligns").at(name);
         auto left = std::make_unique<ProbeChild>(std::vector<std::string>{"left"});
@@ -296,12 +296,8 @@ TEST_CASE("a standalone HStack allocates and aligns exactly as the frozen pi sta
     }
 }
 
-TEST_CASE("a constrained HStack frame allocates unequal columns as the frozen frames do",
-        "[tui][hstack][issue999][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
-    const auto& uneven = expected_of(*bundle, "hstack-frame-unequal");
+void check_constrained_hstack_frame_allocates_unequal_columns(const JsonValue& bundle) {
+    const auto& uneven = expected_of(bundle, "hstack-frame-unequal");
     const auto check_width = [&uneven](const JsonValue& frozen, std::size_t width) {
         auto left = std::make_unique<ProbeChild>(std::vector<std::string>{"lft"});
         auto right = std::make_unique<ProbeChild>(std::vector<std::string>{"rgt"});
@@ -317,12 +313,8 @@ TEST_CASE("a constrained HStack frame allocates unequal columns as the frozen fr
     check_width(uneven.at("narrow"), 8);
 }
 
-TEST_CASE("a constrained HStack frame aligns children inside their allocation as pi does",
-        "[tui][hstack][issue999][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
-    const auto& aligns = expected_of(*bundle, "hstack-frame-align");
+void check_constrained_hstack_frame_aligns_children(const JsonValue& bundle) {
+    const auto& aligns = expected_of(bundle, "hstack-frame-align");
     for (const auto name : {"stretch", "start", "center", "end"}) {
         cch::tui::HStack root({.align = align_of(name)});
         REQUIRE(root.add_child(std::make_unique<ProbeChild>(std::vector<std::string>{"a1"}),
@@ -334,12 +326,8 @@ TEST_CASE("a constrained HStack frame aligns children inside their allocation as
     }
 }
 
-TEST_CASE("a constrained HStack frame measures an auto basis at the frame width as pi does",
-        "[tui][hstack][issue999][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
-    const auto& frozen = expected_of(*bundle, "hstack-frame-auto-basis");
+void check_constrained_hstack_frame_measures_auto_basis(const JsonValue& bundle) {
+    const auto& frozen = expected_of(bundle, "hstack-frame-auto-basis");
     auto wide = std::make_unique<RepeatChild>();
     auto narrow = std::make_unique<ProbeChild>(std::vector<std::string>{"ab"});
     const std::vector<const WidthLog*> logs{wide.get(), narrow.get()};
@@ -351,12 +339,8 @@ TEST_CASE("a constrained HStack frame measures an auto basis at the frame width 
     CHECK(logs_of(logs) == read_width_logs(frozen.at("renderedAt")));
 }
 
-TEST_CASE("a nested HStack frame replays the frozen pi geometry through mutations",
-        "[tui][hstack][issue999][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
-    const auto& expected = expected_of(*bundle, "hstack-nested");
+void check_nested_hstack_frame_replays_geometry(const JsonValue& bundle) {
+    const auto& expected = expected_of(bundle, "hstack-nested");
     auto inner_leaf = std::make_unique<ProbeChild>(std::vector<std::string>{"m1", "m2"}, 1);
     auto* inner_leaf_ptr = inner_leaf.get();
     inner_leaf_ptr->set_focused(true);
@@ -388,12 +372,8 @@ TEST_CASE("a nested HStack frame replays the frozen pi geometry through mutation
     check_frame(expected.at("readded"), root, 10, 3);
 }
 
-TEST_CASE("an HStack inside a constrained VStack allocates the width it was given",
-        "[tui][hstack][issue999][compat-pi]") {
-    const auto bundle = named_bundle();
-    REQUIRE(bundle);
-
-    const auto& frozen = expected_of(*bundle, "hstack-in-vstack");
+void check_hstack_inside_constrained_vstack(const JsonValue& bundle) {
+    const auto& frozen = expected_of(bundle, "hstack-in-vstack");
     const auto check_width = [](const JsonValue& expected, std::size_t width) {
         auto row = std::make_unique<cch::tui::HStack>(cch::tui::StackOptions{.gap = 1});
         REQUIRE(row->add_child(std::make_unique<ProbeChild>(std::vector<std::string>{"left"}),
@@ -410,4 +390,102 @@ TEST_CASE("an HStack inside a constrained VStack allocates the width it was give
     };
     check_width(frozen.at("wide"), 14);
     check_width(frozen.at("narrow"), 10);
+}
+
+TEST_CASE("a standalone HStack allocates and aligns exactly as the frozen pi stack does",
+        "[tui][hstack][issue999][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_standalone_hstack_allocates_and_aligns(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a standalone HStack allocates and aligns exactly as the frozen pi stack does",
+        "[tui][hstack][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_standalone_hstack_allocates_and_aligns(*bundle);
+}
+
+TEST_CASE("a constrained HStack frame allocates unequal columns as the frozen frames do",
+        "[tui][hstack][issue999][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_constrained_hstack_frame_allocates_unequal_columns(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a constrained HStack frame allocates unequal columns as the frozen frames do",
+        "[tui][hstack][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_constrained_hstack_frame_allocates_unequal_columns(*bundle);
+}
+
+TEST_CASE("a constrained HStack frame aligns children inside their allocation as pi does",
+        "[tui][hstack][issue999][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_constrained_hstack_frame_aligns_children(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a constrained HStack frame aligns children inside their allocation as pi does",
+        "[tui][hstack][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_constrained_hstack_frame_aligns_children(*bundle);
+}
+
+TEST_CASE("a constrained HStack frame measures an auto basis at the frame width as pi does",
+        "[tui][hstack][issue999][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_constrained_hstack_frame_measures_auto_basis(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a constrained HStack frame measures an auto basis at the frame width as pi does",
+        "[tui][hstack][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_constrained_hstack_frame_measures_auto_basis(*bundle);
+}
+
+TEST_CASE("a nested HStack frame replays the frozen pi geometry through mutations",
+        "[tui][hstack][issue999][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_nested_hstack_frame_replays_geometry(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 a nested HStack frame replays the frozen pi geometry through mutations",
+        "[tui][hstack][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_nested_hstack_frame_replays_geometry(*bundle);
+}
+
+TEST_CASE("an HStack inside a constrained VStack allocates the width it was given",
+        "[tui][hstack][issue999][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    check_hstack_inside_constrained_vstack(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 an HStack inside a constrained VStack allocates the width it was given",
+        "[tui][hstack][issue1220][compat-pi]") {
+    const auto bundle = audit1220_layout_bundle();
+    REQUIRE(bundle);
+    check_hstack_inside_constrained_vstack(*bundle);
+}
+
+TEST_CASE("constrained HStack discriminating auto basis: measures auto basis at frame width",
+        "[tui][hstack][boundary][issue1220]") {
+    cch::tui::HStack root({.gap = 1});
+    auto wide = std::make_unique<RepeatChild>();
+    auto narrow = std::make_unique<ProbeChild>(std::vector<std::string>{"ab"});
+    REQUIRE(root.add_child(std::move(wide), cch::tui::StackEntryOptions{.basis = std::nullopt}));
+    REQUIRE(root.add_child(std::move(narrow), cch::tui::StackEntryOptions{.basis = std::nullopt, .shrink = 1}));
+
+    const auto frame = cch::tui::detail::LayoutEngine::render(root, 6, 1);
+    REQUIRE(frame);
+    CHECK(frame->root.children[0].rect.width == 4);
+    CHECK(frame->root.children[1].rect.width == 1);
 }
