@@ -229,14 +229,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1216.xml",
-     "sha256": "459221cc64cd6e5a60932583357e16894a0693a8fdb3557c074737c96abb39b2"
+     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1217.xml",
+     "sha256": "274394d7709c05f2f9387e25e3dfe8ae16ab55cf1cba00877adad4427d8f045a"
     }
    },
    "rows": [
@@ -807,6 +807,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1217.xml",
+      "sha256": "274394d7709c05f2f9387e25e3dfe8ae16ab55cf1cba00877adad4427d8f045a"
+     }
+    }
    }
   },
   {
@@ -826,14 +850,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1216.xml",
-     "sha256": "d4d29a5545cc1bf1924000f5826e546f7351a23036c4e925d26c56da599a25d8"
+     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1217.xml",
+     "sha256": "b05d6f9f5389fc4c921b9e99e5317bc3705f725a3e282f8d6eca27b7c8adf80d"
     }
    },
    "inputs": [
@@ -879,7 +903,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "src/durable/CodingTools.cpp",
@@ -1569,6 +1593,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1217.xml",
+      "sha256": "b05d6f9f5389fc4c921b9e99e5317bc3705f725a3e282f8d6eca27b7c8adf80d"
+     }
+    }
    }
   },
   {
@@ -1828,7 +1876,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -1855,14 +1903,14 @@
      "-L",
      "issue1118",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1216.xml",
-     "sha256": "2bc67c0768662fbd4e60d8b2b0c139f79d32266c5e63ea6541c0ece1c68e8ac0"
+     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1217.xml",
+     "sha256": "5eb3dd235f15e7b7cc3eda66a9ffde4aa2e468f373e16388b61d433334b0975f"
     }
    },
    "rows": [
@@ -2532,6 +2580,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1217.xml",
+      "sha256": "5eb3dd235f15e7b7cc3eda66a9ffde4aa2e468f373e16388b61d433334b0975f"
+     }
+    }
    }
   },
   {
@@ -3793,7 +3865,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     }
    ],
    "validation": {
@@ -3804,14 +3876,14 @@
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1216.xml",
-     "sha256": "5ff1c63eee9a850ed27b1ac35afd91cfa87d3a4aa805c20a18c3a003b878231d"
+     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1217.xml",
+     "sha256": "1606ac477586f0620dd4c2155fbb9cd78aeaac7128ecccd13b891938d60b8474"
     }
    },
    "rows": [
@@ -4497,6 +4569,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1217.xml",
+      "sha256": "1606ac477586f0620dd4c2155fbb9cd78aeaac7128ecccd13b891938d60b8474"
+     }
+    }
    }
   },
   {
@@ -5237,14 +5333,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1216.xml",
-     "sha256": "bf33fae651d9879dee183fc545dbdbdb269662ef5781da4cd2e5895c988808bf"
+     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1217.xml",
+     "sha256": "be450a23862cbeb8367a2922bb4370f82de9bee6e38f1c11262a178265c4c804"
     }
    },
    "rows": [
@@ -5418,7 +5514,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -5771,6 +5867,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1217.xml",
+      "sha256": "be450a23862cbeb8367a2922bb4370f82de9bee6e38f1c11262a178265c4c804"
+     }
+    }
    }
   },
   {
@@ -5789,14 +5909,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1216.xml",
-     "sha256": "1ff63020380814b2342e9d1e27ac2dce54dbcb8d3fa26ecf65a4df2b804f27f6"
+     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1217.xml",
+     "sha256": "9a9bb127bdf05d690cd07f4299648ab75bd69d4ec9e9a35b3d2c8daedf5c15c9"
     }
    },
    "rows": [
@@ -6290,6 +6410,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1217.xml",
+      "sha256": "9a9bb127bdf05d690cd07f4299648ab75bd69d4ec9e9a35b3d2c8daedf5c15c9"
+     }
+    }
    }
   },
   {
@@ -6508,14 +6652,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1216.xml",
-     "sha256": "341b80915a2e2bde855c76d1c552c6f3c991e84716fb9c667d95efbdf99de308"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1217.xml",
+     "sha256": "8faffc923e8933e3ef7881d3f16bbf6f4cd4e9424930e7d6f862e5e03887b139"
     }
    },
    "rows": [
@@ -6738,7 +6882,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -6778,7 +6922,7 @@
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
-     "sha256": "610826b434cb09ab130b8800f3ccf4ea536ad5e8880791bccc619a8421660d87"
+     "sha256": "c781016580cc00a29cd107d1fe065b18048ecbeefcbf9ac156f71df8d134f260"
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
@@ -7117,6 +7261,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1217.xml",
+      "sha256": "8faffc923e8933e3ef7881d3f16bbf6f4cd4e9424930e7d6f862e5e03887b139"
+     }
+    }
    }
   },
   {
@@ -7321,7 +7489,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -8258,14 +8426,14 @@
      "-R",
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1216.xml",
-     "sha256": "5b3be37babe99d32dcb80a51f09966cdb2ba6cca0f133bffa360f73a8c2f4a0e"
+     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1217.xml",
+     "sha256": "36cb5d48ab844c04e87b2bf12699e0b0e2d30b61da21485b09d70dc46ea15254"
     }
    },
    "revalidation1179m": {
@@ -8530,6 +8698,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1217.xml",
+      "sha256": "36cb5d48ab844c04e87b2bf12699e0b0e2d30b61da21485b09d70dc46ea15254"
+     }
+    }
    }
   },
   {
@@ -8598,7 +8790,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -8633,14 +8825,14 @@
      "-R",
      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1216.xml",
-     "sha256": "ab868fd04c197d62631e443466a847df8f1f76a08d396875bca8e0f569b07347"
+     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1217.xml",
+     "sha256": "f25b93cc483699b33a37ef86fd140686556929da1428dbc8ee6f5e232ab20dbf"
     }
    },
    "rows": [
@@ -8933,6 +9125,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1217.xml",
+      "sha256": "f25b93cc483699b33a37ef86fd140686556929da1428dbc8ee6f5e232ab20dbf"
+     }
+    }
    }
   },
   {
@@ -8997,7 +9213,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -9052,14 +9268,14 @@
      "-R",
      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1216.xml",
-     "sha256": "f60c0a43edb2754f70fe23bfaf47d5bc2bed205550d0329f98fc22e4e7165fbb"
+     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1217.xml",
+     "sha256": "785109493a47b950084df3ae02d89540ff96bb13bf15318371f9059c2c9f9e9b"
     }
    },
    "rows": [
@@ -9387,6 +9603,30 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1217.xml",
+      "sha256": "785109493a47b950084df3ae02d89540ff96bb13bf15318371f9059c2c9f9e9b"
+     }
+    }
    }
   },
   {
@@ -9784,11 +10024,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
-     "sha256": "648c6b961f9d921f94433b9628801829e5b53001f4589517386c2a5e38aec580"
+     "sha256": "0d48806d2fef3c04122a7c4b340134cd86c8fddbcb669fcf0443e5a89fa7de21"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -9805,14 +10045,14 @@
      "-L",
      "issue1201",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1216.xml",
-     "sha256": "7942768644fb24ec9519e7576daf700d09720a8ff1a1612a65477f1fa76bcf14"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1217.xml",
+     "sha256": "452e4d57331c72b8a6f19d3b7416d7ed4daddab37418f7f3d71323fc362e3190"
     }
    },
    "rows": [
@@ -10505,6 +10745,32 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1201",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1217.xml",
+      "sha256": "452e4d57331c72b8a6f19d3b7416d7ed4daddab37418f7f3d71323fc362e3190"
+     }
+    }
    }
   },
   {
@@ -10543,7 +10809,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -10580,14 +10846,14 @@
      "-L",
      "issue1203",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 3,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1216.xml",
-     "sha256": "2c7458f46d8e1e777004652f4b624c74acbafc181ebf0402acb917c1411555df"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1217.xml",
+     "sha256": "6e8fde174f82d19f4224522fa2eab303cefdedf5d34a570b9cdb1cb5e54b2306"
     }
    },
    "rows": [
@@ -10731,6 +10997,32 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1203",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 3,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1217.xml",
+      "sha256": "6e8fde174f82d19f4224522fa2eab303cefdedf5d34a570b9cdb1cb5e54b2306"
+     }
+    }
    }
   },
   {
@@ -10773,7 +11065,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
@@ -10810,14 +11102,14 @@
      "-L",
      "issue1213",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 15,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1216.xml",
-     "sha256": "9810ea9e07b3f35103805b4018982d9a5c51c1719bf8d8ada9e1fa55508c3629"
+     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1217.xml",
+     "sha256": "64dfde335cd87c01a2d85cb7cd0928f331a07c778e230f85429ae802146b5707"
     }
    },
    "rows": [
@@ -11242,6 +11534,32 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1213",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 15,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1217.xml",
+      "sha256": "64dfde335cd87c01a2d85cb7cd0928f331a07c778e230f85429ae802146b5707"
+     }
+    }
    }
   },
   {
@@ -11292,7 +11610,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -11337,14 +11655,14 @@
      "-L",
      "issue1212",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1216.xml",
-     "sha256": "335e3f31ae34509ddd754bd1938dca2d6a4d2c434bc6359f8ee96eb311956a24"
+     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1217.xml",
+     "sha256": "159900f0193d979c5f061ae74e01b36329582d20772454a6e7ce3d9fd564e3b0"
     }
    },
    "rows": [
@@ -12115,6 +12433,32 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1212",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1217.xml",
+      "sha256": "159900f0193d979c5f061ae74e01b36329582d20772454a6e7ce3d9fd564e3b0"
+     }
+    }
    }
   },
   {
@@ -12177,7 +12521,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -12234,14 +12578,14 @@
      "-L",
      "issue1211",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 34,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1216.xml",
-     "sha256": "0fcd51aeb2648821635d2a330062f767e22a89cad5aefa54544204ae096823a5"
+     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1217.xml",
+     "sha256": "9e985d468fa58707ae83b155d836fc77c21df14f02be305475e3c1e72ae1f13e"
     }
    },
    "rows": [
@@ -13370,6 +13714,32 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1211",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 34,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1217.xml",
+      "sha256": "9e985d468fa58707ae83b155d836fc77c21df14f02be305475e3c1e72ae1f13e"
+     }
+    }
    }
   },
   {
@@ -13412,7 +13782,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -13449,14 +13819,14 @@
      "-L",
      "issue1210",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1216.xml",
-     "sha256": "f42e713dbfbda51c1bc89f91d5a4ff06d30eeba42af2a2613e993cd41dc30f96"
+     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1217.xml",
+     "sha256": "d70d901b1e9d6676218f94a129d865906e69fcf2b376b3099e0b1c9112b42523"
     }
    },
    "rows": [
@@ -13791,6 +14161,32 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1210",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1217.xml",
+      "sha256": "d70d901b1e9d6676218f94a129d865906e69fcf2b376b3099e0b1c9112b42523"
+     }
+    }
    }
   },
   {
@@ -13857,7 +14253,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -13914,14 +14310,14 @@
      "-L",
      "issue1209",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 30,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1216.xml",
-     "sha256": "aba08c7e3d4a80fb56a8893798640c56c1285c460507dce589f40c0e36a2c980"
+     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1217.xml",
+     "sha256": "0c254c6f717442d4be99e145562dff0c4fba7e96a26feca4f562d24d1fb2880b"
     }
    },
    "rows": [
@@ -16044,6 +16440,32 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1209",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 30,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1217.xml",
+      "sha256": "0c254c6f717442d4be99e145562dff0c4fba7e96a26feca4f562d24d1fb2880b"
+     }
+    }
    }
   },
   {
@@ -16084,7 +16506,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -16141,14 +16563,14 @@
      "-L",
      "issue1215",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 25,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1216.xml",
-     "sha256": "540c1557015f846d58813aeaaaac3186bd0469f44472ce6335d5245ca9e943a0"
+     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1217.xml",
+     "sha256": "768eba34de64f558715a386ddc34dc8d986f7cf46292109ebfdda4f07e3cf9d4"
     }
    },
    "rows": [
@@ -17564,6 +17986,32 @@
      }
     },
     "testedRevision": "4c708c15db634a499d63c563d420349633e7f6e4"
+   },
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1215",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 25,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1217.xml",
+      "sha256": "768eba34de64f558715a386ddc34dc8d986f7cf46292109ebfdda4f07e3cf9d4"
+     }
+    }
    }
   },
   {
@@ -17592,7 +18040,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "ec7fd11ce5b8a59ba8ef07bedb80ecfd52c5e8d01530a8844757185e87f47501"
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -17633,14 +18081,14 @@
      "-L",
      "issue1216",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1216-issue1216.xml"
+     "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1217.xml"
     ],
-    "testedRevision": "a3532d70d6bf2bb0da009face9d49b9faee75c58",
-    "recordedAt": "2026-11-05T20:59:16Z",
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1216-issue1216.xml",
-     "sha256": "a132f60f2afb4eccbd08d7096286436105c2aaa0fa01877aeba80a7cdfcedede"
+     "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1217.xml",
+     "sha256": "d3344365ab11b82441326cee8d64279ab04221a7d00f3df27157148c02b78b9b"
     }
    },
    "rows": [
@@ -18161,7 +18609,977 @@
      }
     }
    ],
-   "routingSha256": "8a273697c5dcdf79cef7b3a7614b3d8c69806dfcbb753b8b2aef7a30064754e7"
+   "routingSha256": "8a273697c5dcdf79cef7b3a7614b3d8c69806dfcbb753b8b2aef7a30064754e7",
+   "revalidation1217": {
+    "reason": "The TUI B9 lane registered the audit-1217 family (markdown.json, latex.json) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1216",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1217.xml"
+     ],
+     "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+     "recordedAt": "2026-11-05T21:35:46Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1217.xml",
+      "sha256": "d3344365ab11b82441326cee8d64279ab04221a7d00f3df27157148c02b78b9b"
+     }
+    }
+   }
+  },
+  {
+   "id": "1217-markdown-tables-and-math-rendering",
+   "ticket": "1217",
+   "implementationCommits": [
+    "fabd61b748dc7c9b152fde747c1a83537da27423"
+   ],
+   "report": "docs/research/pi-v1.3.0/1217-markdown-tables-and-math-rendering.md",
+   "inputs": [
+    {
+     "path": "src/tui/Markdown.cpp",
+     "sha256": "d9ccd41ec7a82e08efba5651ddb9813a430e9609571de01b50ae9bcb09d9ff86"
+    },
+    {
+     "path": "src/tui/Latex.cpp",
+     "sha256": "bf4b10831319607a1c8195fbda71ed26b3a0568caed1c69fe1fd422931fcf580"
+    },
+    {
+     "path": "tests/tui/LatexTest.cpp",
+     "sha256": "60dcbb5753501c90335abad86ee4a40279258dfcfef8ac841685b427af172efb"
+    },
+    {
+     "path": "tests/tui/MarkdownTest.cpp",
+     "sha256": "44ae917f9305ca1a974aabad294154215fd8579e51f8084b71123b90ca454937"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/baselines.json",
+     "sha256": "4718dc55939717a44c609aa8653e6828170b0faebe363947e403bb389629840b"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1217/latex.json",
+     "sha256": "90dd56430fc3d9c9fb90abcc587b919c100b1328a047a258218c1b6a12dbe5fa"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1217/manifest.json",
+     "sha256": "71ddd7282ab0e196f4a94b9c897d118b487ebf6c400ae7ef58e5902970f09eac"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1217/markdown.json",
+     "sha256": "61763df45d194fec8503752d234c02ad1f96f0bfa6325b319a26f44ee42a7aa3"
+    }
+   ],
+   "validation": {
+    "command": [
+     "ctest",
+     "--preset",
+     "vcpkg",
+     "-LE",
+     "architecture",
+     "-L",
+     "issue1217",
+     "--output-junit",
+     "docs/research/pi-v1.3.0/deliveries/1217-issue1217.xml"
+    ],
+    "testedRevision": "fabd61b748dc7c9b152fde747c1a83537da27423",
+    "recordedAt": "2026-11-05T21:36:02Z",
+    "selected": 29,
+    "junit": {
+     "path": "docs/research/pi-v1.3.0/deliveries/1217-issue1217.xml",
+     "sha256": "7e349896a3d4add375e03a095292e7a847eb2798e02fd24395b5b6b93ae158fd"
+    }
+   },
+   "rows": [
+    {
+     "id": "cch_tui:DefaultTextStyle",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown applies configured padding and background to every cell",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen default text style scenario verifies text-level styling; the padding test applies background color to the entire padded component grid, separating text hooks from grid-level padding fills."
+     }
+    },
+    {
+     "id": "cch_tui:DefaultTextStyle.bgColor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown applies configured padding and background to every cell",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen default style scenario tests foreground text styling; the background test validates that background color fills all padding cells, separating foreground color from background color application."
+     }
+    },
+    {
+     "id": "cch_tui:DefaultTextStyle.bold",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown default text hooks respect empty narrow and padded rendering",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen default style scenario tests pre-styled text; this control test exercises plain text without bold default text hooks, separating default bold formatting from plain text rendering."
+     }
+    },
+    {
+     "id": "cch_tui:DefaultTextStyle.color",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown default text hooks respect empty narrow and padded rendering",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen default style scenario tests pre-styled text; this control test exercises plain text with explicit red text hook styling, separating default foreground color from custom text hooks."
+     }
+    },
+    {
+     "id": "cch_tui:DefaultTextStyle.italic",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown default text hooks respect empty narrow and padded rendering",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen default style scenario tests pre-styled text; this control test exercises plain text without italic default text hooks, separating default italic formatting from plain text rendering."
+     }
+    },
+    {
+     "id": "cch_tui:DefaultTextStyle.strikethrough",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown default text hooks respect empty narrow and padded rendering",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen default style scenario tests pre-styled text; this control test exercises plain text without strikethrough default text hooks, separating default strikethrough from plain text rendering."
+     }
+    },
+    {
+     "id": "cch_tui:DefaultTextStyle.underline",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown default text hooks respect empty narrow and padded rendering",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen default style scenario tests pre-styled text; this control test exercises plain text without underline default text hooks, separating default underline from plain text rendering."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown invalidates content style and highlighter caches",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen lifecycle test verifies cache preservation; the cache invalidation test alters style and syntax highlighter hooks and verifies cache eviction."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.cachedLines",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown invalidates content style and highlighter caches",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen lifecycle test checks cachedLines after rendering; the invalidation test verifies cache invalidation when content changes."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.cachedWidth",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown invalidates content style and highlighter caches",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen lifecycle test checks cachedWidth after rendering; the invalidation test verifies re-rendering when target width changes."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.constructor",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown invalidates content style and highlighter caches",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen lifecycle test verifies initial construction; the invalidation test verifies post-construction mutators and invalidation."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.defaultStylePrefix",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown default text hooks respect empty narrow and padded rendering",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen default style prefix scenario checks computed ANSI prefix; this control test verifies default text rendering without a pre-styled prefix."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.getDefaultInlineStyleContext",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown default text hooks respect empty narrow and padded rendering",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen inline style context scenario checks context propagation; this control test verifies default text rendering without inline style context."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.getDefaultStylePrefix",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown default text hooks respect empty narrow and padded rendering",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen default style prefix scenario checks computed ANSI prefix; this control test verifies default text rendering without a pre-styled prefix."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.getOrderedListMarker",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lists-and-markers",
+       "test": "pi-v1.3.0 markdown list markers and normalization match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown preserves loose list paragraph structure",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen list test verifies sequential ordered list numbering; the loose list test verifies paragraph breaks and blank lines within list items."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.getStylePrefix",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown default text hooks respect empty narrow and padded rendering",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen style prefix scenario extracts ANSI prefix from a style function; this control test renders text directly through style hooks."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.getUnorderedListMarker",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lists-and-markers",
+       "test": "pi-v1.3.0 markdown list markers and normalization match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown preserves loose list paragraph structure",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen list test verifies nested bullet list indentation; the loose list test verifies paragraph breaks and blank lines within list items."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.invalidate",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown invalidates content style and highlighter caches",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen lifecycle test calls invalidate(); this discriminating test proves that invalidation forces recomputation of content and style caches."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.options",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-links-hr-and-transforms",
+       "test": "pi-v1.3.0 markdown links hr and options transform match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown can disable LaTeX rendering while preserving source",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen options scenario tests source transforms; the disabled LaTeX test verifies that options.render_latex=false disables math parsing while preserving raw source."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.paddingX",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown applies configured padding and background to every cell",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen lifecycle test checks horizontal padding; this discriminating test exercises both horizontal and vertical padding with background color."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.render",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown wraps plain text within terminal width",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen headings test renders structured text with styles; the plain wrap test exercises paragraph line-breaking at exact terminal bounds without styles, separating text wrapping from styling."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.renderInlineTokens",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown keeps partial and invalid input readable",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen inline tokens test formats complete inline markers; the invalid input test handles unclosed formatting delimiters gracefully, separating robust fallback from normal formatting."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.renderToken",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown degrades semantic prefixes at extremely narrow widths",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen render token test formats headings at standard width; the narrow degradation test handles widths smaller than semantic prefixes, separating width-bounded degradation from standard token rendering."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.setText",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown invalidates content style and highlighter caches",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen lifecycle test calls setText(); this discriminating test proves setText invalidates previously cached output."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.text",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lifecycle-and-default-styles",
+       "test": "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown invalidates content style and highlighter caches",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen lifecycle test reads text(); this discriminating test verifies text content update and cache invalidation."
+     }
+    },
+    {
+     "id": "cch_tui:Markdown.theme",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown heading roles match frozen pi styling",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen styles test uses unified ANSI codes; the heading roles test verifies distinct hierarchical H1 and H2 styling, separating theme role specialization from base formatting."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownOptions",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-links-hr-and-transforms",
+       "test": "pi-v1.3.0 markdown links hr and options transform match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown can disable LaTeX rendering while preserving source",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen options scenario tests source transforms; the disabled LaTeX test verifies that options.render_latex=false disables math parsing while preserving raw source."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownOptions.preserveBackslashEscapes",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-links-hr-and-transforms",
+       "test": "pi-v1.3.0 markdown links hr and options transform match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown preserves loose list paragraph structure",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen backslash escape scenario checks escape preservation; this control test verifies list parsing without escape preservation enabled."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownOptions.preserveOrderedListMarkers",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lists-and-markers",
+       "test": "pi-v1.3.0 markdown list markers and normalization match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown preserves loose list paragraph structure",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen list scenario exercises marker preservation with preserveOrderedListMarkers=true; the loose list test verifies paragraph formatting with default normalized markers."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownOptions.renderLatex",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-latex-math-integration",
+       "test": "pi-v1.3.0 markdown latex math integration matches frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown can disable LaTeX rendering while preserving source",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen math integration scenario renders inline and display math; the disabled test sets render_latex=false and verifies the raw math source is preserved unrendered."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownOptions.transform",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-links-hr-and-transforms",
+       "test": "pi-v1.3.0 markdown links hr and options transform match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown wraps plain text within terminal width",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen transform scenario transforms markdown source with available width; the plain wrap test wraps untransformed markdown directly."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown heading roles match frozen pi styling",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen inline test exercises theme callbacks collectively; the heading roles test verifies distinct hierarchical H1 and H2 styling, separating theme role specialization from base formatting."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.bold",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown preserves nested styles Unicode and link termination at narrow widths",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen inline styles test verifies standalone bold tags; the nested styles test verifies bold styling nested inside other spans at narrow width bounds."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.code",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown heading roles match frozen pi styling",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen inline styles test verifies inline code in paragraphs; the heading role test checks code spans inside headings without inheriting bold or underline."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.codeBlock",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-code-blocks-and-quotes",
+       "test": "pi-v1.3.0 markdown code blocks and blockquotes match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown stabilizes streamed partial closing fences",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen code block scenario formats completed fences; the streamed partial fence test prevents premature closing fence flicker during streaming."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.codeBlockBorder",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-code-blocks-and-quotes",
+       "test": "pi-v1.3.0 markdown code blocks and blockquotes match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown stabilizes streamed partial closing fences",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen code block scenario checks border styling; the partial fence test exercises border stability across incremental chunk appends."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.codeBlockIndent",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-code-blocks-and-quotes",
+       "test": "pi-v1.3.0 markdown code blocks and blockquotes match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown stabilizes streamed partial closing fences",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen code block scenario indents code block lines by two spaces; the partial fence test verifies indent preservation while streaming."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.heading",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown heading roles match frozen pi styling",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen headings test verifies H1 and H2 headings; the heading roles test isolates H1 bold+underline from H2 bold-only styling."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.highlightCode",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-code-blocks-and-quotes",
+       "test": "pi-v1.3.0 markdown code blocks and blockquotes match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown streamed code fences match frozen pi at each chunk",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen code block scenario applies syntax highlighting; the streamed code fence test verifies code block rendering across chunk boundaries without a custom highlighter."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.hr",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-links-hr-and-transforms",
+       "test": "pi-v1.3.0 markdown links hr and options transform match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown renders common response constructs in semantic order",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen hr scenario renders a standalone horizontal rule; the semantic order test renders horizontal rules between paragraphs and lists."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.italic",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown preserves nested styles Unicode and link termination at narrow widths",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen inline styles test verifies standalone italic formatting; the nested test ensures italic styling remains intact across narrow line wraps."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.link",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-links-hr-and-transforms",
+       "test": "pi-v1.3.0 markdown links hr and options transform match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown styles link labels and visible URL fallbacks independently",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen link scenario formats links with destination labels; this test verifies independent fallback styling when hyperlinks are not supported."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.linkUrl",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-links-hr-and-transforms",
+       "test": "pi-v1.3.0 markdown links hr and options transform match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown styles link labels and visible URL fallbacks independently",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen link scenario formats links with destination labels; this test verifies independent fallback styling when hyperlinks are not supported."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.listBullet",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-lists-and-markers",
+       "test": "pi-v1.3.0 markdown list markers and normalization match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown preserves loose list paragraph structure",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen list scenario verifies bullet styling on tight lists; the loose list test asserts correct marker styling when items contain multiple paragraphs."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.quote",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-code-blocks-and-quotes",
+       "test": "pi-v1.3.0 markdown code blocks and blockquotes match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown nested quote styles and OSC links preserve frozen cell attributes",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen quote scenario checks top-level quotes; the nested quote test exercises multiple levels of quotation with distinct border styles."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.quoteBorder",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-code-blocks-and-quotes",
+       "test": "pi-v1.3.0 markdown code blocks and blockquotes match frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown nested quote styles and OSC links preserve frozen cell attributes",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen quote scenario checks standard quote borders; the nested quote test validates hierarchical quote border characters and colors."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.strikethrough",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown follows strict strikethrough delimiter semantics",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen inline styles test verifies valid strikethrough spans; the strict delimiter test rejects single-tilde and unclosed delimiters, separating strict CommonMark compliance from permissive parsing."
+     }
+    },
+    {
+     "id": "cch_tui:MarkdownTheme.underline",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/markdown.json",
+       "scenario": "markdown-headings-and-inline-styles",
+       "test": "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation",
+       "testSource": "tests/tui/MarkdownTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "Markdown heading roles match frozen pi styling",
+      "testSource": "tests/tui/MarkdownTest.cpp",
+      "reason": "The frozen inline styles test verifies underline spans; the heading role test verifies underline applied exclusively to H1 headings."
+     }
+    },
+    {
+     "id": "cch_tui:RenderLatexOptions",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/latex.json",
+       "scenario": "display-option",
+       "test": "render_latex matches frozen pi-v1.3.0 display rows and baseline alignment",
+       "testSource": "tests/tui/LatexTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "render_latex aligns matrix columns and renders frozen delimiters",
+      "testSource": "tests/tui/LatexTest.cpp",
+      "reason": "The display option scenario exercises baseline fraction and operator layouts; the delimiter test renders matrix layouts without display baseline fractions, separating environment alignment from display stacking."
+     }
+    },
+    {
+     "id": "cch_tui:RenderLatexOptions.display",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/latex.json",
+       "scenario": "display-option",
+       "test": "render_latex matches frozen pi-v1.3.0 display rows and baseline alignment",
+       "testSource": "tests/tui/LatexTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "render_latex reproduces the frozen frac one-half rendering",
+      "testSource": "tests/tui/LatexTest.cpp",
+      "reason": "The display option scenario renders vertical fraction layout (1 over 2 with horizontal bar); the inline fraction test verifies display=false renders horizontal inline fraction 1/2, separating multiline baseline layout from inline rendering."
+     }
+    },
+    {
+     "id": "cch_tui:renderLatex",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1217/latex.json",
+       "scenario": "inline-grammar",
+       "test": "render_latex matches every frozen pi-v1.3.0 inline grammar observation",
+       "testSource": "tests/tui/LatexTest.cpp"
+      },
+      {
+       "artifact": "audit-1217/latex.json",
+       "scenario": "inline-failure-value",
+       "test": "render_latex matches every frozen pi-v1.3.0 inline grammar observation",
+       "testSource": "tests/tui/LatexTest.cpp"
+      },
+      {
+       "artifact": "audit-1217/latex.json",
+       "scenario": "display-option",
+       "test": "render_latex matches frozen pi-v1.3.0 display rows and baseline alignment",
+       "testSource": "tests/tui/LatexTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "render_latex does not invent a rendering for a failure by keeping the source",
+      "testSource": "tests/tui/LatexTest.cpp",
+      "reason": "The inline grammar observation covers valid expressions; the failure-value test ensures that malformed or unsupported expressions return no value rather than returning raw source or inventing a partial formula."
+     }
+    }
+   ],
+   "routingSha256": "dbb1948b8debdd74903f8897a288bf342e8736f4ee995773dc41d5ba16d098c1"
   }
  ]
 }
