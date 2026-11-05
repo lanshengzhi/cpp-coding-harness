@@ -20,7 +20,9 @@ claim parsing, artifact registration or reporting.
 A claim fails closed when its structure is unparsable, when its artifact is not a registered
 evidence artifact of the selected baseline, when a cited test source is missing or unreadable, or
 when the source (including the test helpers it quotes-includes under ``tests/``) references
-neither the artifact path nor its family directory together with the artifact file name. A
+neither the artifact path nor its family directory together with the artifact file name in a
+shared file-and-statement context; disjoint tokens spread across files or unrelated
+statements are not an anchor (issue #1231). A
 receipt passes only when every claim passes; the process exits non-zero when any active receipt
 fails. Receipts withdrawn whole (removed from the deliveries file, e.g. #1104 and #1189) are not
 active and are not checked; per-claim withdrawals are part of the full receipts and are checked
@@ -148,13 +150,25 @@ class SourceMatcher:
 class StaticNamePathMatcher(SourceMatcher):
     """Name + path matching over comment-stripped C++ source (the 2026-11-04 heuristic).
 
-    An artifact ``audit-1053/worker-lifetime.json`` is referenced when code contains either the
-    artifact path (with an optional ``fixtures/<baseline>/`` prefix, possibly as one quoted
-    literal or reassembled from path segments) or the family directory as a path segment
-    together with the quoted file name. Both forms may span the cited source and the helper
-    files it quoted-includes under ``tests/``. The family token must sit on a path or string
-    boundary, so a scenario key like ``"audit-1057-context"`` or a Catch2 tag like
-    ``[chord][hardware-cursor]`` does not count as a reference.
+    An artifact ``audit-1053/worker-lifetime.json`` is referenced when one cited source blob
+    (the test itself or one helper it quoted-includes under ``tests/``) contains, after comment
+    stripping, any of:
+
+    - the artifact path (with an optional ``fixtures/<baseline>/`` prefix), as one quoted
+      literal or reassembled from path segments;
+    - the quoted artifact file name together with the family directory in one statement —
+      the family as a path/string boundary segment (``"audit-1053"``) or as its namespace
+      spelling (``audit_1053``), e.g. the two-argument loader call
+      ``read_evidence("audit-1209", "screen-state.json")``;
+    - the family directory as a path segment in a path-building statement together with the
+      quoted file name passed to a call in the same file, e.g. a file-local ``audit_root()``
+      returning ``... / "audit-1053"`` with call sites quoting ``"worker-lifetime.json"``.
+
+    Disjoint tokens never anchor (issue #1231): a family mention in one file with the file
+    name in another, or the two tokens in unrelated statements of the same file, is not a
+    reference. The family token must sit on a path, string or namespace boundary, so a
+    scenario key like ``"audit-1057-context"`` or a Catch2 tag like ``[chord]`` does not
+    count as a reference.
     """
 
     def references(self, baseline: str, code_blobs: list[str], artifact: str) -> bool:
@@ -163,6 +177,7 @@ class StaticNamePathMatcher(SourceMatcher):
         family, file_name = match.group("family"), match.group("file")
         token = r"[A-Za-z0-9_.-]"
         family_segment = re.compile(rf"(?<!{token}){re.escape(family)}(?!{token})")
+        family_namespace = re.compile(rf"(?<!{token}){re.escape(family.replace('-', '_'))}(?!{token})")
         file_literal = re.compile(rf'["\']{re.escape(file_name)}["\']')
         path_pattern = re.compile(
             FIXTURE_RELATIVE_PATTERN.format(
@@ -171,15 +186,18 @@ class StaticNamePathMatcher(SourceMatcher):
                 file=re.escape(file_name),
             )
         )
-        family_seen = False
-        file_seen = False
+        family_path = re.compile(rf'"/[^"]*{re.escape(family)}[^"]*"|/\s*"{re.escape(family)}"')
+        file_in_call = re.compile(rf"\([^()]*{re.escape(file_name)}[\"']")
         for code in code_blobs:
             stripped = strip_comments(code)
             if path_pattern.search(stripped):
                 return True
-            family_seen = family_seen or family_segment.search(stripped) is not None
-            file_seen = file_seen or file_literal.search(stripped) is not None
-            if family_seen and file_seen:
+            for statement in stripped.split(";"):
+                if file_literal.search(statement) and (
+                    family_segment.search(statement) or family_namespace.search(statement)
+                ):
+                    return True
+            if family_path.search(stripped) and file_in_call.search(stripped):
                 return True
         return False
 

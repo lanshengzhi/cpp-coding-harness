@@ -4,11 +4,13 @@
 A delivery receipt claims its cited C++ test reads the frozen artifact its rows point at. These
 tests exercise ``scripts/evidence/receipt_boundary.py`` at that boundary: the static name + path
 matcher must accept the real code-level reference forms (full path literal, path reassembled from
-segments, family directory plus file name spanning a quoted include helper) and must reject the
-lookalikes that never open the artifact (a sibling file in the same family, a mention in a
-comment, a Catch2 tag or scenario key spelling). At the receipt level, an unparsable claim, an
-unregistered artifact, a missing test source and a baseline mismatch all fail closed instead of
-crashing, and any failing receipt exits non-zero.
+segments, the family directory and file name in one loader-call statement, a namespace-qualified
+loader call, a file-local path loader root with quoted file names at its call sites) and must
+reject the lookalikes that never open the artifact (a sibling file in the same family, a mention
+in a comment, a Catch2 tag or scenario key spelling, and — issue #1231 — disjoint tokens spread
+across files or across unrelated statements of the same file). At the receipt level, an
+unparsable claim, an unregistered artifact, a missing test source and a baseline mismatch all fail
+closed instead of crashing, and any failing receipt exits non-zero.
 """
 
 from __future__ import annotations
@@ -70,13 +72,58 @@ class MatcherTest(unittest.TestCase):
         )
         self.assertTrue(self.matched(code))
 
-    def test_family_and_file_literals_match_across_includes(self) -> None:
-        # The family directory appears only in the quoted include helper; the file
-        # name is quoted in the cited source.
-        main = 'const auto artifact = tests::audit_9001::read_artifact("frozen.json");\n'
+    def test_two_argument_loader_call_matches(self) -> None:
+        # The family directory and the file name are separate arguments of one
+        # loader call statement.
+        code = 'const auto artifact = read_evidence("audit-9001", "frozen.json");\n'
+        self.assertTrue(self.matched(code))
+
+    def test_namespace_qualified_loader_call_matches(self) -> None:
+        # The loader lives in the family's namespace (C++ spells the family
+        # directory with underscores) and the call statement quotes the file name.
+        code = 'const auto artifact = tests::audit_9001::read_artifact("frozen.json");\n'
+        self.assertTrue(self.matched(code))
+
+    def test_file_local_path_loader_root_matches(self) -> None:
+        # A file-local loader root pins the family as a path segment while the
+        # call sites quote the file name (the tests/codemode loader shape).
+        code = (
+            'std::filesystem::path audit_root() {\n'
+            '    return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-9001";\n'
+            '}\n'
+            'const auto artifact = read_artifact("frozen.json");\n'
+        )
+        self.assertTrue(self.matched(code))
+
+    def test_disjoint_tokens_across_includes_do_not_match(self) -> None:
+        # The family directory appears only in the quoted include helper while the
+        # file name is quoted in the cited source: no blob carries both tokens in
+        # a shared statement context, so there is no anchor (issue #1231).
+        main = 'const auto artifact = read_artifact("frozen.json");\n'
         helper = 'const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/audit-9001/";\n'
-        self.assertTrue(self.matcher.references(BASELINE, [main, helper], ARTIFACT))
+        self.assertFalse(self.matcher.references(BASELINE, [main, helper], ARTIFACT))
         self.assertFalse(self.matcher.references(BASELINE, [main], ARTIFACT))
+        self.assertFalse(self.matcher.references(BASELINE, [helper], ARTIFACT))
+
+    def test_disjoint_tokens_in_unrelated_statements_do_not_match(self) -> None:
+        # Same file, but the family string and the file literal sit in unrelated
+        # statements and the family is not a path-segment loader root.
+        code = (
+            'const auto note = "audit-9001";\n'
+            'const auto artifact = read_artifact("frozen.json");\n'
+        )
+        self.assertFalse(self.matched(code))
+
+    def test_family_path_without_file_name_in_call_is_not_a_match(self) -> None:
+        # A path-context family root alone is not an anchor: the file name must
+        # reach the loader as a quoted call argument, not a bare string.
+        code = (
+            'std::filesystem::path audit_root() {\n'
+            '    return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "pi-v1.3.0" / "audit-9001";\n'
+            '}\n'
+            'const auto artifact = "frozen.json";\n'
+        )
+        self.assertFalse(self.matched(code))
 
     def test_sibling_file_in_the_same_family_is_not_a_match(self) -> None:
         code = (
@@ -115,12 +162,17 @@ class MatcherTest(unittest.TestCase):
         code = (
             'const auto url = "https://example.com/.well-known/oauth";\n'
             "// audit-9001/frozen.json is recorded upstream\n"
-            'const auto artifact = read_artifact("frozen.json");\n'
-            'const auto root = "audit-9001";\n'
+            'const auto artifact = read_artifact("audit-9001", "frozen.json");\n'
         )
+        stripped = boundary.strip_comments(code)
+        self.assertIn('"https://example.com/.well-known/oauth"', stripped)
+        self.assertNotIn("recorded upstream", stripped)
         self.assertTrue(self.matched(code))
 
     def test_raw_string_survives_comment_stripping(self) -> None:
+        # The raw-string body is copied verbatim (its // sequences are not comment
+        # starts); the surviving family and file tokens stay disjoint across
+        # unrelated statements, so the matcher still finds no anchor.
         code = (
             'std::string raw = R"({"value":"pong"})";\n'
             'const auto artifact = read_artifact("frozen.json");\n'
@@ -128,7 +180,8 @@ class MatcherTest(unittest.TestCase):
         )
         stripped = boundary.strip_comments(code)
         self.assertIn('"frozen.json"', stripped)
-        self.assertTrue(self.matched(code))
+        self.assertIn(R'R"({"value":"pong"})"', stripped)
+        self.assertFalse(self.matched(code))
 
 
 class ReceiptBoundaryCliTest(unittest.TestCase):
@@ -247,7 +300,7 @@ class ReceiptBoundaryCliTest(unittest.TestCase):
     def test_all_anchored_receipts_pass_and_exit_zero(self) -> None:
         self.write_source(
             "tests/owner/AnchoredTest.cpp",
-            'const auto artifact = read_artifact("frozen.json");\nconst auto root = "audit-9001";\n',
+            'const auto artifact = read_artifact("audit-9001", "frozen.json");\n',
         )
         self.write_deliveries(
             [
@@ -338,7 +391,7 @@ class ReceiptBoundaryCliTest(unittest.TestCase):
     def test_receipt_filter_selects_by_id_and_ticket(self) -> None:
         self.write_source(
             "tests/owner/AnchoredTest.cpp",
-            'const auto artifact = read_artifact("frozen.json");\nconst auto root = "audit-9001";\n',
+            'const auto artifact = read_artifact("audit-9001", "frozen.json");\n',
         )
         self.write_deliveries(
             [

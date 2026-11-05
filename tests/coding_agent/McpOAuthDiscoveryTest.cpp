@@ -79,20 +79,26 @@ constexpr std::string_view kProtectedResourceDocument = R"({
 } // namespace
 
 TEST_CASE("protected resource discovery retries the bare origin after a path-suffixed miss",
-        "[coding_agent][mcp][issue884][issue1181][spec]") {
+        "[coding_agent][mcp][issue884][issue1181][issue1231][spec]") {
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
-    // The path-suffixed document is a 404 miss; only the bare-origin document
-    // carries the authorization server, so a discovery that skipped the retry
-    // could not produce this answer. The frozen cancellation observation
-    // stalled on the same path-suffixed document (audit-1052
-    // oauth-lifecycle.json), so the miss path is the frozen stalled path.
+    // The frozen cancellation observation (audit-1052 oauth-lifecycle.json)
+    // stalls on the path-suffixed protected-resource document, so its frozen
+    // stalledPath is pi's discovery entry document and drives both the scripted
+    // miss and the expected first request below. The frozen bundle observes the
+    // cancellation, refresh and issuer-mismatch lifecycles only — it has no
+    // observation of the 404 retry — so the retry order is discriminated
+    // against the scripted transport and that evidence gap is recorded in the
+    // 1181 receipt's #1231 revalidation record and the row's discriminating-case
+    // reason.
     const auto artifact = read_oauth_lifecycle_artifact();
     const auto& frozen_expected =
             oauth_lifecycle_scenario(artifact, "cancellation during protected-resource discovery aborts the flow")
                     .get_object()
                     .at("expected")
                     .get_object();
-    http->get_responses["https://mcp.example.com/.well-known/oauth-protected-resource/mcp"] = {{404, "not found"}};
+    const std::string expected_first_request =
+            "https://mcp.example.com" + std::string{frozen_expected.at("stalledPath").get_string()};
+    http->get_responses[expected_first_request] = {{404, "not found"}};
     http->get_responses["https://mcp.example.com/.well-known/oauth-protected-resource"] = {
             {200, std::string{kProtectedResourceDocument}}};
 
@@ -107,8 +113,9 @@ TEST_CASE("protected resource discovery retries the bare origin after a path-suf
     CHECK(*discovered->scopes_supported == std::vector<std::string>{"mcp.read"});
 
     REQUIRE(http->get_requests.size() == 2);
-    CHECK(http->get_requests[0].url == "https://mcp.example.com/.well-known/oauth-protected-resource/mcp");
-    CHECK(http->get_requests[0].url.ends_with(frozen_expected.at("stalledPath").get_string()));
+    // The first request is exactly the frozen stalled discovery document, not a
+    // C++-literal respelling of it.
+    CHECK(http->get_requests[0].url == expected_first_request);
     CHECK(http->get_requests[1].url == "https://mcp.example.com/.well-known/oauth-protected-resource");
     // pi's discovery headers.
     CHECK(http->get_requests[0].headers.at("Accept") == "application/json");
