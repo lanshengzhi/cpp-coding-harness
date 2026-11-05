@@ -493,6 +493,14 @@ def build_index(ledger: dict, deliveries: dict) -> dict:
         entry["rows"].sort()
         entry["implementationRows"].sort()
         entry["scenarioLabels"].sort()
+    # A batch whose rows all carry delivery receipts leaves the partition: the
+    # delivered rows are recorded in deliveredRows and the batch metadata lives
+    # on in its issue and delivery report. The implementation obligation travels
+    # with the rows: it stays only while implementation rows remain.
+    batches = [entry for entry in batches if entry["rows"]]
+    for entry in batches:
+        if not entry["implementationRows"]:
+            entry["implementationObligation"] = None
     unassigned = sorted(row["id"] for row in rows if row["id"] not in assigned and row["id"] not in delivered)
     if unassigned:
         raise ValueError(f"supported rows without a batch: {unassigned[:10]}")

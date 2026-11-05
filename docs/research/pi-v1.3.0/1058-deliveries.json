@@ -232,7 +232,7 @@
      "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 36,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml",
@@ -717,8 +717,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -728,14 +727,14 @@
       "-L",
       "^(issue1090|issue1101|issue1104)$",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1101.xml"
+      "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 36,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1101.xml",
-      "sha256": "584bcabad62e572ee78ea1ba1910755e04390925a0d2dbc290cc18858df53c08"
+      "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml",
+      "sha256": "b7c4eb8843d70e89998b58ebf8aec8dca25f9c4d02086049e9cd8f2296d716ad"
      }
     }
    }
@@ -760,7 +759,7 @@
      "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 36,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml",
@@ -1441,14 +1440,14 @@
       "-L",
       "^(issue1090|issue1101|issue1104)$",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1090.xml"
+      "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 36,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1090.xml",
-      "sha256": "fd2bab6e5284c1446916fae1d4972b50f9cdab9f4f00138cb53150cc2b043edf"
+      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml",
+      "sha256": "6be3a8a1c4b9a0680ae1dd45f89a1be04a54e74c6c95abc17f0267fca1f840f5"
      }
     }
    }
@@ -1740,7 +1739,7 @@
      "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 19,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml",
@@ -2324,8 +2323,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -2335,14 +2333,14 @@
       "-L",
       "issue1118",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1118.xml"
+      "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 19,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1118.xml",
-      "sha256": "6b51494bd9c9b03b63767854eaa920917157e5c0dd911fff8fa518083284868f"
+      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml",
+      "sha256": "721aeb2454221bee7c9c8b2c386b1b7f2f7e83e899586b1810de00f027da6a63"
      }
     }
    }
@@ -3599,7 +3597,7 @@
      "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 16,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml",
@@ -4175,8 +4173,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -4186,14 +4183,14 @@
       "-R",
       "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1181.xml"
+      "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 16,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1181.xml",
-      "sha256": "fd67191454ecc63e9d0cb5adcd3a6e4841797c6aa95888e3aa9d42655f62652f"
+      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml",
+      "sha256": "a5f77081d01ebda3363c7b2388a57ea614a392a0a97a44269504047065c8d348"
      }
     }
    }
@@ -4897,7 +4894,7 @@
      "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 89,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml",
@@ -5338,8 +5335,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -5349,14 +5345,14 @@
       "-L",
       "chord",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1186.xml"
+      "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 89,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1186.xml",
-      "sha256": "4a66b460809624203053e824e473756b79df5ccf12cb85894f3df6ebf5b64d4e"
+      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml",
+      "sha256": "8c4676d1577f5eada43b6461817a8fc2a5d8ddd0a93099da8e8faf309e5ec44a"
      }
     }
    }
@@ -5380,7 +5376,7 @@
      "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 89,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml",
@@ -5788,8 +5784,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -5799,14 +5794,14 @@
       "-L",
       "chord",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1188.xml"
+      "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 89,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1188.xml",
-      "sha256": "395346ad24920d274ee4b460ff81ae12a063c4c2f34524f5c9fc93e243109a46"
+      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml",
+      "sha256": "edc3886927d1992f9eec0bbd6594d3797543de3479a3c4cb38e26df7f10aa29b"
      }
     }
    }
@@ -6009,7 +6004,7 @@
      "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 13,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml",
@@ -6268,7 +6263,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
-     "sha256": "d89a6cdbc901be10151bb869d9abfb544db3498c17bee3726dd342a3b3465130"
+     "sha256": "d8b195b5ad96d59e2efcd15af2b9b82c8925c695564836699169e3ffe7fd3311"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -6276,7 +6271,7 @@
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
-     "sha256": "f5df5357a39f039ca49dd76e7cc8b2bf3bc695b563af241c24e73cfefc1abe61"
+     "sha256": "f9ab199b4ca6659d23a418170529895c58016ad5e1d1bfba0460e1f4e30c9539"
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
@@ -6526,9 +6521,8 @@
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/baselines.json",
-     "tests/tui/ContainerTest.cpp",
-     "tests/tui/SelectionEvidenceTest.cpp",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
+     "docs/research/pi-v1.3.0/1182-tui-route-batches.json"
     ],
     "previousValidation": {
      "command": [
@@ -6538,14 +6532,14 @@
       "-L",
       "issue1182",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/bugfix831-1035-revalidation-1182.xml"
+      "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml"
      ],
-     "testedRevision": "184fd5a7f9d1efb35aa8fa55a33966c348c4d44c",
-     "recordedAt": "2026-11-05T08:44:41Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 13,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/bugfix831-1035-revalidation-1182.xml",
-      "sha256": "b802c97660c0f0c628941de5f7095eafe2fa4d72f470ce8106565b3d4faa3e5d"
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml",
+      "sha256": "2aefa829a77be43e57339c4eba028be87d4392287b6ac9552df820e9209f05e2"
      }
     }
    }
@@ -7692,7 +7686,7 @@
      "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 52,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml",
@@ -7871,8 +7865,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -7882,14 +7875,14 @@
       "-R",
       "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1179.xml"
+      "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 52,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1179.xml",
-      "sha256": "b500f50ce7a50b165fb1bbbed0645846443711350f8e6f0f9e89fb89cefe092f"
+      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml",
+      "sha256": "d4e469dc8d7e2a9c6bc2294b06d0fb5c3577dc1436b2382e031295d346eeb31c"
      }
     }
    }
@@ -7998,7 +7991,7 @@
      "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 5,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml",
@@ -8205,8 +8198,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -8216,14 +8208,14 @@
       "-R",
       "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1176.xml"
+      "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 5,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1176.xml",
-      "sha256": "abc4884063f2c3d51d05fc718c8d89f367b819165fac954df72afaced31b4ab3"
+      "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml",
+      "sha256": "5a34ef523d360f0af5c242c5b6f8a157962819091641df8ccab48650e9522c5f"
      }
     }
    }
@@ -8348,7 +8340,7 @@
      "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 9,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml",
@@ -8590,8 +8582,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -8601,14 +8592,14 @@
       "-R",
       "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1177.xml"
+      "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 9,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1177.xml",
-      "sha256": "0f07c92f45efea8cff6ab488f96893016690fa9ef6c5ee4f2f4d7b7397d32616"
+      "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml",
+      "sha256": "a118fe2a5b0d91ef9d71645876f509f364d0ba2360e543919dd8504d11483f42"
      }
     }
    }
@@ -9032,7 +9023,7 @@
      "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 8,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml",
@@ -9599,10 +9590,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "tests/tui/TerminalColorsTest.cpp",
-     "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -9614,14 +9602,14 @@
       "-L",
       "issue1201",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1201.xml"
+      "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 8,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1201.xml",
-      "sha256": "bc77ec214dc4dddd23fd12c8b0af3c8ad27ffaf6bbb3b245238826b5d82cda2b"
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml",
+      "sha256": "8eb0768c66cb25c56b5830171dcf81e0a7eb14e93b622d4e25e96c151045094c"
      }
     }
    }
@@ -9702,7 +9690,7 @@
      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 3,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml",
@@ -9765,8 +9753,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -9778,14 +9765,14 @@
       "-L",
       "issue1203",
       "--output-junit",
-      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures.xml"
+      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml"
      ],
-     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-     "recordedAt": "2026-11-05T05:36:39Z",
+     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
+     "recordedAt": "2026-11-05T11:42:33Z",
      "selected": 3,
      "junit": {
-      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures.xml",
-      "sha256": "59798a1ebef6420408b0d9139c4f2b3aabc3517f89d3a79dde85c32f9d6c3610"
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml",
+      "sha256": "6d8bbdf2f3cc7533155942b762b6e10c9758a7db115ad99963b6edf56a772e06"
      }
     }
    }
@@ -9794,9 +9781,9 @@
    "id": "1213-mouse-wheel-routing",
    "ticket": "1213",
    "implementationCommits": [
-    "939d8455830e09da3cbc851f8ecf617ba091d192",
     "bf8e9c304bff398cb76b501016131bcd063b9e6f",
-    "cace872ea8c25fbb49450766fa114e6e467174d1"
+    "cace872ea8c25fbb49450766fa114e6e467174d1",
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
    ],
    "report": "docs/research/pi-v1.3.0/1213-mouse-wheel-routing.md",
    "inputs": [
@@ -9870,7 +9857,7 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 15,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1213.xml",
@@ -10242,9 +10229,9 @@
    "id": "1212-transcript-selection",
    "ticket": "1212",
    "implementationCommits": [
-    "939d8455830e09da3cbc851f8ecf617ba091d192",
     "bf8e9c304bff398cb76b501016131bcd063b9e6f",
-    "cace872ea8c25fbb49450766fa114e6e467174d1"
+    "cace872ea8c25fbb49450766fa114e6e467174d1",
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
    ],
    "report": "docs/research/pi-v1.3.0/1212-transcript-selection.md",
    "inputs": [
@@ -10334,7 +10321,7 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1212.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 28,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1212.xml",
@@ -11012,9 +10999,9 @@
    "id": "1211-alt-screen-viewport",
    "ticket": "1211",
    "implementationCommits": [
-    "939d8455830e09da3cbc851f8ecf617ba091d192",
     "bf8e9c304bff398cb76b501016131bcd063b9e6f",
-    "cace872ea8c25fbb49450766fa114e6e467174d1"
+    "cace872ea8c25fbb49450766fa114e6e467174d1",
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
    ],
    "report": "docs/research/pi-v1.3.0/1211-alt-screen-viewport.md",
    "inputs": [
@@ -11128,7 +11115,7 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1211.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 34,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1211.xml",
@@ -12112,9 +12099,9 @@
    "id": "1210-regular-renderer",
    "ticket": "1210",
    "implementationCommits": [
-    "939d8455830e09da3cbc851f8ecf617ba091d192",
     "bf8e9c304bff398cb76b501016131bcd063b9e6f",
-    "cace872ea8c25fbb49450766fa114e6e467174d1"
+    "cace872ea8c25fbb49450766fa114e6e467174d1",
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
    ],
    "report": "docs/research/pi-v1.3.0/1210-regular-renderer.md",
    "inputs": [
@@ -12188,7 +12175,7 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1210.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 10,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1210.xml",
@@ -12458,9 +12445,9 @@
    "id": "1209-root-tui-lifecycle",
    "ticket": "1209",
    "implementationCommits": [
-    "939d8455830e09da3cbc851f8ecf617ba091d192",
     "bf8e9c304bff398cb76b501016131bcd063b9e6f",
-    "cace872ea8c25fbb49450766fa114e6e467174d1"
+    "cace872ea8c25fbb49450766fa114e6e467174d1",
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
    ],
    "report": "docs/research/pi-v1.3.0/1209-root-tui-lifecycle.md",
    "inputs": [
@@ -12578,7 +12565,7 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1209.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:42:33Z",
+    "recordedAt": "2026-11-05T11:57:26Z",
     "selected": 30,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1209.xml",
