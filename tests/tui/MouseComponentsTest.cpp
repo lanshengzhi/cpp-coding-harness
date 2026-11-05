@@ -1215,14 +1215,18 @@ TEST_CASE("pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previo
     // past (and both half-cells of the wide grapheme) and must land on the
     // same frozen target. A wrapped click that maps to the previous grapheme,
     // or that bleeds into the next segment, fails here.
+    const auto cell = [](std::size_t value) {
+        REQUIRE(std::in_range<int>(value)); // §9.14 checked narrowing
+        return static_cast<int>(value);
+    };
     const auto click =
-            [](cch::tui::Editor& editor, std::size_t x, std::size_t y, std::size_t width, std::size_t height) {
+            [&cell](cch::tui::Editor& editor, std::size_t x, std::size_t y, std::size_t width, std::size_t height) {
                 return editor.handle_mouse(cch::tui::MouseEvent{.type = cch::tui::MouseEventType::Click,
                         .button = cch::tui::MouseButton::Left,
-                        .x = static_cast<int>(x),
-                        .y = static_cast<int>(y),
-                        .screen_x = static_cast<int>(x),
-                        .screen_y = static_cast<int>(y),
+                        .x = cell(x),
+                        .y = cell(y),
+                        .screen_x = cell(x),
+                        .screen_y = cell(y),
                         .width = width,
                         .height = height,
                         .click_count = 1});

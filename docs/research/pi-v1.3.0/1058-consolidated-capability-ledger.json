@@ -261,8 +261,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml",
@@ -804,8 +804,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 36,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml",
@@ -833,8 +833,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml",
@@ -1541,8 +1541,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 36,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml",
@@ -1837,8 +1837,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 19,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml",
@@ -2479,8 +2479,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 19,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml",
@@ -3761,8 +3761,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 16,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml",
@@ -4390,8 +4390,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 16,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml",
@@ -5140,8 +5140,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 89,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml",
@@ -5639,8 +5639,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 89,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml",
@@ -5667,8 +5667,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 89,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml",
@@ -6133,8 +6133,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 89,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml",
@@ -6361,8 +6361,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 13,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml",
@@ -6935,8 +6935,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 13,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml",
@@ -8086,8 +8086,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 52,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml",
@@ -8323,8 +8323,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 52,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml",
@@ -8436,8 +8436,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 5,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml",
@@ -8701,8 +8701,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 5,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml",
@@ -8830,8 +8830,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 9,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml",
@@ -9130,8 +9130,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 9,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml",
@@ -9503,7 +9503,7 @@
           },
           {
             "path": "tests/tui/EditorTest.cpp",
-            "sha256": "c033f77463931d25d1b90adb499bc14c48206aaae7215aef1a635765a4cd3373"
+            "sha256": "efc50f4a46e2391dd4fa5d667467b8f321226299393d2a8400dbc5395105e59d"
           },
           {
             "path": "tests/tui/NativeClipboardTest.cpp",
@@ -9558,12 +9558,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
-          "selected": 8,
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
+          "selected": 9,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml",
-            "sha256": "4c83e5990d8434046c70529dae00e1afb44218c3df2d9d1f5409e9e7e2812d6a"
+            "sha256": "12ec77c8892b71890107627ab2c7649d32326f4c0a0bb2efc8b2aaece12639c9"
           }
         },
         "rows": [
@@ -10206,7 +10206,8 @@
         "revalidation1215": {
           "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
           "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json"
+            "fixtures/pi-v1.3.0/baselines.json",
+            "tests/tui/EditorTest.cpp"
           ],
           "previousValidation": {
             "command": [
@@ -10220,12 +10221,12 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
-            "selected": 8,
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
+            "selected": 9,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml",
-              "sha256": "4c83e5990d8434046c70529dae00e1afb44218c3df2d9d1f5409e9e7e2812d6a"
+              "sha256": "12ec77c8892b71890107627ab2c7649d32326f4c0a0bb2efc8b2aaece12639c9"
             }
           }
         }
@@ -10305,8 +10306,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 3,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml",
@@ -10419,8 +10420,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 3,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml",
@@ -10508,8 +10509,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 15,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml",
@@ -10903,8 +10904,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 15,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml",
@@ -10945,7 +10946,7 @@
           },
           {
             "path": "tests/tui/MouseComponentsTest.cpp",
-            "sha256": "caf5f1422cdd2b4f9a059776b4fad3b609a9684485eb4905dc61f3caee0e23fb"
+            "sha256": "d3cc3dd3d39ea2589bb2417a9c7185f5525374d03e2edc733e6f1954b3e1d165"
           },
           {
             "path": "tests/tui/MouseEvidenceTest.cpp",
@@ -11008,8 +11009,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 28,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml",
@@ -11749,8 +11750,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 28,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml",
@@ -11878,8 +11879,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 34,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml",
@@ -12977,8 +12978,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 34,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml",
@@ -13066,8 +13067,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 10,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml",
@@ -13371,8 +13372,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 10,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml",
@@ -13504,8 +13505,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
           "selected": 30,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml",
@@ -15359,8 +15360,8 @@
               "--output-junit",
               "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml"
             ],
-            "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:30:35Z",
+            "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+            "recordedAt": "2026-11-05T20:03:48Z",
             "selected": 30,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml",
@@ -15373,7 +15374,7 @@
         "id": "1215-editor-layout-history-undo-kill-yank",
         "ticket": "1215",
         "implementationCommits": [
-          "9e79680c178533df429fd33906cc336cd7a5cb77"
+          "6665a9d11322d42619cd84b2cd611bdb97b33901"
         ],
         "report": "docs/research/pi-v1.3.0/1215-editor-layout-history-undo-kill-yank.md",
         "inputs": [
@@ -15399,11 +15400,11 @@
           },
           {
             "path": "tests/tui/EditorTest.cpp",
-            "sha256": "c033f77463931d25d1b90adb499bc14c48206aaae7215aef1a635765a4cd3373"
+            "sha256": "efc50f4a46e2391dd4fa5d667467b8f321226299393d2a8400dbc5395105e59d"
           },
           {
             "path": "tests/tui/MouseComponentsTest.cpp",
-            "sha256": "caf5f1422cdd2b4f9a059776b4fad3b609a9684485eb4905dc61f3caee0e23fb"
+            "sha256": "d3cc3dd3d39ea2589bb2417a9c7185f5525374d03e2edc733e6f1954b3e1d165"
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
@@ -15466,12 +15467,12 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1215-issue1215.xml"
           ],
-          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
-          "recordedAt": "2026-11-05T19:48:03Z",
-          "selected": 26,
+          "testedRevision": "6665a9d11322d42619cd84b2cd611bdb97b33901",
+          "recordedAt": "2026-11-05T20:08:29Z",
+          "selected": 25,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1215-issue1215.xml",
-            "sha256": "46841f59722f5332ed7e12c575be8dace0818a6865722ec1456a7d07d112ff00"
+            "sha256": "eff44f692a4c3a3814f2dd59879533f54383acca70589963d25ea417facaab1b"
           }
         },
         "rows": [
@@ -15601,7 +15602,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "horizontal padding and the border color shape the rendered editor frame",
-                "test": "pi-v1.3.0 padding and the border hook shape the frozen editor frame",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16288,7 +16289,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16305,7 +16306,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16322,7 +16323,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16339,7 +16340,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16356,7 +16357,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16373,7 +16374,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16390,7 +16391,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16407,7 +16408,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16424,7 +16425,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16441,7 +16442,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16458,7 +16459,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
@@ -16475,7 +16476,7 @@
               {
                 "artifact": "audit-1201/editor-component.json",
                 "scenario": "an autocomplete provider renders suggestions capped by the visible maximum",
-                "test": "pi-v1.3.0 the autocomplete list renders the frozen capped viewport",
+                "test": "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame",
                 "testSource": "tests/tui/EditorTest.cpp"
               }
             ],
