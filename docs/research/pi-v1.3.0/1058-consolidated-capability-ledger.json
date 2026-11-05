@@ -261,8 +261,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml",
@@ -805,7 +805,7 @@
               "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 36,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1215.xml",
@@ -833,8 +833,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 36,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml",
@@ -1542,7 +1542,7 @@
               "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 36,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1215.xml",
@@ -1837,8 +1837,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 19,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml",
@@ -2480,7 +2480,7 @@
               "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 19,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1215.xml",
@@ -3761,8 +3761,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 16,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml",
@@ -4391,7 +4391,7 @@
               "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 16,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1215.xml",
@@ -5140,8 +5140,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 89,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml",
@@ -5640,7 +5640,7 @@
               "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 89,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1215.xml",
@@ -5667,8 +5667,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 89,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml",
@@ -6134,7 +6134,7 @@
               "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 89,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1215.xml",
@@ -6361,8 +6361,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 13,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml",
@@ -6923,8 +6923,7 @@
         "revalidation1215": {
           "reason": "The TUI B7 lane registered the audit-1215 family (editor-autocomplete.json, screen-state editor scenarios) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
           "changedInputs": [
-            "fixtures/pi-v1.3.0/baselines.json",
-            "docs/research/pi-v1.3.0/1182-tui-route-batches.json"
+            "fixtures/pi-v1.3.0/baselines.json"
           ],
           "previousValidation": {
             "command": [
@@ -6937,7 +6936,7 @@
               "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 13,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1215.xml",
@@ -8087,8 +8086,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 52,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml",
@@ -8325,7 +8324,7 @@
               "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 52,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1215.xml",
@@ -8437,8 +8436,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 5,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml",
@@ -8703,7 +8702,7 @@
               "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 5,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1215.xml",
@@ -8831,8 +8830,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 9,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml",
@@ -9132,7 +9131,7 @@
               "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 9,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1215.xml",
@@ -9559,8 +9558,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 8,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml",
@@ -10222,7 +10221,7 @@
               "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 8,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1215.xml",
@@ -10306,8 +10305,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 3,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml",
@@ -10421,7 +10420,7 @@
               "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 3,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1215.xml",
@@ -10509,8 +10508,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 15,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml",
@@ -10905,7 +10904,7 @@
               "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 15,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1215.xml",
@@ -11009,8 +11008,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 28,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml",
@@ -11751,7 +11750,7 @@
               "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 28,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1215.xml",
@@ -11879,8 +11878,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 34,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml",
@@ -12979,7 +12978,7 @@
               "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 34,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1215.xml",
@@ -13067,8 +13066,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 10,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml",
@@ -13373,7 +13372,7 @@
               "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 10,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1215.xml",
@@ -13505,8 +13504,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 30,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml",
@@ -15361,7 +15360,7 @@
               "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml"
             ],
             "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-            "recordedAt": "2026-11-05T19:28:14Z",
+            "recordedAt": "2026-11-05T19:30:35Z",
             "selected": 30,
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1215.xml",
@@ -15374,7 +15373,7 @@
         "id": "1215-editor-layout-history-undo-kill-yank",
         "ticket": "1215",
         "implementationCommits": [
-          "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37"
+          "9e79680c178533df429fd33906cc336cd7a5cb77"
         ],
         "report": "docs/research/pi-v1.3.0/1215-editor-layout-history-undo-kill-yank.md",
         "inputs": [
@@ -15467,8 +15466,8 @@
             "--output-junit",
             "docs/research/pi-v1.3.0/deliveries/1215-issue1215.xml"
           ],
-          "testedRevision": "fcfcedf146ba13dbd45c9196b0d6c7f79f135c37",
-          "recordedAt": "2026-11-05T19:30:35Z",
+          "testedRevision": "9e79680c178533df429fd33906cc336cd7a5cb77",
+          "recordedAt": "2026-11-05T19:48:03Z",
           "selected": 26,
           "junit": {
             "path": "docs/research/pi-v1.3.0/deliveries/1215-issue1215.xml",
@@ -16097,7 +16096,7 @@
             "discriminatingCase": {
               "test": "pi-v1.3.0 a disabled submit gate suppresses the frozen submission",
               "testSource": "tests/tui/EditorTest.cpp",
-              "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+              "reason": "The frozen submit observation binds the submitted payload; the disabled-gate control expects the sink to stay silent when the flag is set, separating the wired submit callback from a stored one that fires regardless of the gate."
             }
           },
           {
@@ -16114,7 +16113,7 @@
             "discriminatingCase": {
               "test": "pi-v1.3.0 a disabled submit gate suppresses the frozen submission",
               "testSource": "tests/tui/EditorTest.cpp",
-              "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+              "reason": "The frozen submit observation binds the submitted value; the disabled-gate control expects the value to stay unsubmitted and the editor text preserved, separating the submit-value path that consults the gate from one that clears and submits unconditionally."
             }
           },
           {
@@ -16131,7 +16130,7 @@
             "discriminatingCase": {
               "test": "pi-v1.3.0 a disabled submit gate suppresses the frozen submission",
               "testSource": "tests/tui/EditorTest.cpp",
-              "reason": "The frozen sequence undoes the backspace, not the paste; the atomic case pastes at a mid-line cursor and undoes once, separating a paste that is one undo step (text and cursor) from a per-grapheme undo that needs several."
+              "reason": "The frozen submit observation binds the enabled-gate submit; the disabled-gate control sets the flag and replays the same paste and Enter, separating a flag that actually gates submission from one that is only stored while the submit path ignores it."
             }
           },
           {
