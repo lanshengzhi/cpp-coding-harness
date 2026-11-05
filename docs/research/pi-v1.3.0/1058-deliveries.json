@@ -1167,7 +1167,7 @@
     ]
    },
    "revalidation1158": {
-    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery’s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
+    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery\u2019s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
     "changedInputs": [
      "src/durable/include/cch/durable/Environment.hpp"
     ],
@@ -1248,7 +1248,7 @@
     ]
    },
    "revalidation1202": {
-    "reason": "#1202 re-anchoring: the two withdrawn audit-1056/environment.json comparisons now read the registered artifact — ImagesTest drives a generated 40x20 RGBA PNG against the frozen pass-through/shrink/limit observation and HarnessImagesTest compares the frozen resized-read diagnostic text — so the re-anchored claims promote again. The touched test and helper inputs are re-pinned, the audit-1056 family the re-anchored comparisons cite is now pinned alongside the audit-1090 pins (manifest + environment.json), and the recorded 36-case selection was rebuilt and rerun on the re-anchored tree into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+    "reason": "#1202 re-anchoring: the two withdrawn audit-1056/environment.json comparisons now read the registered artifact \u2014 ImagesTest drives a generated 40x20 RGBA PNG against the frozen pass-through/shrink/limit observation and HarnessImagesTest compares the frozen resized-read diagnostic text \u2014 so the re-anchored claims promote again. The touched test and helper inputs are re-pinned, the audit-1056 family the re-anchored comparisons cite is now pinned alongside the audit-1090 pins (manifest + environment.json), and the recorded 36-case selection was rebuilt and rerun on the re-anchored tree into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/audit-1056/environment.json",
      "fixtures/pi-v1.3.0/audit-1056/manifest.json",
@@ -2622,7 +2622,7 @@
      "discriminatingCase": {
       "test": "a multi-byte character is cut only on a character boundary",
       "testSource": "tests/chord/OutputTest.cpp",
-      "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
+      "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"a\u00e9\ud83d\ude00\"; the boundary case separates the byte length from a code-point count."
      }
     },
     {
@@ -3011,7 +3011,7 @@
     }
    ],
    "revalidation1185": {
-    "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp — three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
+    "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp \u2014 three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
     "changedInputs": [
      "src/chord/Delta.cpp",
      "src/chord/include/cch/chord/Delta.hpp",
@@ -3071,7 +3071,7 @@
     }
    },
    "revalidation1187": {
-    "reason": "#1187 added the frozen progress byte-rate constant and the timer-free progress pacing seam to the Chord output helpers, which changed src/chord/Output.cpp, its Owner header and tests/chord/OutputTest.cpp — three inputs the #1178 receipt pins. The claimed rows, scenarios and routing digest are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1187.xml (88 cases, all passing, including the four new #1187 cases). The original deliveries/1178-chord.xml and the earlier revalidation artifacts are retained.",
+    "reason": "#1187 added the frozen progress byte-rate constant and the timer-free progress pacing seam to the Chord output helpers, which changed src/chord/Output.cpp, its Owner header and tests/chord/OutputTest.cpp \u2014 three inputs the #1178 receipt pins. The claimed rows, scenarios and routing digest are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1187.xml (88 cases, all passing, including the four new #1187 cases). The original deliveries/1178-chord.xml and the earlier revalidation artifacts are retained.",
     "changedInputs": [
      "src/chord/Output.cpp",
      "src/chord/include/cch/chord/Output.hpp",
@@ -3959,7 +3959,7 @@
     ]
    },
    "revalidation1202": {
-    "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts — the resource-listing comparisons compare audit-1052/application-initialization.json's frozen method order, resource and failure fields, and the OAuth cancellation/sign-in/issuer cases compare audit-1052/oauth-lifecycle.json's frozen stalled paths, authorization URL shape and request accounting; the transports.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. New comparisons carry the [issue1181] tag. The touched inputs are re-pinned and the recorded 16-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
+    "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts \u2014 the resource-listing comparisons compare audit-1052/application-initialization.json's frozen method order, resource and failure fields, and the OAuth cancellation/sign-in/issuer cases compare audit-1052/oauth-lifecycle.json's frozen stalled paths, authorization URL shape and request accounting; the transports.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. New comparisons carry the [issue1181] tag. The touched inputs are re-pinned and the recorded 16-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
      "tests/coding_agent/McpHttpSessionTest.cpp",
@@ -4641,7 +4641,7 @@
     }
    ],
    "revalidation1158": {
-    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery’s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
+    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery\u2019s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
     "changedInputs": [
      "tests/durable/HarnessWorkflowTest.cpp"
     ],
@@ -5857,14 +5857,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml"
+     "docs/research/pi-v1.3.0/deliveries/bugfix831-1035-revalidation-1182.xml"
     ],
-    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-    "recordedAt": "2026-11-05T05:36:39Z",
+    "testedRevision": "184fd5a7f9d1efb35aa8fa55a33966c348c4d44c",
+    "recordedAt": "2026-11-05T08:44:41Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml",
-     "sha256": "d8700a771a5a8adc68525661c07a11d40d7afee6ffac19424cf8f522657424c4"
+     "path": "docs/research/pi-v1.3.0/deliveries/bugfix831-1035-revalidation-1182.xml",
+     "sha256": "b802c97660c0f0c628941de5f7095eafe2fa4d72f470ce8106565b3d4faa3e5d"
     }
    },
    "rows": [
@@ -6011,7 +6011,7 @@
     },
     {
      "path": "src/tui/AltScreen.cpp",
-     "sha256": "359063c3f3d955dd4b6d703552d1fb866172a547edaa564d54a3e2e3e10be714"
+     "sha256": "9f92648ff9ddd1332d9174cc43462a2ae2ceae166654dbc50a97a8b731d09b5f"
     },
     {
      "path": "src/tui/Text.cpp",
@@ -6348,6 +6348,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidationBugfix8311035": {
+    "reason": "The #1035 real-Kitty emulator observation exposed a product defect: AltScreen::start read terminal_.capabilities().inline_images before terminal_.start(), and a real ProcessTerminal only detects its image protocol during start(), so a direct fullscreen boot pinned the text fallback for the whole session. The fix (a272504437ecd055497495437f5781b145bf09f8, src/tui/AltScreen.cpp) reads the session protocol after the terminal start succeeds; no comparison scenario, claimed row or routing digest of this receipt changes, and the -L issue1182 selection was rerun on the fixed tree into deliveries/bugfix831-1035-revalidation-1182.xml (13 cases, all passing, including every case this record claims). The previous validation artifact is retained.",
+    "changedInputs": [
+     "src/tui/AltScreen.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml"
+     ],
+     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+     "recordedAt": "2026-11-05T05:36:39Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml",
+      "sha256": "d8700a771a5a8adc68525661c07a11d40d7afee6ffac19424cf8f522657424c4"
+     }
+    }
    }
   },
   {
@@ -7520,7 +7544,7 @@
     ]
    },
    "revalidation1202": {
-    "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts — the timeout comparison and deadline discriminating case drive audit-1053/script-execution.json's frozen deadline scenario, the script-error comparison compares its frozen name/message/stack/output, and the worker admission/settlement cases compare audit-1053/worker-lifetime.json's frozen counters and denial message; the remaining remote-exchange.json and inline-interrupt.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. The touched inputs are re-pinned and the recorded 52-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
+    "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts \u2014 the timeout comparison and deadline discriminating case drive audit-1053/script-execution.json's frozen deadline scenario, the script-error comparison compares its frozen name/message/stack/output, and the worker admission/settlement cases compare audit-1053/worker-lifetime.json's frozen counters and denial message; the remaining remote-exchange.json and inline-interrupt.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. The touched inputs are re-pinned and the recorded 52-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
      "tests/codemode/CodemodeOwnerTest.cpp",

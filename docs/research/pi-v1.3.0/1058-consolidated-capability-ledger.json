@@ -5887,14 +5887,14 @@
             "-L",
             "issue1182",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml"
+            "docs/research/pi-v1.3.0/deliveries/bugfix831-1035-revalidation-1182.xml"
           ],
-          "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-          "recordedAt": "2026-11-05T05:36:39Z",
+          "testedRevision": "184fd5a7f9d1efb35aa8fa55a33966c348c4d44c",
+          "recordedAt": "2026-11-05T08:44:41Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml",
-            "sha256": "d8700a771a5a8adc68525661c07a11d40d7afee6ffac19424cf8f522657424c4"
+            "path": "docs/research/pi-v1.3.0/deliveries/bugfix831-1035-revalidation-1182.xml",
+            "sha256": "b802c97660c0f0c628941de5f7095eafe2fa4d72f470ce8106565b3d4faa3e5d"
           }
         },
         "rows": [
@@ -6041,7 +6041,7 @@
           },
           {
             "path": "src/tui/AltScreen.cpp",
-            "sha256": "359063c3f3d955dd4b6d703552d1fb866172a547edaa564d54a3e2e3e10be714"
+            "sha256": "9f92648ff9ddd1332d9174cc43462a2ae2ceae166654dbc50a97a8b731d09b5f"
           },
           {
             "path": "src/tui/Text.cpp",
@@ -6378,6 +6378,30 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidationBugfix8311035": {
+          "reason": "The #1035 real-Kitty emulator observation exposed a product defect: AltScreen::start read terminal_.capabilities().inline_images before terminal_.start(), and a real ProcessTerminal only detects its image protocol during start(), so a direct fullscreen boot pinned the text fallback for the whole session. The fix (a272504437ecd055497495437f5781b145bf09f8, src/tui/AltScreen.cpp) reads the session protocol after the terminal start succeeds; no comparison scenario, claimed row or routing digest of this receipt changes, and the -L issue1182 selection was rerun on the fixed tree into deliveries/bugfix831-1035-revalidation-1182.xml (13 cases, all passing, including every case this record claims). The previous validation artifact is retained.",
+          "changedInputs": [
+            "src/tui/AltScreen.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml"
+            ],
+            "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+            "recordedAt": "2026-11-05T05:36:39Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml",
+              "sha256": "d8700a771a5a8adc68525661c07a11d40d7afee6ffac19424cf8f522657424c4"
+            }
+          }
         }
       },
       {
