@@ -427,17 +427,16 @@ bool scan_excludes_file(const std::string& contents, std::string& value) {
 }
 
 std::string expand_tilde(std::string path) {
+    // Only a leading tilde expands, exactly like frozen pi
+    // (packages/durable/src/env/node.ts) and the repo's other tilde
+    // expansions (WorkspacePathResolution, ShellResolver): a `~` anywhere
+    // else in the path stays literal, so backup files like `foo.txt~` or
+    // names like `dir~name` are never corrupted (issue #1227).
+    if (path != "~" && !path.starts_with("~/")) return path;
     const std::string home = home_dir();
     if (home.empty()) return path;
-    std::string expanded;
-    expanded.reserve(path.size() + home.size());
-    for (const char c : path) {
-        if (c == '~')
-            expanded += home;
-        else
-            expanded.push_back(c);
-    }
-    return expanded;
+    if (path == "~") return home;
+    return home + path.substr(1);
 }
 
 std::optional<std::string> excludes_file_from_config(const char* env_name, const std::string& fallback_path) {

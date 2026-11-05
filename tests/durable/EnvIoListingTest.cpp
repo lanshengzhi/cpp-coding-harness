@@ -402,6 +402,41 @@ TEST_CASE("Durable tree listing matches the frozen discovery observations", "[du
     CHECK(index == 14);
 }
 
+// Regression for issue #1227: a tilde that is not a leading home-directory
+// prefix must stay literal, matching frozen pi (packages/durable/src/env/node.ts)
+// and the repo's other tilde expansions (WorkspacePathResolution, ShellResolver).
+// The excludes file lives under HOME and its name carries a non-leading tilde:
+// expanding every tilde corrupts the path into <home>/tilde<home>/excludes.txt
+// and the rule never applies.
+TEST_CASE("Global excludesFile expands only a leading tilde", "[durable][environment][issue1227]") {
+    cch::tests::TempWorkspace workspace;
+    apply_neutral_env(workspace.path());
+    static EnvGuard home("HOME");
+    static EnvGuard xdg("XDG_CONFIG_HOME");
+    static EnvGuard global("GIT_CONFIG_GLOBAL");
+    static EnvGuard system("GIT_CONFIG_SYSTEM");
+    const auto root = workspace.path() / "work";
+    fs::create_directories(root / ".git");
+    std::ofstream(root / ".git/HEAD") << "ref: refs/heads/main\n";
+    std::ofstream(root / "from-tilde.txt");
+    std::ofstream(root / "keep.txt");
+    fs::create_directories(workspace.path() / "cfg-home");
+    std::ofstream(workspace.path() / "cfg-home/tilde~excludes.txt") << "from-tilde.txt\n";
+    fs::create_directories(workspace.path() / "cfg-env");
+    std::ofstream(workspace.path() / "cfg-env/gitconfig") << "[core]\n\texcludesFile = ~/tilde~excludes.txt\n";
+    home.set((workspace.path() / "cfg-home").string());
+    xdg.set((workspace.path() / "cfg-no-xdg").string());
+    global.set((workspace.path() / "cfg-env/gitconfig").string());
+    system.set((workspace.path() / "cfg-no-system").string());
+    auto env = cch::durable::local_environment(root.string());
+    const auto listing = env->list_files(".", {}, {});
+    REQUIRE(listing.has_value());
+    std::vector<std::string> paths;
+    for (const auto& entry : listing->entries)
+        paths.push_back(entry.path);
+    CHECK(paths == std::vector<std::string>{"keep.txt"});
+}
+
 TEST_CASE("Durable tree listing never loads an unbounded directory into memory", "[durable][environment][issue1158]") {
     cch::tests::TempWorkspace workspace;
     apply_neutral_env(workspace.path());
