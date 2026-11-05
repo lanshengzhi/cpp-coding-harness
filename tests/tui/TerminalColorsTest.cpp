@@ -602,13 +602,14 @@ TEST_CASE("frozen audit-1201 palette assembly binds at sixteen replies through t
         ColorQueryHost host;
         auto future = host.tui().query_terminal_colors(
                 tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
-        host.type("\x1b]10;#ff0000\x07");
-        host.type("\x1b]11;#00ff00\x07");
+        REQUIRE(host.type("\x1b]10;#ff0000\x07"));
+        REQUIRE(host.type("\x1b]11;#00ff00\x07"));
         for (int index = 0; index < 16; ++index) {
             const auto channel = std::format("{:04x}", index * 16);
-            host.type("\x1b]4;" + std::to_string(index) + ";rgb:" + channel + "/" + channel + "/" + channel + "\x07");
+            REQUIRE(host.type(
+                    "\x1b]4;" + std::to_string(index) + ";rgb:" + channel + "/" + channel + "/" + channel + "\x07"));
         }
-        host.type("\x1b[?1;2c");
+        REQUIRE(host.type("\x1b[?1;2c"));
         REQUIRE(future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready);
         const auto colors = future.get();
         const auto& frozenComplete = expected.at("complete");
@@ -636,12 +637,12 @@ TEST_CASE("frozen audit-1201 palette assembly binds at sixteen replies through t
         ColorQueryHost host;
         auto future = host.tui().query_terminal_colors(
                 tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
-        host.type("\x1b]10;#123456\x1b\\");
-        host.type("\x1b]11;#654321\x07");
+        REQUIRE(host.type("\x1b]10;#123456\x1b\\"));
+        REQUIRE(host.type("\x1b]11;#654321\x07"));
         for (int index = 0; index < 15; ++index) {
-            host.type("\x1b]4;" + std::to_string(index) + ";#010203\x07");
+            REQUIRE(host.type("\x1b]4;" + std::to_string(index) + ";#010203\x07"));
         }
-        host.type("\x1b[?1;2c");
+        REQUIRE(host.type("\x1b[?1;2c"));
         REQUIRE(future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready);
         const auto colors = future.get();
         REQUIRE(colors.foreground.has_value());

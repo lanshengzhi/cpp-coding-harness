@@ -8619,7 +8619,7 @@
     },
     {
      "path": "tests/tui/TerminalColorsTest.cpp",
-     "sha256": "eb3c926c99f6ce7f967da7599023622a26f17d5affc412398f038021eaeb084a"
+     "sha256": "e373e040528351b9461236be773c0326fdfd0af646b340f6d9768c46688177fc"
     },
     {
      "path": "tests/tui/EditorTest.cpp",
