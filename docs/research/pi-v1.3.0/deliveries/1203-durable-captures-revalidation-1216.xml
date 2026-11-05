@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="3"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-06T05:46:06"
+	>
+	<testcase name="the audit-1203 frozen background-ownership boundary observation replays in C++" classname="the audit-1203 frozen background-ownership boundary observation replays in C++" time="0.00884241" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1203;ownership"/>
+		</properties>
+		<system-out>Filters: "the audit-1203 frozen background-ownership boundary observation replays in C++"
+Randomness seeded to: 660244512
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the audit-1203 frozen duplicate-request observation replays in C++" classname="the audit-1203 frozen duplicate-request observation replays in C++" time="0.00753388" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1203;workflow"/>
+		</properties>
+		<system-out>Filters: "the audit-1203 frozen duplicate-request observation replays in C++"
+Randomness seeded to: 1555302959
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the audit-1203 frozen harness settings defaults replay in the C++ settings" classname="the audit-1203 frozen harness settings defaults replay in the C++ settings" time="0.00501165" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1203;workflow"/>
+		</properties>
+		<system-out>Filters: "the audit-1203 frozen harness settings defaults replay in the C++ settings"
+Randomness seeded to: 2890467825
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

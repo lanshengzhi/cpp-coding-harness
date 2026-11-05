@@ -66,9 +66,9 @@ folded into membership.
 | By lane | 1047:32, 1048:30, 1049:20, 1050:954, 1051:50, 1052:31, 1053:68, 1054:111, 1055:40, 1056:70, 1057:58 |
 | By owner | cch_tui:925, cch_durable:212, cch_coding_agent:159, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
 | Membership | supported:1435, excluded:29, no-decision:0 |
-| Implementation | implemented:1096, missing:177, not-applicable:18, partial:173 |
-| Verification | not-applicable:28, unverified:852, upstream-captured:309, verified:275 |
-| Evidence route | captured:584, related-captured:224, declared-comparison:29, cpp-regression-only:10, unobserved:29, historical-v1.0.4:531, not-audited:29, excluded:28 |
+| Implementation | implemented:1098, missing:177, not-applicable:18, partial:171 |
+| Verification | not-applicable:28, unverified:824, upstream-captured:307, verified:305 |
+| Evidence route | captured:612, related-captured:224, declared-comparison:29, cpp-regression-only:10, unobserved:29, historical-v1.0.4:505, not-audited:27, excluded:28 |
 
 The three dimensions stay separate. A supported row can be implemented and still unverified, and a
 row with an upstream capture is not promoted because a similar row exists elsewhere: a declared

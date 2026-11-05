@@ -417,12 +417,12 @@ TEST_CASE("an input press positions the cursor and later gestures stay unhandled
     check_an_input_press_positions_the_cursor_and_later_gestures_stay_(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 an input press positions the cursor and later gestures stay unhandled", "[tui][mouse][components][issue1212][compat-pi]") {
+TEST_CASE("pi-v1.3.0 an input press positions the cursor and later gestures stay unhandled",
+        "[tui][mouse][components][issue1212][issue1216][compat-pi]") {
     const auto bundle = audit1212_mouse_components_bundle();
     REQUIRE(bundle);
     check_an_input_press_positions_the_cursor_and_later_gestures_stay_(*bundle);
 }
-
 
 void check_an_input_press_maps_grapheme_widths_and_the_scrolled_windows(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "input-press-maps-grapheme-widths-and-scrolled-columns");
@@ -467,12 +467,47 @@ TEST_CASE("an input press maps grapheme widths and the scrolled window's start c
     check_an_input_press_maps_grapheme_widths_and_the_scrolled_windows(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 an input press maps grapheme widths and the scrolled window's start column", "[tui][mouse][components][issue1212][compat-pi]") {
+TEST_CASE("pi-v1.3.0 an input press maps grapheme widths and the scrolled window's start column",
+        "[tui][mouse][components][issue1212][issue1216][compat-pi]") {
     const auto bundle = audit1212_mouse_components_bundle();
     REQUIRE(bundle);
     check_an_input_press_maps_grapheme_widths_and_the_scrolled_windows(*bundle);
 }
 
+TEST_CASE("pi-v1.3.0 an input press past the last grapheme clamps to the value length",
+        "[tui][mouse][components][issue1212][issue1216][compat-pi]") {
+    const auto bundle = audit1212_mouse_components_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "input-press-cursor-and-unhandled-gestures");
+    const auto& frozen = scenario.at("expected");
+    const auto& first_case = frozen.at("cases").get_array().front();
+
+    // Replay the first case's prompt and value
+    cch::tui::Input input(cch::tui::InputOptions{.prompt = first_case.at("prompt").get_string()});
+    input.set_value(first_case.at("value").get_string());
+    const auto width = size_of(first_case.at("width"));
+    const auto before = input.render(width);
+    REQUIRE(before);
+
+    // Press well past the text end (e.g. x = width - 1)
+    const auto answer = input.handle_mouse(MouseEvent{
+            .type = MouseEventType::Press,
+            .button = MouseButton::Left,
+            .x = static_cast<int>(width) - 1,
+            .y = 0,
+            .screen_x = static_cast<int>(width) - 1,
+            .screen_y = 0,
+            .width = width,
+            .height = 1,
+    });
+    REQUIRE(answer.has_value());
+    CHECK(answer->handled);
+    CHECK(answer->focus);
+
+    // After typing 'x', 'x' appears at the end of the text
+    type_key(input, "x");
+    CHECK(input.value() == first_case.at("value").get_string() + "x");
+}
 
 void check_a_select_list_press_selects_the_rendered_row_and_a_click_act(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "select-list-press-selects-and-click-activates");

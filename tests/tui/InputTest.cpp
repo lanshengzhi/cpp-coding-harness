@@ -375,7 +375,8 @@ TEST_CASE("Input renders a placeholder reversing the first character only while 
     CHECK(rendered->lines[0] == "> " + fake_cursor_cell(" ") + "                 ");
 }
 
-TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with frozen pi", "[tui][input][issue962]") {
+TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with frozen pi",
+        "[tui][input][issue962][issue1216]") {
     // The cursor-marker contract landed in pi-v1.3.0, so the frozen
     // observations come from the registered pi-v1.3.0 audit family rather
     // than the pi-v1.0.4 bundle, whose components drew the fake cursor as
@@ -668,4 +669,581 @@ TEST_CASE("Input outcome-based admission proves boundary no-ops and side-effect 
     // 4. Unhandled side-effect freedom: unrecognized non-printable keys are unhandled and modify no state.
     CHECK(input.handle_input(cch::tui::KeyEvent{.key = "insert"}) == cch::tui::InputAdmissionOutcome::Unhandled);
     CHECK(input.value() == "hello");
+}
+
+TEST_CASE("pi-v1.3.0 input grapheme deletion and boundary operations replay the frozen observation",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+    const auto& scenario = cch::tests::find_scenario(*fixture, "input-grapheme-deletion-and-boundaries");
+    const auto& expected = scenario.at("expected");
+
+    cch::tui::Input input;
+    // Type "h", "é", "😀"
+    type(input, "h");
+    type(input, "\xc3\xa9");
+    type(input, "\xf0\x9f\x98\x80");
+    CHECK(input.value() == expected.at("typed").at("value").get_string());
+
+    // Backspace: deletes "😀"
+    key(input, "backspace");
+    CHECK(input.value() == expected.at("backspace").at("value").get_string());
+
+    // Left, forward-delete: deletes "é"
+    key(input, "left");
+    key(input, "delete");
+    CHECK(input.value() == expected.at("forwardDelete").at("value").get_string());
+
+    // Left (to 0), backspace at 0: boundary no-op
+    key(input, "left");
+    key(input, "backspace");
+    CHECK(input.value() == expected.at("backspaceAtStart").at("value").get_string());
+
+    // End (to 1), delete at end: boundary no-op
+    key(input, "end");
+    key(input, "delete");
+    CHECK(input.value() == expected.at("deleteAtEnd").at("value").get_string());
+}
+
+TEST_CASE("pi-v1.3.0 input line kill and yank rotation replay the frozen observation",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+    const auto& scenario = cch::tests::find_scenario(*fixture, "input-line-kill-and-yank-rotation");
+    const auto& expected = scenario.at("expected");
+
+    cch::tui::Input input;
+
+    // Type FIRST, kill to line start
+    type(input, "FIRST");
+    key(input, "u", true); // ctrl+u
+    CHECK(input.value() == expected.at("firstKill").at("value").get_string());
+
+    // Type x to break accumulation, type SECOND, kill to line start
+    type(input, "x");
+    type(input, "SECOND");
+    key(input, "u", true); // ctrl+u
+    CHECK(input.value() == expected.at("secondKill").at("value").get_string());
+
+    // Setup "head tail" with cursor after "head "
+    type(input, "tail");
+    key(input, "home");
+    type(input, "head ");
+    // Delete to line end (ctrl+k) -> deletes "tail"
+    key(input, "k", true); // ctrl+k
+    CHECK(input.value() == expected.at("thirdKill").at("value").get_string());
+
+    // Yank (ctrl+y) -> inserts "tail"
+    key(input, "y", true); // ctrl+y
+    CHECK(input.value() == expected.at("yankRecent").at("value").get_string());
+
+    // Yank-pop (alt+y) -> replaces "tail" with "xSECOND"
+    key(input, "y", false, false, true); // alt+y
+    CHECK(input.value() == expected.at("yankPop1").at("value").get_string());
+
+    // Yank-pop (alt+y) -> replaces "xSECOND" with "FIRST"
+    key(input, "y", false, false, true); // alt+y
+    CHECK(input.value() == expected.at("yankPop2").at("value").get_string());
+}
+
+TEST_CASE("pi-v1.3.0 input word navigation and deletion replay the frozen observation",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+    const auto& scenario = cch::tests::find_scenario(*fixture, "input-word-navigation-and-deletion");
+    const auto& expected = scenario.at("expected");
+
+    cch::tui::Input input;
+    input.set_value(scenario.at("inputs").at("initial").get_string());
+    input.move_cursor_to_end();
+
+    // Verify backward word navigation stops at word boundaries
+    for (const auto& step : expected.at("stepsBack").get_array()) {
+        CHECK(input.value() == step.at("value").get_string());
+        key(input, "b", false, false, true); // alt+b
+    }
+
+    // Reset to start for forward word navigation
+    key(input, "home");
+    for (const auto& step : expected.at("stepsFwd").get_array()) {
+        CHECK(input.value() == step.at("value").get_string());
+        key(input, "f", false, false, true); // alt+f
+    }
+
+    // Delete word backward from end
+    input.move_cursor_to_end();
+    key(input, "w", true); // ctrl+w
+    CHECK(input.value() == expected.at("deleteWordBack").at("value").get_string());
+
+    // Delete word forward from home after typing 'x'
+    key(input, "home");
+    type(input, "x");
+    key(input, "home");
+    key(input, "d", false, false, true); // alt+d
+    CHECK(input.value() == expected.at("deleteWordFwd").at("value").get_string());
+}
+
+TEST_CASE("pi-v1.3.0 input undo coalescing and snapshots replay the frozen observation",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+    const auto& scenario = cch::tests::find_scenario(*fixture, "input-undo-coalescing-and-snapshots");
+    const auto& expected = scenario.at("expected");
+
+    cch::tui::Input input;
+    type(input, "hello");
+    CHECK(input.value() == expected.at("typedHello").at("value").get_string());
+
+    type(input, " ");
+    CHECK(input.value() == expected.at("typedSpace").at("value").get_string());
+
+    type(input, "world");
+    CHECK(input.value() == expected.at("typedWorld").at("value").get_string());
+
+    // Undo 1: pops "world"
+    key(input, "-", true); // ctrl+-
+    CHECK(input.value() == expected.at("undo1").at("value").get_string());
+
+    // Undo 2: pops space and "hello"
+    key(input, "-", true); // ctrl+-
+    CHECK(input.value() == expected.at("undo2").at("value").get_string());
+
+    // Fresh edit
+    type(input, "fresh");
+    CHECK(input.value() == expected.at("typedFresh").at("value").get_string());
+
+    // Undo 3: pops "fresh"
+    key(input, "-", true); // ctrl+-
+    CHECK(input.value() == expected.at("undo3").at("value").get_string());
+}
+
+TEST_CASE("pi-v1.3.0 input escape cancel and invalidate replay the frozen observation",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+    const auto& scenario = cch::tests::find_scenario(*fixture, "input-escape-cancel-and-invalidate");
+    const auto& expected = scenario.at("expected");
+
+    int escape_count = 0;
+    cch::tui::Input input({}, {}, [&escape_count]() -> cch::support::ExpectedVoid {
+        ++escape_count;
+        return {};
+    });
+
+    type(input, "active");
+    CHECK(input.value() == expected.at("beforeEscape").at("value").get_string());
+
+    // Escape
+    key(input, "escape");
+    CHECK(escape_count == static_cast<int>(expected.at("afterEscape").at("escapeCount").get_number()));
+    CHECK(input.value() == expected.at("afterEscape").at("value").get_string());
+
+    // ctrl+c
+    key(input, "c", true);
+    CHECK(escape_count == static_cast<int>(expected.at("afterCtrlC").at("escapeCount").get_number()));
+    CHECK(input.value() == expected.at("afterCtrlC").at("value").get_string());
+
+    // Invalidate
+    input.invalidate();
+    CHECK(escape_count == static_cast<int>(expected.at("afterInvalidate").at("escapeCount").get_number()));
+    CHECK(input.value() == expected.at("afterInvalidate").at("value").get_string());
+}
+
+TEST_CASE("pi-v1.3.0 input paste buffering and normalization replay the frozen observation",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+    const auto& scenario = cch::tests::find_scenario(*fixture, "input-paste-buffering-and-normalization");
+    const auto& expected = scenario.at("expected");
+
+    std::vector<std::string> submitted;
+    cch::tui::Input input({}, [&submitted](std::string value) -> cch::support::ExpectedVoid {
+        submitted.push_back(std::move(value));
+        return {};
+    });
+
+    type(input, "prefix_");
+    CHECK(input.value() == expected.at("prePaste").at("value").get_string());
+
+    // Paste event with newlines and tab
+    input.handle_input(cch::tui::PasteEvent{.text = "part1\r\npart2\nthird\tcol"});
+    CHECK(input.value() == expected.at("postPaste").at("value").get_string());
+    CHECK(submitted.empty());
+
+    // Undo once restores pre-paste state atomically
+    key(input, "-", true); // ctrl+-
+    CHECK(input.value() == expected.at("afterUndo").at("value").get_string());
+    CHECK(submitted.empty());
+}
+
+TEST_CASE("pi-v1.3.0 input rebound submit and fallthrough replay the frozen observation",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+    const auto& scenario = cch::tests::find_scenario(*fixture, "input-rebound-submit-and-fallthrough");
+    const auto& expected = scenario.at("expected");
+
+    auto resolution = cch::tui::resolve_keybindings({
+            .definitions = cch::tui::builtin_tui_keybinding_definitions(),
+            .overrides = {{.id = "tui.input.submit", .keys = {"ctrl+x"}}},
+    });
+    REQUIRE(resolution);
+
+    std::vector<std::string> submitted;
+    cch::tui::Input input(cch::tui::InputOptions{.keybindings = resolution->registry},
+            [&submitted](std::string value) -> cch::support::ExpectedVoid {
+                submitted.push_back(std::move(value));
+                return {};
+            });
+
+    type(input, "command");
+
+    // Enter (\r): does not submit when rebound
+    input.handle_input(cch::tui::KeyEvent{.key = "enter", .raw_sequence = "\r"});
+    CHECK(submitted.empty());
+    CHECK(input.value() == expected.at("afterEnter").at("val").get_string());
+
+    // ctrl+x submits
+    key(input, "x", true);
+    REQUIRE(submitted.size() == 1);
+    CHECK(submitted[0] == expected.at("afterCtrlX").at("submitted").get_array()[0].get_string());
+
+    // Raw LF submits per pi specification
+    input.handle_input(cch::tui::KeyEvent{.key = "enter", .raw_sequence = "\n"});
+    REQUIRE(submitted.size() == 2);
+    CHECK(submitted[1] == expected.at("afterLf").at("submitted").get_array()[1].get_string());
+}
+
+TEST_CASE("pi-v1.3.0 prompt boundary width truncates the prompt and renders no placeholder cell",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1050", "input-standalone.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input({.prompt = "Find: ", .placeholder = "Filter items"});
+    input.set_focused(true);
+
+    // When width <= prompt visible width (6), only prompt is truncated, no fake cursor is rendered
+    auto rendered = input.render(4);
+    REQUIRE(rendered);
+    CHECK(rendered->lines.size() == 1);
+    CHECK(rendered->lines[0] == "Find\x1b[0m");
+    CHECK(cch::tui::visible_width(rendered->lines[0]) == 4);
+    CHECK_FALSE(rendered->lines[0].find(kFakeCursorStart) != std::string::npos);
+    CHECK_FALSE(rendered->lines[0].find(kCursorMarker) != std::string::npos);
+}
+
+TEST_CASE("pi-v1.3.0 kill at value edge is a no-op and pushes no undo snapshot", "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    type(input, "hello");
+    // Cursor is at end (5). deleteToLineEnd (ctrl+k) at end is a no-op
+    key(input, "k", true);
+    CHECK(input.value() == "hello");
+
+    // Move to line start (0). deleteToLineStart (ctrl+u) at start is a no-op
+    key(input, "home");
+    key(input, "u", true);
+    CHECK(input.value() == "hello");
+
+    // Undo pops "hello" directly, proving the two boundary kills pushed no undo units
+    key(input, "-", true);
+    CHECK(input.value().empty());
+}
+
+TEST_CASE("pi-v1.3.0 yank on an empty kill ring leaves value and undo stack untouched",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    type(input, "clean");
+    // Yank on empty ring: no text inserted
+    key(input, "y", true);
+    CHECK(input.value() == "clean");
+
+    // Yank-pop without a preceding yank: no effect
+    key(input, "y", false, false, true); // alt+y
+    CHECK(input.value() == "clean");
+
+    // Undo once pops "clean" to empty
+    key(input, "-", true);
+    CHECK(input.value().empty());
+}
+
+TEST_CASE("pi-v1.3.0 typing between yank and yank-pop breaks yank-pop rotation", "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    // Set up two kills in the ring
+    type(input, "FIRST");
+    key(input, "u", true); // ctrl+u -> ring: ["FIRST"]
+    type(input, "x");
+    type(input, "SECOND");
+    key(input, "u", true); // ctrl+u -> ring: ["FIRST", "xSECOND"]
+
+    // Yank most recent
+    key(input, "y", true); // ctrl+y -> inserts "xSECOND"
+    CHECK(input.value() == "xSECOND");
+
+    // Type a character to break lastAction from "yank"
+    type(input, "!");
+    CHECK(input.value() == "xSECOND!");
+
+    // Yank-pop should now be rejected (lastAction != "yank")
+    key(input, "y", false, false, true); // alt+y
+    CHECK(input.value() == "xSECOND!");
+}
+
+TEST_CASE(
+        "pi-v1.3.0 whitespace-only value clamps word navigation at both edges", "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    input.set_value("   ");
+    input.move_cursor_to_end();
+
+    // Moving word backwards in whitespace skips to 0
+    key(input, "b", false, false, true); // alt+b
+    key(input, "b", false, false, true); // alt+b clamps at 0
+    type(input, "x");
+    CHECK(input.value() == "x   ");
+
+    // Reset to spaces
+    input.set_value("   ");
+    key(input, "home");
+    // Moving word forwards in whitespace skips to end
+    key(input, "f", false, false, true); // alt+f
+    type(input, "z");
+    CHECK(input.value() == "   z");
+}
+
+TEST_CASE("pi-v1.3.0 input word navigation revisits the frozen boundaries in reverse and clamps at the edges",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    input.set_value("éclair 世界,foo_bar 😀done");
+    key(input, "home");
+
+    // Step forward 6 times
+    for (int i = 0; i < 6; ++i) {
+        key(input, "f", false, false, true);
+    }
+    // An extra step forward clamps at end
+    key(input, "f", false, false, true);
+    type(input, "!");
+    CHECK(input.value() == "éclair 世界,foo_bar 😀done!");
+
+    // An extra step backward past start clamps at 0
+    key(input, "home");
+    key(input, "b", false, false, true);
+    type(input, "?");
+    CHECK(input.value() == "?éclair 世界,foo_bar 😀done!");
+}
+
+TEST_CASE("pi-v1.3.0 undo restores the pre-edit cursor column that the frozen observation binds",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    input.set_focused(true);
+    type(input, "hello");
+    REQUIRE(input.render(20));
+    CHECK(input.cursor_location() == cch::tui::CursorPosition{.column = 7, .row = 0});
+
+    // Move left twice, edit "x"
+    key(input, "left");
+    key(input, "left");
+    REQUIRE(input.render(20));
+    CHECK(input.cursor_location() == cch::tui::CursorPosition{.column = 5, .row = 0});
+
+    type(input, "x");
+    REQUIRE(input.render(20));
+    CHECK(input.value() == "helxlo");
+    CHECK(input.cursor_location() == cch::tui::CursorPosition{.column = 6, .row = 0});
+
+    // Undo restores the exact cursor column where the edit began
+    key(input, "-", true); // ctrl+-
+    REQUIRE(input.render(20));
+    CHECK(input.value() == "hello");
+    CHECK(input.cursor_location() == cch::tui::CursorPosition{.column = 5, .row = 0});
+}
+
+TEST_CASE("pi-v1.3.0 undo exhaustion leaves value and cursor untouched", "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    type(input, "word");
+    key(input, "-", true); // undo -> empty
+    CHECK(input.value().empty());
+
+    // Exhausted undo: additional undos modify nothing
+    key(input, "-", true);
+    key(input, "-", true);
+    CHECK(input.value().empty());
+
+    // Subsequent typing succeeds
+    type(input, "fresh");
+    CHECK(input.value() == "fresh");
+}
+
+TEST_CASE("pi-v1.3.0 boundary deletions at empty value are consumed no-ops", "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    // On empty input, backspace, delete, deleteWordBackward, deleteWordForward are consumed
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "backspace"}) == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "delete"}) == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "w", .ctrl = true}) ==
+            cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(input.handle_input(cch::tui::KeyEvent{.key = "d", .alt = true}) == cch::tui::InputAdmissionOutcome::Consumed);
+    CHECK(input.value().empty());
+
+    // Typing afterwards works cleanly
+    type(input, "ok");
+    CHECK(input.value() == "ok");
+}
+
+TEST_CASE("pi-v1.3.0 rebound submit key submits once and inserts no newline or characters",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    auto resolution = cch::tui::resolve_keybindings({
+            .definitions = cch::tui::builtin_tui_keybinding_definitions(),
+            .overrides = {{.id = "tui.input.submit", .keys = {"ctrl+x"}}},
+    });
+    REQUIRE(resolution);
+
+    std::vector<std::string> submitted;
+    cch::tui::Input input(cch::tui::InputOptions{.keybindings = resolution->registry},
+            [&submitted](std::string value) -> cch::support::ExpectedVoid {
+                submitted.push_back(std::move(value));
+                return {};
+            });
+
+    type(input, "run");
+    // Enter key event without ctrl+x does not submit and does not insert newline
+    key(input, "enter");
+    CHECK(submitted.empty());
+    CHECK(input.value() == "run");
+
+    // ctrl+x submits the value once and value is preserved
+    key(input, "x", true);
+    REQUIRE(submitted.size() == 1);
+    CHECK(submitted[0] == "run");
+    CHECK(input.value() == "run");
+}
+
+TEST_CASE("pi-v1.3.0 sequential pastes insert independently and submit nothing", "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    std::vector<std::string> submitted;
+    cch::tui::Input input({}, [&submitted](std::string value) -> cch::support::ExpectedVoid {
+        submitted.push_back(std::move(value));
+        return {};
+    });
+
+    input.handle_input(cch::tui::PasteEvent{.text = "paste1\n"});
+    input.handle_input(cch::tui::PasteEvent{.text = "paste2\r\n"});
+    CHECK(input.value() == "paste1paste2");
+    CHECK(submitted.empty());
+
+    // Undo reverts paste2
+    key(input, "-", true);
+    CHECK(input.value() == "paste1");
+    // Undo reverts paste1
+    key(input, "-", true);
+    CHECK(input.value().empty());
+}
+
+TEST_CASE("pi-v1.3.0 typed tab is ignored while pasted tab expands to four spaces",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    type(input, "a");
+    // Typed tab does not insert tab character
+    key(input, "tab");
+    CHECK(input.value() == "a");
+
+    // Pasted tab expands to four spaces
+    input.handle_input(cch::tui::PasteEvent{.text = "\tb"});
+    CHECK(input.value() == "a    b");
+}
+
+TEST_CASE("pi-v1.3.0 typing after an escape still inserts text cleanly", "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    int escapes = 0;
+    cch::tui::Input input({}, {}, [&escapes]() -> cch::support::ExpectedVoid {
+        ++escapes;
+        return {};
+    });
+
+    key(input, "escape");
+    CHECK(escapes == 1);
+
+    type(input, "resumed");
+    CHECK(input.value() == "resumed");
+    CHECK(escapes == 1);
+}
+
+TEST_CASE("pi-v1.3.0 set_value clamps the cursor and pushes no undo snapshot", "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1050", "input-standalone.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    type(input, "long_text_here");
+    input.set_value("short");
+    CHECK(input.value() == "short");
+
+    // An undo on set_value restores the typed state before set_value
+    key(input, "-", true);
+    CHECK(input.value().empty());
+}
+
+TEST_CASE("pi-v1.3.0 rendering across several widths never mutates the input value",
+        "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1050", "input-standalone.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    type(input, "immutable value");
+    input.set_focused(true);
+
+    for (std::size_t w = 5; w <= 30; w += 5) {
+        auto rendered = input.render(w);
+        REQUIRE(rendered);
+        CHECK(input.value() == "immutable value");
+    }
+}
+
+TEST_CASE("pi-v1.3.0 invalidate leaves the rendered frame byte-identical", "[tui][input][issue1216][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1216", "input-editing.json");
+    REQUIRE(fixture);
+
+    cch::tui::Input input;
+    type(input, "frame");
+    input.set_focused(true);
+
+    auto before = input.render(15);
+    REQUIRE(before);
+
+    input.invalidate();
+
+    auto after = input.render(15);
+    REQUIRE(after);
+    CHECK(before->lines == after->lines);
 }

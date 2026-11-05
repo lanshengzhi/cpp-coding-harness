@@ -1097,36 +1097,6 @@
    "disposition": "The durable environment process test exercises these outcomes; this classification does not promote the row."
   },
   {
-   "family": "audit-1050",
-   "artifact": "input-standalone.json",
-   "scenario": "input-placeholder-reversal-and-custom-styling",
-   "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
-   "rows": [
-    "cch_tui:Input.placeholderStyle"
-   ],
-   "disposition": "input behavior slices must consume this observation when they touch placeholder styling"
-  },
-  {
-   "family": "audit-1050",
-   "artifact": "input-standalone.json",
-   "scenario": "input-raw-lf-submission-and-rebound-submit",
-   "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact.",
-   "rows": [
-    "cch_tui:Input.onSubmit"
-   ],
-   "disposition": "input behavior slices must consume this observation when they touch submission handling"
-  },
-  {
-   "family": "audit-1050",
-   "artifact": "input-standalone.json",
-   "scenario": "input-narrow-unicode-scroll-and-cursor",
-   "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact.",
-   "rows": [
-    "cch_tui:Input.render"
-   ],
-   "disposition": "input behavior slices must consume this observation when they touch narrow/Unicode cursor scrolling"
-  },
-  {
    "family": "audit-1061",
    "artifact": "draft-array-holes.json",
    "scenario": "deleting an array element from a draft rejects the hole and leaves the prepared revision empty",
@@ -5622,16 +5592,6 @@
     "rows": [
      "cch_tui:TuiAltScreen.handleViewportInput",
      "cch_tui:TuiAltScreen.shouldDeferViewportInputToOverlay"
-    ]
-   },
-   {
-    "id": "TM-tui-b8",
-    "ticket": "#1216",
-    "history": false,
-    "note": "Proposal section 2 group 16 -> N5: #1182 route batch B8 filed as #1208 + 8 (Input: editing, paste and submit).",
-    "rows": [
-     "cch_tui:Input",
-     "cch_tui:Input.render"
     ]
    },
    {

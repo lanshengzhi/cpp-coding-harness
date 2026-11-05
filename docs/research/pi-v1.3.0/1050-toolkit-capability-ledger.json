@@ -11705,7 +11705,7 @@
    "evidence": {
     "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
     "scenario": "standalone-input-fake-cursor-is-strippable",
-    "result": "frozen Input.render wraps the placeholder/cursor cell in APC markers that strip to the same visible text; C++ Input renders raw reverse video and strips nothing",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1216 (route batch B8), not duplicated",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
@@ -11787,14 +11787,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-grapheme-deletion-and-boundaries",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-grapheme-deletion-and-boundaries",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -11813,7 +11812,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -11823,7 +11822,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-grapheme-deletion-and-boundaries"
   },
   {
    "id": "Input.cursor",
@@ -11839,8 +11838,14 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
-   "evidence": null,
+   "scenario": "input-narrow-unicode-scroll-and-cursor",
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/input-standalone.json",
+    "scenario": "input-narrow-unicode-scroll-and-cursor",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1216 (route batch B8), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
     "member name appears in changed source hunks; not individually re-audited against v1.3.0"
@@ -11858,7 +11863,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -11868,7 +11873,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": "input-narrow-unicode-scroll-and-cursor"
   },
   {
    "id": "Input.placeholder",
@@ -11884,14 +11889,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-placeholder-reversal-and-custom-styling",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/input-standalone.json",
+    "scenario": "input-placeholder-reversal-and-custom-styling",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1216 (route batch B8), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -11910,7 +11914,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -11920,7 +11924,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-placeholder-reversal-and-custom-styling"
   },
   {
    "id": "Input.placeholderStyle",
@@ -11936,8 +11940,14 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
-   "evidence": null,
+   "scenario": "input-placeholder-reversal-and-custom-styling",
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/input-standalone.json",
+    "scenario": "input-placeholder-reversal-and-custom-styling",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1216 (route batch B8), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
     "member name appears in changed source hunks; not individually re-audited against v1.3.0"
@@ -11955,7 +11965,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -11965,7 +11975,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": "input-placeholder-reversal-and-custom-styling"
   },
   {
    "id": "Input.onSubmit",
@@ -11981,14 +11991,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-rebound-submit-and-fallthrough",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-rebound-submit-and-fallthrough",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12007,7 +12016,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12017,7 +12026,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-rebound-submit-and-fallthrough"
   },
   {
    "id": "Input.onEscape",
@@ -12033,14 +12042,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-escape-cancel-and-invalidate",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-escape-cancel-and-invalidate",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12059,7 +12067,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12069,7 +12077,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-escape-cancel-and-invalidate"
   },
   {
    "id": "Input.isInPaste",
@@ -12085,14 +12093,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-paste-buffering-and-normalization",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-paste-buffering-and-normalization",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12111,7 +12118,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12121,7 +12128,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-paste-buffering-and-normalization"
   },
   {
    "id": "Input.lastAction",
@@ -12137,14 +12144,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-undo-coalescing-and-snapshots",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-undo-coalescing-and-snapshots",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12163,7 +12169,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12173,7 +12179,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-undo-coalescing-and-snapshots"
   },
   {
    "id": "Input.constructor",
@@ -12189,14 +12195,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "standalone-input-fake-cursor-is-strippable",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
+    "scenario": "standalone-input-fake-cursor-is-strippable",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1216 (route batch B8), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12215,7 +12220,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12225,7 +12230,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "standalone-input-fake-cursor-is-strippable"
   },
   {
    "id": "Input.getValue",
@@ -12241,14 +12246,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-grapheme-deletion-and-boundaries",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-grapheme-deletion-and-boundaries",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12267,7 +12271,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12277,7 +12281,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-grapheme-deletion-and-boundaries"
   },
   {
    "id": "Input.setValue",
@@ -12293,14 +12297,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-narrow-unicode-scroll-and-cursor",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1050/input-standalone.json",
+    "scenario": "input-narrow-unicode-scroll-and-cursor",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1216 (route batch B8), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12319,7 +12322,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12329,7 +12332,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-narrow-unicode-scroll-and-cursor"
   },
   {
    "id": "Input.handleInput",
@@ -12345,14 +12348,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-grapheme-deletion-and-boundaries",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-grapheme-deletion-and-boundaries",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12371,7 +12373,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12381,7 +12383,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-grapheme-deletion-and-boundaries"
   },
   {
    "id": "Input.handleMouse",
@@ -12397,14 +12399,16 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": [
+    "input-press-cursor-and-unhandled-gestures",
+    "input-press-maps-grapheme-widths-and-scrolled-columns"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1212/mouse-components.json",
+    "scenario": "input-press-cursor-and-unhandled-gestures",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1212; referenced by #1216 (route batch B8), not duplicated",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12423,7 +12427,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12433,7 +12437,16 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": [
+    "input-press-cursor-and-unhandled-gestures",
+    "input-press-maps-grapheme-widths-and-scrolled-columns"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "input-press-cursor-and-unhandled-gestures",
+     "input-press-maps-grapheme-widths-and-scrolled-columns"
+    ]
+   }
   },
   {
    "id": "Input.insertCharacter",
@@ -12449,14 +12462,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-grapheme-deletion-and-boundaries",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-grapheme-deletion-and-boundaries",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12475,7 +12487,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12485,7 +12497,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-grapheme-deletion-and-boundaries"
   },
   {
    "id": "Input.handleBackspace",
@@ -12501,14 +12513,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-grapheme-deletion-and-boundaries",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-grapheme-deletion-and-boundaries",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12527,7 +12538,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12537,7 +12548,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-grapheme-deletion-and-boundaries"
   },
   {
    "id": "Input.handleForwardDelete",
@@ -12553,14 +12564,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-grapheme-deletion-and-boundaries",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-grapheme-deletion-and-boundaries",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12579,7 +12589,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12589,7 +12599,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-grapheme-deletion-and-boundaries"
   },
   {
    "id": "Input.deleteToLineStart",
@@ -12605,14 +12615,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-line-kill-and-yank-rotation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-line-kill-and-yank-rotation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12631,7 +12640,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12641,7 +12650,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-line-kill-and-yank-rotation"
   },
   {
    "id": "Input.deleteToLineEnd",
@@ -12657,14 +12666,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-line-kill-and-yank-rotation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-line-kill-and-yank-rotation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12683,7 +12691,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12693,7 +12701,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-line-kill-and-yank-rotation"
   },
   {
    "id": "Input.deleteWordBackwards",
@@ -12709,14 +12717,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-word-navigation-and-deletion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-word-navigation-and-deletion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12735,7 +12742,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12745,7 +12752,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-word-navigation-and-deletion"
   },
   {
    "id": "Input.deleteWordForward",
@@ -12761,14 +12768,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-word-navigation-and-deletion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-word-navigation-and-deletion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12787,7 +12793,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12797,7 +12803,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-word-navigation-and-deletion"
   },
   {
    "id": "Input.yank",
@@ -12813,14 +12819,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-line-kill-and-yank-rotation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-line-kill-and-yank-rotation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12839,7 +12844,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12849,7 +12854,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-line-kill-and-yank-rotation"
   },
   {
    "id": "Input.yankPop",
@@ -12865,14 +12870,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-line-kill-and-yank-rotation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-line-kill-and-yank-rotation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12891,7 +12895,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12901,7 +12905,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-line-kill-and-yank-rotation"
   },
   {
    "id": "Input.pushUndo",
@@ -12917,14 +12921,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-undo-coalescing-and-snapshots",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-undo-coalescing-and-snapshots",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12943,7 +12946,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -12953,7 +12956,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-undo-coalescing-and-snapshots"
   },
   {
    "id": "Input.undo",
@@ -12969,14 +12972,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-undo-coalescing-and-snapshots",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-undo-coalescing-and-snapshots",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -12995,7 +12997,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -13005,7 +13007,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-undo-coalescing-and-snapshots"
   },
   {
    "id": "Input.moveWordBackwards",
@@ -13021,14 +13023,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-word-navigation-and-deletion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-word-navigation-and-deletion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -13047,7 +13048,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -13057,7 +13058,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-word-navigation-and-deletion"
   },
   {
    "id": "Input.moveWordForwards",
@@ -13073,14 +13074,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-word-navigation-and-deletion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-word-navigation-and-deletion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -13099,7 +13099,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -13109,7 +13109,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-word-navigation-and-deletion"
   },
   {
    "id": "Input.handlePaste",
@@ -13125,14 +13125,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-paste-buffering-and-normalization",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-paste-buffering-and-normalization",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -13151,7 +13150,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -13161,7 +13160,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-paste-buffering-and-normalization"
   },
   {
    "id": "Input.invalidate",
@@ -13177,14 +13176,13 @@
    "consumer": "dialogs/search/ treeselector inputs",
    "boundary": "Input presentation/LF/paste",
    "implementation_ticket": null,
-   "scenario": "E06 Input",
+   "scenario": "input-escape-cancel-and-invalidate",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E06 Input",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1216/input-editing.json",
+    "scenario": "input-escape-cancel-and-invalidate",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1216",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -13203,7 +13201,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Input presentation/LF/paste",
     "consumer": "dialogs/search/ treeselector inputs",
@@ -13213,7 +13211,7 @@
      "tests/coding_agent/tui/TuiModeSwitchTest.cpp"
     ]
    },
-   "comparisonCase": "E06 Input"
+   "comparisonCase": "input-escape-cancel-and-invalidate"
   },
   {
    "id": "Input.render",
@@ -13233,7 +13231,7 @@
    "evidence": {
     "artifact": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
     "scenario": "standalone-input-fake-cursor-is-strippable",
-    "result": "frozen Input.render wraps the placeholder/cursor cell in APC markers that strip to the same visible text; C++ Input renders raw reverse video and strips nothing",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1050; referenced by #1216 (route batch B8), not duplicated",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },

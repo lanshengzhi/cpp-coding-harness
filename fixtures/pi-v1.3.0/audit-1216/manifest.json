@@ -1,0 +1,477 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1216",
+  "family": "audit-1216",
+  "capturedAt": "2026-11-05T20:38:42.934Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1216/capture-1216.mts",
+    "sha256": "6fa788ece667f2d785f357eab96ef3c66a1f3dff257bea445a80e98e6a545c7e",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1216/capture-1216.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1216/capture-1216.mts",
+        "sha256": "6fa788ece667f2d785f357eab96ef3c66a1f3dff257bea445a80e98e6a545c7e"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/input-editing-scenarios.mts",
+        "sha256": "df4b413c4fddfa438b1f0d8ed9e2b47c53c42a0f66cba2481fc714a7b86914b9"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "input-editing.json",
+      "family": "audit-1216",
+      "bytes": 11118,
+      "sha256": "bee283f48eb1cabf5e0ae8b0c4858c26fd269600e45dfabe3818c770a22ac99e",
+      "sourceEndpoints": [
+        "packages/tui/src/components/input.ts:handleInput,getValue,setValue,render,handleMouse,invalidate",
+        "packages/tui/src/word-navigation.ts:findWordBackward,findWordForward",
+        "packages/tui/src/undo-stack.ts:UndoStack.push,pop",
+        "packages/tui/src/kill-ring.ts:KillRing.push,rotate,peek",
+        "packages/tui/src/keybindings.ts:KeybindingsManager"
+      ],
+      "scenarios": [
+        {
+          "name": "input-grapheme-deletion-and-boundaries",
+          "dimensions": {
+            "columns": 20,
+            "rows": 1
+          },
+          "inputs": {
+            "chars": [
+              "h",
+              "é",
+              "😀"
+            ],
+            "backspaceKey": "backspace",
+            "deleteKey": "delete"
+          },
+          "expected": {
+            "typed": {
+              "value": "hé😀",
+              "cursor": 4,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0
+            },
+            "backspace": {
+              "value": "hé",
+              "cursor": 2,
+              "lastAction": null,
+              "isInPaste": false,
+              "undoLength": 2,
+              "killRingLength": 0
+            },
+            "forwardDelete": {
+              "value": "h",
+              "cursor": 1,
+              "lastAction": null,
+              "isInPaste": false,
+              "undoLength": 3,
+              "killRingLength": 0
+            },
+            "backspaceAtStart": {
+              "value": "h",
+              "cursor": 0,
+              "lastAction": null,
+              "isInPaste": false,
+              "undoLength": 3,
+              "killRingLength": 0
+            },
+            "deleteAtEnd": {
+              "value": "h",
+              "cursor": 1,
+              "lastAction": null,
+              "isInPaste": false,
+              "undoLength": 3,
+              "killRingLength": 0
+            }
+          }
+        },
+        {
+          "name": "input-line-kill-and-yank-rotation",
+          "dimensions": {
+            "columns": 30,
+            "rows": 1
+          },
+          "inputs": {
+            "first": "FIRST",
+            "second": "SECOND",
+            "deleteToLineStartKey": "ctrl+u",
+            "deleteToLineEndKey": "ctrl+k",
+            "yankKey": "ctrl+y",
+            "yankPopKey": "alt+y"
+          },
+          "expected": {
+            "firstKill": {
+              "value": "",
+              "cursor": 0,
+              "lastAction": "kill",
+              "isInPaste": false,
+              "undoLength": 2,
+              "killRingLength": 1,
+              "ring": [
+                "FIRST"
+              ]
+            },
+            "secondKill": {
+              "value": "",
+              "cursor": 0,
+              "lastAction": "kill",
+              "isInPaste": false,
+              "undoLength": 4,
+              "killRingLength": 2,
+              "ring": [
+                "FIRST",
+                "xSECOND"
+              ]
+            },
+            "thirdKill": {
+              "value": "head ",
+              "cursor": 5,
+              "lastAction": "kill",
+              "isInPaste": false,
+              "undoLength": 8,
+              "killRingLength": 3,
+              "ring": [
+                "FIRST",
+                "xSECOND",
+                "tail"
+              ]
+            },
+            "yankRecent": {
+              "value": "head tail",
+              "cursor": 9,
+              "lastAction": "yank",
+              "isInPaste": false,
+              "undoLength": 9,
+              "killRingLength": 3
+            },
+            "yankPop1": {
+              "value": "head xSECOND",
+              "cursor": 12,
+              "lastAction": "yank",
+              "isInPaste": false,
+              "undoLength": 10,
+              "killRingLength": 3
+            },
+            "yankPop2": {
+              "value": "head FIRST",
+              "cursor": 10,
+              "lastAction": "yank",
+              "isInPaste": false,
+              "undoLength": 11,
+              "killRingLength": 3
+            }
+          }
+        },
+        {
+          "name": "input-word-navigation-and-deletion",
+          "dimensions": {
+            "columns": 35,
+            "rows": 1
+          },
+          "inputs": {
+            "initial": "éclair 世界,foo_bar 😀done",
+            "moveWordBackwardKey": "alt+b",
+            "moveWordForwardKey": "alt+f",
+            "deleteWordBackwardKey": "ctrl+w",
+            "deleteWordForwardKey": "alt+d"
+          },
+          "expected": {
+            "stepsBack": [
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 24
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 20
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 18
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 10
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 9
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 7
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 0
+              }
+            ],
+            "stepsFwd": [
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 0
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 6
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 9
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 10
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 17
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 20
+              },
+              {
+                "value": "éclair 世界,foo_bar 😀done",
+                "cursor": 24
+              }
+            ],
+            "deleteWordBack": {
+              "value": "éclair 世界,foo_bar 😀",
+              "cursor": 20,
+              "ring": [
+                "done"
+              ]
+            },
+            "deleteWordFwd": {
+              "value": " 世界,foo_bar 😀",
+              "cursor": 0,
+              "ring": [
+                "done",
+                "xéclair"
+              ]
+            }
+          }
+        },
+        {
+          "name": "input-undo-coalescing-and-snapshots",
+          "dimensions": {
+            "columns": 25,
+            "rows": 1
+          },
+          "inputs": {
+            "words": [
+              "hello",
+              " ",
+              "world"
+            ],
+            "undoKey": "ctrl+-",
+            "edit": "fresh"
+          },
+          "expected": {
+            "typedHello": {
+              "value": "hello",
+              "cursor": 5,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0
+            },
+            "typedSpace": {
+              "value": "hello ",
+              "cursor": 6,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 2,
+              "killRingLength": 0
+            },
+            "typedWorld": {
+              "value": "hello world",
+              "cursor": 11,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 2,
+              "killRingLength": 0
+            },
+            "undo1": {
+              "value": "hello",
+              "cursor": 5,
+              "lastAction": null,
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0
+            },
+            "undo2": {
+              "value": "",
+              "cursor": 0,
+              "lastAction": null,
+              "isInPaste": false,
+              "undoLength": 0,
+              "killRingLength": 0
+            },
+            "typedFresh": {
+              "value": "fresh",
+              "cursor": 5,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0
+            },
+            "undo3": {
+              "value": "",
+              "cursor": 0,
+              "lastAction": null,
+              "isInPaste": false,
+              "undoLength": 0,
+              "killRingLength": 0
+            }
+          }
+        },
+        {
+          "name": "input-escape-cancel-and-invalidate",
+          "dimensions": {
+            "columns": 20,
+            "rows": 1
+          },
+          "inputs": {
+            "initial": "active",
+            "escapeKey": "escape",
+            "ctrlCKey": "ctrl+c"
+          },
+          "expected": {
+            "beforeEscape": {
+              "value": "active",
+              "cursor": 6,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0
+            },
+            "afterEscape": {
+              "value": "active",
+              "cursor": 6,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0,
+              "escapeCount": 1
+            },
+            "afterCtrlC": {
+              "value": "active",
+              "cursor": 6,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0,
+              "escapeCount": 2
+            },
+            "afterInvalidate": {
+              "value": "active",
+              "cursor": 6,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0,
+              "escapeCount": 2
+            }
+          }
+        },
+        {
+          "name": "input-paste-buffering-and-normalization",
+          "dimensions": {
+            "columns": 40,
+            "rows": 1
+          },
+          "inputs": {
+            "prefix": "prefix_",
+            "chunk1": "\u001b[200~part1\r\n",
+            "chunk2": "part2\nthird\tcol\u001b[201~",
+            "undoKey": "ctrl+-"
+          },
+          "expected": {
+            "prePaste": {
+              "value": "prefix_",
+              "cursor": 7,
+              "lastAction": "type-word",
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0
+            },
+            "midPaste": {
+              "value": "prefix_",
+              "cursor": 7,
+              "lastAction": "type-word",
+              "isInPaste": true,
+              "undoLength": 1,
+              "killRingLength": 0,
+              "submitted": []
+            },
+            "postPaste": {
+              "value": "prefix_part1part2third    col",
+              "cursor": 29,
+              "lastAction": null,
+              "isInPaste": false,
+              "undoLength": 2,
+              "killRingLength": 0,
+              "submitted": []
+            },
+            "afterUndo": {
+              "value": "prefix_",
+              "cursor": 7,
+              "lastAction": null,
+              "isInPaste": false,
+              "undoLength": 1,
+              "killRingLength": 0,
+              "submitted": []
+            }
+          }
+        },
+        {
+          "name": "input-rebound-submit-and-fallthrough",
+          "dimensions": {
+            "columns": 20,
+            "rows": 1
+          },
+          "inputs": {
+            "command": "command",
+            "reboundSubmit": "ctrl+x"
+          },
+          "expected": {
+            "afterEnter": {
+              "val": "command",
+              "submitted": []
+            },
+            "afterCtrlX": {
+              "val": "command",
+              "submitted": [
+                "command"
+              ]
+            },
+            "afterLf": {
+              "val": "command",
+              "submitted": [
+                "command",
+                "command"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

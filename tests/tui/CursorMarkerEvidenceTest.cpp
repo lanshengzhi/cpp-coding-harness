@@ -686,3 +686,56 @@ TEST_CASE("pi-v1.3.0 the editor marker pair resolves in order and leaves the fro
     }
     CHECK(marked_lines == 1);
 }
+
+TEST_CASE("the standalone input draws a strippable fake cursor marker",
+        "[tui][cursor-marker][issue1120][issue1216][compat-pi][spec]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "cursor-composition.json");
+    REQUIRE(bundle.has_value());
+    CHECK(bundle->at("schema").get_string() == kFrozenSchema);
+    CHECK(bundle->at("revision").get_string() == kFrozenRevision);
+
+    const auto& scenario = find_scenario(*bundle, "standalone-input-fake-cursor-is-strippable");
+    const auto& expected = scenario.at("expected");
+    const auto& frozen_raw = expected.at("rawLine").get_string();
+    const auto& frozen_stripped = expected.at("strippedLine").get_string();
+    const auto expected_marker_count = static_cast<std::size_t>(expected.at("fakeCursorMarkerCount").get_number());
+    const auto width = static_cast<std::size_t>(scenario.at("inputs").at("width").get_number());
+
+    cch::tui::Input input;
+    input.set_value(scenario.at("inputs").at("value").get_string());
+    input.set_focused(scenario.at("inputs").at("focused").get_boolean());
+
+    const auto rendered = input.render(width);
+    REQUIRE(rendered.has_value());
+    REQUIRE(rendered->lines.size() == 1);
+
+    const auto& line = rendered->lines[0];
+    CHECK(line == frozen_raw);
+    CHECK(count_occurrences(line, cch::tui::kFakeCursorStart) == expected_marker_count);
+    CHECK(cch::tui::strip_terminal_sequences(line) == frozen_stripped);
+}
+
+TEST_CASE("pi-v1.3.0 the input marker pair resolves in order and leaves the frozen visible frame",
+        "[tui][cursor-marker][issue1216][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "cursor-composition.json");
+    REQUIRE(bundle.has_value());
+    const auto& scenario = cch::tests::find_scenario(*bundle, "standalone-input-fake-cursor-is-strippable");
+    const auto& expected = scenario.at("expected");
+    const auto& frozen_stripped = expected.at("strippedLine").get_string();
+
+    cch::tui::Input input;
+    input.set_value(scenario.at("inputs").at("value").get_string());
+    input.set_focused(true);
+
+    const auto rendered = input.render(10);
+    REQUIRE(rendered.has_value());
+    REQUIRE(rendered->lines.size() == 1);
+
+    const auto& line = rendered->lines[0];
+    CHECK(cch::tui::strip_terminal_sequences(line) == frozen_stripped);
+    CHECK_FALSE(contains(line, kReverseVideoOn));
+    CHECK_FALSE(contains(line, kReverseVideoOff));
+    CHECK(count_occurrences(line, cch::tui::kFakeCursorStart) == 1);
+    CHECK(count_occurrences(line, cch::tui::kFakeCursorEnd) == 1);
+    CHECK(line.find(cch::tui::kFakeCursorStart) < line.find(cch::tui::kFakeCursorEnd));
+}
