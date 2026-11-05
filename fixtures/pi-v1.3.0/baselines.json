@@ -301,6 +301,10 @@
           "manifest": "audit-1217/manifest.json",
           "manifestSha256": "71ddd7282ab0e196f4a94b9c897d118b487ebf6c400ae7ef58e5902970f09eac"
         },
+        "audit-1218": {
+          "manifest": "audit-1218/manifest.json",
+          "manifestSha256": "4d42759c23b86d4973c2e2212a2649850d34cd85cf69bc40188fd4e4bf4190fa"
+        },
         "audit-810": {
           "manifest": "audit-810/manifest.json",
           "manifestSha256": "3815cac847e63ef4e1a4780682547c4ab0e9158aead7f7a631a8d44d580822ab"

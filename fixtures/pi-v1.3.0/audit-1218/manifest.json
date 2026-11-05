@@ -1,0 +1,1487 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1218",
+  "family": "audit-1218",
+  "capturedAt": "2026-11-05T21:58:37.607Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1218/capture-1218.mts",
+    "sha256": "c6c3a06e98b54c1c9bb9ee3605674af82ed8a6e48d65fe7622cfb66c7e6f23f7",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1218/capture-1218.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1218/capture-1218.mts",
+        "sha256": "c6c3a06e98b54c1c9bb9ee3605674af82ed8a6e48d65fe7622cfb66c7e6f23f7"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/color-scenarios.mts",
+        "sha256": "f9e37ba15fc481b1c57553272e34f2086af18885052a6dce5124ca072ff7bae1"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "color.json",
+      "family": "audit-1218",
+      "bytes": 32858,
+      "sha256": "f758c72d7c60699fc8273db37a5100e39480c0b415bfff4a87f4796f58447510",
+      "sourceEndpoints": [
+        "packages/tui/src/colors.ts:Color,ColorMixSpace,IndexedColor,OkhslChannels,OklchChannels,OklchColorValue,RgbColorValue,TerminalColorMode,TextAttributes,TextStyle,backgroundAnsi,colorToHex,colorToOkhsl,colorToOklch,colorToRgb,foregroundAnsi,indexedColor,mixColors,okhslColor,oklchColor,parseColor,rgbColor,styleText,styleTextWithAnsi",
+        "packages/tui/src/oklab.ts:oklabToOkhslLightness"
+      ],
+      "scenarios": [
+        {
+          "name": "color-values-and-construction",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "indexed": [
+              0,
+              9,
+              15,
+              16,
+              42,
+              231,
+              232,
+              255
+            ],
+            "rgb": [
+              {
+                "r": 0,
+                "g": 0,
+                "b": 0
+              },
+              {
+                "r": 255,
+                "g": 0,
+                "b": 0
+              },
+              {
+                "r": 18,
+                "g": 52,
+                "b": 86
+              },
+              {
+                "r": 12.5,
+                "g": 34.5,
+                "b": 56.5
+              },
+              {
+                "r": 255,
+                "g": 255,
+                "b": 255
+              }
+            ],
+            "oklch": [
+              {
+                "l": 0.627955,
+                "c": 0.257683,
+                "h": 29.2339
+              },
+              {
+                "l": 0.8,
+                "c": 0.15,
+                "h": 150
+              },
+              {
+                "l": 1,
+                "c": 0.3,
+                "h": 150
+              },
+              {
+                "l": 0,
+                "c": 0.3,
+                "h": 150
+              }
+            ]
+          },
+          "expected": {
+            "indexed": [
+              {
+                "kind": "indexed",
+                "index": 0
+              },
+              {
+                "kind": "indexed",
+                "index": 9
+              },
+              {
+                "kind": "indexed",
+                "index": 15
+              },
+              {
+                "kind": "indexed",
+                "index": 16
+              },
+              {
+                "kind": "indexed",
+                "index": 42
+              },
+              {
+                "kind": "indexed",
+                "index": 231
+              },
+              {
+                "kind": "indexed",
+                "index": 232
+              },
+              {
+                "kind": "indexed",
+                "index": 255
+              }
+            ],
+            "rgb": [
+              {
+                "kind": "rgb",
+                "r": 0,
+                "g": 0,
+                "b": 0
+              },
+              {
+                "kind": "rgb",
+                "r": 255,
+                "g": 0,
+                "b": 0
+              },
+              {
+                "kind": "rgb",
+                "r": 18,
+                "g": 52,
+                "b": 86
+              },
+              {
+                "kind": "rgb",
+                "r": 12.5,
+                "g": 34.5,
+                "b": 56.5
+              },
+              {
+                "kind": "rgb",
+                "r": 255,
+                "g": 255,
+                "b": 255
+              }
+            ],
+            "oklch": [
+              {
+                "kind": "oklch",
+                "l": 0.627955,
+                "c": 0.257683,
+                "h": 29.233900000000006
+              },
+              {
+                "kind": "oklch",
+                "l": 0.8,
+                "c": 0.15,
+                "h": 150
+              },
+              {
+                "kind": "oklch",
+                "l": 1,
+                "c": 0.3,
+                "h": 150
+              },
+              {
+                "kind": "oklch",
+                "l": 0,
+                "c": 0.3,
+                "h": 150
+              }
+            ]
+          }
+        },
+        {
+          "name": "color-parsing-and-hex",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "hex": [
+              "#abc",
+              "#12aBcD",
+              "#ff0000",
+              "#0000ff",
+              "#808080",
+              "#ffffff",
+              "#000000",
+              "#aB3"
+            ],
+            "indexed": [
+              0,
+              42,
+              231,
+              232,
+              255
+            ],
+            "oklch": [
+              "oklch(62% 0.1 200)",
+              "oklch(80% 0.15 150deg)",
+              "OKLCH(0.8 0.15 510)"
+            ],
+            "okhsl": [
+              "okhsl(29.23 100% 56.8%)",
+              "OKHSL(250deg 60% 55%)",
+              "okhsl(150 50% 80%)",
+              "okhsl(150deg 0.5 0.8)"
+            ]
+          },
+          "expected": {
+            "hex": [
+              {
+                "input": "#abc",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 170,
+                  "g": 187,
+                  "b": 204
+                },
+                "hex": "#aabbcc"
+              },
+              {
+                "input": "#12aBcD",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 18,
+                  "g": 171,
+                  "b": 205
+                },
+                "hex": "#12abcd"
+              },
+              {
+                "input": "#ff0000",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 255,
+                  "g": 0,
+                  "b": 0
+                },
+                "hex": "#ff0000"
+              },
+              {
+                "input": "#0000ff",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 0,
+                  "g": 0,
+                  "b": 255
+                },
+                "hex": "#0000ff"
+              },
+              {
+                "input": "#808080",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 128,
+                  "g": 128,
+                  "b": 128
+                },
+                "hex": "#808080"
+              },
+              {
+                "input": "#ffffff",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 255,
+                  "g": 255,
+                  "b": 255
+                },
+                "hex": "#ffffff"
+              },
+              {
+                "input": "#000000",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                "hex": "#000000"
+              },
+              {
+                "input": "#aB3",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 170,
+                  "g": 187,
+                  "b": 51
+                },
+                "hex": "#aabb33"
+              }
+            ],
+            "indexed": [
+              {
+                "input": 0,
+                "parsed": {
+                  "kind": "indexed",
+                  "index": 0
+                },
+                "hex": "#000000"
+              },
+              {
+                "input": 42,
+                "parsed": {
+                  "kind": "indexed",
+                  "index": 42
+                },
+                "hex": "#00d787"
+              },
+              {
+                "input": 231,
+                "parsed": {
+                  "kind": "indexed",
+                  "index": 231
+                },
+                "hex": "#ffffff"
+              },
+              {
+                "input": 232,
+                "parsed": {
+                  "kind": "indexed",
+                  "index": 232
+                },
+                "hex": "#080808"
+              },
+              {
+                "input": 255,
+                "parsed": {
+                  "kind": "indexed",
+                  "index": 255
+                },
+                "hex": "#eeeeee"
+              }
+            ],
+            "oklch": [
+              {
+                "input": "oklch(62% 0.1 200)",
+                "parsed": {
+                  "kind": "oklch",
+                  "l": 0.62,
+                  "c": 0.1,
+                  "h": 200
+                },
+                "hex": "#1c989e"
+              },
+              {
+                "input": "oklch(80% 0.15 150deg)",
+                "parsed": {
+                  "kind": "oklch",
+                  "l": 0.8,
+                  "c": 0.15,
+                  "h": 150
+                },
+                "hex": "#6ed889"
+              },
+              {
+                "input": "OKLCH(0.8 0.15 510)",
+                "parsed": {
+                  "kind": "oklch",
+                  "l": 0.8,
+                  "c": 0.15,
+                  "h": 150
+                },
+                "hex": "#6ed889"
+              }
+            ],
+            "okhsl": [
+              {
+                "input": "okhsl(29.23 100% 56.8%)",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 255,
+                  "g": 0,
+                  "b": 0
+                },
+                "hex": "#ff0000"
+              },
+              {
+                "input": "OKHSL(250deg 60% 55%)",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 78,
+                  "g": 136,
+                  "b": 194
+                },
+                "hex": "#4e88c2"
+              },
+              {
+                "input": "okhsl(150 50% 80%)",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 160,
+                  "g": 214,
+                  "b": 170
+                },
+                "hex": "#a0d6aa"
+              },
+              {
+                "input": "okhsl(150deg 0.5 0.8)",
+                "parsed": {
+                  "kind": "rgb",
+                  "r": 160,
+                  "g": 214,
+                  "b": 170
+                },
+                "hex": "#a0d6aa"
+              }
+            ]
+          }
+        },
+        {
+          "name": "okhsl-channels-and-conversion",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "okhslColors": [
+              {
+                "h": 29.23,
+                "s": 1,
+                "l": 0.568
+              },
+              {
+                "h": 250,
+                "s": 0.6,
+                "l": 0.55
+              },
+              {
+                "h": 150,
+                "s": 0.5,
+                "l": 0.8
+              },
+              {
+                "h": 0,
+                "s": 0,
+                "l": 0.5
+              },
+              {
+                "h": 180,
+                "s": 1,
+                "l": 0.5
+              }
+            ],
+            "colorsToOkhsl": [
+              "#4f8eb3",
+              "#20242a",
+              "#f8f9fa",
+              "#ff0000",
+              "#00ff00",
+              "#0000ff",
+              42
+            ]
+          },
+          "expected": {
+            "okhslColors": [
+              {
+                "input": {
+                  "h": 29.23,
+                  "s": 1,
+                  "l": 0.568
+                },
+                "rgb": {
+                  "kind": "rgb",
+                  "r": 255,
+                  "g": 0,
+                  "b": 0
+                },
+                "channels": {
+                  "h": 29.23388027962784,
+                  "s": 1,
+                  "l": 0.5680846563197032
+                }
+              },
+              {
+                "input": {
+                  "h": 250,
+                  "s": 0.6,
+                  "l": 0.55
+                },
+                "rgb": {
+                  "kind": "rgb",
+                  "r": 78,
+                  "g": 136,
+                  "b": 194
+                },
+                "channels": {
+                  "h": 249.98277734752858,
+                  "s": 0.5992728096478688,
+                  "l": 0.5503021158697632
+                }
+              },
+              {
+                "input": {
+                  "h": 150,
+                  "s": 0.5,
+                  "l": 0.8
+                },
+                "rgb": {
+                  "kind": "rgb",
+                  "r": 160,
+                  "g": 214,
+                  "b": 170
+                },
+                "channels": {
+                  "h": 149.91294447745196,
+                  "s": 0.4985418331801708,
+                  "l": 0.7984760624685766
+                }
+              },
+              {
+                "input": {
+                  "h": 0,
+                  "s": 0,
+                  "l": 0.5
+                },
+                "rgb": {
+                  "kind": "rgb",
+                  "r": 119,
+                  "g": 119,
+                  "b": 119
+                },
+                "channels": {
+                  "h": 0,
+                  "s": 0,
+                  "l": 0.5004875342358648
+                }
+              },
+              {
+                "input": {
+                  "h": 180,
+                  "s": 1,
+                  "l": 0.5
+                },
+                "rgb": {
+                  "kind": "rgb",
+                  "r": 0,
+                  "g": 138,
+                  "b": 121
+                },
+                "channels": {
+                  "h": 180.0785062484631,
+                  "s": 1,
+                  "l": 0.4985318443997862
+                }
+              }
+            ],
+            "colorsToOkhsl": [
+              {
+                "input": "#4f8eb3",
+                "channels": {
+                  "h": 236.19717656525768,
+                  "s": 0.540661618165528,
+                  "l": 0.5584624058913696
+                }
+              },
+              {
+                "input": "#20242a",
+                "channels": {
+                  "h": 258.37244185419917,
+                  "s": 0.12562894901938743,
+                  "l": 0.15552440397159636
+                }
+              },
+              {
+                "input": "#f8f9fa",
+                "channels": {
+                  "h": 247.83945362134128,
+                  "s": 0.12427292617023489,
+                  "l": 0.9786102401903075
+                }
+              },
+              {
+                "input": "#ff0000",
+                "channels": {
+                  "h": 29.23388027962784,
+                  "s": 1,
+                  "l": 0.5680846563197032
+                }
+              },
+              {
+                "input": "#00ff00",
+                "channels": {
+                  "h": 142.49534504144378,
+                  "s": 0.9999999999999991,
+                  "l": 0.844528971493631
+                }
+              },
+              {
+                "input": "#0000ff",
+                "channels": {
+                  "h": 264.05202261637,
+                  "s": 1,
+                  "l": 0.36656533918708134
+                }
+              },
+              {
+                "input": 42,
+                "channels": {
+                  "h": 157.82366689702144,
+                  "s": 1,
+                  "l": 0.7374103890848663
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "color-conversion-and-gamut-mapping",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "toRgb": {
+              "indexed": [
+                0,
+                9,
+                16,
+                231,
+                232,
+                255
+              ],
+              "rgb": [
+                {
+                  "r": 18,
+                  "g": 52,
+                  "b": 86
+                },
+                {
+                  "r": 255,
+                  "g": 0,
+                  "b": 0
+                }
+              ],
+              "oklch": [
+                {
+                  "l": 0.627955,
+                  "c": 0.257683,
+                  "h": 29.2339
+                },
+                {
+                  "l": 1,
+                  "c": 0.3,
+                  "h": 150
+                },
+                {
+                  "l": 0,
+                  "c": 0.3,
+                  "h": 150
+                }
+              ]
+            },
+            "toOklch": {
+              "rgb": [
+                {
+                  "r": 255,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 255,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 255
+                },
+                {
+                  "r": 255,
+                  "g": 255,
+                  "b": 0
+                }
+              ],
+              "indexed": [
+                9,
+                42
+              ],
+              "oklch": [
+                {
+                  "l": 0.8,
+                  "c": 0.15,
+                  "h": 150
+                }
+              ]
+            }
+          },
+          "expected": {
+            "toRgb": {
+              "indexed": [
+                {
+                  "input": 0,
+                  "rgb": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0
+                  }
+                },
+                {
+                  "input": 9,
+                  "rgb": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  }
+                },
+                {
+                  "input": 16,
+                  "rgb": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0
+                  }
+                },
+                {
+                  "input": 231,
+                  "rgb": {
+                    "r": 255,
+                    "g": 255,
+                    "b": 255
+                  }
+                },
+                {
+                  "input": 232,
+                  "rgb": {
+                    "r": 8,
+                    "g": 8,
+                    "b": 8
+                  }
+                },
+                {
+                  "input": 255,
+                  "rgb": {
+                    "r": 238,
+                    "g": 238,
+                    "b": 238
+                  }
+                }
+              ],
+              "rgb": [
+                {
+                  "input": {
+                    "r": 18,
+                    "g": 52,
+                    "b": 86
+                  },
+                  "rgb": {
+                    "r": 18,
+                    "g": 52,
+                    "b": 86
+                  }
+                },
+                {
+                  "input": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  },
+                  "rgb": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  }
+                }
+              ],
+              "oklch": [
+                {
+                  "input": {
+                    "l": 0.627955,
+                    "c": 0.257683,
+                    "h": 29.2339
+                  },
+                  "rgb": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  }
+                },
+                {
+                  "input": {
+                    "l": 1,
+                    "c": 0.3,
+                    "h": 150
+                  },
+                  "rgb": {
+                    "r": 255,
+                    "g": 255,
+                    "b": 255
+                  }
+                },
+                {
+                  "input": {
+                    "l": 0,
+                    "c": 0.3,
+                    "h": 150
+                  },
+                  "rgb": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0
+                  }
+                }
+              ]
+            },
+            "toOklch": {
+              "rgb": [
+                {
+                  "input": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  },
+                  "oklch": {
+                    "l": 0.6279553639214309,
+                    "c": 0.2576833038053606,
+                    "h": 29.23388027962784
+                  }
+                },
+                {
+                  "input": {
+                    "r": 0,
+                    "g": 255,
+                    "b": 0
+                  },
+                  "oklch": {
+                    "l": 0.8664396175234363,
+                    "c": 0.29482722454269544,
+                    "h": 142.49534504144378
+                  }
+                },
+                {
+                  "input": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 255
+                  },
+                  "oklch": {
+                    "l": 0.4520137181744233,
+                    "c": 0.3132143886344848,
+                    "h": 264.05202261637
+                  }
+                },
+                {
+                  "input": {
+                    "r": 255,
+                    "g": 255,
+                    "b": 0
+                  },
+                  "oklch": {
+                    "l": 0.9679827267927986,
+                    "c": 0.2110058737497979,
+                    "h": 109.76923612816614
+                  }
+                }
+              ],
+              "indexed": [
+                {
+                  "input": 9,
+                  "oklch": {
+                    "l": 0.6279553639214309,
+                    "c": 0.2576833038053606,
+                    "h": 29.23388027962784
+                  }
+                },
+                {
+                  "input": 42,
+                  "oklch": {
+                    "l": 0.7742338392580884,
+                    "c": 0.1816666089516545,
+                    "h": 157.82366689702144
+                  }
+                }
+              ],
+              "oklch": [
+                {
+                  "input": {
+                    "l": 0.8,
+                    "c": 0.15,
+                    "h": 150
+                  },
+                  "oklch": {
+                    "l": 0.8,
+                    "c": 0.15,
+                    "h": 150
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "color-mixing-and-spaces",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "oklch": [
+              {
+                "first": "#ff0000",
+                "second": "#0000ff",
+                "amount": 0.5
+              },
+              {
+                "first": {
+                  "kind": "oklch",
+                  "l": 0.7,
+                  "c": 0.1,
+                  "h": 350
+                },
+                "second": {
+                  "kind": "oklch",
+                  "l": 0.7,
+                  "c": 0.1,
+                  "h": 10
+                },
+                "amount": 0.5
+              },
+              {
+                "first": "#808080",
+                "second": {
+                  "kind": "oklch",
+                  "l": 0.7,
+                  "c": 0.12,
+                  "h": 217
+                },
+                "amount": 0.5
+              },
+              {
+                "first": {
+                  "kind": "oklch",
+                  "l": 0.7,
+                  "c": 0.12,
+                  "h": 217
+                },
+                "second": "#808080",
+                "amount": 0.5
+              }
+            ],
+            "srgb": [
+              {
+                "first": "#ff0000",
+                "second": "#0000ff",
+                "amount": 0.5
+              },
+              {
+                "first": "#000000",
+                "second": "#ffffff",
+                "amount": 0.25
+              }
+            ]
+          },
+          "expected": {
+            "oklch": [
+              {
+                "first": "#ff0000",
+                "second": "#0000ff",
+                "amount": 0.5,
+                "mixed": {
+                  "kind": "oklch",
+                  "l": 0.5399845410479271,
+                  "c": 0.2854488462199227,
+                  "h": 326.6429514479989
+                },
+                "hex": "#b200b8"
+              },
+              {
+                "first": {
+                  "kind": "oklch",
+                  "l": 0.7,
+                  "c": 0.1,
+                  "h": 350
+                },
+                "second": {
+                  "kind": "oklch",
+                  "l": 0.7,
+                  "c": 0.1,
+                  "h": 10
+                },
+                "amount": 0.5,
+                "mixed": {
+                  "kind": "oklch",
+                  "l": 0.7,
+                  "c": 0.1,
+                  "h": 0
+                },
+                "hex": "#d2849c"
+              },
+              {
+                "first": "#808080",
+                "second": {
+                  "kind": "oklch",
+                  "l": 0.7,
+                  "c": 0.12,
+                  "h": 217
+                },
+                "amount": 0.5,
+                "mixed": {
+                  "kind": "oklch",
+                  "l": 0.6499354028110733,
+                  "c": 0.06000000000000006,
+                  "h": 217
+                },
+                "hex": "#6499a7"
+              },
+              {
+                "first": {
+                  "kind": "oklch",
+                  "l": 0.7,
+                  "c": 0.12,
+                  "h": 217
+                },
+                "second": "#808080",
+                "amount": 0.5,
+                "mixed": {
+                  "kind": "oklch",
+                  "l": 0.6499354028110733,
+                  "c": 0.06000000000000006,
+                  "h": 217
+                },
+                "hex": "#6499a7"
+              }
+            ],
+            "srgb": [
+              {
+                "first": "#ff0000",
+                "second": "#0000ff",
+                "amount": 0.5,
+                "mixed": {
+                  "kind": "rgb",
+                  "r": 127.5,
+                  "g": 0,
+                  "b": 127.5
+                },
+                "hex": "#800080"
+              },
+              {
+                "first": "#000000",
+                "second": "#ffffff",
+                "amount": 0.25,
+                "mixed": {
+                  "kind": "rgb",
+                  "r": 63.75,
+                  "g": 63.75,
+                  "b": 63.75
+                },
+                "hex": "#404040"
+              }
+            ]
+          }
+        },
+        {
+          "name": "oklab-to-okhsl-lightness",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "values": [
+              0,
+              0.1,
+              0.2,
+              0.4,
+              0.5,
+              0.6279553639214309,
+              0.75,
+              0.9,
+              1
+            ]
+          },
+          "expected": {
+            "values": [
+              {
+                "input": 0,
+                "lightness": 0
+              },
+              {
+                "input": 0.1,
+                "lightness": 0.029631373306766642
+              },
+              {
+                "input": 0.2,
+                "lightness": 0.09907971332700129
+              },
+              {
+                "input": 0.4,
+                "lightness": 0.3079721056348804
+              },
+              {
+                "input": 0.5,
+                "lightness": 0.42114056260896976
+              },
+              {
+                "input": 0.6279553639214309,
+                "lightness": 0.5680846563197032
+              },
+              {
+                "input": 0.75,
+                "lightness": 0.7092972572794943
+              },
+              {
+                "input": 0.9,
+                "lightness": 0.8835659576242668
+              },
+              {
+                "input": 1,
+                "lightness": 1
+              }
+            ]
+          }
+        },
+        {
+          "name": "text-style-and-ansi-formatting",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "foregroundAnsi": [
+              {
+                "color": "#ff0000",
+                "mode": "truecolor"
+              },
+              {
+                "color": "#ff0000",
+                "mode": "256color"
+              },
+              {
+                "color": 9,
+                "mode": "truecolor"
+              },
+              {
+                "color": 9,
+                "mode": "256color"
+              },
+              {
+                "color": {
+                  "kind": "oklch",
+                  "l": 0.627955,
+                  "c": 0.257683,
+                  "h": 29.2339
+                },
+                "mode": "truecolor"
+              },
+              {
+                "color": {
+                  "kind": "oklch",
+                  "l": 0.627955,
+                  "c": 0.257683,
+                  "h": 29.2339
+                },
+                "mode": "256color"
+              }
+            ],
+            "backgroundAnsi": [
+              {
+                "color": "#0000ff",
+                "mode": "truecolor"
+              },
+              {
+                "color": "#0000ff",
+                "mode": "256color"
+              },
+              {
+                "color": 42,
+                "mode": "truecolor"
+              },
+              {
+                "color": 42,
+                "mode": "256color"
+              }
+            ],
+            "styleText": [
+              {
+                "text": "Ready",
+                "style": {
+                  "fg": {
+                    "kind": "rgb",
+                    "r": 18,
+                    "g": 52,
+                    "b": 86
+                  },
+                  "bg": {
+                    "kind": "indexed",
+                    "index": 9
+                  },
+                  "bold": true,
+                  "italic": true
+                },
+                "mode": "truecolor"
+              },
+              {
+                "text": "Ready",
+                "style": {
+                  "fg": {
+                    "kind": "rgb",
+                    "r": 18,
+                    "g": 52,
+                    "b": 86
+                  }
+                },
+                "mode": "256color"
+              },
+              {
+                "text": "FullAttrs",
+                "style": {
+                  "fg": {
+                    "kind": "rgb",
+                    "r": 18,
+                    "g": 52,
+                    "b": 86
+                  },
+                  "bg": {
+                    "kind": "indexed",
+                    "index": 9
+                  },
+                  "bold": true,
+                  "dim": true,
+                  "italic": true,
+                  "underline": true,
+                  "inverse": true,
+                  "strikethrough": true
+                },
+                "mode": "truecolor"
+              },
+              {
+                "text": "AttrsOnly",
+                "style": {
+                  "bold": true,
+                  "dim": true,
+                  "underline": true
+                },
+                "mode": "256color"
+              },
+              {
+                "text": "NoAttrs",
+                "style": {},
+                "mode": "truecolor"
+              }
+            ],
+            "styleTextWithAnsi": [
+              {
+                "text": "Cached",
+                "fgAnsi": "\u001b[38;2;18;52;86m",
+                "bgAnsi": "\u001b[48;5;9m",
+                "options": {
+                  "bold": true,
+                  "italic": true
+                }
+              },
+              {
+                "text": "Plain",
+                "options": {
+                  "underline": true
+                }
+              }
+            ]
+          },
+          "expected": {
+            "foregroundAnsi": [
+              {
+                "input": {
+                  "color": "#ff0000",
+                  "mode": "truecolor"
+                },
+                "ansi": "\u001b[38;2;255;0;0m"
+              },
+              {
+                "input": {
+                  "color": "#ff0000",
+                  "mode": "256color"
+                },
+                "ansi": "\u001b[38;5;196m"
+              },
+              {
+                "input": {
+                  "color": 9,
+                  "mode": "truecolor"
+                },
+                "ansi": "\u001b[38;5;9m"
+              },
+              {
+                "input": {
+                  "color": 9,
+                  "mode": "256color"
+                },
+                "ansi": "\u001b[38;5;9m"
+              },
+              {
+                "input": {
+                  "color": {
+                    "kind": "oklch",
+                    "l": 0.627955,
+                    "c": 0.257683,
+                    "h": 29.2339
+                  },
+                  "mode": "truecolor"
+                },
+                "ansi": "\u001b[38;2;255;0;0m"
+              },
+              {
+                "input": {
+                  "color": {
+                    "kind": "oklch",
+                    "l": 0.627955,
+                    "c": 0.257683,
+                    "h": 29.2339
+                  },
+                  "mode": "256color"
+                },
+                "ansi": "\u001b[38;5;196m"
+              }
+            ],
+            "backgroundAnsi": [
+              {
+                "input": {
+                  "color": "#0000ff",
+                  "mode": "truecolor"
+                },
+                "ansi": "\u001b[48;2;0;0;255m"
+              },
+              {
+                "input": {
+                  "color": "#0000ff",
+                  "mode": "256color"
+                },
+                "ansi": "\u001b[48;5;21m"
+              },
+              {
+                "input": {
+                  "color": 42,
+                  "mode": "truecolor"
+                },
+                "ansi": "\u001b[48;5;42m"
+              },
+              {
+                "input": {
+                  "color": 42,
+                  "mode": "256color"
+                },
+                "ansi": "\u001b[48;5;42m"
+              }
+            ],
+            "styleText": [
+              {
+                "input": {
+                  "text": "Ready",
+                  "style": {
+                    "fg": {
+                      "kind": "rgb",
+                      "r": 18,
+                      "g": 52,
+                      "b": 86
+                    },
+                    "bg": {
+                      "kind": "indexed",
+                      "index": 9
+                    },
+                    "bold": true,
+                    "italic": true
+                  },
+                  "mode": "truecolor"
+                },
+                "output": "\u001b[38;2;18;52;86m\u001b[48;5;9m\u001b[1m\u001b[3mReady\u001b[23m\u001b[22m\u001b[49m\u001b[39m"
+              },
+              {
+                "input": {
+                  "text": "Ready",
+                  "style": {
+                    "fg": {
+                      "kind": "rgb",
+                      "r": 18,
+                      "g": 52,
+                      "b": 86
+                    }
+                  },
+                  "mode": "256color"
+                },
+                "output": "\u001b[38;5;23mReady\u001b[39m"
+              },
+              {
+                "input": {
+                  "text": "FullAttrs",
+                  "style": {
+                    "fg": {
+                      "kind": "rgb",
+                      "r": 18,
+                      "g": 52,
+                      "b": 86
+                    },
+                    "bg": {
+                      "kind": "indexed",
+                      "index": 9
+                    },
+                    "bold": true,
+                    "dim": true,
+                    "italic": true,
+                    "underline": true,
+                    "inverse": true,
+                    "strikethrough": true
+                  },
+                  "mode": "truecolor"
+                },
+                "output": "\u001b[38;2;18;52;86m\u001b[48;5;9m\u001b[1m\u001b[2m\u001b[3m\u001b[4m\u001b[7m\u001b[9mFullAttrs\u001b[29m\u001b[27m\u001b[24m\u001b[23m\u001b[22m\u001b[49m\u001b[39m"
+              },
+              {
+                "input": {
+                  "text": "AttrsOnly",
+                  "style": {
+                    "bold": true,
+                    "dim": true,
+                    "underline": true
+                  },
+                  "mode": "256color"
+                },
+                "output": "\u001b[1m\u001b[2m\u001b[4mAttrsOnly\u001b[24m\u001b[22m"
+              },
+              {
+                "input": {
+                  "text": "NoAttrs",
+                  "style": {},
+                  "mode": "truecolor"
+                },
+                "output": "NoAttrs"
+              }
+            ],
+            "styleTextWithAnsi": [
+              {
+                "input": {
+                  "text": "Cached",
+                  "fgAnsi": "\u001b[38;2;18;52;86m",
+                  "bgAnsi": "\u001b[48;5;9m",
+                  "options": {
+                    "bold": true,
+                    "italic": true
+                  }
+                },
+                "output": "\u001b[38;2;18;52;86m\u001b[48;5;9m\u001b[1m\u001b[3mCached\u001b[23m\u001b[22m\u001b[49m\u001b[39m"
+              },
+              {
+                "input": {
+                  "text": "Plain",
+                  "options": {
+                    "underline": true
+                  }
+                },
+                "output": "\u001b[4mPlain\u001b[24m"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

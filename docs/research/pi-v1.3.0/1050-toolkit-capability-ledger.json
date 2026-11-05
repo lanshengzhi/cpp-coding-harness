@@ -2062,14 +2062,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2087,13 +2086,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "Color",
@@ -2109,14 +2108,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2134,7 +2132,7 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -2144,7 +2142,7 @@
      "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "ColorMixSpace",
@@ -2160,14 +2158,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-mixing-and-spaces",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-mixing-and-spaces",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2185,7 +2182,7 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -2193,7 +2190,7 @@
      "tests/tui/ColorUtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-mixing-and-spaces"
   },
   {
    "id": "colorToHex",
@@ -2209,14 +2206,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-parsing-and-hex",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-parsing-and-hex",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2234,7 +2230,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -2242,7 +2238,7 @@
      "tests/coding_agent/tui/HtmlExportTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-parsing-and-hex"
   },
   {
    "id": "colorToOkhsl",
@@ -2258,14 +2254,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "okhsl-channels-and-conversion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "okhsl-channels-and-conversion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2283,13 +2278,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "okhsl-channels-and-conversion"
   },
   {
    "id": "colorToOklch",
@@ -2305,14 +2300,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-conversion-and-gamut-mapping",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-conversion-and-gamut-mapping",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2330,13 +2324,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-conversion-and-gamut-mapping"
   },
   {
    "id": "colorToRgb",
@@ -2352,14 +2346,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-conversion-and-gamut-mapping",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-conversion-and-gamut-mapping",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2377,13 +2370,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-conversion-and-gamut-mapping"
   },
   {
    "id": "foregroundAnsi",
@@ -2399,14 +2392,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2424,13 +2416,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "IndexedColor",
@@ -2446,14 +2438,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2474,7 +2465,7 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -2483,7 +2474,7 @@
      "tests/tui/UtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "IndexedColor.kind",
@@ -2499,14 +2490,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -2523,7 +2513,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -2532,7 +2522,7 @@
      "tests/tui/UtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "IndexedColor.index",
@@ -2548,14 +2538,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -2572,7 +2561,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -2581,7 +2570,7 @@
      "tests/tui/UtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "indexedColor",
@@ -2597,14 +2586,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2622,13 +2610,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "mixColors",
@@ -2644,14 +2632,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-mixing-and-spaces",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-mixing-and-spaces",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2669,13 +2656,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-mixing-and-spaces"
   },
   {
    "id": "OkhslChannels",
@@ -2691,14 +2678,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "okhsl-channels-and-conversion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "okhsl-channels-and-conversion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2720,13 +2706,13 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "okhsl-channels-and-conversion"
   },
   {
    "id": "OkhslChannels.h",
@@ -2742,14 +2728,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "okhsl-channels-and-conversion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "okhsl-channels-and-conversion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -2766,13 +2751,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "okhsl-channels-and-conversion"
   },
   {
    "id": "OkhslChannels.s",
@@ -2788,14 +2773,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "okhsl-channels-and-conversion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "okhsl-channels-and-conversion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -2812,13 +2796,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "okhsl-channels-and-conversion"
   },
   {
    "id": "OkhslChannels.l",
@@ -2834,14 +2818,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "okhsl-channels-and-conversion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "okhsl-channels-and-conversion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -2858,13 +2841,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "okhsl-channels-and-conversion"
   },
   {
    "id": "OklchChannels",
@@ -2880,14 +2863,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -2909,13 +2891,13 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "OklchChannels.l",
@@ -2931,14 +2913,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -2955,13 +2936,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "OklchChannels.c",
@@ -2977,14 +2958,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3001,13 +2981,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "OklchChannels.h",
@@ -3023,14 +3003,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3047,13 +3026,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "OklchColorValue",
@@ -3069,14 +3048,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3099,7 +3077,7 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -3107,7 +3085,7 @@
      "tests/tui/ColorUtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "OklchColorValue.kind",
@@ -3123,14 +3101,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3147,7 +3124,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -3155,7 +3132,7 @@
      "tests/tui/ColorUtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "OklchColorValue.l",
@@ -3171,14 +3148,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3195,7 +3171,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -3203,7 +3179,7 @@
      "tests/tui/ColorUtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "OklchColorValue.c",
@@ -3219,14 +3195,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3243,7 +3218,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -3251,7 +3226,7 @@
      "tests/tui/ColorUtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "OklchColorValue.h",
@@ -3267,14 +3242,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3291,7 +3265,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -3299,7 +3273,7 @@
      "tests/tui/ColorUtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "okhslColor",
@@ -3315,14 +3289,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "okhsl-channels-and-conversion",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "okhsl-channels-and-conversion",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3340,13 +3313,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "okhsl-channels-and-conversion"
   },
   {
    "id": "oklchColor",
@@ -3362,14 +3335,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3387,13 +3359,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "parseColor",
@@ -3409,14 +3381,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-parsing-and-hex",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-parsing-and-hex",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3434,13 +3405,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-parsing-and-hex"
   },
   {
    "id": "RgbColorValue",
@@ -3456,14 +3427,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3486,13 +3456,13 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "RgbColorValue.kind",
@@ -3508,14 +3478,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3532,13 +3501,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "RgbColorValue.r",
@@ -3554,14 +3523,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3578,13 +3546,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "RgbColorValue.g",
@@ -3600,14 +3568,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3624,13 +3591,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "RgbColorValue.b",
@@ -3646,14 +3613,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3670,13 +3636,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "rgbColor",
@@ -3692,14 +3658,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "color-values-and-construction",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "color-values-and-construction",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3717,13 +3682,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "color-values-and-construction"
   },
   {
    "id": "styleText",
@@ -3739,14 +3704,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3764,7 +3728,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -3772,7 +3736,7 @@
      "tests/tui/UtilsAnsiTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "styleTextWithAnsi",
@@ -3788,14 +3752,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3813,13 +3776,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TerminalColorMode",
@@ -3835,14 +3798,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3860,7 +3822,7 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -3869,7 +3831,7 @@
      "tests/tui/UtilsTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextAttributes",
@@ -3885,14 +3847,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -3917,13 +3878,13 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextAttributes.bold",
@@ -3939,14 +3900,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -3963,13 +3923,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextAttributes.dim",
@@ -3985,14 +3945,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -4009,13 +3968,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextAttributes.italic",
@@ -4031,14 +3990,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -4055,13 +4013,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextAttributes.underline",
@@ -4077,14 +4035,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -4101,13 +4058,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextAttributes.inverse",
@@ -4123,14 +4080,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -4147,13 +4103,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextAttributes.strikethrough",
@@ -4169,14 +4125,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -4193,13 +4148,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
     "tests": []
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextStyle",
@@ -4215,14 +4170,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -4243,7 +4197,7 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -4251,7 +4205,7 @@
      "tests/tui/UtilsAnsiTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextStyle.fg",
@@ -4267,14 +4221,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -4291,7 +4244,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -4299,7 +4252,7 @@
      "tests/tui/UtilsAnsiTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "TextStyle.bg",
@@ -4315,14 +4268,13 @@
    "consumer": "theme/style consumers",
    "boundary": "Color values, parseColor, styleText*, mixColors",
    "implementation_ticket": null,
-   "scenario": "E17 color parse/style",
+   "scenario": "text-style-and-ansi-formatting",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 color parse/style",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "text-style-and-ansi-formatting",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -4339,7 +4291,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Color values, parseColor, styleText*, mixColors",
     "consumer": "theme/style consumers",
@@ -4347,7 +4299,7 @@
      "tests/tui/UtilsAnsiTest.cpp"
     ]
    },
-   "comparisonCase": "E17 color parse/style"
+   "comparisonCase": "text-style-and-ansi-formatting"
   },
   {
    "id": "Box",
@@ -28234,14 +28186,13 @@
    "consumer": "color conversion helpers",
    "boundary": "oklabToOkhslLightness helper",
    "implementation_ticket": null,
-   "scenario": "E17 OKLCH/OKHSL/mix",
+   "scenario": "oklab-to-okhsl-lightness",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E17 OKLCH/OKHSL/mix",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1218/color.json",
+    "scenario": "oklab-to-okhsl-lightness",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1218",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -28258,13 +28209,13 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "oklabToOkhslLightness helper",
     "consumer": "color conversion helpers",
     "tests": []
    },
-   "comparisonCase": "E17 OKLCH/OKHSL/mix"
+   "comparisonCase": "oklab-to-okhsl-lightness"
   },
   {
    "id": "formatProgramStatus",

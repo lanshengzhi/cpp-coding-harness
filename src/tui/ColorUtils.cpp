@@ -226,11 +226,6 @@ constexpr std::array<double, 24> kGrayValues{
 
 [[nodiscard]] double normalize_hue(double hue) { return std::fmod(std::fmod(hue, 360.0) + 360.0, 360.0); }
 
-[[nodiscard]] double oklab_to_okhsl_lightness(double value) {
-    const auto term = kK3 * value - kK1;
-    return 0.5 * (term + std::sqrt(term * term + 4 * kK2 * kK3 * value));
-}
-
 [[nodiscard]] double okhsl_to_oklab_lightness(double value) {
     return (value * value + kK1 * value) / (kK3 * (value + kK2));
 }
@@ -449,6 +444,11 @@ struct ParsedChannel {
 
 } // namespace
 
+double oklab_to_okhsl_lightness(double value) {
+    const auto term = kK3 * value - kK1;
+    return 0.5 * (term + std::sqrt(term * term + 4 * kK2 * kK3 * value));
+}
+
 support::Expected<OklchColorValue> oklch_color(double lightness, double chroma, double hue) {
     if (!std::isfinite(lightness) || lightness < 0 || lightness > 1) {
         return std::unexpected(invalid_color(std::format("l must be between 0 and 1: {}", lightness)));
@@ -469,6 +469,10 @@ support::Expected<RgbColor> okhsl_to_rgb(double hue, double saturation, double l
         return std::unexpected(invalid_color(std::format("l must be between 0 and 1: {}", lightness)));
     }
     return okhsl_to_rgb_unchecked(hue, saturation, lightness);
+}
+
+support::Expected<RgbColor> okhsl_color(double hue, double saturation, double lightness) {
+    return okhsl_to_rgb(hue, saturation, lightness);
 }
 
 support::Expected<Color> parse_color(int index) {

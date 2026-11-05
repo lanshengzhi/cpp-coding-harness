@@ -14,22 +14,46 @@ namespace cch::tui {
 
 struct IndexedColor {
     std::uint8_t index{0};
+    static constexpr std::string_view kind{"indexed"};
 
     bool operator==(const IndexedColor&) const = default;
+};
+
+struct RgbColorValue {
+    double r{0};
+    double g{0};
+    double b{0};
+    static constexpr std::string_view kind{"rgb"};
+
+    bool operator==(const RgbColorValue&) const = default;
 };
 
 struct RgbColor {
     double red{0};
     double green{0};
     double blue{0};
+    static constexpr std::string_view kind{"rgb"};
+
+    [[nodiscard]] double r() const noexcept { return red; }
+    [[nodiscard]] double g() const noexcept { return green; }
+    [[nodiscard]] double b() const noexcept { return blue; }
 
     bool operator==(const RgbColor&) const = default;
+};
+
+struct OklchChannels {
+    double l{0};
+    double c{0};
+    double h{0};
+
+    bool operator==(const OklchChannels&) const = default;
 };
 
 struct OklchColorValue {
     double l{0};
     double c{0};
     double h{0};
+    static constexpr std::string_view kind{"oklch"};
 
     bool operator==(const OklchColorValue&) const = default;
 };
@@ -54,6 +78,17 @@ enum class TerminalColorMode {
     TrueColor,
 };
 
+struct TextAttributes {
+    bool bold{false};
+    bool dim{false};
+    bool italic{false};
+    bool underline{false};
+    bool inverse{false};
+    bool strikethrough{false};
+
+    bool operator==(const TextAttributes&) const = default;
+};
+
 /// SGR attributes and optional terminal colors for one styled text span.
 struct TextStyle {
     std::optional<Color> foreground;
@@ -64,6 +99,24 @@ struct TextStyle {
     bool underline{false};
     bool inverse{false};
     bool strikethrough{false};
+
+    [[nodiscard]] const std::optional<Color>& fg() const noexcept { return foreground; }
+    [[nodiscard]] const std::optional<Color>& bg() const noexcept { return background; }
+    std::optional<Color>& fg() noexcept { return foreground; }
+    std::optional<Color>& bg() noexcept { return background; }
+
+    [[nodiscard]] TextAttributes attributes() const noexcept {
+        return {
+                .bold = bold,
+                .dim = dim,
+                .italic = italic,
+                .underline = underline,
+                .inverse = inverse,
+                .strikethrough = strikethrough,
+        };
+    }
+
+    bool operator==(const TextStyle&) const = default;
 };
 
 /// Indexed palette channels match frozen pi's `colors.ts` BASIC_COLORS for indexes 0-15.
@@ -79,7 +132,9 @@ struct TextStyle {
 
 /// Construct and convert colors in OKLCH and OKHSL.
 [[nodiscard]] support::Expected<OklchColorValue> oklch_color(double lightness, double chroma, double hue);
+[[nodiscard]] support::Expected<RgbColor> okhsl_color(double hue, double saturation, double lightness);
 [[nodiscard]] support::Expected<RgbColor> okhsl_to_rgb(double hue, double saturation, double lightness);
+[[nodiscard]] double oklab_to_okhsl_lightness(double value);
 [[nodiscard]] support::Expected<OklchColorValue> color_to_oklch(const Color& color);
 [[nodiscard]] support::Expected<OkhslChannels> color_to_okhsl(const Color& color);
 
@@ -96,6 +151,12 @@ struct TextStyle {
 /// Apply colors and SGR attributes around text, retaining existing ANSI and OSC 8 bytes.
 [[nodiscard]] support::Expected<std::string> style_text(
         std::string_view text, const TextStyle& style, TerminalColorMode mode);
+
+/// Apply precomputed foreground/background SGR sequences with text attributes.
+[[nodiscard]] std::string style_text_with_ansi(std::string_view text,
+        std::optional<std::string_view> foreground,
+        std::optional<std::string_view> background,
+        const TextAttributes& attributes);
 
 /// Apply precomputed foreground/background SGR sequences. The colors in style are ignored.
 [[nodiscard]] std::string style_text_with_ansi(std::string_view text,

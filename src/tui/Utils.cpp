@@ -273,7 +273,7 @@ support::Expected<std::string> background_ansi(const Color& color, TerminalColor
 std::string style_text_with_ansi(std::string_view text,
         std::optional<std::string_view> foreground,
         std::optional<std::string_view> background,
-        const TextStyle& style) {
+        const TextAttributes& attributes) {
     std::string prefix;
     std::string suffix;
     if (foreground) {
@@ -284,26 +284,33 @@ std::string style_text_with_ansi(std::string_view text,
         prefix += *background;
         suffix = "\x1b[49m" + suffix;
     }
-    if (style.bold) prefix += "\x1b[1m";
-    if (style.dim) prefix += "\x1b[2m";
-    if (style.bold || style.dim) suffix = "\x1b[22m" + suffix;
-    if (style.italic) {
+    if (attributes.bold) prefix += "\x1b[1m";
+    if (attributes.dim) prefix += "\x1b[2m";
+    if (attributes.bold || attributes.dim) suffix = "\x1b[22m" + suffix;
+    if (attributes.italic) {
         prefix += "\x1b[3m";
         suffix = "\x1b[23m" + suffix;
     }
-    if (style.underline) {
+    if (attributes.underline) {
         prefix += "\x1b[4m";
         suffix = "\x1b[24m" + suffix;
     }
-    if (style.inverse) {
+    if (attributes.inverse) {
         prefix += "\x1b[7m";
         suffix = "\x1b[27m" + suffix;
     }
-    if (style.strikethrough) {
+    if (attributes.strikethrough) {
         prefix += "\x1b[9m";
         suffix = "\x1b[29m" + suffix;
     }
     return prefix + std::string(text) + suffix;
+}
+
+std::string style_text_with_ansi(std::string_view text,
+        std::optional<std::string_view> foreground,
+        std::optional<std::string_view> background,
+        const TextStyle& style) {
+    return style_text_with_ansi(text, foreground, background, style.attributes());
 }
 
 support::Expected<std::string> style_text(std::string_view text, const TextStyle& style, TerminalColorMode mode) {
