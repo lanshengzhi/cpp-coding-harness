@@ -1859,7 +1859,6 @@ TEST_CASE("pi-v1.3.0 root overlay lifecycle replays the frozen bounds and focus 
     CHECK(passing_handle.is_focused() == frozen_non_capturing.at("secondFocused").get_boolean());
     passing_handle.hide();
     handle.hide();
-    const auto& frozen_after_hide = expected.at("afterHide");
     CHECK(!tui.has_overlay_entries());
     REQUIRE(tui.stop());
 }

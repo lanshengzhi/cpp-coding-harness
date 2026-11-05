@@ -868,7 +868,7 @@ TEST_CASE("pi-v1.3.0 the settings search row forwards clicks and the separator r
 }
 
 
-void check_a_delegating_host_keeps_the_focus_when_its_nested_input_is_c(const JsonValue& bundle) {
+void check_a_delegating_host_keeps_the_focus_when_its_nested_input_is_c(const JsonValue&) {
     // Criterion 3: the focus inheritance rule of `dispatch_mouse_event`
     // (`Mouse.cpp:13-31`, pi `tui.ts:81-105`). The frozen end-to-end case
     // (`mouse-components.test.ts:195-215`) shows the same property through the

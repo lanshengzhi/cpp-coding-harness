@@ -211,7 +211,7 @@ TEST_CASE("pi-v1.3.0 fullscreen search index reuses cached matches until its inp
 }
 
 
-void check_fullscreen_search_renders_input_before_applying_truncated_re(const JsonValue& bundle) {
+void check_fullscreen_search_renders_input_before_applying_truncated_re(const JsonValue&) {
     const auto registry = cch::tests::fullscreen_registry();
     cch::tui::AltScreenSearchComponent component([](std::string) {}, *registry);
     for (const char value : std::string{"abcdefghij"}) {
@@ -441,12 +441,8 @@ TEST_CASE("pi-v1.3.0 fullscreen search close restores previous overlay focus and
     check_fullscreen_search_close_restores_previous_overlay_focus_and_(*bundle);
 }
 
-
-TEST_CASE("fullscreen search ignores box drawing clicks as navigation controls",
-        "[tui][alt-screen-search][issue1010][issue1213][compat-pi]") {
-    const auto bundle = search_evidence();
-    REQUIRE(bundle);
-    const auto& scenario = scenario_of(*bundle, "search-boxdrawing-not-buttons");
+void check_fullscreen_search_ignores_box_drawing_clicks_as_navigatio(const JsonValue& bundle) {
+    const auto& scenario = scenario_of(bundle, "search-boxdrawing-not-buttons");
     const auto& dimensions = scenario.at("dimensions");
     const auto& inputs = scenario.at("inputs");
     cch::tui::VirtualTerminal terminal({.columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
@@ -471,6 +467,20 @@ TEST_CASE("fullscreen search ignores box drawing clicks as navigation controls",
     REQUIRE(tui.render());
     CHECK(visible_lines(terminal) == lines_of(expected.at("after")));
     REQUIRE(tui.stop());
+}
+
+TEST_CASE("fullscreen search ignores box drawing clicks as navigation controls",
+        "[tui][alt-screen-search][issue1010][issue1213][compat-pi]") {
+    const auto bundle = search_evidence();
+    REQUIRE(bundle);
+    check_fullscreen_search_ignores_box_drawing_clicks_as_navigatio(*bundle);
+}
+
+TEST_CASE("pi-v1.3.0 search ignores box drawing clicks as navigation controls",
+        "[tui][alt-screen-search][issue1211][compat-pi]") {
+    const auto bundle = audit1211_search_bundle();
+    REQUIRE(bundle);
+    check_fullscreen_search_ignores_box_drawing_clicks_as_navigatio(*bundle);
 }
 
 void check_fullscreen_search_preserves_current_and_non_current_highligh(const JsonValue& bundle) {

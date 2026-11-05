@@ -144,7 +144,8 @@ private:
 
 } // namespace
 
-TEST_CASE("mouse reports parse from SGR, legacy X10, and wheel forms", "[tui][mouse][issue1002][issue1213][spec]") {
+TEST_CASE("mouse reports parse from SGR, legacy X10, and wheel forms",
+        "[tui][mouse][issue1002][issue1209][issue1213][spec]") {
     using cch::tui::detail::MousePacket;
     using cch::tui::detail::parse_mouse_packet;
 
@@ -859,7 +860,8 @@ TEST_CASE("regular mode neither consumes nor paints a mouse report", "[tui][mous
     CHECK(tui.stop());
 }
 
-TEST_CASE("a released gesture stops capturing before the next press", "[tui][mouse][issue1213][spec]") {
+TEST_CASE("a released gesture stops capturing before the next press",
+        "[tui][mouse][issue1209][issue1212][issue1213][spec]") {
     // Discriminating case for the frozen capture gesture: a capture map that
     // leaks past release keeps sending moves to the old target; the frozen
     // behavior hit-tests the component under the pointer once the gesture ends.
@@ -898,7 +900,7 @@ TEST_CASE("a released gesture stops capturing before the next press", "[tui][mou
     CHECK(tui.stop());
 }
 
-TEST_CASE("an unconsumed wheel scrolls after handled pointer motion", "[tui][mouse][issue1213][spec]") {
+TEST_CASE("an unconsumed wheel scrolls after handled pointer motion", "[tui][mouse][issue1209][issue1213][spec]") {
     // Discriminating case for the frozen wheel routing: motion-handling state
     // must not swallow a later wheel report; an unconsumed wheel still scrolls
     // the transcript after a handled motion.

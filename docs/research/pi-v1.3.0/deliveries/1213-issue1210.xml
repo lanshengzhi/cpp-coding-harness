@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="10"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="2"
+	timestamp="2026-11-05T20:40:13"
+	>
+	<testcase name="an overlay&apos;s focused fake cursor resolves before it is spliced" classname="an overlay&apos;s focused fake cursor resolves before it is spliced" time="0.449367" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1209;issue1210;issue1211;spec;tui"/>
+		</properties>
+		<system-out>Filters: "an overlay's focused fake cursor resolves before it is spliced"
+Randomness seeded to: 2776385
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="hardware cursor mode omits the focused fake cursor while the unfocused one stays visible" classname="hardware cursor mode omits the focused fake cursor while the unfocused one stays visible" time="0.577132" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1210;spec;tui"/>
+		</properties>
+		<system-out>Filters: "hardware cursor mode omits the focused fake cursor while the unfocused one stays visible"
+Randomness seeded to: 3268864510
+===============================================================================
+All tests passed (43 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 InteractiveEngine preserves exact nested and clipped cursor coordinates across mode switch" classname="pi-v1.3.0 InteractiveEngine preserves exact nested and clipped cursor coordinates across mode switch" time="2.19464" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compat-pi;cursor;issue1210;renderer-switch;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 InteractiveEngine preserves exact nested and clipped cursor coordinates across mode switch"
+Randomness seeded to: 3588471928
+===============================================================================
+All tests passed (201 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 format_resume_command characterizes the frozen resume command matrix" classname="pi-v1.3.0 format_resume_command characterizes the frozen resume command matrix" time="2.16857" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compat-pi;exit;issue1210;resume_command;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 format_resume_command characterizes the frozen resume command matrix"
+Randomness seeded to: 1276112995
+===============================================================================
+All tests passed (56 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 live renderer switch validates focus and state expectations from evidence" classname="pi-v1.3.0 live renderer switch validates focus and state expectations from evidence" time="0.473402" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1210;renderer-switch;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 live renderer switch validates focus and state expectations from evidence"
+Randomness seeded to: 425672116
+===============================================================================
+All tests passed (33 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 product-cursor live switch scenarios replay across MainScreen and AltScreen" classname="pi-v1.3.0 product-cursor live switch scenarios replay across MainScreen and AltScreen" time="1.47534" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1210;product-cursor;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 product-cursor live switch scenarios replay across MainScreen and AltScreen"
+Randomness seeded to: 2504806070
+===============================================================================
+All tests passed (135 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 product-cursor settings resolution replays against SettingsManager" classname="pi-v1.3.0 product-cursor settings resolution replays against SettingsManager" time="0.234078" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1210;product-cursor;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 product-cursor settings resolution replays against SettingsManager"
+Randomness seeded to: 916955767
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 public fullscreen exit output characterizes the frozen artifact scenarios" classname="pi-v1.3.0 public fullscreen exit output characterizes the frozen artifact scenarios" time="1.4567" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;compat-pi;exit;issue1210;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 public fullscreen exit output characterizes the frozen artifact scenarios"
+Randomness seeded to: 3044117763
+===============================================================================
+All tests passed (101 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 renderer-switch frames replay through the Pike roots" classname="pi-v1.3.0 renderer-switch frames replay through the Pike roots" time="0.320431" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1210;renderer-switch;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 renderer-switch frames replay through the Pike roots"
+Randomness seeded to: 877580864
+===============================================================================
+All tests passed (565 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 renderer-switch observations record the state and callback contract" classname="pi-v1.3.0 renderer-switch observations record the state and callback contract" time="0.301853" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1210;renderer-switch;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 renderer-switch observations record the state and callback contract"
+Randomness seeded to: 4203267736
+===============================================================================
+All tests passed (105 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

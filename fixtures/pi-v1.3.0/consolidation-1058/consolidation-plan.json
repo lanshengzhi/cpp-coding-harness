@@ -4245,6 +4245,72 @@
     "cch_coding_agent:setImageTranscoder"
    ],
    "disposition": "#1201 records the historical comparison beside the v1.3.0 observation; the whole-row receipts bind the behavioral scenarios."
+  },
+  {
+   "family": "audit-1209",
+   "artifact": "product-cursor.json",
+   "scenario": "product-settings-resolution",
+   "reason": "Captured by the #1209 B1 recapture from the frozen pi-v1.3.0 checkout; no 1050 toolkit row names the root product-cursor switch surface. The comparable cursor bookkeeping rows are compared through the audit-1210 product-cursor-layout scenarios (renderer transfer) and the audit-1050 hardware-cursor scenarios (TUI.getShowHardwareCursor/setShowHardwareCursor), so this root-level capture stays provenance without a row taker.",
+   "rows": [
+    "cch_tui:TUI.getShowHardwareCursor",
+    "cch_tui:TUI.setShowHardwareCursor"
+   ],
+   "disposition": "#1209 records the root product-cursor observation beside the routed comparisons; it does not promote a whole capability row."
+  },
+  {
+   "family": "audit-1209",
+   "artifact": "product-cursor.json",
+   "scenario": "switch-regular-to-fullscreen-live-false",
+   "reason": "Captured by the #1209 B1 recapture from the frozen pi-v1.3.0 checkout; no 1050 toolkit row names the root product-cursor switch surface. The comparable cursor bookkeeping rows are compared through the audit-1210 product-cursor-layout scenarios (renderer transfer) and the audit-1050 hardware-cursor scenarios (TUI.getShowHardwareCursor/setShowHardwareCursor), so this root-level capture stays provenance without a row taker.",
+   "rows": [
+    "cch_tui:TUI.getShowHardwareCursor",
+    "cch_tui:TUI.setShowHardwareCursor"
+   ],
+   "disposition": "#1209 records the root product-cursor observation beside the routed comparisons; it does not promote a whole capability row."
+  },
+  {
+   "family": "audit-1209",
+   "artifact": "product-cursor.json",
+   "scenario": "switch-fullscreen-to-regular-live-false",
+   "reason": "Captured by the #1209 B1 recapture from the frozen pi-v1.3.0 checkout; no 1050 toolkit row names the root product-cursor switch surface. The comparable cursor bookkeeping rows are compared through the audit-1210 product-cursor-layout scenarios (renderer transfer) and the audit-1050 hardware-cursor scenarios (TUI.getShowHardwareCursor/setShowHardwareCursor), so this root-level capture stays provenance without a row taker.",
+   "rows": [
+    "cch_tui:TUI.getShowHardwareCursor",
+    "cch_tui:TUI.setShowHardwareCursor"
+   ],
+   "disposition": "#1209 records the root product-cursor observation beside the routed comparisons; it does not promote a whole capability row."
+  },
+  {
+   "family": "audit-1209",
+   "artifact": "product-cursor.json",
+   "scenario": "switch-fullscreen-to-regular-live-true",
+   "reason": "Captured by the #1209 B1 recapture from the frozen pi-v1.3.0 checkout; no 1050 toolkit row names the root product-cursor switch surface. The comparable cursor bookkeeping rows are compared through the audit-1210 product-cursor-layout scenarios (renderer transfer) and the audit-1050 hardware-cursor scenarios (TUI.getShowHardwareCursor/setShowHardwareCursor), so this root-level capture stays provenance without a row taker.",
+   "rows": [
+    "cch_tui:TUI.getShowHardwareCursor",
+    "cch_tui:TUI.setShowHardwareCursor"
+   ],
+   "disposition": "#1209 records the root product-cursor observation beside the routed comparisons; it does not promote a whole capability row."
+  },
+  {
+   "family": "audit-1209",
+   "artifact": "product-cursor.json",
+   "scenario": "switch-null-cursor-hides",
+   "reason": "Captured by the #1209 B1 recapture from the frozen pi-v1.3.0 checkout; no 1050 toolkit row names the root product-cursor switch surface. The comparable cursor bookkeeping rows are compared through the audit-1210 product-cursor-layout scenarios (renderer transfer) and the audit-1050 hardware-cursor scenarios (TUI.getShowHardwareCursor/setShowHardwareCursor), so this root-level capture stays provenance without a row taker.",
+   "rows": [
+    "cch_tui:TUI.getShowHardwareCursor",
+    "cch_tui:TUI.setShowHardwareCursor"
+   ],
+   "disposition": "#1209 records the root product-cursor observation beside the routed comparisons; it does not promote a whole capability row."
+  },
+  {
+   "family": "audit-1209",
+   "artifact": "product-cursor.json",
+   "scenario": "switch-nested-box-padding",
+   "reason": "Captured by the #1209 B1 recapture from the frozen pi-v1.3.0 checkout; no 1050 toolkit row names the root product-cursor switch surface. The comparable cursor bookkeeping rows are compared through the audit-1210 product-cursor-layout scenarios (renderer transfer) and the audit-1050 hardware-cursor scenarios (TUI.getShowHardwareCursor/setShowHardwareCursor), so this root-level capture stays provenance without a row taker.",
+   "rows": [
+    "cch_tui:TUI.getShowHardwareCursor",
+    "cch_tui:TUI.setShowHardwareCursor"
+   ],
+   "disposition": "#1209 records the root product-cursor observation beside the routed comparisons; it does not promote a whole capability row."
   }
  ],
  "groups": [
@@ -5546,51 +5612,6 @@
     "note": "Proposal history retarget (implemented rows): delivered by the closed #1116 summary-serialization slice. Verification unchanged.",
     "rows": [
      "cch_coding_agent:Session:compaction:summary-serialization"
-    ]
-   },
-   {
-    "id": "TM-tui-b1",
-    "ticket": "#1209",
-    "history": false,
-    "note": "Proposal section 2 group 16 -> N5: #1182 route batch B1 filed as #1208 + 1 (Root TUI lifecycle, root mutation and diagnostic callbacks).",
-    "rows": [
-     "cch_tui:CURSOR_MARKER",
-     "cch_tui:TUI",
-     "cch_tui:TUI.showOverlay",
-     "cch_tui:renderFakeCursor",
-     "cch_tui:tui:fake-cursor-marker-constants",
-     "cch_tui:tui:resolveFakeCursors"
-    ]
-   },
-   {
-    "id": "TM-tui-b2",
-    "ticket": "#1210",
-    "history": false,
-    "note": "Proposal section 2 group 16 -> N5: #1182 route batch B2 filed as #1208 + 2 (Regular renderer, frame commit and render-state transfer).",
-    "rows": [
-     "cch_tui:TuiMainScreen",
-     "cch_tui:TuiMainScreen.doRender"
-    ]
-   },
-   {
-    "id": "TM-tui-b3",
-    "ticket": "#1211",
-    "history": false,
-    "note": "Proposal section 2 group 16 -> N5: #1182 route batch B3 filed as #1208 + 3 (Alternate-screen viewport: frames, scroll algebra, scrollbar and search).",
-    "rows": [
-     "cch_tui:TuiAltScreen",
-     "cch_tui:TuiAltScreen.render"
-    ]
-   },
-   {
-    "id": "TM-tui-b4",
-    "ticket": "#1212",
-    "history": false,
-    "note": "Proposal section 2 group 16 -> N5: #1182 route batch B4 filed as #1208 + 4 (Alternate-screen transcript selection, multi-click and copy).",
-    "rows": [
-     "cch_tui:TuiAltScreen.clearTextSelection",
-     "cch_tui:TuiAltScreen.lastClick",
-     "cch_tui:TuiAltScreen.resetTextSelection"
     ]
    },
    {

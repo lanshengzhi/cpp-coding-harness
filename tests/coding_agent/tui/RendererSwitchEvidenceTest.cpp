@@ -521,12 +521,12 @@ TEST_CASE("frozen renderer-switch frames replay through the Pike roots",
     check_frozen_renderer_switch_frames_replay_through_the_Pike_roots(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 renderer-switch frames replay through the Pike roots", "[tui][renderer-switch][issue1210][compat-pi]") {
+TEST_CASE("pi-v1.3.0 renderer-switch frames replay through the Pike roots",
+        "[tui][renderer-switch][issue1210][issue1209][compat-pi]") {
     const auto bundle = audit1210_renderer_switch_bundle();
     REQUIRE(bundle);
     check_frozen_renderer_switch_frames_replay_through_the_Pike_roots(*bundle);
 }
-
 
 namespace {
 

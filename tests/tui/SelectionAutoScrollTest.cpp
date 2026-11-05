@@ -445,12 +445,12 @@ TEST_CASE("AltScreen auto-scroll ticks follow the selection anchor viewport in a
     check_AltScreen_auto_scroll_ticks_follow_the_selection_anchor_view(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+TEST_CASE("pi-v1.3.0 AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout",
+        "[tui][alt-screen][selection][issue1211][issue1212][compat-pi]") {
     const auto bundle = audit1213_scroll_view_for_selection_bundle();
     REQUIRE(bundle);
     check_AltScreen_auto_scroll_ticks_follow_the_selection_anchor_view(*bundle);
 }
-
 
 void check_AltScreen_keeps_selection_coordinates_valid_as_auto_scrolled(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "alt-screen-auto-scroll-content-growth");
@@ -511,7 +511,7 @@ TEST_CASE("pi-v1.3.0 AltScreen keeps selection coordinates valid as auto-scrolle
 }
 
 
-void check_AltScreen_discards_a_queued_auto_scroll_tick_after_a_new_sel(const JsonValue& bundle) {
+void check_AltScreen_discards_a_queued_auto_scroll_tick_after_a_new_sel(const JsonValue&) {
     cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
     cch::tui::AltScreen tui(terminal);
     ManualScheduler scheduler;

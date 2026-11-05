@@ -589,7 +589,7 @@ TEST_CASE("frozen audit-1201 OSC color replies replay through the C++ parser", "
 }
 
 TEST_CASE("frozen audit-1201 palette assembly binds at sixteen replies through the C++ query",
-        "[tui][theme][issue1201]") {
+        "[tui][theme][issue1201][issue1209]") {
     const auto artifact = cch::tests::read_pi_v130_audit_evidence("audit-1201", "terminal-colors.json");
     REQUIRE(artifact);
     const auto* scenario = audit1201_scenario(

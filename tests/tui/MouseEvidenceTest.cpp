@@ -466,12 +466,12 @@ TEST_CASE("the cached frame routes a press to the deepest nested region as froze
     check_cached_frame_hit_test(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 cached frame routes a press to the deepest nested region", "[tui][mouse][issue1209][issue1213][compat-pi]") {
+TEST_CASE("pi-v1.3.0 cached frame routes a press to the deepest nested region",
+        "[tui][mouse][issue1209][issue1212][issue1213][compat-pi]") {
     const auto bundle = audit1213_bundle();
     REQUIRE(bundle);
     check_cached_frame_hit_test(*bundle);
 }
-
 
 void check_capture_drag_and_host_focus(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "capture-drag-and-host-focus");

@@ -400,12 +400,12 @@ TEST_CASE("AltScreen selection preserves the cell range through content and focu
     check_selection_content_focus_and_clear_lifecycle(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 selection preserves the cell range through content and focus changes", "[tui][alt-screen][selection][issue1212][compat-pi]") {
+TEST_CASE("pi-v1.3.0 selection preserves the cell range through content and focus changes",
+        "[tui][alt-screen][selection][issue1211][issue1212][compat-pi]") {
     const auto bundle = audit1212_selection_bundle();
     REQUIRE(bundle);
     check_selection_content_focus_and_clear_lifecycle(*bundle);
 }
-
 
 void check_selection_copy_specific_failure(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "selection-copy-specific-failure");
@@ -545,7 +545,7 @@ TEST_CASE("AltScreen multi-click selection replays the frozen dictionary-script 
 // test on the same boundary.
 
 TEST_CASE("pi-v1.3.0 selection routing and multi-click scenarios replay against frozen pi",
-        "[tui][alt-screen][selection][issue1212][compat-pi]") {
+        "[tui][alt-screen][selection][issue1211][issue1212][compat-pi]") {
     const auto bundle = audit1212_selection_bundle();
     REQUIRE(bundle);
     for (const auto& scenario : bundle->at("scenarios").get_array()) {
