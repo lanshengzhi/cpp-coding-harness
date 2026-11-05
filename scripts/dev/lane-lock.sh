@@ -26,8 +26,10 @@
 #   scripts/dev/lane-lock.sh --help
 #
 # Environment:
-#   CCH_LANE_TASK_ID   recorded as `taskId` in the lock when set
-#   CCH_LANE_AGENT     recorded as `agent` (default USER@HOST)
+#   CCH_LANE_TASK_ID   recorded as `taskId` in the lock when set; must be a
+#                      single-line [A-Za-z0-9._:@#-] identifier, else acquire refuses
+#   CCH_LANE_AGENT     recorded as `agent` (default USER@HOST); the same whitelist
+#                      applies, so neither value can break the lock JSON
 #
 # Exit status: acquire/release return 0 on success and 1 on refusal; `acquire` by the
 # holding lane again is a successful no-op. status returns 0 when the lock is free and 1
@@ -82,12 +84,32 @@ require_lane_arg() {
     fi
 }
 
+json_safe_value() {
+    # $1 = value to be interpolated into the machine-written single-line lock JSON.
+    # Only whitelist characters keep that JSON unambiguous: anything else (a quote, a
+    # newline, a control character) could corrupt the lock file or inject extra fields
+    # such as a fake ,"lane":"other". Unsafe values are refused outright — fail
+    # closed, exactly like an invalid lane name — never escaped or silently rewritten.
+    case $1 in
+        '' | *[!A-Za-z0-9._:@#-]*)
+            return 1
+            ;;
+    esac
+    return 0
+}
+
 write_lock() {
     # $1 = lock file, $2 = lane. Atomic create: with noclobber set, the redirection fails
     # instead of truncating when the file already exists.
     agent=$(agent_name)
     started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     task=${CCH_LANE_TASK_ID:-}
+    if ! json_safe_value "$agent"; then
+        die "refusing to write the lock: CCH_LANE_AGENT contains characters outside [A-Za-z0-9._:@#-]"
+    fi
+    if [ -n "$task" ] && ! json_safe_value "$task"; then
+        die "refusing to write the lock: CCH_LANE_TASK_ID contains characters outside [A-Za-z0-9._:@#-]"
+    fi
     if [ -n "$task" ]; then
         content=$(printf '{"lane":"%s","agent":"%s","taskId":"%s","startedAt":"%s"}' \
             "$2" "$agent" "$task" "$started")
@@ -276,9 +298,11 @@ Usage:
       Print this text.
 
 The lock records {lane, agent, taskId?, startedAt}; CCH_LANE_TASK_ID is recorded as
-taskId when set, CCH_LANE_AGENT overrides the agent (default USER@HOST). The
-consolidation build/check entry points refuse to run under a foreign lock; the caller
-proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1.
+taskId when set, CCH_LANE_AGENT overrides the agent (default USER@HOST). Both values
+must be single-line [A-Za-z0-9._:@#-] identifiers; anything else is refused because it
+could corrupt the lock JSON or inject fields. The consolidation build/check entry
+points refuse to run under a foreign lock; the caller proves its lane with
+CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1.
 EOF
 }
 

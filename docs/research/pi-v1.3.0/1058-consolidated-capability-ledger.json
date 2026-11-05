@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -771,6 +771,14 @@
         "revalidation1228": {
           "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
           "changedInputs": [
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
@@ -1754,7 +1762,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -2384,6 +2392,14 @@
         "revalidation1228": {
           "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
           "changedInputs": [
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
@@ -3107,7 +3123,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -3268,6 +3284,14 @@
         "revalidation1228": {
           "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
           "changedInputs": [
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
@@ -3622,7 +3646,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -4222,6 +4246,14 @@
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
         }
       },
       {
@@ -4437,7 +4469,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4539,6 +4571,14 @@
         "revalidation1228": {
           "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
           "changedInputs": [
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
@@ -4757,7 +4797,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4914,6 +4954,14 @@
         "revalidation1228": {
           "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
           "changedInputs": [
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
@@ -5123,7 +5171,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -5405,6 +5453,14 @@
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
         }
       },
       {
@@ -5602,7 +5658,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -5861,6 +5917,14 @@
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
         }
       },
       {
@@ -5961,7 +6025,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -6045,6 +6109,14 @@
         "revalidation1228": {
           "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
           "changedInputs": [
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
@@ -6323,7 +6395,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -6611,6 +6683,14 @@
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
         }
       },
       {
@@ -6823,7 +6903,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -7961,6 +8041,14 @@
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
         }
       },
       {
@@ -8037,7 +8125,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -8301,6 +8389,14 @@
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
         }
       },
       {
@@ -8373,7 +8469,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
+            "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -8689,6 +8785,14 @@
         "revalidation1228": {
           "reason": "Issue #1228 fixes the stale-takeover TOCTOU race in scripts/dev/lane-lock.sh: a stale lock is now taken over through a mkdir compare-and-swap on a claim directory beside the lock, with the winner re-validating staleness inside its claim, instead of the non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. tests/dev/LaneLockTest.py gains the deterministic two-contender race regression (scripted participants plus an rm-park interlock and SIGSTOP) and the takeover-claim lifecycle cases. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
           "changedInputs": [
+            "scripts/dev/lane-lock.sh",
+            "tests/dev/LaneLockTest.py"
+          ]
+        },
+        "revalidation1233": {
+          "reason": "Issue #1233 closes the lane-lock holes the retro review found in the 9603e2354 mitigation: consolidate_audits.py now reads .lane-lock.json before honouring CCH_LANE_LOCK_SKIP=1, so the skip proceeds only for the named holding lane (CCH_LANE_NAME match) or when the lock cannot be read or parsed, and a foreign lane can no longer bypass the build/check gate by exporting the variable; lane-lock.sh refuses CCH_LANE_AGENT and CCH_LANE_TASK_ID values outside [A-Za-z0-9._:@#-] instead of interpolating them into the machine-written lock JSON. tests/dev/LaneLockTest.py gains the foreign-skip refusal, the unreadable-lock skip/refusal and the value-whitelist regressions. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
             "scripts/dev/lane-lock.sh",
             "tests/dev/LaneLockTest.py"
           ]

@@ -6,9 +6,15 @@ One code lane at a time may hold the main checkout (docs/wiki/pi-alignment/ops-l
 consolidation build/check entry points refuse to run under a foreign hold. Stale-lock
 takeover is a mkdir compare-and-swap: exactly one contender may unlink a lock observed
 stale, and the winner re-validates staleness inside its claim, so two contenders racing a
-stale lock can never both win. The CLI cases drive the real tool inside a throwaway git
-repository, so they cannot leave a lock in the project checkout; the consolidation-gate
-cases hold the project lock only for the body of the test and always remove it afterwards.
+stale lock can never both win. The lock records only whitelist-safe identity values:
+CCH_LANE_AGENT and CCH_LANE_TASK_ID whose characters fall outside [A-Za-z0-9._:@#-] are
+refused outright, so they can neither corrupt the JSON nor inject extra fields. The gate
+honours CCH_LANE_LOCK_SKIP=1 only after reading the lock: a readable lock permits the
+skip only from its named holding lane; an unreadable lock permits it because no holder
+can be identified (the documented escape hatch for the owning lane). The CLI cases drive
+the real tool inside a throwaway git repository, so they cannot leave a lock in the
+project checkout; the consolidation-gate cases hold the project lock only for the body
+of the test and always remove it afterwards.
 """
 
 from __future__ import annotations
@@ -195,6 +201,32 @@ class LaneLockCliTest(unittest.TestCase):
             self.assertEqual(result.returncode, 1, bad)
             self.assertIn("invalid lane name", result.stderr)
         self.assertFalse(self.lock_file().exists())
+
+    def test_agent_and_task_id_values_outside_the_whitelist_are_refused(self) -> None:
+        """#1233: agent and taskId are interpolated into the machine-written lock JSON;
+        a value carrying quotes or control characters must be refused, never written —
+        otherwise it corrupts the lock or injects fields such as a fake "lane"."""
+        for env, name in (
+            ({"CCH_LANE_AGENT": 'attacker","lane":"other'}, "CCH_LANE_AGENT"),
+            ({"CCH_LANE_TASK_ID": 'x","startedAt":"y'}, "CCH_LANE_TASK_ID"),
+        ):
+            result = run_lock(self.repo, "acquire", "lane-a", env=env)
+            self.assertEqual(result.returncode, 1, env)
+            self.assertIn("refusing", result.stderr)
+            self.assertIn(name, result.stderr)
+            self.assertFalse(self.lock_file().exists(), env)
+
+    def test_agent_and_task_id_whitelisted_characters_are_recorded(self) -> None:
+        result = run_lock(
+            self.repo,
+            "acquire",
+            "lane-a",
+            env={"CCH_LANE_AGENT": "bot@host", "CCH_LANE_TASK_ID": "#1233"},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lock = self.read_lock()
+        self.assertEqual(lock["agent"], "bot@host")
+        self.assertEqual(lock["taskId"], "#1233")
 
     def test_two_scripted_contenders_racing_a_stale_lock_yield_exactly_one_winner(self) -> None:
         """Deterministic regression for the stale-takeover TOCTOU race (#1228).
@@ -442,10 +474,59 @@ class ConsolidationLaneGateTest(unittest.TestCase):
         self.assertIn("'unset'", unnamed.stderr)
 
     def test_cch_lane_lock_skip_lets_the_owning_lane_bypass_the_gate(self) -> None:
+        """The skip is the owning lane's documented escape hatch (#1233 pins it to the
+        named holder): only CCH_LANE_NAME matching the lock's lane may use it."""
         self.acquire_project_lock("lane-a")
-        skipped = run_consolidate({"CCH_LANE_NAME": "lane-b", "CCH_LANE_LOCK_SKIP": "1"})
+        skipped = run_consolidate({"CCH_LANE_NAME": "lane-a", "CCH_LANE_LOCK_SKIP": "1"})
         self.assertEqual(skipped.returncode, 0, skipped.stderr)
         self.assertIn("consolidation check: PASS", skipped.stdout)
+
+    def test_a_foreign_lane_cannot_bypass_the_gate_with_cch_lane_lock_skip(self) -> None:
+        """#1233: exporting CCH_LANE_LOCK_SKIP=1 must not let a foreign lane through —
+        the gate reads the lock first and rejects the skip from a non-holding lane."""
+        self.acquire_project_lock("lane-a")
+        bypass = run_consolidate({"CCH_LANE_NAME": "lane-b", "CCH_LANE_LOCK_SKIP": "1"})
+        self.assertEqual(bypass.returncode, 1)
+        self.assertIn("consolidation check: FAIL", bypass.stderr)
+        self.assertIn("lane lock held by 'lane-a'", bypass.stderr)
+        self.assertIn("does not bypass the gate", bypass.stderr)
+
+        unnamed = run_consolidate({"CCH_LANE_LOCK_SKIP": "1"})
+        self.assertEqual(unnamed.returncode, 1)
+        self.assertIn("consolidation check: FAIL", unnamed.stderr)
+        self.assertIn("lane lock held by 'lane-a'", unnamed.stderr)
+
+    def test_cch_lane_lock_skip_still_bypasses_an_unreadable_lock(self) -> None:
+        """A lock whose JSON cannot be read names no holder; the documented escape
+        hatch stays open for the owning lane, with no CCH_LANE_NAME to match against."""
+        LOCK.write_text('{"lane":"lane-a","agent":"broken\n', encoding="utf-8")
+        self._created = True
+        skipped = run_consolidate({"CCH_LANE_LOCK_SKIP": "1"})
+        self.assertEqual(skipped.returncode, 0, skipped.stderr)
+        self.assertIn("consolidation check: PASS", skipped.stdout)
+
+    def test_an_unreadable_lock_without_skip_is_refused(self) -> None:
+        """Fail closed: a corrupt lock refuses build/check until the owning lane
+        removes it or sets the skip explicitly."""
+        LOCK.write_text('{"lane":"lane-a","agent":"broken\n', encoding="utf-8")
+        self._created = True
+        refused = run_consolidate({})
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("consolidation check: FAIL", refused.stderr)
+        self.assertIn("unreadable", refused.stderr)
+
+    def test_a_parseable_lock_without_a_holding_lane_refuses_the_skip(self) -> None:
+        """#1233 review follow-up: the skip hatch is reserved for a corrupt or
+        unreadable lock. A lock whose JSON parses but names no string lane identifies
+        no owner, so even CCH_LANE_LOCK_SKIP=1 must not let any caller through."""
+        for body in ("[1,2]", '{"lane":42}', '{"agent":"ghost"}'):
+            LOCK.write_text(body + "\n", encoding="utf-8")
+            self._created = True
+            for env in ({"CCH_LANE_LOCK_SKIP": "1"}, {"CCH_LANE_NAME": "lane-a", "CCH_LANE_LOCK_SKIP": "1"}):
+                refused = run_consolidate(env)
+                self.assertEqual(refused.returncode, 1, f"{body} {env}")
+                self.assertIn("consolidation check: FAIL", refused.stderr)
+                self.assertIn("names no holding lane", refused.stderr)
 
 
 if __name__ == "__main__":

@@ -1821,34 +1821,49 @@ def refuse_foreign_lane_lock() -> None:
 
     The main checkout serializes code lanes: while one lane holds `.lane-lock.json`
     (scripts/dev/lane-lock.sh), another lane's build/check must not rewrite the shared
-    ledger pipeline. The caller proves its lane identity with CCH_LANE_NAME; only the
-    owning lane may set CCH_LANE_LOCK_SKIP=1 for its own calls. No lock, or a lock held
-    by the caller's own lane, proceeds.
+    ledger pipeline. The caller proves its lane identity with CCH_LANE_NAME. The gate
+    reads the lock before honouring CCH_LANE_LOCK_SKIP=1: a lock with a named holding
+    lane permits the skip only from that lane, so exporting the variable cannot bypass
+    the gate from a foreign lane; a lock that cannot be read or parsed permits it only
+    because no holder can be identified (the documented escape hatch). A parseable
+    lock that names no holding lane refuses the skip like any foreign lane: nothing on
+    disk identifies an owner to exempt. No lock proceeds.
     """
-    if os.environ.get(LANE_LOCK_SKIP_ENV) == "1":
-        return
     if not LANE_LOCK_PATH.exists():
         return
+    caller = os.environ.get(LANE_NAME_ENV, "")
+    skip = os.environ.get(LANE_LOCK_SKIP_ENV) == "1"
     try:
         lock = json.loads(LANE_LOCK_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
+        if skip:
+            return
         raise ConsolidationError(
             f"lane lock {LANE_LOCK_PATH.name} is unreadable ({error}); remove it or set "
             f"{LANE_LOCK_SKIP_ENV}=1 from the owning lane"
         ) from error
     holder = lock.get("lane") if isinstance(lock, dict) else None
     if not isinstance(holder, str) or not holder:
+        # The file parses but names no owner, so the skip hatch (reserved for a lock
+        # that is corrupt or unreadable) cannot apply; removal is the only way through.
         raise ConsolidationError(
-            f"lane lock {LANE_LOCK_PATH.name} names no holding lane; remove it or set "
-            f"{LANE_LOCK_SKIP_ENV}=1 from the owning lane"
+            f"lane lock {LANE_LOCK_PATH.name} names no holding lane; remove it before "
+            f"running build/check ({LANE_LOCK_SKIP_ENV} bypasses only a corrupt or "
+            f"unreadable lock, and this lock parses)"
         )
-    caller = os.environ.get(LANE_NAME_ENV, "")
-    if caller != holder:
+    if caller == holder:
+        return
+    if skip:
         raise ConsolidationError(
-            f"lane lock held by '{holder}' and this caller is '{caller or 'unset'}'; a different "
-            f"lane may not run build/check in this checkout (AGENTS.md 并发约束). Only the "
-            f"holding lane sets {LANE_LOCK_SKIP_ENV}=1."
+            f"lane lock held by '{holder}' and this caller is '{caller or 'unset'}'; "
+            f"{LANE_LOCK_SKIP_ENV}=1 from a non-holding lane does not bypass the gate "
+            f"(AGENTS.md 并发约束). Only the holding lane sets {LANE_LOCK_SKIP_ENV}=1."
         )
+    raise ConsolidationError(
+        f"lane lock held by '{holder}' and this caller is '{caller or 'unset'}'; a different "
+        f"lane may not run build/check in this checkout (AGENTS.md 并发约束). Only the "
+        f"holding lane sets {LANE_LOCK_SKIP_ENV}=1."
+    )
 
 
 def main() -> int:
