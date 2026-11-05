@@ -1,0 +1,155 @@
+{
+  "issue": "#1236",
+  "receipt": "1211-alt-screen-viewport",
+  "withdrawnAt": "2026-11-05",
+  "reason": "Per-claim withdrawal under #1236 (fix 1 split from #1229): the row's discriminatingCase.test string-equals one of the same row's comparisons[].test entries, so the cited discriminating case is the happy-path comparison and discriminates nothing (ADR 0075 clauses 2 and 5; retro-review blocker #1229). The claim is withdrawn from promotion through the checked-in per-claim withdrawal channel and the row reverts to source-audit status pending a genuinely discriminating negative/control case under #1229 fix 2.",
+  "claims": [
+    {
+      "id": "cch_tui:TuiAltScreen.applySearchHighlights"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.applySearchTextHighlight"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.beforeTerminalStart"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.beforeTerminalStop"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.closeSearch"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.compositeFlashes"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.constructor"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.currentLayout"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.doRender"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.flashes"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.getMountedRoots"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.getPrimaryScrollView"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.getSearchNavigationDirectionAt"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.implicitDocument"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.implicitScrollView"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.lastDocument"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.layoutRoot"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.navigateSearch"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.previousScreen"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.refreshSearch"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.resetRenderState"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.savedCapabilities"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.scrollBy"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.scrollScrollbarToPointer"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.scrollToBottom"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.scrollToEndIndicator"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.scrollToEndIndicatorRect"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.scrollToPrompt"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.scrollToTop"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.scrollbarDrag"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.scrollbarHover"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.searchCurrentMatchStyle"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.searchMatchStyle"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.searchNavigationButtonStyle"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.setLayoutRoot"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.setScrollbarHover"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.stopScrollbarDrag"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.stopScrollbarHover"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.toggleSearch"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.updateSearchQuery"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.updateScrollbarHover"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.viewportTop"
+    },
+    {
+      "id": "cch_tui:TuiAltScreenOptions"
+    },
+    {
+      "id": "cch_tui:TuiAltScreenOptions.scrollToEndIndicator"
+    },
+    {
+      "id": "cch_tui:TuiAltScreenOptions.searchCurrentMatchStyle"
+    },
+    {
+      "id": "cch_tui:TuiAltScreenOptions.searchMatchStyle"
+    },
+    {
+      "id": "cch_tui:TuiAltScreenOptions.searchNavigationButtonStyle"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen"
+    },
+    {
+      "id": "cch_tui:TuiAltScreen.render"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "issue": "#1236",
+  "receipt": "1201-terminal-primitives",
+  "withdrawnAt": "2026-11-05",
+  "reason": "Per-claim withdrawal under #1236 (fix 1 split from #1229): the row's discriminatingCase.test string-equals one of the same row's comparisons[].test entries, so the cited discriminating case is the happy-path comparison and discriminates nothing (ADR 0075 clauses 2 and 5; retro-review blocker #1229). The claim is withdrawn from promotion through the checked-in per-claim withdrawal channel and the row reverts to source-audit status pending a genuinely discriminating negative/control case under #1229 fix 2.",
+  "claims": [
+    {
+      "id": "cch_coding_agent:TerminalColorScheme"
+    },
+    {
+      "id": "cch_coding_agent:parseTerminalColorSchemeReport"
+    },
+    {
+      "id": "cch_coding_agent:TerminalColors"
+    },
+    {
+      "id": "cch_coding_agent:TerminalColors.foreground"
+    },
+    {
+      "id": "cch_coding_agent:TerminalColors.background"
+    },
+    {
+      "id": "cch_coding_agent:TerminalColors.palette"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.getText"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.setText"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.handleInput"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.onChange"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.onSubmit"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.addToHistory"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.insertTextAtCursor"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.getExpandedText"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.setAutocompleteProvider"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.setAutocompleteMaxVisible"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.setPaddingX"
+    },
+    {
+      "id": "cch_coding_agent:EditorComponent.borderColor"
+    },
+    {
+      "id": "cch_coding_agent:NativeClipboard"
+    },
+    {
+      "id": "cch_coding_agent:NativeClipboard.getText"
+    },
+    {
+      "id": "cch_coding_agent:NativeClipboard.getImage"
+    },
+    {
+      "id": "cch_coding_agent:NativeClipboard.getFilePaths"
+    },
+    {
+      "id": "cch_coding_agent:NativeClipboard.setText"
+    },
+    {
+      "id": "cch_coding_agent:getNativeClipboard"
+    },
+    {
+      "id": "cch_coding_agent:setImageTranscoder"
+    }
+  ]
+}
