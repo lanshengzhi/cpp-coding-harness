@@ -1229,12 +1229,17 @@ def scenario_coverage(rows: list[dict], bundles: dict[str, dict[str, list[str]]]
             path = f"fixtures/pi-v1.3.0/{family}/{artifact}"
             for scenario in scenarios:
                 total += 1
-                if scenario in named:
+                # An explicit orphan declaration is the scenario's single deliberate route: it must
+                # win over the incidental coverage below, or a provenance scenario whose artifact is
+                # referenced for the behavioral rows (e.g. the audit-1201 historical-comparison
+                # records) would be counted both as artifact-covered and as an orphan. A scenario
+                # named by a row may not also be an orphan, which the caller asserts on the sets.
+                if (family, artifact, scenario) in orphan_keys:
+                    continue
+                elif scenario in named:
                     scenario_named += 1
                 elif path in referenced_artifacts:
                     artifact_covered += 1
-                elif (family, artifact, scenario) in orphan_keys:
-                    continue
                 else:
                     uncovered.append(f"{family}/{artifact}:{scenario}")
     return {
