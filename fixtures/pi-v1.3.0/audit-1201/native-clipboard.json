@@ -1,0 +1,117 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T03:45:46.241Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/native-platform.ts:NativeClipboard,getNativeClipboard",
+    "packages/tui/src/native-module-path.ts:getNativeModuleCandidates"
+  ],
+  "scenarios": [
+    {
+      "name": "getNativeClipboard reports no helper when no display variable is set",
+      "inputs": {
+        "DISPLAY": "unset",
+        "WAYLAND_DISPLAY": "unset"
+      },
+      "expected": {
+        "clipboard": "undefined"
+      },
+      "observed": {
+        "clipboard": "undefined"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a disconnected display keeps the helper loaded and reads report unavailable",
+      "inputs": {
+        "DISPLAY": ":99 (no X server)",
+        "reads": [
+          "getText",
+          "getImage"
+        ]
+      },
+      "expected": {
+        "helper": "object",
+        "getText": "undefined",
+        "getImage": "undefined",
+        "getFilePathsPresent": false,
+        "setTextPresent": false
+      },
+      "observed": {
+        "helper": "object",
+        "getText": "undefined",
+        "getImage": "undefined",
+        "getFilePathsPresent": false,
+        "setTextPresent": false
+      },
+      "normalizations": [
+        "the empty (null) and transfer-failure (reject) outcomes need a live X server, which the headless capture host lacks"
+      ]
+    },
+    {
+      "name": "the NativeClipboard interface spells the unavailable empty and failed outcomes",
+      "inputs": {
+        "source": "packages/tui/src/native-platform.ts:NativeClipboard"
+      },
+      "expected": {
+        "getTextUnavailableIsUndefined": true,
+        "getTextDoc": "Undefined means unavailable, null means no text; transfer failures reject.",
+        "getImageUnavailableIsUndefined": true,
+        "getFilePathsOptional": true,
+        "setTextOptional": true,
+        "linuxSetTextNote": "Linux uses command-line tools to retain clipboard ownership instead."
+      },
+      "observed": {
+        "getTextUnavailableIsUndefined": true,
+        "getTextDoc": "Undefined means unavailable, null means no text; transfer failures reject.",
+        "getImageUnavailableIsUndefined": true,
+        "getFilePathsOptional": true,
+        "setTextOptional": true,
+        "linuxSetTextNote": "Linux uses command-line tools to retain clipboard ownership instead."
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the clipboard primitives are unchanged from the historical pi-v1.0.4 bundle record",
+      "inputs": {
+        "source": "packages/tui/src/native-platform.ts"
+      },
+      "expected": {
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+        "historicalExportAccounting": "index-export-accounting",
+        "primitivesListedInHistoricalExports": {
+          "NativeClipboard": true,
+          "getNativeClipboard": true
+        },
+        "sourceAtHistoricalRevision": "693d33898358804541d36aff089db74e1eb3be8f1a1722ffe6d821036b925959",
+        "sourceAtFrozenRevision": "693d33898358804541d36aff089db74e1eb3be8f1a1722ffe6d821036b925959",
+        "sourceUnchangedSinceHistoricalBaseline": true
+      },
+      "observed": {
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+        "historicalExportAccounting": "index-export-accounting",
+        "primitivesListedInHistoricalExports": {
+          "NativeClipboard": true,
+          "getNativeClipboard": true
+        },
+        "sourceAtHistoricalRevision": "693d33898358804541d36aff089db74e1eb3be8f1a1722ffe6d821036b925959",
+        "sourceAtFrozenRevision": "693d33898358804541d36aff089db74e1eb3be8f1a1722ffe6d821036b925959",
+        "sourceUnchangedSinceHistoricalBaseline": true
+      },
+      "normalizations": []
+    }
+  ]
+}

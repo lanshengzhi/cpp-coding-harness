@@ -1,0 +1,517 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T03:45:46.241Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/terminal-colors.ts:RgbColor,TerminalColorScheme,TerminalColors,parseOscColorResponse,parseTerminalColorSchemeReport",
+    "packages/tui/src/tui.ts:queryTerminalColors"
+  ],
+  "scenarios": [
+    {
+      "name": "OSC color replies parse every frozen color form at its per-channel scale",
+      "inputs": {
+        "replies": [
+          "\u001b]10;#ff0000\u0007",
+          "\u001b]11;#00ff7f\u001b\\",
+          "\u001b]4;1;#abcd12345678\u0007",
+          "\u001b]4;2;rgb:8/8/8\u0007",
+          "\u001b]10;rgba:f/0/0/f\u0007",
+          "\u001b]10;#12345\u0007",
+          "\u001b]10;not-a-color\u0007",
+          "\u001b[31m"
+        ]
+      },
+      "expected": {
+        "parsed": [
+          {
+            "input": "\u001b]10;#ff0000\u0007",
+            "result": {
+              "target": "foreground",
+              "rgb": {
+                "r": 255,
+                "g": 0,
+                "b": 0
+              }
+            }
+          },
+          {
+            "input": "\u001b]11;#00ff7f\u001b\\",
+            "result": {
+              "target": "background",
+              "rgb": {
+                "r": 0,
+                "g": 255,
+                "b": 127
+              }
+            }
+          },
+          {
+            "input": "\u001b]4;1;#abcd12345678\u0007",
+            "result": {
+              "target": 1,
+              "rgb": {
+                "r": 171,
+                "g": 18,
+                "b": 86
+              }
+            }
+          },
+          {
+            "input": "\u001b]4;2;rgb:8/8/8\u0007",
+            "result": {
+              "target": 2,
+              "rgb": {
+                "r": 136,
+                "g": 136,
+                "b": 136
+              }
+            }
+          },
+          {
+            "input": "\u001b]10;rgba:f/0/0/f\u0007",
+            "result": {
+              "target": "foreground",
+              "rgb": {
+                "r": 255,
+                "g": 0,
+                "b": 0
+              }
+            }
+          },
+          {
+            "input": "\u001b]10;#12345\u0007",
+            "result": {
+              "target": "foreground"
+            }
+          },
+          {
+            "input": "\u001b]10;not-a-color\u0007",
+            "result": {
+              "target": "foreground"
+            }
+          },
+          {
+            "input": "\u001b[31m"
+          }
+        ]
+      },
+      "observed": {
+        "parsed": [
+          {
+            "input": "\u001b]10;#ff0000\u0007",
+            "result": {
+              "target": "foreground",
+              "rgb": {
+                "r": 255,
+                "g": 0,
+                "b": 0
+              }
+            }
+          },
+          {
+            "input": "\u001b]11;#00ff7f\u001b\\",
+            "result": {
+              "target": "background",
+              "rgb": {
+                "r": 0,
+                "g": 255,
+                "b": 127
+              }
+            }
+          },
+          {
+            "input": "\u001b]4;1;#abcd12345678\u0007",
+            "result": {
+              "target": 1,
+              "rgb": {
+                "r": 171,
+                "g": 18,
+                "b": 86
+              }
+            }
+          },
+          {
+            "input": "\u001b]4;2;rgb:8/8/8\u0007",
+            "result": {
+              "target": 2,
+              "rgb": {
+                "r": 136,
+                "g": 136,
+                "b": 136
+              }
+            }
+          },
+          {
+            "input": "\u001b]10;rgba:f/0/0/f\u0007",
+            "result": {
+              "target": "foreground",
+              "rgb": {
+                "r": 255,
+                "g": 0,
+                "b": 0
+              }
+            }
+          },
+          {
+            "input": "\u001b]10;#12345\u0007",
+            "result": {
+              "target": "foreground"
+            }
+          },
+          {
+            "input": "\u001b]10;not-a-color\u0007",
+            "result": {
+              "target": "foreground"
+            }
+          },
+          {
+            "input": "\u001b[31m"
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the public color query sets the palette only when all sixteen replies arrive",
+      "inputs": {
+        "complete": "foreground, background and sixteen OSC 4 replies terminated by DA1",
+        "missingSlot": "foreground, background and fifteen of sixteen OSC 4 replies terminated by DA1"
+      },
+      "expected": {
+        "complete": {
+          "foreground": {
+            "r": 255,
+            "g": 0,
+            "b": 0
+          },
+          "background": {
+            "r": 0,
+            "g": 255,
+            "b": 0
+          },
+          "palette": [
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            }
+          ]
+        },
+        "missingSlot": {
+          "foreground": {
+            "r": 18,
+            "g": 52,
+            "b": 86
+          },
+          "background": {
+            "r": 101,
+            "g": 67,
+            "b": 33
+          },
+          "palette": null
+        }
+      },
+      "observed": {
+        "complete": {
+          "foreground": {
+            "r": 255,
+            "g": 0,
+            "b": 0
+          },
+          "background": {
+            "r": 0,
+            "g": 255,
+            "b": 0
+          },
+          "palette": [
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            }
+          ]
+        },
+        "missingSlot": {
+          "foreground": {
+            "r": 18,
+            "g": 52,
+            "b": 86
+          },
+          "background": {
+            "r": 101,
+            "g": 67,
+            "b": 33
+          },
+          "palette": null
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "terminal color scheme reports resolve dark and light only from complete 997 replies",
+      "inputs": {
+        "reports": [
+          "\u001b[?997;1n",
+          "\u001b[?997;2n",
+          "\u001b[?997;3n",
+          "not-a-report",
+          "\u001b[?997;1n\u001b[?997;2n",
+          ""
+        ]
+      },
+      "expected": {
+        "parsed": [
+          {
+            "report": "\u001b[?997;1n",
+            "scheme": "dark"
+          },
+          {
+            "report": "\u001b[?997;2n",
+            "scheme": "light"
+          },
+          {
+            "report": "\u001b[?997;3n",
+            "scheme": null
+          },
+          {
+            "report": "not-a-report",
+            "scheme": null
+          },
+          {
+            "report": "\u001b[?997;1n\u001b[?997;2n",
+            "scheme": "light"
+          },
+          {
+            "report": "",
+            "scheme": null
+          }
+        ]
+      },
+      "observed": {
+        "parsed": [
+          {
+            "report": "\u001b[?997;1n",
+            "scheme": "dark"
+          },
+          {
+            "report": "\u001b[?997;2n",
+            "scheme": "light"
+          },
+          {
+            "report": "\u001b[?997;3n",
+            "scheme": null
+          },
+          {
+            "report": "not-a-report",
+            "scheme": null
+          },
+          {
+            "report": "\u001b[?997;1n\u001b[?997;2n",
+            "scheme": "light"
+          },
+          {
+            "report": "",
+            "scheme": null
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the terminal color primitives are unchanged from the historical pi-v1.0.4 bundle record",
+      "inputs": {
+        "source": "packages/tui/src/terminal-colors.ts"
+      },
+      "expected": {
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+        "historicalExportAccounting": "index-export-accounting",
+        "primitivesListedInHistoricalExports": {
+          "RgbColor": true,
+          "TerminalColorScheme": true,
+          "TerminalColors": true,
+          "parseTerminalColorSchemeReport": true
+        },
+        "sourceAtHistoricalRevision": "72d1ef298837bfe520bd8a060cb93ea27547dcbff04a167ace0f55b5183e550d",
+        "sourceAtFrozenRevision": "72d1ef298837bfe520bd8a060cb93ea27547dcbff04a167ace0f55b5183e550d",
+        "sourceUnchangedSinceHistoricalBaseline": true
+      },
+      "observed": {
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+        "historicalExportAccounting": "index-export-accounting",
+        "primitivesListedInHistoricalExports": {
+          "RgbColor": true,
+          "TerminalColorScheme": true,
+          "TerminalColors": true,
+          "parseTerminalColorSchemeReport": true
+        },
+        "sourceAtHistoricalRevision": "72d1ef298837bfe520bd8a060cb93ea27547dcbff04a167ace0f55b5183e550d",
+        "sourceAtFrozenRevision": "72d1ef298837bfe520bd8a060cb93ea27547dcbff04a167ace0f55b5183e550d",
+        "sourceUnchangedSinceHistoricalBaseline": true
+      },
+      "normalizations": []
+    }
+  ]
+}

@@ -1,0 +1,507 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T03:45:46.241Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/editor-component.ts:EditorComponent",
+    "packages/tui/src/components/editor.ts:Editor,getText,setText,handleInput,onSubmit,onChange,addToHistory,insertTextAtCursor,getExpandedText,setAutocompleteProvider,setPaddingX,setAutocompleteMaxVisible,borderColor",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal"
+  ],
+  "scenarios": [
+    {
+      "name": "the editor component exposes every EditorComponent contract member",
+      "inputs": {
+        "contract": "packages/tui/src/editor-component.ts:EditorComponent"
+      },
+      "expected": {
+        "getText": true,
+        "setText": true,
+        "handleInput": true,
+        "onSubmit": true,
+        "onChange": true,
+        "addToHistory": true,
+        "insertTextAtCursor": true,
+        "getExpandedText": true,
+        "setAutocompleteProvider": true,
+        "setPaddingX": true,
+        "setAutocompleteMaxVisible": true,
+        "borderColor": true
+      },
+      "observed": {
+        "getText": true,
+        "setText": true,
+        "handleInput": true,
+        "onSubmit": true,
+        "onChange": true,
+        "addToHistory": true,
+        "insertTextAtCursor": true,
+        "getExpandedText": true,
+        "setAutocompleteProvider": true,
+        "setPaddingX": true,
+        "setAutocompleteMaxVisible": true,
+        "borderColor": true
+      },
+      "normalizations": []
+    },
+    {
+      "name": "typing reports every change through onChange and submits through onSubmit",
+      "inputs": {
+        "keys": [
+          "h",
+          "é",
+          "😀",
+          "left",
+          "backspace",
+          "enter"
+        ]
+      },
+      "expected": {
+        "typed": {
+          "text": "hé😀",
+          "expanded": "hé😀",
+          "lines": [
+            "hé😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 4,
+            "before": "hé😀",
+            "after": ""
+          }
+        },
+        "left": {
+          "text": "hé😀",
+          "expanded": "hé😀",
+          "lines": [
+            "hé😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 2,
+            "before": "hé",
+            "after": "😀"
+          }
+        },
+        "deleted": {
+          "text": "h😀",
+          "expanded": "h😀",
+          "lines": [
+            "h😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 1,
+            "before": "h",
+            "after": "😀"
+          }
+        },
+        "submitted": [
+          "h😀"
+        ],
+        "changes": [
+          "h",
+          "hé",
+          "hé😀",
+          "h😀",
+          ""
+        ]
+      },
+      "observed": {
+        "typed": {
+          "text": "hé😀",
+          "expanded": "hé😀",
+          "lines": [
+            "hé😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 4,
+            "before": "hé😀",
+            "after": ""
+          }
+        },
+        "left": {
+          "text": "hé😀",
+          "expanded": "hé😀",
+          "lines": [
+            "hé😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 2,
+            "before": "hé",
+            "after": "😀"
+          }
+        },
+        "deleted": {
+          "text": "h😀",
+          "expanded": "h😀",
+          "lines": [
+            "h😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 1,
+            "before": "h",
+            "after": "😀"
+          }
+        },
+        "submitted": [
+          "h😀"
+        ],
+        "changes": [
+          "h",
+          "hé",
+          "hé😀",
+          "h😀",
+          ""
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "added history entries recall with up and restore the edited draft with down",
+      "inputs": {
+        "history": [
+          "first",
+          "second"
+        ],
+        "draft": "draft",
+        "keys": [
+          "up",
+          "up",
+          "down",
+          "down"
+        ]
+      },
+      "expected": {
+        "recalled": {
+          "text": "draft",
+          "expanded": "draft",
+          "lines": [
+            "draft"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "draft"
+          }
+        },
+        "recalledOlder": {
+          "text": "second",
+          "expanded": "second",
+          "lines": [
+            "second"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "second"
+          }
+        },
+        "restored": {
+          "text": "draft",
+          "expanded": "draft",
+          "lines": [
+            "draft"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "draft"
+          }
+        },
+        "draftBack": {
+          "text": "draft",
+          "expanded": "draft",
+          "lines": [
+            "draft"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 5,
+            "before": "draft",
+            "after": ""
+          }
+        },
+        "changes": [
+          "draft",
+          "second",
+          "draft"
+        ]
+      },
+      "observed": {
+        "recalled": {
+          "text": "draft",
+          "expanded": "draft",
+          "lines": [
+            "draft"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "draft"
+          }
+        },
+        "recalledOlder": {
+          "text": "second",
+          "expanded": "second",
+          "lines": [
+            "second"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "second"
+          }
+        },
+        "restored": {
+          "text": "draft",
+          "expanded": "draft",
+          "lines": [
+            "draft"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "draft"
+          }
+        },
+        "draftBack": {
+          "text": "draft",
+          "expanded": "draft",
+          "lines": [
+            "draft"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 5,
+            "before": "draft",
+            "after": ""
+          }
+        },
+        "changes": [
+          "draft",
+          "second",
+          "draft"
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a large paste collapses to a marker and getExpandedText restores the full text",
+      "inputs": {
+        "frame": "AB",
+        "payloadLines": [
+          "line-0",
+          "line-1",
+          "line-2",
+          "line-3",
+          "line-4",
+          "line-5",
+          "line-6",
+          "line-7",
+          "line-8",
+          "line-9",
+          "line-10",
+          "line-11"
+        ],
+        "paste": "bracketed"
+      },
+      "expected": {
+        "collapsed": {
+          "text": "A[paste #1 +12 lines]B",
+          "expanded": "Aline-0\nline-1\nline-2\nline-3\nline-4\nline-5\nline-6\nline-7\nline-8\nline-9\nline-10\nline-11B",
+          "lines": [
+            "A[paste #1 +12 lines]B"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 21,
+            "before": "A[paste #1 +12 lines]",
+            "after": "B"
+          }
+        },
+        "expandedEqualsPayload": true
+      },
+      "observed": {
+        "collapsed": {
+          "text": "A[paste #1 +12 lines]B",
+          "expanded": "Aline-0\nline-1\nline-2\nline-3\nline-4\nline-5\nline-6\nline-7\nline-8\nline-9\nline-10\nline-11B",
+          "lines": [
+            "A[paste #1 +12 lines]B"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 21,
+            "before": "A[paste #1 +12 lines]",
+            "after": "B"
+          }
+        },
+        "expandedEqualsPayload": true
+      },
+      "normalizations": []
+    },
+    {
+      "name": "an autocomplete provider renders suggestions capped by the visible maximum",
+      "inputs": {
+        "trigger": "@am",
+        "requestedMaxVisible": 2,
+        "items": [
+          "alice",
+          "amal",
+          "amanda",
+          "amber",
+          "amy"
+        ],
+        "accept": "tab"
+      },
+      "expected": {
+        "viewport": [
+          "────────────────────────────────────────────────────────────",
+          "@am                                                         ",
+          "────────────────────────────────────────────────────────────",
+          "→ alice                           first                     ",
+          "  amal                            second                    ",
+          "  amanda                          third                     ",
+          "  (1/5)                                                     ",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "visibleCount": 3,
+        "pagingIndicator": "  (1/5)                                                     ",
+        "applied": {
+          "text": "alice",
+          "expanded": "alice",
+          "lines": [
+            "alice"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 5,
+            "before": "alice",
+            "after": ""
+          }
+        }
+      },
+      "observed": {
+        "viewport": [
+          "────────────────────────────────────────────────────────────",
+          "@am                                                         ",
+          "────────────────────────────────────────────────────────────",
+          "→ alice                           first                     ",
+          "  amal                            second                    ",
+          "  amanda                          third                     ",
+          "  (1/5)                                                     ",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "visibleCount": 3,
+        "pagingIndicator": "  (1/5)                                                     ",
+        "applied": {
+          "text": "alice",
+          "expanded": "alice",
+          "lines": [
+            "alice"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 5,
+            "before": "alice",
+            "after": ""
+          }
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "horizontal padding and the border color shape the rendered editor frame",
+      "inputs": {
+        "text": "pad",
+        "paddingX": 2,
+        "borderColor": "ANSI red colorizer"
+      },
+      "expected": {
+        "padded": [
+          "────────────────────────────────────────",
+          "  pad                                   ",
+          "────────────────────────────────────────",
+          "",
+          "",
+          ""
+        ],
+        "paddingXApplied": true,
+        "borderWrite": "\u001b[?2026h\u001b[2J\u001b[H\u001b[3J\u001b[31m────────────────────────────────────────\u001b[39m\u001b[0m\u001b]8;;\u0007\r\n  pad\u001b[7m \u001b[27m                                  \u001b[0m\u001b]8;;\u0007\r\n\u001b[31m────────────────────────────────────────\u001b[39m\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+        "borderApplied": true
+      },
+      "observed": {
+        "padded": [
+          "────────────────────────────────────────",
+          "  pad                                   ",
+          "────────────────────────────────────────",
+          "",
+          "",
+          ""
+        ],
+        "paddingXApplied": true,
+        "borderWrite": "\u001b[?2026h\u001b[2J\u001b[H\u001b[3J\u001b[31m────────────────────────────────────────\u001b[39m\u001b[0m\u001b]8;;\u0007\r\n  pad\u001b[7m \u001b[27m                                  \u001b[0m\u001b]8;;\u0007\r\n\u001b[31m────────────────────────────────────────\u001b[39m\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+        "borderApplied": true
+      },
+      "normalizations": [
+        "xterm trailing-space trimming on blank rows; the border color is observed on the raw write chunk because the plain-text viewport strips styling"
+      ]
+    },
+    {
+      "name": "the editor component primitives are unchanged from the historical pi-v1.0.4 bundle record",
+      "inputs": {
+        "source": "packages/tui/src/editor-component.ts"
+      },
+      "expected": {
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+        "historicalExportAccounting": "index-export-accounting",
+        "primitivesListedInHistoricalExports": {
+          "EditorComponent": true
+        },
+        "sourceAtHistoricalRevision": "0e40ba454b74e2ce21dfc6d831c185e5fb5619b0987fa158be98ed98564e8716",
+        "sourceAtFrozenRevision": "0e40ba454b74e2ce21dfc6d831c185e5fb5619b0987fa158be98ed98564e8716",
+        "sourceUnchangedSinceHistoricalBaseline": true
+      },
+      "observed": {
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+        "historicalExportAccounting": "index-export-accounting",
+        "primitivesListedInHistoricalExports": {
+          "EditorComponent": true
+        },
+        "sourceAtHistoricalRevision": "0e40ba454b74e2ce21dfc6d831c185e5fb5619b0987fa158be98ed98564e8716",
+        "sourceAtFrozenRevision": "0e40ba454b74e2ce21dfc6d831c185e5fb5619b0987fa158be98ed98564e8716",
+        "sourceUnchangedSinceHistoricalBaseline": true
+      },
+      "normalizations": []
+    }
+  ]
+}

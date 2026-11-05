@@ -1,0 +1,1284 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1201",
+  "family": "audit-1201",
+  "capturedAt": "2026-11-05T03:45:46.241Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1201/capture-1201.mts",
+    "sha256": "a7c53a75195294a55e11779b85f7415b48c934ab56d6e09bed78a93cf440ae8c",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1201/capture-1201.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1201/capture-1201.mts",
+        "sha256": "a7c53a75195294a55e11779b85f7415b48c934ab56d6e09bed78a93cf440ae8c"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "terminal-colors.json",
+      "family": "audit-1201",
+      "bytes": 12341,
+      "sha256": "fe31c6da55d7d079930c2b6d9583f611e317d6680663c68c66a121e0ac5077ff",
+      "sourceEndpoints": [
+        "packages/tui/src/terminal-colors.ts:RgbColor,TerminalColorScheme,TerminalColors,parseOscColorResponse,parseTerminalColorSchemeReport",
+        "packages/tui/src/tui.ts:queryTerminalColors"
+      ],
+      "scenarios": [
+        {
+          "name": "OSC color replies parse every frozen color form at its per-channel scale",
+          "inputs": {
+            "replies": [
+              "\u001b]10;#ff0000\u0007",
+              "\u001b]11;#00ff7f\u001b\\",
+              "\u001b]4;1;#abcd12345678\u0007",
+              "\u001b]4;2;rgb:8/8/8\u0007",
+              "\u001b]10;rgba:f/0/0/f\u0007",
+              "\u001b]10;#12345\u0007",
+              "\u001b]10;not-a-color\u0007",
+              "\u001b[31m"
+            ]
+          },
+          "expected": {
+            "parsed": [
+              {
+                "input": "\u001b]10;#ff0000\u0007",
+                "result": {
+                  "target": "foreground",
+                  "rgb": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  }
+                }
+              },
+              {
+                "input": "\u001b]11;#00ff7f\u001b\\",
+                "result": {
+                  "target": "background",
+                  "rgb": {
+                    "r": 0,
+                    "g": 255,
+                    "b": 127
+                  }
+                }
+              },
+              {
+                "input": "\u001b]4;1;#abcd12345678\u0007",
+                "result": {
+                  "target": 1,
+                  "rgb": {
+                    "r": 171,
+                    "g": 18,
+                    "b": 86
+                  }
+                }
+              },
+              {
+                "input": "\u001b]4;2;rgb:8/8/8\u0007",
+                "result": {
+                  "target": 2,
+                  "rgb": {
+                    "r": 136,
+                    "g": 136,
+                    "b": 136
+                  }
+                }
+              },
+              {
+                "input": "\u001b]10;rgba:f/0/0/f\u0007",
+                "result": {
+                  "target": "foreground",
+                  "rgb": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  }
+                }
+              },
+              {
+                "input": "\u001b]10;#12345\u0007",
+                "result": {
+                  "target": "foreground"
+                }
+              },
+              {
+                "input": "\u001b]10;not-a-color\u0007",
+                "result": {
+                  "target": "foreground"
+                }
+              },
+              {
+                "input": "\u001b[31m"
+              }
+            ]
+          },
+          "observed": {
+            "parsed": [
+              {
+                "input": "\u001b]10;#ff0000\u0007",
+                "result": {
+                  "target": "foreground",
+                  "rgb": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  }
+                }
+              },
+              {
+                "input": "\u001b]11;#00ff7f\u001b\\",
+                "result": {
+                  "target": "background",
+                  "rgb": {
+                    "r": 0,
+                    "g": 255,
+                    "b": 127
+                  }
+                }
+              },
+              {
+                "input": "\u001b]4;1;#abcd12345678\u0007",
+                "result": {
+                  "target": 1,
+                  "rgb": {
+                    "r": 171,
+                    "g": 18,
+                    "b": 86
+                  }
+                }
+              },
+              {
+                "input": "\u001b]4;2;rgb:8/8/8\u0007",
+                "result": {
+                  "target": 2,
+                  "rgb": {
+                    "r": 136,
+                    "g": 136,
+                    "b": 136
+                  }
+                }
+              },
+              {
+                "input": "\u001b]10;rgba:f/0/0/f\u0007",
+                "result": {
+                  "target": "foreground",
+                  "rgb": {
+                    "r": 255,
+                    "g": 0,
+                    "b": 0
+                  }
+                }
+              },
+              {
+                "input": "\u001b]10;#12345\u0007",
+                "result": {
+                  "target": "foreground"
+                }
+              },
+              {
+                "input": "\u001b]10;not-a-color\u0007",
+                "result": {
+                  "target": "foreground"
+                }
+              },
+              {
+                "input": "\u001b[31m"
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "the public color query sets the palette only when all sixteen replies arrive",
+          "inputs": {
+            "complete": "foreground, background and sixteen OSC 4 replies terminated by DA1",
+            "missingSlot": "foreground, background and fifteen of sixteen OSC 4 replies terminated by DA1"
+          },
+          "expected": {
+            "complete": {
+              "foreground": {
+                "r": 255,
+                "g": 0,
+                "b": 0
+              },
+              "background": {
+                "r": 0,
+                "g": 255,
+                "b": 0
+              },
+              "palette": [
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                }
+              ]
+            },
+            "missingSlot": {
+              "foreground": {
+                "r": 18,
+                "g": 52,
+                "b": 86
+              },
+              "background": {
+                "r": 101,
+                "g": 67,
+                "b": 33
+              },
+              "palette": null
+            }
+          },
+          "observed": {
+            "complete": {
+              "foreground": {
+                "r": 255,
+                "g": 0,
+                "b": 0
+              },
+              "background": {
+                "r": 0,
+                "g": 255,
+                "b": 0
+              },
+              "palette": [
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 0,
+                  "g": 0,
+                  "b": 0
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                },
+                {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1
+                }
+              ]
+            },
+            "missingSlot": {
+              "foreground": {
+                "r": 18,
+                "g": 52,
+                "b": 86
+              },
+              "background": {
+                "r": 101,
+                "g": 67,
+                "b": 33
+              },
+              "palette": null
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "terminal color scheme reports resolve dark and light only from complete 997 replies",
+          "inputs": {
+            "reports": [
+              "\u001b[?997;1n",
+              "\u001b[?997;2n",
+              "\u001b[?997;3n",
+              "not-a-report",
+              "\u001b[?997;1n\u001b[?997;2n",
+              ""
+            ]
+          },
+          "expected": {
+            "parsed": [
+              {
+                "report": "\u001b[?997;1n",
+                "scheme": "dark"
+              },
+              {
+                "report": "\u001b[?997;2n",
+                "scheme": "light"
+              },
+              {
+                "report": "\u001b[?997;3n",
+                "scheme": null
+              },
+              {
+                "report": "not-a-report",
+                "scheme": null
+              },
+              {
+                "report": "\u001b[?997;1n\u001b[?997;2n",
+                "scheme": "light"
+              },
+              {
+                "report": "",
+                "scheme": null
+              }
+            ]
+          },
+          "observed": {
+            "parsed": [
+              {
+                "report": "\u001b[?997;1n",
+                "scheme": "dark"
+              },
+              {
+                "report": "\u001b[?997;2n",
+                "scheme": "light"
+              },
+              {
+                "report": "\u001b[?997;3n",
+                "scheme": null
+              },
+              {
+                "report": "not-a-report",
+                "scheme": null
+              },
+              {
+                "report": "\u001b[?997;1n\u001b[?997;2n",
+                "scheme": "light"
+              },
+              {
+                "report": "",
+                "scheme": null
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "the terminal color primitives are unchanged from the historical pi-v1.0.4 bundle record",
+          "inputs": {
+            "source": "packages/tui/src/terminal-colors.ts"
+          },
+          "expected": {
+            "historicalBaseline": "pi-v1.0.4",
+            "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+            "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+            "historicalExportAccounting": "index-export-accounting",
+            "primitivesListedInHistoricalExports": {
+              "RgbColor": true,
+              "TerminalColorScheme": true,
+              "TerminalColors": true,
+              "parseTerminalColorSchemeReport": true
+            },
+            "sourceAtHistoricalRevision": "72d1ef298837bfe520bd8a060cb93ea27547dcbff04a167ace0f55b5183e550d",
+            "sourceAtFrozenRevision": "72d1ef298837bfe520bd8a060cb93ea27547dcbff04a167ace0f55b5183e550d",
+            "sourceUnchangedSinceHistoricalBaseline": true
+          },
+          "observed": {
+            "historicalBaseline": "pi-v1.0.4",
+            "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+            "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+            "historicalExportAccounting": "index-export-accounting",
+            "primitivesListedInHistoricalExports": {
+              "RgbColor": true,
+              "TerminalColorScheme": true,
+              "TerminalColors": true,
+              "parseTerminalColorSchemeReport": true
+            },
+            "sourceAtHistoricalRevision": "72d1ef298837bfe520bd8a060cb93ea27547dcbff04a167ace0f55b5183e550d",
+            "sourceAtFrozenRevision": "72d1ef298837bfe520bd8a060cb93ea27547dcbff04a167ace0f55b5183e550d",
+            "sourceUnchangedSinceHistoricalBaseline": true
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "editor-component.json",
+      "family": "audit-1201",
+      "bytes": 15426,
+      "sha256": "3ef02646c9b23f774ad2c10e38e4e938691cd5bc14d41dba9a897baf7bc4ce1a",
+      "sourceEndpoints": [
+        "packages/tui/src/editor-component.ts:EditorComponent",
+        "packages/tui/src/components/editor.ts:Editor,getText,setText,handleInput,onSubmit,onChange,addToHistory,insertTextAtCursor,getExpandedText,setAutocompleteProvider,setPaddingX,setAutocompleteMaxVisible,borderColor",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal"
+      ],
+      "scenarios": [
+        {
+          "name": "the editor component exposes every EditorComponent contract member",
+          "inputs": {
+            "contract": "packages/tui/src/editor-component.ts:EditorComponent"
+          },
+          "expected": {
+            "getText": true,
+            "setText": true,
+            "handleInput": true,
+            "onSubmit": true,
+            "onChange": true,
+            "addToHistory": true,
+            "insertTextAtCursor": true,
+            "getExpandedText": true,
+            "setAutocompleteProvider": true,
+            "setPaddingX": true,
+            "setAutocompleteMaxVisible": true,
+            "borderColor": true
+          },
+          "observed": {
+            "getText": true,
+            "setText": true,
+            "handleInput": true,
+            "onSubmit": true,
+            "onChange": true,
+            "addToHistory": true,
+            "insertTextAtCursor": true,
+            "getExpandedText": true,
+            "setAutocompleteProvider": true,
+            "setPaddingX": true,
+            "setAutocompleteMaxVisible": true,
+            "borderColor": true
+          },
+          "normalizations": []
+        },
+        {
+          "name": "typing reports every change through onChange and submits through onSubmit",
+          "inputs": {
+            "keys": [
+              "h",
+              "é",
+              "😀",
+              "left",
+              "backspace",
+              "enter"
+            ]
+          },
+          "expected": {
+            "typed": {
+              "text": "hé😀",
+              "expanded": "hé😀",
+              "lines": [
+                "hé😀"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 4,
+                "before": "hé😀",
+                "after": ""
+              }
+            },
+            "left": {
+              "text": "hé😀",
+              "expanded": "hé😀",
+              "lines": [
+                "hé😀"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 2,
+                "before": "hé",
+                "after": "😀"
+              }
+            },
+            "deleted": {
+              "text": "h😀",
+              "expanded": "h😀",
+              "lines": [
+                "h😀"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 1,
+                "before": "h",
+                "after": "😀"
+              }
+            },
+            "submitted": [
+              "h😀"
+            ],
+            "changes": [
+              "h",
+              "hé",
+              "hé😀",
+              "h😀",
+              ""
+            ]
+          },
+          "observed": {
+            "typed": {
+              "text": "hé😀",
+              "expanded": "hé😀",
+              "lines": [
+                "hé😀"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 4,
+                "before": "hé😀",
+                "after": ""
+              }
+            },
+            "left": {
+              "text": "hé😀",
+              "expanded": "hé😀",
+              "lines": [
+                "hé😀"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 2,
+                "before": "hé",
+                "after": "😀"
+              }
+            },
+            "deleted": {
+              "text": "h😀",
+              "expanded": "h😀",
+              "lines": [
+                "h😀"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 1,
+                "before": "h",
+                "after": "😀"
+              }
+            },
+            "submitted": [
+              "h😀"
+            ],
+            "changes": [
+              "h",
+              "hé",
+              "hé😀",
+              "h😀",
+              ""
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "added history entries recall with up and restore the edited draft with down",
+          "inputs": {
+            "history": [
+              "first",
+              "second"
+            ],
+            "draft": "draft",
+            "keys": [
+              "up",
+              "up",
+              "down",
+              "down"
+            ]
+          },
+          "expected": {
+            "recalled": {
+              "text": "draft",
+              "expanded": "draft",
+              "lines": [
+                "draft"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 0,
+                "before": "",
+                "after": "draft"
+              }
+            },
+            "recalledOlder": {
+              "text": "second",
+              "expanded": "second",
+              "lines": [
+                "second"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 0,
+                "before": "",
+                "after": "second"
+              }
+            },
+            "restored": {
+              "text": "draft",
+              "expanded": "draft",
+              "lines": [
+                "draft"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 0,
+                "before": "",
+                "after": "draft"
+              }
+            },
+            "draftBack": {
+              "text": "draft",
+              "expanded": "draft",
+              "lines": [
+                "draft"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 5,
+                "before": "draft",
+                "after": ""
+              }
+            },
+            "changes": [
+              "draft",
+              "second",
+              "draft"
+            ]
+          },
+          "observed": {
+            "recalled": {
+              "text": "draft",
+              "expanded": "draft",
+              "lines": [
+                "draft"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 0,
+                "before": "",
+                "after": "draft"
+              }
+            },
+            "recalledOlder": {
+              "text": "second",
+              "expanded": "second",
+              "lines": [
+                "second"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 0,
+                "before": "",
+                "after": "second"
+              }
+            },
+            "restored": {
+              "text": "draft",
+              "expanded": "draft",
+              "lines": [
+                "draft"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 0,
+                "before": "",
+                "after": "draft"
+              }
+            },
+            "draftBack": {
+              "text": "draft",
+              "expanded": "draft",
+              "lines": [
+                "draft"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 5,
+                "before": "draft",
+                "after": ""
+              }
+            },
+            "changes": [
+              "draft",
+              "second",
+              "draft"
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a large paste collapses to a marker and getExpandedText restores the full text",
+          "inputs": {
+            "frame": "AB",
+            "payloadLines": [
+              "line-0",
+              "line-1",
+              "line-2",
+              "line-3",
+              "line-4",
+              "line-5",
+              "line-6",
+              "line-7",
+              "line-8",
+              "line-9",
+              "line-10",
+              "line-11"
+            ],
+            "paste": "bracketed"
+          },
+          "expected": {
+            "collapsed": {
+              "text": "A[paste #1 +12 lines]B",
+              "expanded": "Aline-0\nline-1\nline-2\nline-3\nline-4\nline-5\nline-6\nline-7\nline-8\nline-9\nline-10\nline-11B",
+              "lines": [
+                "A[paste #1 +12 lines]B"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 21,
+                "before": "A[paste #1 +12 lines]",
+                "after": "B"
+              }
+            },
+            "expandedEqualsPayload": true
+          },
+          "observed": {
+            "collapsed": {
+              "text": "A[paste #1 +12 lines]B",
+              "expanded": "Aline-0\nline-1\nline-2\nline-3\nline-4\nline-5\nline-6\nline-7\nline-8\nline-9\nline-10\nline-11B",
+              "lines": [
+                "A[paste #1 +12 lines]B"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 21,
+                "before": "A[paste #1 +12 lines]",
+                "after": "B"
+              }
+            },
+            "expandedEqualsPayload": true
+          },
+          "normalizations": []
+        },
+        {
+          "name": "an autocomplete provider renders suggestions capped by the visible maximum",
+          "inputs": {
+            "trigger": "@am",
+            "requestedMaxVisible": 2,
+            "items": [
+              "alice",
+              "amal",
+              "amanda",
+              "amber",
+              "amy"
+            ],
+            "accept": "tab"
+          },
+          "expected": {
+            "viewport": [
+              "────────────────────────────────────────────────────────────",
+              "@am                                                         ",
+              "────────────────────────────────────────────────────────────",
+              "→ alice                           first                     ",
+              "  amal                            second                    ",
+              "  amanda                          third                     ",
+              "  (1/5)                                                     ",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "visibleCount": 3,
+            "pagingIndicator": "  (1/5)                                                     ",
+            "applied": {
+              "text": "alice",
+              "expanded": "alice",
+              "lines": [
+                "alice"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 5,
+                "before": "alice",
+                "after": ""
+              }
+            }
+          },
+          "observed": {
+            "viewport": [
+              "────────────────────────────────────────────────────────────",
+              "@am                                                         ",
+              "────────────────────────────────────────────────────────────",
+              "→ alice                           first                     ",
+              "  amal                            second                    ",
+              "  amanda                          third                     ",
+              "  (1/5)                                                     ",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "visibleCount": 3,
+            "pagingIndicator": "  (1/5)                                                     ",
+            "applied": {
+              "text": "alice",
+              "expanded": "alice",
+              "lines": [
+                "alice"
+              ],
+              "cursor": {
+                "line": 0,
+                "utf16Column": 5,
+                "before": "alice",
+                "after": ""
+              }
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "horizontal padding and the border color shape the rendered editor frame",
+          "inputs": {
+            "text": "pad",
+            "paddingX": 2,
+            "borderColor": "ANSI red colorizer"
+          },
+          "expected": {
+            "padded": [
+              "────────────────────────────────────────",
+              "  pad                                   ",
+              "────────────────────────────────────────",
+              "",
+              "",
+              ""
+            ],
+            "paddingXApplied": true,
+            "borderWrite": "\u001b[?2026h\u001b[2J\u001b[H\u001b[3J\u001b[31m────────────────────────────────────────\u001b[39m\u001b[0m\u001b]8;;\u0007\r\n  pad\u001b[7m \u001b[27m                                  \u001b[0m\u001b]8;;\u0007\r\n\u001b[31m────────────────────────────────────────\u001b[39m\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+            "borderApplied": true
+          },
+          "observed": {
+            "padded": [
+              "────────────────────────────────────────",
+              "  pad                                   ",
+              "────────────────────────────────────────",
+              "",
+              "",
+              ""
+            ],
+            "paddingXApplied": true,
+            "borderWrite": "\u001b[?2026h\u001b[2J\u001b[H\u001b[3J\u001b[31m────────────────────────────────────────\u001b[39m\u001b[0m\u001b]8;;\u0007\r\n  pad\u001b[7m \u001b[27m                                  \u001b[0m\u001b]8;;\u0007\r\n\u001b[31m────────────────────────────────────────\u001b[39m\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+            "borderApplied": true
+          },
+          "normalizations": [
+            "xterm trailing-space trimming on blank rows; the border color is observed on the raw write chunk because the plain-text viewport strips styling"
+          ]
+        },
+        {
+          "name": "the editor component primitives are unchanged from the historical pi-v1.0.4 bundle record",
+          "inputs": {
+            "source": "packages/tui/src/editor-component.ts"
+          },
+          "expected": {
+            "historicalBaseline": "pi-v1.0.4",
+            "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+            "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+            "historicalExportAccounting": "index-export-accounting",
+            "primitivesListedInHistoricalExports": {
+              "EditorComponent": true
+            },
+            "sourceAtHistoricalRevision": "0e40ba454b74e2ce21dfc6d831c185e5fb5619b0987fa158be98ed98564e8716",
+            "sourceAtFrozenRevision": "0e40ba454b74e2ce21dfc6d831c185e5fb5619b0987fa158be98ed98564e8716",
+            "sourceUnchangedSinceHistoricalBaseline": true
+          },
+          "observed": {
+            "historicalBaseline": "pi-v1.0.4",
+            "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+            "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+            "historicalExportAccounting": "index-export-accounting",
+            "primitivesListedInHistoricalExports": {
+              "EditorComponent": true
+            },
+            "sourceAtHistoricalRevision": "0e40ba454b74e2ce21dfc6d831c185e5fb5619b0987fa158be98ed98564e8716",
+            "sourceAtFrozenRevision": "0e40ba454b74e2ce21dfc6d831c185e5fb5619b0987fa158be98ed98564e8716",
+            "sourceUnchangedSinceHistoricalBaseline": true
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "native-clipboard.json",
+      "family": "audit-1201",
+      "bytes": 4274,
+      "sha256": "4fe01d00b3636243018880363cd31d6e91210793373d29d738152bd60793a85d",
+      "sourceEndpoints": [
+        "packages/tui/src/native-platform.ts:NativeClipboard,getNativeClipboard",
+        "packages/tui/src/native-module-path.ts:getNativeModuleCandidates"
+      ],
+      "scenarios": [
+        {
+          "name": "getNativeClipboard reports no helper when no display variable is set",
+          "inputs": {
+            "DISPLAY": "unset",
+            "WAYLAND_DISPLAY": "unset"
+          },
+          "expected": {
+            "clipboard": "undefined"
+          },
+          "observed": {
+            "clipboard": "undefined"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a disconnected display keeps the helper loaded and reads report unavailable",
+          "inputs": {
+            "DISPLAY": ":99 (no X server)",
+            "reads": [
+              "getText",
+              "getImage"
+            ]
+          },
+          "expected": {
+            "helper": "object",
+            "getText": "undefined",
+            "getImage": "undefined",
+            "getFilePathsPresent": false,
+            "setTextPresent": false
+          },
+          "observed": {
+            "helper": "object",
+            "getText": "undefined",
+            "getImage": "undefined",
+            "getFilePathsPresent": false,
+            "setTextPresent": false
+          },
+          "normalizations": [
+            "the empty (null) and transfer-failure (reject) outcomes need a live X server, which the headless capture host lacks"
+          ]
+        },
+        {
+          "name": "the NativeClipboard interface spells the unavailable empty and failed outcomes",
+          "inputs": {
+            "source": "packages/tui/src/native-platform.ts:NativeClipboard"
+          },
+          "expected": {
+            "getTextUnavailableIsUndefined": true,
+            "getTextDoc": "Undefined means unavailable, null means no text; transfer failures reject.",
+            "getImageUnavailableIsUndefined": true,
+            "getFilePathsOptional": true,
+            "setTextOptional": true,
+            "linuxSetTextNote": "Linux uses command-line tools to retain clipboard ownership instead."
+          },
+          "observed": {
+            "getTextUnavailableIsUndefined": true,
+            "getTextDoc": "Undefined means unavailable, null means no text; transfer failures reject.",
+            "getImageUnavailableIsUndefined": true,
+            "getFilePathsOptional": true,
+            "setTextOptional": true,
+            "linuxSetTextNote": "Linux uses command-line tools to retain clipboard ownership instead."
+          },
+          "normalizations": []
+        },
+        {
+          "name": "the clipboard primitives are unchanged from the historical pi-v1.0.4 bundle record",
+          "inputs": {
+            "source": "packages/tui/src/native-platform.ts"
+          },
+          "expected": {
+            "historicalBaseline": "pi-v1.0.4",
+            "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+            "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+            "historicalExportAccounting": "index-export-accounting",
+            "primitivesListedInHistoricalExports": {
+              "NativeClipboard": true,
+              "getNativeClipboard": true
+            },
+            "sourceAtHistoricalRevision": "693d33898358804541d36aff089db74e1eb3be8f1a1722ffe6d821036b925959",
+            "sourceAtFrozenRevision": "693d33898358804541d36aff089db74e1eb3be8f1a1722ffe6d821036b925959",
+            "sourceUnchangedSinceHistoricalBaseline": true
+          },
+          "observed": {
+            "historicalBaseline": "pi-v1.0.4",
+            "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+            "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+            "historicalExportAccounting": "index-export-accounting",
+            "primitivesListedInHistoricalExports": {
+              "NativeClipboard": true,
+              "getNativeClipboard": true
+            },
+            "sourceAtHistoricalRevision": "693d33898358804541d36aff089db74e1eb3be8f1a1722ffe6d821036b925959",
+            "sourceAtFrozenRevision": "693d33898358804541d36aff089db74e1eb3be8f1a1722ffe6d821036b925959",
+            "sourceUnchangedSinceHistoricalBaseline": true
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "image-transcoder.json",
+      "family": "audit-1201",
+      "bytes": 4499,
+      "sha256": "002bfabf0edb14a61294aa26e7a1e46a739bf25d9471220490882a0096325312",
+      "sourceEndpoints": [
+        "packages/tui/src/components/image.ts:setImageTranscoder,Image",
+        "packages/tui/src/terminal-image.ts:setCapabilities"
+      ],
+      "scenarios": [
+        {
+          "name": "without a transcoder a non-PNG image renders the text fallback",
+          "inputs": {
+            "image": "image/jpeg base64",
+            "transcoder": "unset",
+            "capabilities": "kitty"
+          },
+          "expected": {
+            "lines": [
+              "[Image: [image/jpeg] 800x600]"
+            ],
+            "fallbackText": "[Image: [image/jpeg] 800x600]"
+          },
+          "observed": {
+            "lines": [
+              "[Image: [image/jpeg] 800x600]"
+            ],
+            "fallbackText": "[Image: [image/jpeg] 800x600]"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a transcoder converts non-PNG data for the Kitty protocol",
+          "inputs": {
+            "image": "image/jpeg base64",
+            "transcoder": "returns PNG",
+            "capabilities": "kitty"
+          },
+          "expected": {
+            "transcoderCalls": 1,
+            "fallbackText": null,
+            "renderedImage": true
+          },
+          "observed": {
+            "transcoderCalls": 1,
+            "fallbackText": null,
+            "renderedImage": true
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a failing transcoder keeps the fallback and a fresh image retries with the new transcoder",
+          "inputs": {
+            "image": "image/jpeg base64",
+            "first": "returns null",
+            "second": "returns PNG"
+          },
+          "expected": {
+            "failed": {
+              "transcoderCalls": 1,
+              "lines": [
+                "[Image: [image/jpeg] 800x600]"
+              ]
+            },
+            "retried": {
+              "transcoderCalls": 1,
+              "fallbackText": null,
+              "renderedImage": true
+            }
+          },
+          "observed": {
+            "failed": {
+              "transcoderCalls": 1,
+              "lines": [
+                "[Image: [image/jpeg] 800x600]"
+              ]
+            },
+            "retried": {
+              "transcoderCalls": 1,
+              "fallbackText": null,
+              "renderedImage": true
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "clearing the transcoder restores the text fallback for fresh images",
+          "inputs": {
+            "image": "image/jpeg base64",
+            "transcoder": "set then cleared"
+          },
+          "expected": {
+            "lines": [
+              "[Image: [image/jpeg] 800x600]"
+            ],
+            "fallbackText": "[Image: [image/jpeg] 800x600]"
+          },
+          "observed": {
+            "lines": [
+              "[Image: [image/jpeg] 800x600]"
+            ],
+            "fallbackText": "[Image: [image/jpeg] 800x600]"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "the image transcoder primitive is unchanged from the historical pi-v1.0.4 bundle record",
+          "inputs": {
+            "source": "packages/tui/src/components/image.ts"
+          },
+          "expected": {
+            "historicalBaseline": "pi-v1.0.4",
+            "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+            "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+            "historicalExportAccounting": "index-export-accounting",
+            "primitivesListedInHistoricalExports": {
+              "setImageTranscoder": true
+            },
+            "sourceAtHistoricalRevision": "e92c3f66f36eb579ff1eabd9dc3b9f34bd8a07997bd62ffe3fb63a21f97a7462",
+            "sourceAtFrozenRevision": "e92c3f66f36eb579ff1eabd9dc3b9f34bd8a07997bd62ffe3fb63a21f97a7462",
+            "sourceUnchangedSinceHistoricalBaseline": true
+          },
+          "observed": {
+            "historicalBaseline": "pi-v1.0.4",
+            "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+            "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+            "historicalExportAccounting": "index-export-accounting",
+            "primitivesListedInHistoricalExports": {
+              "setImageTranscoder": true
+            },
+            "sourceAtHistoricalRevision": "e92c3f66f36eb579ff1eabd9dc3b9f34bd8a07997bd62ffe3fb63a21f97a7462",
+            "sourceAtFrozenRevision": "e92c3f66f36eb579ff1eabd9dc3b9f34bd8a07997bd62ffe3fb63a21f97a7462",
+            "sourceUnchangedSinceHistoricalBaseline": true
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T03:45:46.241Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/image.ts:setImageTranscoder,Image",
+    "packages/tui/src/terminal-image.ts:setCapabilities"
+  ],
+  "scenarios": [
+    {
+      "name": "without a transcoder a non-PNG image renders the text fallback",
+      "inputs": {
+        "image": "image/jpeg base64",
+        "transcoder": "unset",
+        "capabilities": "kitty"
+      },
+      "expected": {
+        "lines": [
+          "[Image: [image/jpeg] 800x600]"
+        ],
+        "fallbackText": "[Image: [image/jpeg] 800x600]"
+      },
+      "observed": {
+        "lines": [
+          "[Image: [image/jpeg] 800x600]"
+        ],
+        "fallbackText": "[Image: [image/jpeg] 800x600]"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a transcoder converts non-PNG data for the Kitty protocol",
+      "inputs": {
+        "image": "image/jpeg base64",
+        "transcoder": "returns PNG",
+        "capabilities": "kitty"
+      },
+      "expected": {
+        "transcoderCalls": 1,
+        "fallbackText": null,
+        "renderedImage": true
+      },
+      "observed": {
+        "transcoderCalls": 1,
+        "fallbackText": null,
+        "renderedImage": true
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a failing transcoder keeps the fallback and a fresh image retries with the new transcoder",
+      "inputs": {
+        "image": "image/jpeg base64",
+        "first": "returns null",
+        "second": "returns PNG"
+      },
+      "expected": {
+        "failed": {
+          "transcoderCalls": 1,
+          "lines": [
+            "[Image: [image/jpeg] 800x600]"
+          ]
+        },
+        "retried": {
+          "transcoderCalls": 1,
+          "fallbackText": null,
+          "renderedImage": true
+        }
+      },
+      "observed": {
+        "failed": {
+          "transcoderCalls": 1,
+          "lines": [
+            "[Image: [image/jpeg] 800x600]"
+          ]
+        },
+        "retried": {
+          "transcoderCalls": 1,
+          "fallbackText": null,
+          "renderedImage": true
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "clearing the transcoder restores the text fallback for fresh images",
+      "inputs": {
+        "image": "image/jpeg base64",
+        "transcoder": "set then cleared"
+      },
+      "expected": {
+        "lines": [
+          "[Image: [image/jpeg] 800x600]"
+        ],
+        "fallbackText": "[Image: [image/jpeg] 800x600]"
+      },
+      "observed": {
+        "lines": [
+          "[Image: [image/jpeg] 800x600]"
+        ],
+        "fallbackText": "[Image: [image/jpeg] 800x600]"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the image transcoder primitive is unchanged from the historical pi-v1.0.4 bundle record",
+      "inputs": {
+        "source": "packages/tui/src/components/image.ts"
+      },
+      "expected": {
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+        "historicalExportAccounting": "index-export-accounting",
+        "primitivesListedInHistoricalExports": {
+          "setImageTranscoder": true
+        },
+        "sourceAtHistoricalRevision": "e92c3f66f36eb579ff1eabd9dc3b9f34bd8a07997bd62ffe3fb63a21f97a7462",
+        "sourceAtFrozenRevision": "e92c3f66f36eb579ff1eabd9dc3b9f34bd8a07997bd62ffe3fb63a21f97a7462",
+        "sourceUnchangedSinceHistoricalBaseline": true
+      },
+      "observed": {
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "historicalBundle": "fixtures/pi-tui/bundles/pi-v1.0.4",
+        "historicalExportAccounting": "index-export-accounting",
+        "primitivesListedInHistoricalExports": {
+          "setImageTranscoder": true
+        },
+        "sourceAtHistoricalRevision": "e92c3f66f36eb579ff1eabd9dc3b9f34bd8a07997bd62ffe3fb63a21f97a7462",
+        "sourceAtFrozenRevision": "e92c3f66f36eb579ff1eabd9dc3b9f34bd8a07997bd62ffe3fb63a21f97a7462",
+        "sourceUnchangedSinceHistoricalBaseline": true
+      },
+      "normalizations": []
+    }
+  ]
+}
