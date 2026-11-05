@@ -49,6 +49,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -66,6 +67,9 @@ LEDGER_PATH = ROOT / "docs/research/pi-v1.3.0/1058-consolidated-capability-ledge
 FRONTIER_PATH = ROOT / "docs/research/pi-v1.3.0/1058-implementation-frontier.json"
 REPORT_PATH = ROOT / "docs/research/pi-v1.3.0/1058-consolidation-frontier.md"
 REGISTRY_PATH = ROOT / "fixtures/pi-v1.3.0/baselines.json"
+LANE_LOCK_PATH = ROOT / ".lane-lock.json"
+LANE_LOCK_SKIP_ENV = "CCH_LANE_LOCK_SKIP"
+LANE_NAME_ENV = "CCH_LANE_NAME"
 LEDGER_SCHEMA = "pike/pi-v1.3.0-consolidated-capability-ledger/1"
 FRONTIER_SCHEMA = "pike/pi-v1.3.0-implementation-frontier/1"
 REVISION = "71023aec1546d6d677a65669c5665c0927ce0dd0"
@@ -1812,11 +1816,48 @@ def check_docs(ledger: dict, frontier: dict) -> list[str]:
     return notes
 
 
+def refuse_foreign_lane_lock() -> None:
+    """Fail closed when a different lane holds the checkout (docs/wiki/pi-alignment/ops-lanes.md).
+
+    The main checkout serializes code lanes: while one lane holds `.lane-lock.json`
+    (scripts/dev/lane-lock.sh), another lane's build/check must not rewrite the shared
+    ledger pipeline. The caller proves its lane identity with CCH_LANE_NAME; only the
+    owning lane may set CCH_LANE_LOCK_SKIP=1 for its own calls. No lock, or a lock held
+    by the caller's own lane, proceeds.
+    """
+    if os.environ.get(LANE_LOCK_SKIP_ENV) == "1":
+        return
+    if not LANE_LOCK_PATH.exists():
+        return
+    try:
+        lock = json.loads(LANE_LOCK_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ConsolidationError(
+            f"lane lock {LANE_LOCK_PATH.name} is unreadable ({error}); remove it or set "
+            f"{LANE_LOCK_SKIP_ENV}=1 from the owning lane"
+        ) from error
+    holder = lock.get("lane") if isinstance(lock, dict) else None
+    if not isinstance(holder, str) or not holder:
+        raise ConsolidationError(
+            f"lane lock {LANE_LOCK_PATH.name} names no holding lane; remove it or set "
+            f"{LANE_LOCK_SKIP_ENV}=1 from the owning lane"
+        )
+    caller = os.environ.get(LANE_NAME_ENV, "")
+    if caller != holder:
+        raise ConsolidationError(
+            f"lane lock held by '{holder}' and this caller is '{caller or 'unset'}'; a different "
+            f"lane may not run build/check in this checkout (AGENTS.md 并发约束). Only the "
+            f"holding lane sets {LANE_LOCK_SKIP_ENV}=1."
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("build", "check"))
     parser.add_argument("--pi-root", default=None)
     args = parser.parse_args()
+
+    refuse_foreign_lane_lock()
 
     plan = load_json(PLAN_PATH)
     bundles = build_bundle_index(registered_families())

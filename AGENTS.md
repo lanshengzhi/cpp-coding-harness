@@ -13,6 +13,15 @@ Experimental C++23 coding-agent runtime with strict Owner packages and safety bo
 
 Read [validation](docs/agents/validation.md) for Focused, Full, and Fresh tiers, their commands, and the docs-only exception.
 
+## 并发约束 (Concurrency)
+
+One code lane at a time in the main checkout (owner rule, 2026-11-05; lane definitions and incident record: [ops-lanes](docs/wiki/pi-alignment/ops-lanes.md)).
+
+1. Before starting any build/test/evidence work (`cmake --build`, `ctest`, `consolidate_audits.py`, the ledger or delivery files), inspect `git status --short` for in-flight lanes and run `scripts/dev/lane-lock.sh status`.
+2. Take the checkout explicitly: `scripts/dev/lane-lock.sh acquire <lane> [timeout]`; release with `release <lane>` (fail-closed — only the holder releases). The consolidation `build`/`check` refuse to run under a foreign `.lane-lock.json`: the caller proves its lane with `CCH_LANE_NAME`, and only the owning lane sets `CCH_LANE_LOCK_SKIP=1`.
+3. 每个 lane 完成后立即 push，下个 lane 从新的 HEAD 开始（serial-merger handoff）。
+4. Light tasks — `gh` operations, `docs/wiki/` edits, read-only research — may run in parallel with a code lane; two code lanes never overlap, in any session.
+
 ## Task-specific context
 
 - **Implementation:** read [validation](docs/agents/validation.md); check [CODING_STANDARDS.md](CODING_STANDARDS.md) §2 (mechanical style) and §11 (tests).

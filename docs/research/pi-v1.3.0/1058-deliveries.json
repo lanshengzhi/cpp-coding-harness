@@ -178,7 +178,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -707,6 +707,12 @@
       "sha256": "0ac7cdeb4faf6badfc3a9d400e982bb6c5b260c528715e83bbbefa131aa9df18"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -1663,7 +1669,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -2259,6 +2265,12 @@
       "sha256": "a669370425d5cb61863db09eab1f8e45f6f43e26c02070827c3b9486f017829f"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -2979,7 +2991,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -3130,6 +3142,12 @@
       "sha256": "fe7da1fc92e5518e043e83af019c0855da7d78efee1c86888996c34221e1f5da"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -3481,7 +3499,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -4073,6 +4091,12 @@
       "sha256": "f9ab7cfc11a4c8b943c263e33c291ded74a3855f197091bdd51280a28ac653c9"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -4288,7 +4312,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4380,6 +4404,12 @@
       "sha256": "1898af52153cbdc2db678ea022900229b34a020f18c56525e0707e39df2600cc"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -4595,7 +4625,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4742,6 +4772,12 @@
       "sha256": "1456cc1256d98fdbf58a191e07f1d5050aea4db17e58bc64b5ef5492de876493"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -4948,7 +4984,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -5193,6 +5229,12 @@
       "sha256": "c3d65fd22e763315cd15aa65be508e375f4082aee726f0ab2723ece821541e1a"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -5390,7 +5432,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -5612,6 +5654,12 @@
       "sha256": "1526cba0f63f5bb94190ef7105efd6f9361501347ab1bb03ddae3b03fb99bf80"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -5712,7 +5760,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -5786,6 +5834,12 @@
       "sha256": "6d8693e2ffd3aa327527f15a1bd1a2047a026960a479364ce9f0251c07179609"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -6061,7 +6115,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -6288,6 +6342,12 @@
       "sha256": "da4ab725ec1f9264566892d1326429b877ed6c5d461d51ac0e27a7e0e9320ef0"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -6500,7 +6560,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -7601,6 +7661,12 @@
       "sha256": "5a1c17162fbffa8cadeb48cff725199c5a42766c4232048465604a201a1e4776"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -7677,7 +7743,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -7904,6 +7970,12 @@
       "sha256": "fd2ad96d7754de3931963bd396f6339f369f72a9925a208ed325d6301360fa23"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -7976,7 +8048,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "8872e777afef8529caf2cdba3495b4589519941da655e053d5e8044f166321aa"
+     "sha256": "8aeaef9e225b059c5fca94f7712d2bc3324fdb083ad22cf51d2af88c5ef0a0de"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -8258,6 +8330,12 @@
       "sha256": "fcd42f0f7d8e505817d58a71d7f5f2153880431c04920259f5e4446aaabf30b6"
      }
     }
+   },
+   "revalidationLaneLock": {
+    "reason": "The 2026-11-05 lane-lock mitigation adds a fail-closed lane gate at the consolidate_audits.py CLI entry: build/check refuse to run while a different lane holds the checkout's .lane-lock.json (scripts/dev/lane-lock.sh); the caller proves its lane with CCH_LANE_NAME and only the owning lane sets CCH_LANE_LOCK_SKIP=1. The receipt's claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
