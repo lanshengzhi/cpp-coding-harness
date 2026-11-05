@@ -1,0 +1,548 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-05T22:49:09.371Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/settings-list.ts:constructor,render,renderMainList,handleInput,updateValue,selectItem,activateItem,closeSubmenu,applyFilter,addHintLine,getDisplayItems,getVisibleRange",
+    "packages/tui/src/keybindings.ts:getKeybindings",
+    "packages/tui/src/utils.ts:visibleWidth,truncateToWidth,wrapTextWithAnsi",
+    "packages/tui/src/fuzzy.ts:fuzzyFilter",
+    "packages/tui/src/components/input.ts:constructor,render,handleInput,getValue"
+  ],
+  "scenarios": [
+    {
+      "name": "settings-list-cycling-and-selection",
+      "dimensions": {
+        "columns": 50,
+        "rows": 8
+      },
+      "inputs": {
+        "items": [
+          {
+            "id": "theme",
+            "label": "Theme",
+            "values": [
+              "dark",
+              "light"
+            ]
+          },
+          {
+            "id": "editor",
+            "label": "Editor",
+            "values": [
+              "vim",
+              "emacs",
+              "nano"
+            ]
+          },
+          {
+            "id": "wrap",
+            "label": "Word Wrap",
+            "values": [
+              "off",
+              "on"
+            ]
+          }
+        ],
+        "keys": [
+          "up",
+          "space",
+          "up",
+          "enter",
+          "down",
+          "down",
+          "escape"
+        ]
+      },
+      "expected": {
+        "initial": {
+          "rows": [
+            "→ Theme      dark",
+            "  Editor     vim",
+            "  Word Wrap  off",
+            "",
+            "  Color theme",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            17,
+            16,
+            16,
+            0,
+            13,
+            0,
+            49
+          ]
+        },
+        "wrappedUp": {
+          "rows": [
+            "  Theme      dark",
+            "  Editor     vim",
+            "→ Word Wrap  off",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            17,
+            16,
+            16,
+            0,
+            49
+          ]
+        },
+        "afterSpace": {
+          "rows": [
+            "  Theme      dark",
+            "  Editor     vim",
+            "→ Word Wrap  on",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            17,
+            16,
+            15,
+            0,
+            49
+          ]
+        },
+        "afterEnter": {
+          "rows": [
+            "  Theme      dark",
+            "→ Editor     emacs",
+            "  Word Wrap  on",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            17,
+            18,
+            15,
+            0,
+            49
+          ]
+        },
+        "changes": [
+          {
+            "id": "wrap",
+            "value": "on"
+          },
+          {
+            "id": "editor",
+            "value": "emacs"
+          }
+        ],
+        "cancels": 1
+      }
+    },
+    {
+      "name": "settings-list-centered-five-row-window",
+      "dimensions": {
+        "columns": 50,
+        "rows": 7
+      },
+      "inputs": {
+        "itemCount": 9,
+        "maxVisible": 5,
+        "downPresses": 6,
+        "thenDownPresses": 2
+      },
+      "expected": {
+        "initial": {
+          "rows": [
+            "→ Setting 1  val-1",
+            "  Setting 2  val-2",
+            "  Setting 3  val-3",
+            "  Setting 4  val-4",
+            "  Setting 5  val-5",
+            "  (1/9)",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            18,
+            18,
+            18,
+            18,
+            18,
+            7,
+            0,
+            49
+          ]
+        },
+        "middle": {
+          "rows": [
+            "  Setting 5  val-5",
+            "  Setting 6  val-6",
+            "→ Setting 7  val-7",
+            "  Setting 8  val-8",
+            "  Setting 9  val-9",
+            "  (7/9)",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            18,
+            18,
+            18,
+            18,
+            18,
+            7,
+            0,
+            49
+          ]
+        },
+        "end": {
+          "rows": [
+            "  Setting 5  val-5",
+            "  Setting 6  val-6",
+            "  Setting 7  val-7",
+            "  Setting 8  val-8",
+            "→ Setting 9  val-9",
+            "  (9/9)",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            18,
+            18,
+            18,
+            18,
+            18,
+            7,
+            0,
+            49
+          ]
+        }
+      }
+    },
+    {
+      "name": "settings-list-description-and-hint",
+      "dimensions": {
+        "columns": 60,
+        "rows": 8
+      },
+      "inputs": {
+        "widths": [
+          40,
+          60,
+          80
+        ]
+      },
+      "expected": {
+        "widths": [
+          {
+            "width": 40,
+            "rows": [
+              "→ First Option                          ",
+              "  Very Long Setting Option Label Exce\u001b[0m...\u001b[0m",
+              "",
+              "  Short description line",
+              "",
+              "  enter/space to change · escape/ctrl\u001b[0m...\u001b[0m"
+            ],
+            "visibleWidths": [
+              40,
+              40,
+              0,
+              24,
+              0,
+              40
+            ]
+          },
+          {
+            "width": 60,
+            "rows": [
+              "→ First Option                          enabled",
+              "  Very Long Setting Option Label Exceeding Width  custom-\u001b[0m...\u001b[0m",
+              "",
+              "  Short description line",
+              "",
+              "  enter/space to change · escape/ctrl+c to cancel"
+            ],
+            "visibleWidths": [
+              47,
+              60,
+              0,
+              24,
+              0,
+              49
+            ]
+          },
+          {
+            "width": 80,
+            "rows": [
+              "→ First Option                          enabled",
+              "  Very Long Setting Option Label Exceeding Width  custom-value-data",
+              "",
+              "  Short description line",
+              "",
+              "  enter/space to change · escape/ctrl+c to cancel"
+            ],
+            "visibleWidths": [
+              47,
+              67,
+              0,
+              24,
+              0,
+              49
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings-list-search-filtering-and-input",
+      "dimensions": {
+        "columns": 60,
+        "rows": 10
+      },
+      "inputs": {
+        "items": [
+          {
+            "id": "term",
+            "label": "Terminal Bell"
+          },
+          {
+            "id": "theme",
+            "label": "Color Theme"
+          },
+          {
+            "id": "telemetry",
+            "label": "Telemetry Report"
+          },
+          {
+            "id": "wrap",
+            "label": "Word Wrap"
+          }
+        ]
+      },
+      "expected": {
+        "initial": {
+          "rows": [
+            "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                         ",
+            "",
+            "→ Terminal Bell     audible",
+            "  Color Theme       dark",
+            "  Telemetry Report  off",
+            "  Word Wrap         off",
+            "",
+            "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+          ],
+          "visibleWidths": [
+            60,
+            0,
+            27,
+            24,
+            23,
+            23,
+            0,
+            60
+          ]
+        },
+        "filtered": {
+          "rows": [
+            "> term\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                     ",
+            "",
+            "→ Terminal Bell     audible",
+            "",
+            "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+          ],
+          "visibleWidths": [
+            60,
+            0,
+            27,
+            0,
+            60
+          ]
+        },
+        "afterSpaceNonEmpty": {
+          "rows": [
+            "> term \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                    ",
+            "",
+            "→ Terminal Bell     audible",
+            "",
+            "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+          ],
+          "visibleWidths": [
+            60,
+            0,
+            27,
+            0,
+            60
+          ]
+        },
+        "cleared": {
+          "rows": [
+            "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                         ",
+            "",
+            "→ Terminal Bell     audible",
+            "  Color Theme       dark",
+            "  Telemetry Report  off",
+            "  Word Wrap         off",
+            "",
+            "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+          ],
+          "visibleWidths": [
+            60,
+            0,
+            27,
+            24,
+            23,
+            23,
+            0,
+            60
+          ]
+        },
+        "afterSpaceEmpty": {
+          "rows": [
+            "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                         ",
+            "",
+            "→ Terminal Bell     visual",
+            "  Color Theme       dark",
+            "  Telemetry Report  off",
+            "  Word Wrap         off",
+            "",
+            "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+          ],
+          "visibleWidths": [
+            60,
+            0,
+            26,
+            24,
+            23,
+            23,
+            0,
+            60
+          ]
+        },
+        "noMatch": {
+          "rows": [
+            "> zzzzz\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                    ",
+            "",
+            "  No matching settings",
+            "",
+            "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+          ],
+          "visibleWidths": [
+            60,
+            0,
+            22,
+            0,
+            60
+          ]
+        },
+        "changes": [
+          {
+            "id": "term",
+            "value": "visual"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings-list-submenu-navigation-and-lifecycle",
+      "dimensions": {
+        "columns": 60,
+        "rows": 6
+      },
+      "inputs": {
+        "items": [
+          {
+            "id": "model"
+          },
+          {
+            "id": "provider"
+          }
+        ]
+      },
+      "expected": {
+        "openedWith": "gpt-4o",
+        "initial": {
+          "rows": [
+            "→ Model Selector  gpt-4o",
+            "  API Provider    openai",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            24,
+            24,
+            0,
+            49
+          ]
+        },
+        "openSubmenu": {
+          "rows": [
+            "[Submenu: choosing model, current=gpt-4o, width=60]"
+          ],
+          "visibleWidths": [
+            51
+          ]
+        },
+        "afterDoneAndNavigate": {
+          "rows": [
+            "  Model Selector  claude-3-5-sonnet",
+            "→ API Provider    anthropic",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            35,
+            27,
+            0,
+            49
+          ]
+        },
+        "changes": [
+          {
+            "id": "model",
+            "value": "claude-3-5-sonnet"
+          },
+          {
+            "id": "provider",
+            "value": "anthropic"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings-list-update-value-and-select-item",
+      "dimensions": {
+        "columns": 50,
+        "rows": 5
+      },
+      "inputs": {
+        "updateId": "beta",
+        "newValue": "updated-b",
+        "selectId": "beta"
+      },
+      "expected": {
+        "observation": {
+          "rows": [
+            "  Alpha  initial-a",
+            "→ Beta   updated-b",
+            "",
+            "  enter/space to change · escape/ctrl+c to cancel"
+          ],
+          "visibleWidths": [
+            18,
+            18,
+            0,
+            49
+          ]
+        }
+      }
+    }
+  ]
+}

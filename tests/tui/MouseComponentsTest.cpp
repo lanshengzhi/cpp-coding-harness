@@ -235,6 +235,10 @@ void check_answer(const std::optional<MouseEventResult>& actual, const JsonValue
     return cch::tests::read_pi_v130_audit_evidence("audit-1212", "mouse-components.json");
 }
 
+[[nodiscard]] cch::support::Expected<JsonValue> audit1219_mouse_components_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1219", "mouse-components.json");
+}
+
 [[nodiscard]] const JsonValue& scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
         if (scenario.at("name").get_string() == name) return scenario;
@@ -542,12 +546,12 @@ TEST_CASE("a select-list press selects the rendered row and a click activates it
     check_a_select_list_press_selects_the_rendered_row_and_a_click_act(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 a select-list press selects the rendered row and a click activates it", "[tui][mouse][components][issue1212][compat-pi]") {
-    const auto bundle = audit1212_mouse_components_bundle();
+TEST_CASE("pi-v1.3.0 a select-list press selects the rendered row and a click activates it",
+        "[tui][mouse][components][issue1212][issue1219][compat-pi]") {
+    const auto bundle = audit1219_mouse_components_bundle();
     REQUIRE(bundle);
     check_a_select_list_press_selects_the_rendered_row_and_a_click_act(*bundle);
 }
-
 
 void check_a_select_list_wheel_moves_one_row_per_notch_and_hover_never_(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "select-list-wheel-hover-and-scrolled-rows");
@@ -643,12 +647,12 @@ TEST_CASE("a select-list wheel moves one row per notch and hover never moves the
     check_a_select_list_wheel_moves_one_row_per_notch_and_hover_never_(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 a select-list wheel moves one row per notch and hover never moves the selection", "[tui][mouse][components][issue1212][compat-pi]") {
-    const auto bundle = audit1212_mouse_components_bundle();
+TEST_CASE("pi-v1.3.0 a select-list wheel moves one row per notch and hover never moves the selection",
+        "[tui][mouse][components][issue1212][issue1219][compat-pi]") {
+    const auto bundle = audit1219_mouse_components_bundle();
     REQUIRE(bundle);
     check_a_select_list_wheel_moves_one_row_per_notch_and_hover_never_(*bundle);
 }
-
 
 void check_a_settings_list_press_selects_the_rendered_row_and_a_click_a(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "settings-list-press-selects-and-click-activates");
@@ -700,12 +704,12 @@ TEST_CASE("a settings-list press selects the rendered row and a click activates 
     check_a_settings_list_press_selects_the_rendered_row_and_a_click_a(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 a settings-list press selects the rendered row and a click activates it", "[tui][mouse][components][issue1212][compat-pi]") {
-    const auto bundle = audit1212_mouse_components_bundle();
+TEST_CASE("pi-v1.3.0 a settings-list press selects the rendered row and a click activates it",
+        "[tui][mouse][components][issue1212][issue1219][compat-pi]") {
+    const auto bundle = audit1219_mouse_components_bundle();
     REQUIRE(bundle);
     check_a_settings_list_press_selects_the_rendered_row_and_a_click_a(*bundle);
 }
-
 
 void check_a_settings_list_wheel_moves_one_row_per_notch_and_hover_neve(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "settings-list-wheel-hover-and-scrolled-rows");
@@ -812,12 +816,12 @@ TEST_CASE("a settings-list wheel moves one row per notch and hover never moves t
     check_a_settings_list_wheel_moves_one_row_per_notch_and_hover_neve(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 a settings-list wheel moves one row per notch and hover never moves the selection", "[tui][mouse][components][issue1212][compat-pi]") {
-    const auto bundle = audit1212_mouse_components_bundle();
+TEST_CASE("pi-v1.3.0 a settings-list wheel moves one row per notch and hover never moves the selection",
+        "[tui][mouse][components][issue1212][issue1219][compat-pi]") {
+    const auto bundle = audit1219_mouse_components_bundle();
     REQUIRE(bundle);
     check_a_settings_list_wheel_moves_one_row_per_notch_and_hover_neve(*bundle);
 }
-
 
 void check_the_settings_search_row_forwards_clicks_and_the_separator_ro(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "settings-list-search-row-forwards-and-separator-is-inert");
@@ -896,12 +900,12 @@ TEST_CASE("the settings search row forwards clicks and the separator row stays i
     check_the_settings_search_row_forwards_clicks_and_the_separator_ro(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 the settings search row forwards clicks and the separator row stays inert", "[tui][mouse][components][issue1212][compat-pi]") {
-    const auto bundle = audit1212_mouse_components_bundle();
+TEST_CASE("pi-v1.3.0 the settings search row forwards clicks and the separator row stays inert",
+        "[tui][mouse][components][issue1212][issue1219][compat-pi]") {
+    const auto bundle = audit1219_mouse_components_bundle();
     REQUIRE(bundle);
     check_the_settings_search_row_forwards_clicks_and_the_separator_ro(*bundle);
 }
-
 
 void check_a_delegating_host_keeps_the_focus_when_its_nested_input_is_c(const JsonValue&) {
     // Criterion 3: the focus inheritance rule of `dispatch_mouse_event`
@@ -1081,12 +1085,12 @@ TEST_CASE("a settings submenu click closes it and keys still reach the visible l
     check_a_settings_submenu_click_closes_it_and_keys_still_reach_the_(*bundle);
 }
 
-TEST_CASE("pi-v1.3.0 a settings submenu click closes it and keys still reach the visible list", "[tui][mouse][components][issue1212][compat-pi]") {
-    const auto bundle = audit1212_mouse_components_bundle();
+TEST_CASE("pi-v1.3.0 a settings submenu click closes it and keys still reach the visible list",
+        "[tui][mouse][components][issue1212][issue1219][compat-pi]") {
+    const auto bundle = audit1219_mouse_components_bundle();
     REQUIRE(bundle);
     check_a_settings_submenu_click_closes_it_and_keys_still_reach_the_(*bundle);
 }
-
 
 void check_an_alternate_screen_click_positions_and_focuses_the_editor_c(const JsonValue& bundle) {
     const auto& scenario = scenario_of(bundle, "editor-alternate-screen-click-positions-cursor");
@@ -1305,3 +1309,58 @@ TEST_CASE("pi-v1.3.0 a wrapped click maps to the frozen grapheme, not the previo
         }
     }
 }
+
+TEST_CASE("SelectList mouse interactions ignore hover gestures and clamp wheel delta at boundary",
+        "[tui][select-list][boundary][issue1219]") {
+    cch::tui::SelectList list({{.value = "a", .label = "A"}, {.value = "b", .label = "B"}});
+    // Hover (move) returns nullopt
+    auto hover = list.handle_mouse(cch::tui::MouseEvent{.type = cch::tui::MouseEventType::Move, .x = 1, .y = 1});
+    CHECK_FALSE(hover.has_value());
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "a");
+
+    // Wheel up at index 0 returns handled with render=false (no change)
+    auto wheel_up = list.handle_mouse(cch::tui::MouseEvent{
+            .type = cch::tui::MouseEventType::Wheel, .x = 1, .y = 0, .wheel_delta = -1});
+    REQUIRE(wheel_up.has_value());
+    CHECK(wheel_up->handled);
+    CHECK(wheel_up->render == false);
+    CHECK(list.selected_item()->value == "a");
+
+    // Press outside rendered rows returns nullopt
+    auto press_outside = list.handle_mouse(cch::tui::MouseEvent{
+            .type = cch::tui::MouseEventType::Press, .button = cch::tui::MouseButton::Left, .x = 1, .y = 99});
+    CHECK_FALSE(press_outside.has_value());
+}
+
+TEST_CASE("SettingsList search separator row and empty lines are inert to click activation",
+        "[tui][settings-list][negative][issue1219]") {
+    std::vector<std::string> changes;
+    cch::tui::SettingsList list(
+            {
+                    {.id = "s1",
+                            .label = "Setting 1",
+                            .current_value = "off",
+                            .control = cch::tui::SettingValues{{"off", "on"}}},
+            },
+            cch::tui::SettingsListOptions{
+                    .enable_search = true,
+                    .on_change = [&changes](std::string id, std::string val) -> cch::support::ExpectedVoid {
+                        changes.push_back(id + "=" + val);
+                        return {};
+                    },
+            });
+
+    // Row 1 is the separator line under the search input
+    auto click_separator = list.handle_mouse(cch::tui::MouseEvent{
+            .type = cch::tui::MouseEventType::Click, .button = cch::tui::MouseButton::Left, .x = 1, .y = 1});
+    CHECK_FALSE(click_separator.has_value());
+    CHECK(changes.empty());
+
+    // Row 10 is way past any displayed setting
+    auto click_past = list.handle_mouse(cch::tui::MouseEvent{
+            .type = cch::tui::MouseEventType::Click, .button = cch::tui::MouseButton::Left, .x = 1, .y = 10});
+    CHECK_FALSE(click_past.has_value());
+    CHECK(changes.empty());
+}
+

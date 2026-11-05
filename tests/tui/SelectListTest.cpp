@@ -622,3 +622,419 @@ TEST_CASE("SelectList matches frozen pi unbound key non-mutation", "[tui][select
     CHECK(list.selected_item()->value ==
             scenario->at("expected").at("observations").get_array().back().at("after").get_string());
 }
+
+namespace {
+
+[[nodiscard]] cch::support::Expected<cch::support::JsonValue> select_list_v130_scenario(std::string_view name) {
+    auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1219", "select-list.json");
+    if (!fixture) return std::unexpected(fixture.error());
+    for (const auto& item : fixture->at("scenarios").get_array()) {
+        if (item.at("name").get_string() == name) return cch::support::JsonValue{item};
+    }
+    return std::unexpected(
+            cch::support::make_error(cch::support::ErrorCode::Validation, "Scenario not found: " + std::string(name)));
+}
+
+} // namespace
+
+TEST_CASE("pi-v1.3.0 SelectList cycling and selection callback order matches frozen observation",
+        "[tui][select-list][issue1219]") {
+    const auto scenario = select_list_v130_scenario("select-list-cycling-and-selection");
+    REQUIRE(scenario);
+    const auto& expected = scenario->at("expected");
+    const auto inputs = named_items(scenario->at("inputs").at("items"));
+    std::vector<std::string> callback_events;
+    cch::tui::SelectList list(inputs,
+            cch::tui::SelectListOptions{
+                    .on_select = [&callback_events](const auto& item) -> cch::support::ExpectedVoid {
+                        callback_events.push_back("select:" + item.value);
+                        return {};
+                    },
+                    .on_selection_change = [&callback_events](const auto& item) -> cch::support::ExpectedVoid {
+                        callback_events.push_back("change:" + item.value);
+                        return {};
+                    },
+            });
+    const auto check_observation = [&list](const cch::support::JsonValue& recorded) {
+        const auto rendered = list.render(24);
+        REQUIRE(rendered);
+        CHECK(list.selected_item()->value == recorded.at("selected").get_string());
+        CHECK(rendered->lines == string_array(recorded.at("rows")));
+        std::vector<std::size_t> widths;
+        for (const auto& line : rendered->lines)
+            widths.push_back(cch::tui::visible_width(line));
+        std::vector<std::size_t> expected_widths;
+        for (const auto& width : recorded.at("visibleWidths").get_array())
+            expected_widths.push_back(static_cast<std::size_t>(width.get_number()));
+        CHECK(widths == expected_widths);
+    };
+    check_observation(expected.at("initial"));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "up"}));
+    check_observation(expected.at("up"));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    check_observation(expected.at("wrapped"));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
+    CHECK(callback_events == string_array(expected.at("callbackEvents")));
+}
+
+TEST_CASE("pi-v1.3.0 SelectList centered five-row window and scroll counters match frozen observation",
+        "[tui][select-list][issue1219]") {
+    const auto scenario = select_list_v130_scenario("select-list-centered-five-row-window");
+    REQUIRE(scenario);
+    const auto& expected = scenario->at("expected");
+    std::vector<cch::tui::SelectItem> items;
+    for (std::size_t index = 1; index <= 9; ++index) {
+        const auto name = "item-" + std::to_string(index);
+        const auto label = "Item " + std::to_string(index);
+        items.push_back({.value = name, .label = label});
+    }
+    cch::tui::SelectList list(std::move(items));
+    const auto check_observation = [&list](const cch::support::JsonValue& recorded) {
+        const auto rendered = list.render(24);
+        REQUIRE(rendered);
+        REQUIRE(list.selected_item());
+        CHECK(list.selected_item()->value == recorded.at("selected").get_string());
+        CHECK(rendered->lines == string_array(recorded.at("rows")));
+        std::vector<std::size_t> widths;
+        for (const auto& line : rendered->lines)
+            widths.push_back(cch::tui::visible_width(line));
+        std::vector<std::size_t> expected_widths;
+        for (const auto& width : recorded.at("visibleWidths").get_array())
+            expected_widths.push_back(static_cast<std::size_t>(width.get_number()));
+        CHECK(widths == expected_widths);
+    };
+    check_observation(expected.at("initial"));
+    for (std::size_t index = 0; index < 6; ++index)
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    check_observation(expected.at("middle"));
+    for (std::size_t index = 0; index < 2; ++index)
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    check_observation(expected.at("end"));
+}
+
+TEST_CASE("pi-v1.3.0 SelectList description allocation and wide glyph truncation match frozen observation",
+        "[tui][select-list][issue1219]") {
+    const auto boundary_scenario = select_list_v130_scenario("select-list-description-width-boundaries");
+    REQUIRE(boundary_scenario);
+    std::vector<cch::tui::SelectItem> boundary_items = {
+            {.value = "a", .label = "Alpha", .description = "First descriptive row"},
+            {.value = "b", .label = "Beta", .description = "Second descriptive row"},
+    };
+    cch::tui::SelectList boundary_list(std::move(boundary_items));
+    for (const auto& observation : boundary_scenario->at("expected").at("widths").get_array()) {
+        const auto width = static_cast<std::size_t>(observation.at("width").get_number());
+        const auto rendered = boundary_list.render(width);
+        REQUIRE(rendered);
+        CHECK(rendered->lines == string_array(observation.at("rows")));
+        std::vector<std::size_t> widths;
+        for (const auto& line : rendered->lines)
+            widths.push_back(cch::tui::visible_width(line));
+        std::vector<std::size_t> expected_widths;
+        for (const auto& expected_width : observation.at("visibleWidths").get_array())
+            expected_widths.push_back(static_cast<std::size_t>(expected_width.get_number()));
+        CHECK(widths == expected_widths);
+    }
+
+    const auto narrow_scenario = select_list_v130_scenario("select-list-narrow-wide-glyph-truncation");
+    REQUIRE(narrow_scenario);
+    std::vector<cch::tui::SelectItem> narrow_items = {
+            {.value = "wide", .label = "界界界界", .description = "hidden when narrow"},
+    };
+    cch::tui::SelectList narrow_list(std::move(narrow_items));
+    const auto rendered = narrow_list.render(10);
+    REQUIRE(rendered);
+    CHECK(rendered->lines == string_array(narrow_scenario->at("expected").at("rows")));
+    std::vector<std::size_t> widths;
+    for (const auto& line : rendered->lines)
+        widths.push_back(cch::tui::visible_width(line));
+    std::vector<std::size_t> expected_widths;
+    for (const auto& expected_width : narrow_scenario->at("expected").at("visibleWidths").get_array())
+        expected_widths.push_back(static_cast<std::size_t>(expected_width.get_number()));
+    CHECK(widths == expected_widths);
+}
+
+TEST_CASE("pi-v1.3.0 SelectList value-prefix filtering and selection reset match frozen observation",
+        "[tui][select-list][issue1219]") {
+    const auto scenario = select_list_v130_scenario("select-list-value-prefix-filter-and-selection-reset");
+    REQUIRE(scenario);
+    const auto items = select_items(scenario->at("inputs").at("items"));
+    const auto& operations = scenario->at("inputs").at("operations").get_array();
+    const auto& observations = scenario->at("expected").at("observations").get_array();
+    REQUIRE(operations.size() == observations.size());
+    std::vector<std::string> callback_events;
+    cch::tui::SelectList list(items,
+            cch::tui::SelectListOptions{
+                    .on_select = [&callback_events](const auto& item) -> cch::support::ExpectedVoid {
+                        callback_events.push_back("select:" + item.value);
+                        return {};
+                    },
+                    .on_selection_change = [&callback_events](const auto& item) -> cch::support::ExpectedVoid {
+                        callback_events.push_back("change:" + item.value);
+                        return {};
+                    },
+            });
+    for (std::size_t index = 0; index < operations.size(); ++index) {
+        const auto& operation = operations[index];
+        const auto& recorded = observations[index];
+        const auto kind = operation.at("kind").get_string();
+        if (kind == "filter") {
+            list.set_filter(operation.at("value").get_string());
+        } else {
+            list.set_selected_index(static_cast<std::size_t>(operation.at("index").get_number()));
+        }
+        const auto rendered = list.render(60);
+        REQUIRE(rendered);
+        const auto selected = list.selected_item();
+        if (recorded.at("selected").holds<std::nullptr_t>()) {
+            CHECK_FALSE(selected.has_value());
+        } else {
+            REQUIRE(selected);
+            CHECK(selected->value == recorded.at("selected").get_string());
+        }
+        CHECK(rendered->lines == string_array(recorded.at("rows")));
+        const auto filtered = list.filtered_items();
+        std::vector<std::string> filtered_values;
+        for (const auto& item : filtered)
+            filtered_values.push_back(item.value);
+        CHECK(filtered_values == string_array(recorded.at("filteredValues")));
+    }
+    CHECK(callback_events == string_array(scenario->at("expected").at("callbackEvents")));
+}
+
+TEST_CASE("pi-v1.3.0 SelectList Unicode description normalization matches frozen observation",
+        "[tui][select-list][issue1219]") {
+    const auto scenario = select_list_v130_scenario("select-list-unicode-description-normalization");
+    REQUIRE(scenario);
+    const auto items = select_items(scenario->at("inputs").at("items"));
+    cch::tui::SelectList list(items);
+    const auto& observations = scenario->at("expected").at("observations").get_array();
+    for (std::size_t index = 0; index < observations.size(); ++index) {
+        list.set_selected_index(index);
+        const auto rendered = list.render(80);
+        REQUIRE(rendered);
+        REQUIRE(list.selected_item());
+        const auto& recorded = observations[index];
+        CHECK(list.selected_item()->value == recorded.at("selected").get_string());
+        CHECK(rendered->lines == string_array(recorded.at("rows")));
+        std::vector<std::size_t> widths;
+        for (const auto& line : rendered->lines)
+            widths.push_back(cch::tui::visible_width(line));
+        std::vector<std::size_t> expected_widths;
+        for (const auto& expected_width : recorded.at("visibleWidths").get_array())
+            expected_widths.push_back(static_cast<std::size_t>(expected_width.get_number()));
+        CHECK(widths == expected_widths);
+    }
+}
+
+TEST_CASE("pi-v1.3.0 SelectList unbound key non-mutation matches frozen observation", "[tui][select-list][issue1219]") {
+    const auto scenario = select_list_v130_scenario("select-list-unbound-key-forwarding");
+    REQUIRE(scenario);
+    cch::tui::SelectList list({{.value = "first", .label = "First"}, {.value = "second", .label = "Second"}});
+    for (const auto& observation : scenario->at("expected").at("observations").get_array()) {
+        REQUIRE(list.selected_item());
+        CHECK(list.selected_item()->value == observation.at("before").get_string());
+        const auto& input = observation.at("input").get_string();
+        const auto key = input == "\x1b[6~" ? "pageDown" : input.c_str();
+        CHECK(list.handle_input(cch::tui::KeyEvent{.key = key}) == cch::tui::InputAdmissionOutcome::Unhandled);
+        CHECK(list.selected_item()->value == observation.at("after").get_string());
+    }
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value ==
+            scenario->at("expected").at("observations").get_array().back().at("after").get_string());
+}
+
+TEST_CASE("pi-v1.3.0 SelectList primary column layout and custom truncation match frozen observation",
+        "[tui][select-list][issue1219]") {
+    const auto scenario = select_list_v130_scenario("select-list-primary-column-layout-and-custom-truncation");
+    REQUIRE(scenario);
+    struct TruncateRecord {
+        std::string text;
+        std::size_t max_width{0};
+        std::size_t column_width{0};
+        std::string item_value;
+        bool is_selected{false};
+    };
+    std::vector<TruncateRecord> truncate_calls;
+    cch::tui::SelectListLayoutOptions layout{
+            .min_primary_column_width = 15,
+            .max_primary_column_width = 25,
+            .truncate_primary = [&truncate_calls](std::string text,
+                                        std::size_t max_width,
+                                        std::size_t column_width,
+                                        const cch::tui::SelectItem& item,
+                                        bool is_selected) -> std::string {
+                truncate_calls.push_back({
+                        .text = text,
+                        .max_width = max_width,
+                        .column_width = column_width,
+                        .item_value = item.value,
+                        .is_selected = is_selected,
+                });
+                return "[" + text + "]";
+            },
+    };
+    std::vector<cch::tui::SelectItem> items = {
+            {.value = "short", .label = "Short", .description = "Short description"},
+            {.value = "medium-length", .label = "Medium Length", .description = "Medium description"},
+            {
+                    .value = "long-item-exceeding-columns",
+                    .label = "Very Long Item Label Exceeding Maximum Primary Column Width",
+                    .description = "Long description",
+            },
+    };
+    cch::tui::SelectList list(std::move(items), cch::tui::SelectListOptions{.layout = std::move(layout)});
+    const auto& observations = scenario->at("expected").at("observations").get_array();
+    for (const auto& obs : observations) {
+        const auto width = static_cast<std::size_t>(obs.at("width").get_number());
+        const auto rendered = list.render(width);
+        REQUIRE(rendered);
+        CHECK(rendered->lines == string_array(obs.at("rows")));
+        std::vector<std::size_t> widths;
+        for (const auto& line : rendered->lines)
+            widths.push_back(cch::tui::visible_width(line));
+        std::vector<std::size_t> expected_widths;
+        for (const auto& expected_width : obs.at("visibleWidths").get_array())
+            expected_widths.push_back(static_cast<std::size_t>(expected_width.get_number()));
+        CHECK(widths == expected_widths);
+    }
+
+    const auto& expected_calls = scenario->at("expected").at("truncateCalls").get_array();
+    REQUIRE(truncate_calls.size() == expected_calls.size());
+    for (std::size_t i = 0; i < truncate_calls.size(); ++i) {
+        CHECK(truncate_calls[i].text == expected_calls[i].at("text").get_string());
+        CHECK(truncate_calls[i].max_width == static_cast<std::size_t>(expected_calls[i].at("maxWidth").get_number()));
+        CHECK(truncate_calls[i].column_width ==
+                static_cast<std::size_t>(expected_calls[i].at("columnWidth").get_number()));
+        CHECK(truncate_calls[i].item_value == expected_calls[i].at("itemValue").get_string());
+        CHECK(truncate_calls[i].is_selected == expected_calls[i].at("isSelected").get_boolean());
+    }
+}
+
+TEST_CASE("SelectList window centering rejects off-by-one indices and clamps bounds",
+        "[tui][select-list][boundary][issue1219]") {
+    std::vector<cch::tui::SelectItem> items;
+    for (std::size_t i = 0; i < 9; ++i) {
+        items.push_back({.value = "val-" + std::to_string(i), .label = "Label " + std::to_string(i)});
+    }
+    cch::tui::SelectList list(std::move(items), cch::tui::SelectListOptions{.max_visible = 5});
+    // At index 0, window is 0..5
+    auto r0 = list.render(40);
+    REQUIRE(r0);
+    CHECK(r0->lines.size() == 6); // 5 items + scroll indicator (1/9)
+    CHECK(r0->lines[0].starts_with("→ Label 0"));
+    CHECK(r0->lines[4].starts_with("  Label 4"));
+    CHECK(r0->lines[5].find("(1/9)") != std::string::npos);
+
+    // Out-of-bounds index clamps to count-1
+    list.set_selected_index(999);
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "val-8");
+    auto r_end = list.render(40);
+    REQUIRE(r_end);
+    CHECK(r_end->lines.size() == 6);
+    CHECK(r_end->lines[0].starts_with("  Label 4"));
+    CHECK(r_end->lines[4].starts_with("→ Label 8"));
+    CHECK(r_end->lines[5].find("(9/9)") != std::string::npos);
+
+    // List smaller than max_visible renders without scroll indicator
+    cch::tui::SelectList small_list({{.value = "a", .label = "A"}, {.value = "b", .label = "B"}},
+            cch::tui::SelectListOptions{.max_visible = 5});
+    auto r_small = small_list.render(40);
+    REQUIRE(r_small);
+    CHECK(r_small->lines.size() == 2);
+}
+
+TEST_CASE("SelectList layout bounds clamp inverted minimum and maximum options",
+        "[tui][select-list][boundary][issue1219]") {
+    cch::tui::SelectListLayoutOptions inverted_layout{
+            .min_primary_column_width = 30,
+            .max_primary_column_width = 10,
+    };
+    cch::tui::SelectList list(
+            {{.value = "a", .label = "Short"}}, cch::tui::SelectListOptions{.layout = std::move(inverted_layout)});
+    auto rendered = list.render(60);
+    REQUIRE(rendered);
+    REQUIRE_FALSE(rendered->lines.empty());
+    CHECK(cch::tui::visible_width(rendered->lines[0]) <= 60);
+
+    // Width 0 fails validation closed
+    auto invalid_render = list.render(0);
+    CHECK_FALSE(invalid_render.has_value());
+}
+
+TEST_CASE(
+        "SelectList description truncation never cuts multi-byte graphemes and omits descriptions under minimum width",
+        "[tui][select-list][boundary][issue1219]") {
+    std::vector<cch::tui::SelectItem> items = {
+            {.value = "cjk", .label = "CJK", .description = "日本語の長い説明文テキスト"},
+    };
+    cch::tui::SelectList list(std::move(items));
+    // At width 40, description is omitted because width <= 40
+    auto r40 = list.render(40);
+    REQUIRE(r40);
+    CHECK(r40->lines[0] == "→ CJK");
+
+    // At width 45, space is narrow and description is truncated cleanly
+    auto r45 = list.render(45);
+    REQUIRE(r45);
+    CHECK(r45->lines[0].starts_with("→ CJK"));
+    CHECK(cch::tui::visible_width(r45->lines[0]) <= 45);
+}
+
+TEST_CASE("SelectList filtering resets selection to zero and handles empty item collections",
+        "[tui][select-list][boundary][issue1219]") {
+    std::vector<cch::tui::SelectItem> items = {
+            {.value = "apple", .label = "Apple"},
+            {.value = "apricot", .label = "Apricot"},
+            {.value = "banana", .label = "Banana"},
+    };
+    cch::tui::SelectList list(std::move(items));
+    list.set_selected_index(2);
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "banana");
+
+    // Setting filter resets selection to 0
+    list.set_filter("ap");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "apple");
+
+    // Non-matching filter empties items and renders no-match
+    list.set_filter("xyz");
+    CHECK_FALSE(list.selected_item().has_value());
+    auto rendered = list.render(40);
+    REQUIRE(rendered);
+    CHECK(rendered->lines.size() == 1);
+    CHECK(rendered->lines[0].find("No matching commands") != std::string::npos);
+
+    // Empty initial list
+    cch::tui::SelectList empty_list({});
+    auto empty_render = empty_list.render(40);
+    REQUIRE(empty_render);
+    CHECK(empty_render->lines.size() == 1);
+    CHECK(empty_render->lines[0].find("No matching commands") != std::string::npos);
+}
+
+TEST_CASE("SelectList unbound keys return unhandled and do not fire selection callbacks",
+        "[tui][select-list][negative][issue1219]") {
+    std::vector<std::string> selects;
+    std::vector<std::string> changes;
+    cch::tui::SelectList list({{.value = "one", .label = "One"}, {.value = "two", .label = "Two"}},
+            cch::tui::SelectListOptions{
+                    .on_select = [&selects](const auto& item) -> cch::support::ExpectedVoid {
+                        selects.push_back(item.value);
+                        return {};
+                    },
+                    .on_selection_change = [&changes](const auto& item) -> cch::support::ExpectedVoid {
+                        changes.push_back(item.value);
+                        return {};
+                    },
+            });
+    CHECK(list.handle_input(cch::tui::KeyEvent{.key = "x"}) == cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(list.handle_input(cch::tui::KeyEvent{.key = "f12"}) == cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(list.handle_input(cch::tui::KeyEvent{.key = "pageDown"}) == cch::tui::InputAdmissionOutcome::Unhandled);
+    CHECK(selects.empty());
+    CHECK(changes.empty());
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "one");
+}

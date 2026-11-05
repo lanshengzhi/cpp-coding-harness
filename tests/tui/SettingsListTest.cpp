@@ -4,6 +4,8 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/PiTuiEvidence.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -600,4 +602,549 @@ TEST_CASE("SettingsList lays the value column out the way pi does", "[tui][setti
     for (const auto& line : rendered->lines) {
         CHECK(cch::tui::visible_width(line) <= width);
     }
+}
+
+namespace {
+
+[[nodiscard]] cch::support::Expected<cch::support::JsonValue> settings_list_v130_scenario(std::string_view name) {
+    auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1219", "settings-list.json");
+    if (!fixture) return std::unexpected(fixture.error());
+    for (const auto& item : fixture->at("scenarios").get_array()) {
+        if (item.at("name").get_string() == name) return cch::support::JsonValue{item};
+    }
+    return std::unexpected(
+            cch::support::make_error(cch::support::ErrorCode::Validation, "Scenario not found: " + std::string(name)));
+}
+
+[[nodiscard]] std::vector<std::string> settings_string_array(const cch::support::JsonValue& value) {
+    std::vector<std::string> result;
+    for (const auto& entry : value.get_array())
+        result.push_back(entry.get_string());
+    return result;
+}
+
+[[nodiscard]] cch::tui::SettingsListTheme test_settings_theme() {
+    return cch::tui::SettingsListTheme{
+            .cursor = "→ ",
+    };
+}
+
+} // namespace
+
+TEST_CASE("pi-v1.3.0 SettingsList value cycling and selection match frozen observation",
+        "[tui][settings-list][issue1219]") {
+    const auto scenario = settings_list_v130_scenario("settings-list-cycling-and-selection");
+    REQUIRE(scenario);
+    std::vector<std::pair<std::string, std::string>> changes;
+    std::size_t cancels = 0;
+    std::vector<cch::tui::SettingItem> items = {
+            {
+                    .id = "theme",
+                    .label = "Theme",
+                    .description = "Color theme",
+                    .current_value = "dark",
+                    .control = cch::tui::SettingValues{{"dark", "light"}},
+            },
+            {
+                    .id = "editor",
+                    .label = "Editor",
+                    .current_value = "vim",
+                    .control = cch::tui::SettingValues{{"vim", "emacs", "nano"}},
+            },
+            {
+                    .id = "wrap",
+                    .label = "Word Wrap",
+                    .current_value = "off",
+                    .control = cch::tui::SettingValues{{"off", "on"}},
+            },
+    };
+    cch::tui::SettingsList list(std::move(items),
+            cch::tui::SettingsListOptions{
+                    .theme = test_settings_theme(),
+                    .on_change = [&changes](std::string id, std::string val) -> cch::support::ExpectedVoid {
+                        changes.emplace_back(std::move(id), std::move(val));
+                        return {};
+                    },
+                    .on_cancel = [&cancels]() -> cch::support::ExpectedVoid {
+                        cancels++;
+                        return {};
+                    },
+            });
+
+    const auto& expected = scenario->at("expected");
+    auto r_initial = list.render(50);
+    REQUIRE(r_initial);
+    CHECK(r_initial->lines == settings_string_array(expected.at("initial").at("rows")));
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "up"}));
+    auto r_wrap_up = list.render(50);
+    REQUIRE(r_wrap_up);
+    CHECK(r_wrap_up->lines == settings_string_array(expected.at("wrappedUp").at("rows")));
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "space"}));
+    auto r_after_space = list.render(50);
+    REQUIRE(r_after_space);
+    CHECK(r_after_space->lines == settings_string_array(expected.at("afterSpace").at("rows")));
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "up"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
+    auto r_after_enter = list.render(50);
+    REQUIRE(r_after_enter);
+    CHECK(r_after_enter->lines == settings_string_array(expected.at("afterEnter").at("rows")));
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "escape"}));
+
+    const auto& exp_changes = expected.at("changes").get_array();
+    REQUIRE(changes.size() == exp_changes.size());
+    for (std::size_t i = 0; i < changes.size(); ++i) {
+        CHECK(changes[i].first == exp_changes[i].at("id").get_string());
+        CHECK(changes[i].second == exp_changes[i].at("value").get_string());
+    }
+    CHECK(cancels == static_cast<std::size_t>(expected.at("cancels").get_number()));
+}
+
+TEST_CASE("pi-v1.3.0 SettingsList centered five-row windowing matches frozen observation",
+        "[tui][settings-list][issue1219]") {
+    const auto scenario = settings_list_v130_scenario("settings-list-centered-five-row-window");
+    REQUIRE(scenario);
+    std::vector<cch::tui::SettingItem> items;
+    for (std::size_t i = 1; i <= 9; ++i) {
+        items.push_back({
+                .id = "setting-" + std::to_string(i),
+                .label = "Setting " + std::to_string(i),
+                .current_value = "val-" + std::to_string(i),
+                .control = cch::tui::SettingValues{{"val-" + std::to_string(i), "alt-" + std::to_string(i)}},
+        });
+    }
+    cch::tui::SettingsList list(std::move(items),
+            cch::tui::SettingsListOptions{
+                    .max_visible = 5,
+                    .theme = test_settings_theme(),
+            });
+
+    const auto& expected = scenario->at("expected");
+    auto r_init = list.render(50);
+    REQUIRE(r_init);
+    CHECK(r_init->lines == settings_string_array(expected.at("initial").at("rows")));
+
+    for (std::size_t i = 0; i < 6; ++i) {
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    }
+    auto r_mid = list.render(50);
+    REQUIRE(r_mid);
+    CHECK(r_mid->lines == settings_string_array(expected.at("middle").at("rows")));
+
+    for (std::size_t i = 0; i < 2; ++i) {
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    }
+    auto r_end = list.render(50);
+    REQUIRE(r_end);
+    CHECK(r_end->lines == settings_string_array(expected.at("end").at("rows")));
+}
+
+TEST_CASE("pi-v1.3.0 SettingsList description wrapping label padding and hints match frozen observation",
+        "[tui][settings-list][issue1219]") {
+    const auto scenario = settings_list_v130_scenario("settings-list-description-and-hint");
+    REQUIRE(scenario);
+    std::vector<cch::tui::SettingItem> items = {
+            {
+                    .id = "opt1",
+                    .label = "First Option",
+                    .description = "Short description line",
+                    .current_value = "enabled",
+            },
+            {
+                    .id = "opt2",
+                    .label = "Very Long Setting Option Label Exceeding Width",
+                    .description = "Multi-line description text that must wrap cleanly across lines.\nSecond explicit "
+                                   "paragraph of description with additional information.",
+                    .current_value = "custom-value-data",
+            },
+    };
+    cch::tui::SettingsList list(std::move(items),
+            cch::tui::SettingsListOptions{
+                    .max_visible = 5,
+                    .theme = test_settings_theme(),
+            });
+
+    const auto& expected = scenario->at("expected");
+    for (const auto& width_obs : expected.at("widths").get_array()) {
+        const auto width = static_cast<std::size_t>(width_obs.at("width").get_number());
+        const auto rendered = list.render(width);
+        REQUIRE(rendered);
+        CHECK(rendered->lines == settings_string_array(width_obs.at("rows")));
+        std::vector<std::size_t> widths;
+        for (const auto& line : rendered->lines)
+            widths.push_back(cch::tui::visible_width(line));
+        std::vector<std::size_t> expected_widths;
+        for (const auto& w : width_obs.at("visibleWidths").get_array())
+            expected_widths.push_back(static_cast<std::size_t>(w.get_number()));
+        CHECK(widths == expected_widths);
+    }
+}
+
+TEST_CASE("pi-v1.3.0 SettingsList search input filtering and empty results match frozen observation",
+        "[tui][settings-list][issue1219]") {
+    const auto scenario = settings_list_v130_scenario("settings-list-search-filtering-and-input");
+    REQUIRE(scenario);
+    std::vector<std::pair<std::string, std::string>> changes;
+    std::vector<cch::tui::SettingItem> items = {
+            {.id = "term",
+                    .label = "Terminal Bell",
+                    .current_value = "audible",
+                    .control = cch::tui::SettingValues{{"audible", "visual", "none"}}},
+            {.id = "theme",
+                    .label = "Color Theme",
+                    .current_value = "dark",
+                    .control = cch::tui::SettingValues{{"dark", "light"}}},
+            {.id = "telemetry",
+                    .label = "Telemetry Report",
+                    .current_value = "off",
+                    .control = cch::tui::SettingValues{{"off", "on"}}},
+            {.id = "wrap",
+                    .label = "Word Wrap",
+                    .current_value = "off",
+                    .control = cch::tui::SettingValues{{"off", "on"}}},
+    };
+    cch::tui::SettingsList list(std::move(items),
+            cch::tui::SettingsListOptions{
+                    .max_visible = 5,
+                    .enable_search = true,
+                    .theme = test_settings_theme(),
+                    .on_change = [&changes](std::string id, std::string val) -> cch::support::ExpectedVoid {
+                        changes.emplace_back(std::move(id), std::move(val));
+                        return {};
+                    },
+            });
+
+    const auto& expected = scenario->at("expected");
+    auto r_init = list.render(60);
+    REQUIRE(r_init);
+    CHECK(r_init->lines == settings_string_array(expected.at("initial").at("rows")));
+
+    for (const char ch : std::string_view("term")) {
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = std::string(1, ch)}));
+    }
+    auto r_filt = list.render(60);
+    REQUIRE(r_filt);
+    CHECK(r_filt->lines == settings_string_array(expected.at("filtered").at("rows")));
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "space"}));
+    auto r_space_non_empty = list.render(60);
+    REQUIRE(r_space_non_empty);
+    CHECK(r_space_non_empty->lines == settings_string_array(expected.at("afterSpaceNonEmpty").at("rows")));
+
+    for (std::size_t i = 0; i < 5; ++i) {
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
+    }
+    auto r_cleared = list.render(60);
+    REQUIRE(r_cleared);
+    CHECK(r_cleared->lines == settings_string_array(expected.at("cleared").at("rows")));
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "space"}));
+    auto r_space_empty = list.render(60);
+    REQUIRE(r_space_empty);
+    CHECK(r_space_empty->lines == settings_string_array(expected.at("afterSpaceEmpty").at("rows")));
+
+    for (const char ch : std::string_view("zzzzz")) {
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = std::string(1, ch)}));
+    }
+    auto r_no_match = list.render(60);
+    REQUIRE(r_no_match);
+    CHECK(r_no_match->lines == settings_string_array(expected.at("noMatch").at("rows")));
+
+    const auto& exp_changes = expected.at("changes").get_array();
+    REQUIRE(changes.size() == exp_changes.size());
+    for (std::size_t i = 0; i < changes.size(); ++i) {
+        CHECK(changes[i].first == exp_changes[i].at("id").get_string());
+        CHECK(changes[i].second == exp_changes[i].at("value").get_string());
+    }
+}
+
+TEST_CASE("pi-v1.3.0 SettingsList submenu lifecycle and navigate-to behavior match frozen observation",
+        "[tui][settings-list][issue1219]") {
+    const auto scenario = settings_list_v130_scenario("settings-list-submenu-navigation-and-lifecycle");
+    REQUIRE(scenario);
+    std::vector<std::pair<std::string, std::string>> changes;
+    std::string opened_with;
+
+    class TestSubmenu final : public cch::tui::Component, public cch::tui::InputHandler {
+    public:
+        TestSubmenu(std::string current, std::shared_ptr<cch::tui::SettingsSubmenuDoneSink> done)
+            : current_(std::move(current)), done_(std::move(done)) {}
+
+        cch::support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+            return cch::tui::RenderResult{
+                    .lines = {"[Submenu: choosing model, current=" + current_ + ", width=" + std::to_string(width) +
+                              "]"},
+            };
+        }
+        void invalidate() override {}
+        cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override {
+            const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
+            if (!key) return cch::tui::InputAdmissionOutcome::Unhandled;
+            if (key->key == "enter") {
+                if (done_ && *done_) {
+                    (void)(*done_)("claude-3-5-sonnet", cch::tui::SettingsSubmenuOptions{.navigate_to = "provider"});
+                }
+                return cch::tui::InputAdmissionOutcome::Consumed;
+            }
+            if (key->key == "escape") {
+                if (done_ && *done_) {
+                    (void)(*done_)(std::nullopt, std::nullopt);
+                }
+                return cch::tui::InputAdmissionOutcome::Consumed;
+            }
+            return cch::tui::InputAdmissionOutcome::Unhandled;
+        }
+
+    private:
+        std::string current_;
+        std::shared_ptr<cch::tui::SettingsSubmenuDoneSink> done_;
+    };
+
+    std::vector<cch::tui::SettingItem> items = {
+            {
+                    .id = "model",
+                    .label = "Model Selector",
+                    .current_value = "gpt-4o",
+                    .control = cch::tui::SettingSubmenu{},
+            },
+            {
+                    .id = "provider",
+                    .label = "API Provider",
+                    .current_value = "openai",
+                    .control = cch::tui::SettingValues{{"openai", "anthropic"}},
+            },
+    };
+    cch::tui::SettingsList list(std::move(items),
+            cch::tui::SettingsListOptions{
+                    .max_visible = 5,
+                    .theme = test_settings_theme(),
+                    .on_change = [&changes](std::string id, std::string val) -> cch::support::ExpectedVoid {
+                        changes.emplace_back(std::move(id), std::move(val));
+                        return {};
+                    },
+                    .submenu_factory =
+                            [&opened_with](const cch::tui::SettingItem& item,
+                                    cch::tui::SettingsSubmenuDoneSink done) -> std::unique_ptr<cch::tui::Component> {
+                        opened_with = item.current_value;
+                        return std::make_unique<TestSubmenu>(item.current_value,
+                                std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done)));
+                    },
+            });
+
+    const auto& expected = scenario->at("expected");
+    auto r_init = list.render(60);
+    REQUIRE(r_init);
+    CHECK(r_init->lines == settings_string_array(expected.at("initial").at("rows")));
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
+    CHECK(list.submenu_open());
+    CHECK(opened_with == expected.at("openedWith").get_string());
+    auto r_open = list.render(60);
+    REQUIRE(r_open);
+    CHECK(r_open->lines == settings_string_array(expected.at("openSubmenu").at("rows")));
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
+    CHECK_FALSE(list.submenu_open());
+    auto r_done = list.render(60);
+    REQUIRE(r_done);
+    CHECK(r_done->lines == settings_string_array(expected.at("afterDoneAndNavigate").at("rows")));
+
+    const auto& exp_changes = expected.at("changes").get_array();
+    REQUIRE(changes.size() == exp_changes.size());
+    for (std::size_t i = 0; i < changes.size(); ++i) {
+        CHECK(changes[i].first == exp_changes[i].at("id").get_string());
+        CHECK(changes[i].second == exp_changes[i].at("value").get_string());
+    }
+}
+
+TEST_CASE("pi-v1.3.0 SettingsList value update and item selection match frozen observation",
+        "[tui][settings-list][issue1219]") {
+    const auto scenario = settings_list_v130_scenario("settings-list-update-value-and-select-item");
+    REQUIRE(scenario);
+    std::vector<cch::tui::SettingItem> items = {
+            {.id = "alpha",
+                    .label = "Alpha",
+                    .current_value = "initial-a",
+                    .control = cch::tui::SettingValues{{"initial-a", "next-a"}}},
+            {.id = "beta",
+                    .label = "Beta",
+                    .current_value = "initial-b",
+                    .control = cch::tui::SettingValues{{"initial-b", "next-b"}}},
+    };
+    cch::tui::SettingsList list(std::move(items),
+            cch::tui::SettingsListOptions{
+                    .max_visible = 5,
+                    .theme = test_settings_theme(),
+            });
+
+    list.update_value("beta", "updated-b");
+    list.select_item("beta");
+    auto rendered = list.render(50);
+    REQUIRE(rendered);
+    const auto& expected = scenario->at("expected").at("observation");
+    CHECK(rendered->lines == settings_string_array(expected.at("rows")));
+}
+
+TEST_CASE("SettingsList space confirms only when search query is empty and ignores non-empty input",
+        "[tui][settings-list][negative][issue1219]") {
+    std::vector<std::string> changes;
+    cch::tui::SettingsList list(
+            {
+                    {.id = "mode",
+                            .label = "Mode",
+                            .current_value = "one",
+                            .control = cch::tui::SettingValues{{"one", "two"}}},
+            },
+            cch::tui::SettingsListOptions{
+                    .enable_search = true,
+                    .on_change = [&changes](std::string id, std::string val) -> cch::support::ExpectedVoid {
+                        changes.push_back(id + "=" + val);
+                        return {};
+                    },
+            });
+
+    // Type "m" into search query
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "m"}));
+    CHECK(list.search_query() == "m");
+
+    // Space when search query is non-empty types space into search and does NOT activate setting
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "space"}));
+    CHECK(list.search_query() == "m ");
+    CHECK(changes.empty());
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->current_value == "one");
+
+    // Clear search
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
+    CHECK(list.search_query().empty());
+
+    // Space when search query is empty DOES activate setting
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "space"}));
+    CHECK(changes.size() == 1);
+    CHECK(changes[0] == "mode=two");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->current_value == "two");
+}
+
+TEST_CASE("SettingsList windowing clamps selection within valid range on item removal",
+        "[tui][settings-list][boundary][issue1219]") {
+    std::vector<cch::tui::SettingItem> items;
+    for (std::size_t i = 0; i < 9; ++i) {
+        items.push_back({.id = "s" + std::to_string(i), .label = "S" + std::to_string(i), .current_value = "v"});
+    }
+    cch::tui::SettingsList list(std::move(items), cch::tui::SettingsListOptions{.max_visible = 5});
+    for (std::size_t i = 0; i < 8; ++i) {
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "down"}));
+    }
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "s8");
+    auto r = list.render(40);
+    REQUIRE(r);
+    CHECK(r->lines.size() == 8); // 5 items + scroll indicator + 2 blank/hint lines
+}
+
+TEST_CASE("SettingsList layout caps label padding at thirty-six columns and preserves value column",
+        "[tui][settings-list][boundary][issue1219]") {
+    const std::string long_label(50, 'L');
+    cch::tui::SettingsList list(
+            {{.id = "long", .label = long_label, .current_value = "val"}}, cch::tui::SettingsListOptions{});
+    auto rendered = list.render(60);
+    REQUIRE(rendered);
+    for (const auto& line : rendered->lines) {
+        CHECK(cch::tui::visible_width(line) <= 60);
+    }
+
+    auto invalid = list.render(0);
+    CHECK_FALSE(invalid.has_value());
+}
+
+TEST_CASE("SettingsList search input handles backspace to empty and non-matching queries fail closed",
+        "[tui][settings-list][negative][issue1219]") {
+    cch::tui::SettingsList list(
+            {
+                    {.id = "s1", .label = "Item Alpha", .current_value = "on"},
+                    {.id = "s2", .label = "Item Beta", .current_value = "off"},
+            },
+            cch::tui::SettingsListOptions{.enable_search = true});
+
+    for (const char ch : std::string_view("nonexistent")) {
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = std::string(1, ch)}));
+    }
+    CHECK_FALSE(list.selected_item().has_value());
+    auto r_none = list.render(50);
+    REQUIRE(r_none);
+    bool found_no_match = false;
+    for (const auto& line : r_none->lines) {
+        if (line.find("No matching settings") != std::string::npos) found_no_match = true;
+    }
+    CHECK(found_no_match);
+
+    // Backspace clears query
+    for (std::size_t i = 0; i < 20; ++i) {
+        static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "backspace"}));
+    }
+    CHECK(list.search_query().empty());
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "s1");
+}
+
+TEST_CASE("SettingsList submenu done callback ignores invalid navigateTo identifiers",
+        "[tui][settings-list][negative][issue1219]") {
+    class MockSubmenu final : public cch::tui::Component, public cch::tui::InputHandler {
+    public:
+        explicit MockSubmenu(cch::tui::SettingsSubmenuDoneSink done)
+            : done_(std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done))) {}
+
+        cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+            return cch::tui::RenderResult{.lines = {"mock"}};
+        }
+        void invalidate() override {}
+        cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant&) override {
+            if (done_ && *done_) {
+                (void)(*done_)("new-val", std::nullopt);
+            }
+            return cch::tui::InputAdmissionOutcome::Consumed;
+        }
+
+    private:
+        std::shared_ptr<cch::tui::SettingsSubmenuDoneSink> done_;
+    };
+
+    cch::tui::SettingsList list(
+            {
+                    {.id = "sub", .label = "Sub", .current_value = "old", .control = cch::tui::SettingSubmenu{}},
+                    {.id = "other", .label = "Other", .current_value = "v"},
+            },
+            cch::tui::SettingsListOptions{
+                    .submenu_factory = [](const cch::tui::SettingItem&, cch::tui::SettingsSubmenuDoneSink done)
+                            -> std::unique_ptr<cch::tui::Component> {
+                        return std::make_unique<MockSubmenu>(std::move(done));
+                    },
+            });
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
+    CHECK(list.submenu_open());
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "x"}));
+    CHECK_FALSE(list.submenu_open());
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "sub");
+    CHECK(list.selected_item()->current_value == "new-val");
+}
+
+TEST_CASE("SettingsList update_value and select_item ignore unknown identifiers",
+        "[tui][settings-list][negative][issue1219]") {
+    cch::tui::SettingsList list({{.id = "valid", .label = "Valid", .current_value = "val"}});
+    list.update_value("unknown", "new");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->current_value == "val");
+
+    list.select_item("unknown");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "valid");
 }

@@ -1,0 +1,3411 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1219",
+  "family": "audit-1219",
+  "capturedAt": "2026-11-05T22:49:09.371Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1219/capture-1219.mts",
+    "sha256": "39db9e8ed34ffdc521afcbb7e36620233545cc902f0bbd4c2426dac988888aec",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1219/capture-1219.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1219/capture-1219.mts",
+        "sha256": "39db9e8ed34ffdc521afcbb7e36620233545cc902f0bbd4c2426dac988888aec"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/select-list-scenarios.mts",
+        "sha256": "bbf7d111d5a1133d885a61cfe0c75d33dbd3136c6687b719f72a0c081072e087"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/settings-list-scenarios.mts",
+        "sha256": "94a4ece9f74f3005b33a6b1b94273f614803c05c649d0ed0e90fc23615db3789"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/mouse-components-scenarios.mts",
+        "sha256": "ff24a6de012024fd20df7db391059a7cc9f195a90fb2458d9904d7cddafc773c"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "select-list.json",
+      "family": "audit-1219",
+      "bytes": 21878,
+      "sha256": "ee240ace4a4783a0e6a4ab32131daef301e78813dce186efb1ce9ffe4d43439b",
+      "sourceEndpoints": [
+        "packages/tui/src/components/select-list.ts:constructor,render,handleInput,getSelectedItem,setFilter,setSelectedIndex,getPrimaryColumnBounds,getPrimaryColumnWidth,truncatePrimary,renderItem,getDisplayValue",
+        "packages/tui/src/keybindings.ts:getKeybindings",
+        "packages/tui/src/utils.ts:visibleWidth,truncateToWidth"
+      ],
+      "scenarios": [
+        {
+          "name": "select-list-cycling-and-selection",
+          "dimensions": {
+            "columns": 24,
+            "rows": 8
+          },
+          "inputs": {
+            "keys": [
+              "up",
+              "down",
+              "down",
+              "enter"
+            ],
+            "items": [
+              "alpha",
+              "beta",
+              "gamma"
+            ]
+          },
+          "expected": {
+            "initial": {
+              "selected": "alpha",
+              "rows": [
+                "→ Alpha",
+                "  Beta",
+                "  Gamma"
+              ],
+              "visibleWidths": [
+                7,
+                6,
+                7
+              ]
+            },
+            "up": {
+              "selected": "gamma",
+              "rows": [
+                "  Alpha",
+                "  Beta",
+                "→ Gamma"
+              ],
+              "visibleWidths": [
+                7,
+                6,
+                7
+              ]
+            },
+            "wrapped": {
+              "selected": "beta",
+              "rows": [
+                "  Alpha",
+                "→ Beta",
+                "  Gamma"
+              ],
+              "visibleWidths": [
+                7,
+                6,
+                7
+              ]
+            },
+            "callbackEvents": [
+              "change:gamma",
+              "change:alpha",
+              "change:beta",
+              "select:beta"
+            ]
+          }
+        },
+        {
+          "name": "select-list-centered-five-row-window",
+          "dimensions": {
+            "columns": 24,
+            "rows": 7
+          },
+          "inputs": {
+            "itemCount": 9,
+            "maxVisible": 5,
+            "downPresses": 6,
+            "thenDownPresses": 2
+          },
+          "expected": {
+            "initial": {
+              "selected": "item-1",
+              "rows": [
+                "→ Item 1",
+                "  Item 2",
+                "  Item 3",
+                "  Item 4",
+                "  Item 5",
+                "  (1/9)"
+              ],
+              "visibleWidths": [
+                8,
+                8,
+                8,
+                8,
+                8,
+                7
+              ]
+            },
+            "middle": {
+              "selected": "item-7",
+              "rows": [
+                "  Item 5",
+                "  Item 6",
+                "→ Item 7",
+                "  Item 8",
+                "  Item 9",
+                "  (7/9)"
+              ],
+              "visibleWidths": [
+                8,
+                8,
+                8,
+                8,
+                8,
+                7
+              ]
+            },
+            "end": {
+              "selected": "item-9",
+              "rows": [
+                "  Item 5",
+                "  Item 6",
+                "  Item 7",
+                "  Item 8",
+                "→ Item 9",
+                "  (9/9)"
+              ],
+              "visibleWidths": [
+                8,
+                8,
+                8,
+                8,
+                8,
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "select-list-description-width-boundaries",
+          "dimensions": {
+            "columns": 60,
+            "rows": 4
+          },
+          "inputs": {
+            "widths": [
+              40,
+              41,
+              60
+            ]
+          },
+          "expected": {
+            "widths": [
+              {
+                "width": 40,
+                "selected": "a",
+                "rows": [
+                  "→ Alpha",
+                  "  Beta"
+                ],
+                "visibleWidths": [
+                  7,
+                  6
+                ]
+              },
+              {
+                "width": 41,
+                "selected": "a",
+                "rows": [
+                  "→ Alpha",
+                  "  Beta"
+                ],
+                "visibleWidths": [
+                  7,
+                  6
+                ]
+              },
+              {
+                "width": 60,
+                "selected": "a",
+                "rows": [
+                  "→ Alpha                           First descriptive row",
+                  "  Beta                            Second descriptive row"
+                ],
+                "visibleWidths": [
+                  55,
+                  56
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "select-list-narrow-wide-glyph-truncation",
+          "dimensions": {
+            "columns": 10,
+            "rows": 2
+          },
+          "inputs": {
+            "width": 10,
+            "label": "界界界界",
+            "description": "hidden when narrow"
+          },
+          "expected": {
+            "selected": "wide",
+            "rows": [
+              "→ 界界界\u001b[0m"
+            ],
+            "visibleWidths": [
+              8
+            ]
+          }
+        },
+        {
+          "name": "select-list-value-prefix-filter-and-selection-reset",
+          "dimensions": {
+            "columns": 60,
+            "rows": 7
+          },
+          "inputs": {
+            "items": [
+              {
+                "value": "Alpha",
+                "label": "Visible only"
+              },
+              {
+                "value": "Straße",
+                "label": "Other"
+              },
+              {
+                "value": "alphabet",
+                "label": "Prefix candidate"
+              },
+              {
+                "value": "axlxp",
+                "label": "alp label-only trap"
+              },
+              {
+                "value": "unrelated",
+                "label": "Alpha label-only"
+              },
+              {
+                "value": "İSTANBUL",
+                "label": "Dotted-I candidate"
+              },
+              {
+                "value": "ΟΣΟΣ",
+                "label": "Greek candidate"
+              },
+              {
+                "value": "𐐀lpha",
+                "label": "Supplementary candidate"
+              }
+            ],
+            "operations": [
+              {
+                "name": "select-before-filter",
+                "kind": "select",
+                "index": 2
+              },
+              {
+                "name": "value-prefix-not-label-or-subsequence",
+                "kind": "filter",
+                "value": "alp"
+              },
+              {
+                "name": "select-second-prefix-result",
+                "kind": "select",
+                "index": 1
+              },
+              {
+                "name": "same-filter-resets-selection",
+                "kind": "filter",
+                "value": "alp"
+              },
+              {
+                "name": "single-prefix-result",
+                "kind": "filter",
+                "value": "alphabet"
+              },
+              {
+                "name": "clear-filter-resets-selection",
+                "kind": "filter",
+                "value": ""
+              },
+              {
+                "name": "sharp-s-is-not-case-fold-expanded",
+                "kind": "filter",
+                "value": "STRASSE"
+              },
+              {
+                "name": "sharp-s-lowercase-prefix",
+                "kind": "filter",
+                "value": "straße"
+              },
+              {
+                "name": "dotted-i-expanded-prefix",
+                "kind": "filter",
+                "value": "İS"
+              },
+              {
+                "name": "dotted-i-does-not-lose-combining-dot",
+                "kind": "filter",
+                "value": "istan"
+              },
+              {
+                "name": "dotted-i-short-prefix",
+                "kind": "filter",
+                "value": "i"
+              },
+              {
+                "name": "uppercase-greek-prefix-final-sigma-context",
+                "kind": "filter",
+                "value": "ΟΣ"
+              },
+              {
+                "name": "internal-greek-sigma-prefix",
+                "kind": "filter",
+                "value": "οσ"
+              },
+              {
+                "name": "whole-greek-value-final-sigma-context",
+                "kind": "filter",
+                "value": "ΟΣΟΣ"
+              },
+              {
+                "name": "supplementary-lowercase-prefix",
+                "kind": "filter",
+                "value": "𐐨L"
+              }
+            ],
+            "maxVisible": 5
+          },
+          "expected": {
+            "observations": [
+              {
+                "name": "select-before-filter",
+                "selected": "alphabet",
+                "rows": [
+                  "  Visible only",
+                  "  Other",
+                  "→ Prefix candidate",
+                  "  alp label-only trap",
+                  "  Alpha label-only",
+                  "  (3/8)"
+                ],
+                "visibleWidths": [
+                  14,
+                  7,
+                  18,
+                  21,
+                  18,
+                  7
+                ],
+                "filteredValues": [
+                  "Alpha",
+                  "Straße",
+                  "alphabet",
+                  "axlxp",
+                  "unrelated",
+                  "İSTANBUL",
+                  "ΟΣΟΣ",
+                  "𐐀lpha"
+                ]
+              },
+              {
+                "name": "value-prefix-not-label-or-subsequence",
+                "selected": "Alpha",
+                "rows": [
+                  "→ Visible only",
+                  "  Prefix candidate"
+                ],
+                "visibleWidths": [
+                  14,
+                  18
+                ],
+                "filteredValues": [
+                  "Alpha",
+                  "alphabet"
+                ]
+              },
+              {
+                "name": "select-second-prefix-result",
+                "selected": "alphabet",
+                "rows": [
+                  "  Visible only",
+                  "→ Prefix candidate"
+                ],
+                "visibleWidths": [
+                  14,
+                  18
+                ],
+                "filteredValues": [
+                  "Alpha",
+                  "alphabet"
+                ]
+              },
+              {
+                "name": "same-filter-resets-selection",
+                "selected": "Alpha",
+                "rows": [
+                  "→ Visible only",
+                  "  Prefix candidate"
+                ],
+                "visibleWidths": [
+                  14,
+                  18
+                ],
+                "filteredValues": [
+                  "Alpha",
+                  "alphabet"
+                ]
+              },
+              {
+                "name": "single-prefix-result",
+                "selected": "alphabet",
+                "rows": [
+                  "→ Prefix candidate"
+                ],
+                "visibleWidths": [
+                  18
+                ],
+                "filteredValues": [
+                  "alphabet"
+                ]
+              },
+              {
+                "name": "clear-filter-resets-selection",
+                "selected": "Alpha",
+                "rows": [
+                  "→ Visible only",
+                  "  Other",
+                  "  Prefix candidate",
+                  "  alp label-only trap",
+                  "  Alpha label-only",
+                  "  (1/8)"
+                ],
+                "visibleWidths": [
+                  14,
+                  7,
+                  18,
+                  21,
+                  18,
+                  7
+                ],
+                "filteredValues": [
+                  "Alpha",
+                  "Straße",
+                  "alphabet",
+                  "axlxp",
+                  "unrelated",
+                  "İSTANBUL",
+                  "ΟΣΟΣ",
+                  "𐐀lpha"
+                ]
+              },
+              {
+                "name": "sharp-s-is-not-case-fold-expanded",
+                "selected": null,
+                "rows": [
+                  "  No matching commands"
+                ],
+                "visibleWidths": [
+                  22
+                ],
+                "filteredValues": []
+              },
+              {
+                "name": "sharp-s-lowercase-prefix",
+                "selected": "Straße",
+                "rows": [
+                  "→ Other"
+                ],
+                "visibleWidths": [
+                  7
+                ],
+                "filteredValues": [
+                  "Straße"
+                ]
+              },
+              {
+                "name": "dotted-i-expanded-prefix",
+                "selected": "İSTANBUL",
+                "rows": [
+                  "→ Dotted-I candidate"
+                ],
+                "visibleWidths": [
+                  20
+                ],
+                "filteredValues": [
+                  "İSTANBUL"
+                ]
+              },
+              {
+                "name": "dotted-i-does-not-lose-combining-dot",
+                "selected": null,
+                "rows": [
+                  "  No matching commands"
+                ],
+                "visibleWidths": [
+                  22
+                ],
+                "filteredValues": []
+              },
+              {
+                "name": "dotted-i-short-prefix",
+                "selected": "İSTANBUL",
+                "rows": [
+                  "→ Dotted-I candidate"
+                ],
+                "visibleWidths": [
+                  20
+                ],
+                "filteredValues": [
+                  "İSTANBUL"
+                ]
+              },
+              {
+                "name": "uppercase-greek-prefix-final-sigma-context",
+                "selected": null,
+                "rows": [
+                  "  No matching commands"
+                ],
+                "visibleWidths": [
+                  22
+                ],
+                "filteredValues": []
+              },
+              {
+                "name": "internal-greek-sigma-prefix",
+                "selected": "ΟΣΟΣ",
+                "rows": [
+                  "→ Greek candidate"
+                ],
+                "visibleWidths": [
+                  17
+                ],
+                "filteredValues": [
+                  "ΟΣΟΣ"
+                ]
+              },
+              {
+                "name": "whole-greek-value-final-sigma-context",
+                "selected": "ΟΣΟΣ",
+                "rows": [
+                  "→ Greek candidate"
+                ],
+                "visibleWidths": [
+                  17
+                ],
+                "filteredValues": [
+                  "ΟΣΟΣ"
+                ]
+              },
+              {
+                "name": "supplementary-lowercase-prefix",
+                "selected": "𐐀lpha",
+                "rows": [
+                  "→ Supplementary candidate"
+                ],
+                "visibleWidths": [
+                  25
+                ],
+                "filteredValues": [
+                  "𐐀lpha"
+                ]
+              }
+            ],
+            "callbackEvents": []
+          }
+        },
+        {
+          "name": "select-list-unicode-description-normalization",
+          "dimensions": {
+            "columns": 80,
+            "rows": 5
+          },
+          "inputs": {
+            "items": [
+              {
+                "value": "nbsp",
+                "label": "NBSP",
+                "description": "  hello  "
+              },
+              {
+                "value": "ideographic",
+                "label": "Wide space",
+                "description": "　 wide words 　"
+              },
+              {
+                "value": "bom",
+                "label": "BOM",
+                "description": "﻿ hello ﻿"
+              },
+              {
+                "value": "crlf",
+                "label": "CRLF",
+                "description": " first\r\n\r\nsecond　"
+              },
+              {
+                "value": "empty",
+                "label": "Whitespace only",
+                "description": "　 ﻿\r\n"
+              }
+            ],
+            "selectedIndices": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "selected": "nbsp",
+                "rows": [
+                  "→ NBSP                            hello",
+                  "  Wide space                      wide words",
+                  "  BOM                             hello",
+                  "  CRLF                            first second",
+                  "  Whitespace only"
+                ],
+                "visibleWidths": [
+                  39,
+                  44,
+                  39,
+                  46,
+                  17
+                ]
+              },
+              {
+                "selected": "ideographic",
+                "rows": [
+                  "  NBSP                            hello",
+                  "→ Wide space                      wide words",
+                  "  BOM                             hello",
+                  "  CRLF                            first second",
+                  "  Whitespace only"
+                ],
+                "visibleWidths": [
+                  39,
+                  44,
+                  39,
+                  46,
+                  17
+                ]
+              },
+              {
+                "selected": "bom",
+                "rows": [
+                  "  NBSP                            hello",
+                  "  Wide space                      wide words",
+                  "→ BOM                             hello",
+                  "  CRLF                            first second",
+                  "  Whitespace only"
+                ],
+                "visibleWidths": [
+                  39,
+                  44,
+                  39,
+                  46,
+                  17
+                ]
+              },
+              {
+                "selected": "crlf",
+                "rows": [
+                  "  NBSP                            hello",
+                  "  Wide space                      wide words",
+                  "  BOM                             hello",
+                  "→ CRLF                            first second",
+                  "  Whitespace only"
+                ],
+                "visibleWidths": [
+                  39,
+                  44,
+                  39,
+                  46,
+                  17
+                ]
+              },
+              {
+                "selected": "empty",
+                "rows": [
+                  "  NBSP                            hello",
+                  "  Wide space                      wide words",
+                  "  BOM                             hello",
+                  "  CRLF                            first second",
+                  "→ Whitespace only"
+                ],
+                "visibleWidths": [
+                  39,
+                  44,
+                  39,
+                  46,
+                  17
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "select-list-unbound-key-forwarding",
+          "dimensions": {
+            "columns": 24,
+            "rows": 3
+          },
+          "inputs": {
+            "keys": [
+              "j",
+              "k",
+              "\u001b[6~",
+              "/",
+              "x"
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "input": "j",
+                "before": "first",
+                "after": "first"
+              },
+              {
+                "input": "k",
+                "before": "first",
+                "after": "first"
+              },
+              {
+                "input": "\u001b[6~",
+                "before": "first",
+                "after": "first"
+              },
+              {
+                "input": "/",
+                "before": "first",
+                "after": "first"
+              },
+              {
+                "input": "x",
+                "before": "first",
+                "after": "first"
+              }
+            ]
+          }
+        },
+        {
+          "name": "select-list-primary-column-layout-and-custom-truncation",
+          "dimensions": {
+            "columns": 80,
+            "rows": 5
+          },
+          "inputs": {
+            "layout": {
+              "minPrimaryColumnWidth": 15,
+              "maxPrimaryColumnWidth": 25
+            },
+            "widths": [
+              40,
+              50,
+              80
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "width": 40,
+                "selected": "short",
+                "rows": [
+                  "→ [Short]",
+                  "  [Medium Length]",
+                  "  [Very Long Item Label Exceeding Maxi\u001b[0m"
+                ],
+                "visibleWidths": [
+                  9,
+                  17,
+                  38
+                ]
+              },
+              {
+                "width": 50,
+                "selected": "short",
+                "rows": [
+                  "→ [Short]                  Short description",
+                  "  [Medium Length]          Medium description",
+                  "  [Very Long Item Label E\u001b[0m  Long description"
+                ],
+                "visibleWidths": [
+                  44,
+                  45,
+                  43
+                ]
+              },
+              {
+                "width": 80,
+                "selected": "short",
+                "rows": [
+                  "→ [Short]                  Short description",
+                  "  [Medium Length]          Medium description",
+                  "  [Very Long Item Label E\u001b[0m  Long description"
+                ],
+                "visibleWidths": [
+                  44,
+                  45,
+                  43
+                ]
+              }
+            ],
+            "truncateCalls": [
+              {
+                "text": "Short",
+                "maxWidth": 36,
+                "columnWidth": 36,
+                "itemValue": "short",
+                "isSelected": true
+              },
+              {
+                "text": "Medium Length",
+                "maxWidth": 36,
+                "columnWidth": 36,
+                "itemValue": "medium-length",
+                "isSelected": false
+              },
+              {
+                "text": "Very Long Item Label Exceeding Maximum Primary Column Width",
+                "maxWidth": 36,
+                "columnWidth": 36,
+                "itemValue": "long-item-exceeding-columns",
+                "isSelected": false
+              },
+              {
+                "text": "Short",
+                "maxWidth": 23,
+                "columnWidth": 25,
+                "itemValue": "short",
+                "isSelected": true
+              },
+              {
+                "text": "Medium Length",
+                "maxWidth": 23,
+                "columnWidth": 25,
+                "itemValue": "medium-length",
+                "isSelected": false
+              },
+              {
+                "text": "Very Long Item Label Exceeding Maximum Primary Column Width",
+                "maxWidth": 23,
+                "columnWidth": 25,
+                "itemValue": "long-item-exceeding-columns",
+                "isSelected": false
+              },
+              {
+                "text": "Short",
+                "maxWidth": 23,
+                "columnWidth": 25,
+                "itemValue": "short",
+                "isSelected": true
+              },
+              {
+                "text": "Medium Length",
+                "maxWidth": 23,
+                "columnWidth": 25,
+                "itemValue": "medium-length",
+                "isSelected": false
+              },
+              {
+                "text": "Very Long Item Label Exceeding Maximum Primary Column Width",
+                "maxWidth": 23,
+                "columnWidth": 25,
+                "itemValue": "long-item-exceeding-columns",
+                "isSelected": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "settings-list.json",
+      "family": "audit-1219",
+      "bytes": 13307,
+      "sha256": "4998d564034b7b00cbb3c57326f9dd95d0914db99a87f1657b330f0fd2e39ad6",
+      "sourceEndpoints": [
+        "packages/tui/src/components/settings-list.ts:constructor,render,renderMainList,handleInput,updateValue,selectItem,activateItem,closeSubmenu,applyFilter,addHintLine,getDisplayItems,getVisibleRange",
+        "packages/tui/src/keybindings.ts:getKeybindings",
+        "packages/tui/src/utils.ts:visibleWidth,truncateToWidth,wrapTextWithAnsi",
+        "packages/tui/src/fuzzy.ts:fuzzyFilter",
+        "packages/tui/src/components/input.ts:constructor,render,handleInput,getValue"
+      ],
+      "scenarios": [
+        {
+          "name": "settings-list-cycling-and-selection",
+          "dimensions": {
+            "columns": 50,
+            "rows": 8
+          },
+          "inputs": {
+            "items": [
+              {
+                "id": "theme",
+                "label": "Theme",
+                "values": [
+                  "dark",
+                  "light"
+                ]
+              },
+              {
+                "id": "editor",
+                "label": "Editor",
+                "values": [
+                  "vim",
+                  "emacs",
+                  "nano"
+                ]
+              },
+              {
+                "id": "wrap",
+                "label": "Word Wrap",
+                "values": [
+                  "off",
+                  "on"
+                ]
+              }
+            ],
+            "keys": [
+              "up",
+              "space",
+              "up",
+              "enter",
+              "down",
+              "down",
+              "escape"
+            ]
+          },
+          "expected": {
+            "initial": {
+              "rows": [
+                "→ Theme      dark",
+                "  Editor     vim",
+                "  Word Wrap  off",
+                "",
+                "  Color theme",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                17,
+                16,
+                16,
+                0,
+                13,
+                0,
+                49
+              ]
+            },
+            "wrappedUp": {
+              "rows": [
+                "  Theme      dark",
+                "  Editor     vim",
+                "→ Word Wrap  off",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                17,
+                16,
+                16,
+                0,
+                49
+              ]
+            },
+            "afterSpace": {
+              "rows": [
+                "  Theme      dark",
+                "  Editor     vim",
+                "→ Word Wrap  on",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                17,
+                16,
+                15,
+                0,
+                49
+              ]
+            },
+            "afterEnter": {
+              "rows": [
+                "  Theme      dark",
+                "→ Editor     emacs",
+                "  Word Wrap  on",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                17,
+                18,
+                15,
+                0,
+                49
+              ]
+            },
+            "changes": [
+              {
+                "id": "wrap",
+                "value": "on"
+              },
+              {
+                "id": "editor",
+                "value": "emacs"
+              }
+            ],
+            "cancels": 1
+          }
+        },
+        {
+          "name": "settings-list-centered-five-row-window",
+          "dimensions": {
+            "columns": 50,
+            "rows": 7
+          },
+          "inputs": {
+            "itemCount": 9,
+            "maxVisible": 5,
+            "downPresses": 6,
+            "thenDownPresses": 2
+          },
+          "expected": {
+            "initial": {
+              "rows": [
+                "→ Setting 1  val-1",
+                "  Setting 2  val-2",
+                "  Setting 3  val-3",
+                "  Setting 4  val-4",
+                "  Setting 5  val-5",
+                "  (1/9)",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                18,
+                18,
+                18,
+                18,
+                18,
+                7,
+                0,
+                49
+              ]
+            },
+            "middle": {
+              "rows": [
+                "  Setting 5  val-5",
+                "  Setting 6  val-6",
+                "→ Setting 7  val-7",
+                "  Setting 8  val-8",
+                "  Setting 9  val-9",
+                "  (7/9)",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                18,
+                18,
+                18,
+                18,
+                18,
+                7,
+                0,
+                49
+              ]
+            },
+            "end": {
+              "rows": [
+                "  Setting 5  val-5",
+                "  Setting 6  val-6",
+                "  Setting 7  val-7",
+                "  Setting 8  val-8",
+                "→ Setting 9  val-9",
+                "  (9/9)",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                18,
+                18,
+                18,
+                18,
+                18,
+                7,
+                0,
+                49
+              ]
+            }
+          }
+        },
+        {
+          "name": "settings-list-description-and-hint",
+          "dimensions": {
+            "columns": 60,
+            "rows": 8
+          },
+          "inputs": {
+            "widths": [
+              40,
+              60,
+              80
+            ]
+          },
+          "expected": {
+            "widths": [
+              {
+                "width": 40,
+                "rows": [
+                  "→ First Option                          ",
+                  "  Very Long Setting Option Label Exce\u001b[0m...\u001b[0m",
+                  "",
+                  "  Short description line",
+                  "",
+                  "  enter/space to change · escape/ctrl\u001b[0m...\u001b[0m"
+                ],
+                "visibleWidths": [
+                  40,
+                  40,
+                  0,
+                  24,
+                  0,
+                  40
+                ]
+              },
+              {
+                "width": 60,
+                "rows": [
+                  "→ First Option                          enabled",
+                  "  Very Long Setting Option Label Exceeding Width  custom-\u001b[0m...\u001b[0m",
+                  "",
+                  "  Short description line",
+                  "",
+                  "  enter/space to change · escape/ctrl+c to cancel"
+                ],
+                "visibleWidths": [
+                  47,
+                  60,
+                  0,
+                  24,
+                  0,
+                  49
+                ]
+              },
+              {
+                "width": 80,
+                "rows": [
+                  "→ First Option                          enabled",
+                  "  Very Long Setting Option Label Exceeding Width  custom-value-data",
+                  "",
+                  "  Short description line",
+                  "",
+                  "  enter/space to change · escape/ctrl+c to cancel"
+                ],
+                "visibleWidths": [
+                  47,
+                  67,
+                  0,
+                  24,
+                  0,
+                  49
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "settings-list-search-filtering-and-input",
+          "dimensions": {
+            "columns": 60,
+            "rows": 10
+          },
+          "inputs": {
+            "items": [
+              {
+                "id": "term",
+                "label": "Terminal Bell"
+              },
+              {
+                "id": "theme",
+                "label": "Color Theme"
+              },
+              {
+                "id": "telemetry",
+                "label": "Telemetry Report"
+              },
+              {
+                "id": "wrap",
+                "label": "Word Wrap"
+              }
+            ]
+          },
+          "expected": {
+            "initial": {
+              "rows": [
+                "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                         ",
+                "",
+                "→ Terminal Bell     audible",
+                "  Color Theme       dark",
+                "  Telemetry Report  off",
+                "  Word Wrap         off",
+                "",
+                "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+              ],
+              "visibleWidths": [
+                60,
+                0,
+                27,
+                24,
+                23,
+                23,
+                0,
+                60
+              ]
+            },
+            "filtered": {
+              "rows": [
+                "> term\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                     ",
+                "",
+                "→ Terminal Bell     audible",
+                "",
+                "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+              ],
+              "visibleWidths": [
+                60,
+                0,
+                27,
+                0,
+                60
+              ]
+            },
+            "afterSpaceNonEmpty": {
+              "rows": [
+                "> term \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                    ",
+                "",
+                "→ Terminal Bell     audible",
+                "",
+                "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+              ],
+              "visibleWidths": [
+                60,
+                0,
+                27,
+                0,
+                60
+              ]
+            },
+            "cleared": {
+              "rows": [
+                "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                         ",
+                "",
+                "→ Terminal Bell     audible",
+                "  Color Theme       dark",
+                "  Telemetry Report  off",
+                "  Word Wrap         off",
+                "",
+                "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+              ],
+              "visibleWidths": [
+                60,
+                0,
+                27,
+                24,
+                23,
+                23,
+                0,
+                60
+              ]
+            },
+            "afterSpaceEmpty": {
+              "rows": [
+                "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                         ",
+                "",
+                "→ Terminal Bell     visual",
+                "  Color Theme       dark",
+                "  Telemetry Report  off",
+                "  Word Wrap         off",
+                "",
+                "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+              ],
+              "visibleWidths": [
+                60,
+                0,
+                26,
+                24,
+                23,
+                23,
+                0,
+                60
+              ]
+            },
+            "noMatch": {
+              "rows": [
+                "> zzzzz\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007                                                    ",
+                "",
+                "  No matching settings",
+                "",
+                "  Type to search · enter/space to change · escape/ctrl+c \u001b[0m...\u001b[0m"
+              ],
+              "visibleWidths": [
+                60,
+                0,
+                22,
+                0,
+                60
+              ]
+            },
+            "changes": [
+              {
+                "id": "term",
+                "value": "visual"
+              }
+            ]
+          }
+        },
+        {
+          "name": "settings-list-submenu-navigation-and-lifecycle",
+          "dimensions": {
+            "columns": 60,
+            "rows": 6
+          },
+          "inputs": {
+            "items": [
+              {
+                "id": "model"
+              },
+              {
+                "id": "provider"
+              }
+            ]
+          },
+          "expected": {
+            "openedWith": "gpt-4o",
+            "initial": {
+              "rows": [
+                "→ Model Selector  gpt-4o",
+                "  API Provider    openai",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                24,
+                24,
+                0,
+                49
+              ]
+            },
+            "openSubmenu": {
+              "rows": [
+                "[Submenu: choosing model, current=gpt-4o, width=60]"
+              ],
+              "visibleWidths": [
+                51
+              ]
+            },
+            "afterDoneAndNavigate": {
+              "rows": [
+                "  Model Selector  claude-3-5-sonnet",
+                "→ API Provider    anthropic",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                35,
+                27,
+                0,
+                49
+              ]
+            },
+            "changes": [
+              {
+                "id": "model",
+                "value": "claude-3-5-sonnet"
+              },
+              {
+                "id": "provider",
+                "value": "anthropic"
+              }
+            ]
+          }
+        },
+        {
+          "name": "settings-list-update-value-and-select-item",
+          "dimensions": {
+            "columns": 50,
+            "rows": 5
+          },
+          "inputs": {
+            "updateId": "beta",
+            "newValue": "updated-b",
+            "selectId": "beta"
+          },
+          "expected": {
+            "observation": {
+              "rows": [
+                "  Alpha  initial-a",
+                "→ Beta   updated-b",
+                "",
+                "  enter/space to change · escape/ctrl+c to cancel"
+              ],
+              "visibleWidths": [
+                18,
+                18,
+                0,
+                49
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "mouse-components.json",
+      "family": "audit-1219",
+      "bytes": 51866,
+      "sha256": "f115e3767ec47038f47cb7170abc6ffdab63be46f93f1296ec4f8bc6d9cd761d",
+      "sourceEndpoints": [
+        "packages/tui/src/components/input.ts:handleMouse,render,handleInput,setValue,getValue",
+        "packages/tui/src/components/editor.ts:handleMouse,render,setText,setPaddingX,handleInput,getCursor,getText",
+        "packages/tui/src/components/select-list.ts:handleMouse,render,setSelectedIndex,getSelectedItem",
+        "packages/tui/src/components/settings-list.ts:handleMouse,render,selectItem,getSelectedItem,handleInput",
+        "packages/tui/src/tui.ts:Container.handleMouse,dispatchMouseEvent",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.dispatchMouseEvent,TuiAltScreen.getFocusedComponent",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.getViewport"
+      ],
+      "scenarios": [
+        {
+          "name": "input-press-cursor-and-unhandled-gestures",
+          "dimensions": {
+            "columns": 20,
+            "rows": 1
+          },
+          "inputs": {
+            "prompt": "> ",
+            "value": "hello",
+            "width": 20,
+            "typed": "X",
+            "cases": [
+              {
+                "label": "value-column-two",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left"
+              },
+              {
+                "label": "prompt-column-zero",
+                "x": 2,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left"
+              },
+              {
+                "label": "past-line-end",
+                "x": 20,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left"
+              },
+              {
+                "label": "right-button",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "right"
+              },
+              {
+                "label": "release",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "release",
+                "button": "left"
+              },
+              {
+                "label": "move",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "move",
+                "button": "none"
+              },
+              {
+                "label": "wheel",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "wheel",
+                "button": "left"
+              },
+              {
+                "label": "second-row",
+                "x": 4,
+                "y": 1,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left"
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "label": "value-column-two",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorColumn": -1,
+                "row": "> he\u001b_pi:fc\u0007l\u001b_pi:/fc\u0007lo",
+                "valueAfterType": "heXllo"
+              },
+              {
+                "label": "prompt-column-zero",
+                "x": 2,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "past-line-end",
+                "x": 20,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorColumn": -1,
+                "row": "> hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                "valueAfterType": "helloX"
+              },
+              {
+                "label": "right-button",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "right",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "release",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "release",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "move",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "move",
+                "button": "none",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "wheel",
+                "x": 4,
+                "y": 0,
+                "width": 20,
+                "height": 1,
+                "type": "wheel",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              },
+              {
+                "label": "second-row",
+                "x": 4,
+                "y": 1,
+                "width": 20,
+                "height": 1,
+                "type": "press",
+                "button": "left",
+                "prompt": "> ",
+                "value": "hello",
+                "result": null,
+                "cursorColumn": -1,
+                "row": "> \u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ello",
+                "valueAfterType": "Xhello"
+              }
+            ]
+          }
+        },
+        {
+          "name": "input-press-maps-grapheme-widths-and-scrolled-columns",
+          "dimensions": {
+            "columns": 20,
+            "rows": 1
+          },
+          "inputs": {
+            "prompt": "> ",
+            "typed": "X",
+            "cases": [
+              {
+                "label": "cjk-inside-first-grapheme",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  4
+                ]
+              },
+              {
+                "label": "cjk-inside-second-grapheme",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  5
+                ]
+              },
+              {
+                "label": "cjk-past-end",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  6
+                ]
+              },
+              {
+                "label": "scrolled-column-zero",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  2
+                ]
+              },
+              {
+                "label": "scrolled-column-one",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  3
+                ]
+              },
+              {
+                "label": "scrolled-past-end",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  7
+                ]
+              },
+              {
+                "label": "scrolled-wide-grapheme",
+                "value": "一二三四五六七八",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  20,
+                  4
+                ]
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "label": "cjk-inside-first-grapheme",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  4
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 4,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 你\u001b_pi:fc\u0007好\u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "你X好"
+              },
+              {
+                "label": "cjk-inside-second-grapheme",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  5
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 5,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 你\u001b_pi:fc\u0007好\u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "你X好"
+              },
+              {
+                "label": "cjk-past-end",
+                "value": "你好",
+                "width": 20,
+                "height": 1,
+                "presses": [
+                  6
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 6,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 你好\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "你好X"
+              },
+              {
+                "label": "scrolled-column-zero",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  2
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 7,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> cde\u001b_pi:fc\u0007f\u001b_pi:/fc\u0007gh",
+                    "cursorColumn": -1
+                  },
+                  {
+                    "x": 2,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> ab\u001b_pi:fc\u0007c\u001b_pi:/fc\u0007def",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "abXcdefghij"
+              },
+              {
+                "label": "scrolled-column-one",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  3
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 7,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> cde\u001b_pi:fc\u0007f\u001b_pi:/fc\u0007gh",
+                    "cursorColumn": -1
+                  },
+                  {
+                    "x": 3,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> abc\u001b_pi:fc\u0007d\u001b_pi:/fc\u0007ef",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "abcXdefghij"
+              },
+              {
+                "label": "scrolled-past-end",
+                "value": "abcdefghij",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  7,
+                  7
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 7,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> cde\u001b_pi:fc\u0007f\u001b_pi:/fc\u0007gh",
+                    "cursorColumn": -1
+                  },
+                  {
+                    "x": 7,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> efg\u001b_pi:fc\u0007h\u001b_pi:/fc\u0007ij",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "abcdefgXhij"
+              },
+              {
+                "label": "scrolled-wide-grapheme",
+                "value": "一二三四五六七八",
+                "width": 8,
+                "height": 1,
+                "presses": [
+                  20,
+                  4
+                ],
+                "prompt": "> ",
+                "y": 0,
+                "steps": [
+                  {
+                    "x": 20,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 七八\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  },
+                  {
+                    "x": 4,
+                    "result": {
+                      "handled": true,
+                      "focus": true,
+                      "render": null
+                    },
+                    "row": "> 六\u001b_pi:fc\u0007七\u001b_pi:/fc\u0007",
+                    "cursorColumn": -1
+                  }
+                ],
+                "valueAfterType": "一二三四五六X七八"
+              }
+            ]
+          }
+        },
+        {
+          "name": "select-list-press-selects-and-click-activates",
+          "dimensions": {
+            "columns": 40,
+            "rows": 3
+          },
+          "inputs": {
+            "items": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ],
+            "maxVisible": 3
+          },
+          "expected": {
+            "pressClick": {
+              "maxVisible": 3,
+              "items": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "press": {
+                "x": 1,
+                "y": 2,
+                "width": 40,
+                "height": 3,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "selected": "c"
+              },
+              "click": {
+                "x": 1,
+                "y": 2,
+                "width": 40,
+                "height": 3,
+                "result": {
+                  "handled": true,
+                  "focus": false,
+                  "render": null
+                },
+                "selected": "c"
+              }
+            }
+          }
+        },
+        {
+          "name": "select-list-wheel-hover-and-scrolled-rows",
+          "dimensions": {
+            "columns": 80,
+            "rows": 5
+          },
+          "inputs": {
+            "itemCount": 12,
+            "maxVisible": 5,
+            "selectedIndex": 5,
+            "wheelDelta": 1,
+            "rows": [
+              0,
+              4
+            ]
+          },
+          "expected": {
+            "rows": [
+              {
+                "row": 0,
+                "afterWheel": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": true
+                  },
+                  "selected": "item-6",
+                  "changes": [
+                    "item-6"
+                  ]
+                },
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ],
+                "hover": [
+                  {
+                    "y": 0,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 1,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 3,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 0,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  }
+                ],
+                "press": {
+                  "result": {
+                    "handled": true,
+                    "focus": true,
+                    "render": null
+                  },
+                  "selected": "item-4",
+                  "changes": [
+                    "item-6",
+                    "item-4"
+                  ]
+                },
+                "click": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": null
+                  },
+                  "selected": "item-4",
+                  "changes": [
+                    "item-6",
+                    "item-4"
+                  ]
+                }
+              },
+              {
+                "row": 4,
+                "afterWheel": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": true
+                  },
+                  "selected": "item-6",
+                  "changes": [
+                    "item-6"
+                  ]
+                },
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ],
+                "hover": [
+                  {
+                    "y": 0,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 1,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 3,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "  Item 4",
+                      "  Item 5",
+                      "→ Item 6",
+                      "  Item 7",
+                      "  Item 8",
+                      "  (7/12)"
+                    ]
+                  }
+                ],
+                "press": {
+                  "result": {
+                    "handled": true,
+                    "focus": true,
+                    "render": null
+                  },
+                  "selected": "item-8",
+                  "changes": [
+                    "item-6",
+                    "item-8"
+                  ]
+                },
+                "click": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": null
+                  },
+                  "selected": "item-8",
+                  "changes": [
+                    "item-6",
+                    "item-8"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "settings-list-press-selects-and-click-activates",
+          "dimensions": {
+            "columns": 40,
+            "rows": 5
+          },
+          "inputs": {
+            "items": [
+              "mode",
+              "other",
+              "third",
+              "fourth"
+            ],
+            "maxVisible": 3
+          },
+          "expected": {
+            "pressClick": {
+              "maxVisible": 3,
+              "items": [
+                "mode",
+                "other",
+                "third",
+                "fourth"
+              ],
+              "press": {
+                "x": 1,
+                "y": 2,
+                "width": 40,
+                "height": 5,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                }
+              },
+              "click": {
+                "x": 1,
+                "y": 2,
+                "width": 40,
+                "height": 5,
+                "result": {
+                  "handled": true,
+                  "focus": false,
+                  "render": null
+                }
+              },
+              "changes": [
+                {
+                  "id": "third",
+                  "value": "high"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "settings-list-wheel-hover-and-scrolled-rows",
+          "dimensions": {
+            "columns": 80,
+            "rows": 6
+          },
+          "inputs": {
+            "itemCount": 12,
+            "maxVisible": 5,
+            "selectedItem": "item-5",
+            "wheelDelta": 1,
+            "rows": [
+              0,
+              4
+            ]
+          },
+          "expected": {
+            "rows": [
+              {
+                "row": 0,
+                "rowOffset": 2,
+                "afterWheel": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": true
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 4   off",
+                    "  Item 5   off",
+                    "> Item 6   off",
+                    "  Item 7   off",
+                    "  Item 8   off",
+                    "  (7/12)",
+                    "",
+                    "  Description 6",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ]
+                },
+                "hover": [
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 3,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 5,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 6,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  }
+                ],
+                "press": {
+                  "result": {
+                    "handled": true,
+                    "focus": true,
+                    "render": null
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 2   off",
+                    "  Item 3   off",
+                    "> Item 4   off",
+                    "  Item 5   off",
+                    "  Item 6   off",
+                    "  (5/12)",
+                    "",
+                    "  Description 4",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ]
+                },
+                "click": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": null
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 2   off",
+                    "  Item 3   off",
+                    "> Item 4   on",
+                    "  Item 5   off",
+                    "  Item 6   off",
+                    "  (5/12)",
+                    "",
+                    "  Description 4",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ],
+                  "changes": [
+                    {
+                      "id": "item-4",
+                      "value": "on"
+                    }
+                  ]
+                }
+              },
+              {
+                "row": 4,
+                "rowOffset": 2,
+                "afterWheel": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": true
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 4   off",
+                    "  Item 5   off",
+                    "> Item 6   off",
+                    "  Item 7   off",
+                    "  Item 8   off",
+                    "  (7/12)",
+                    "",
+                    "  Description 6",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ]
+                },
+                "hover": [
+                  {
+                    "y": 2,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 3,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 4,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 5,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 6,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  },
+                  {
+                    "y": 6,
+                    "result": null,
+                    "rows": [
+                      "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                      "",
+                      "  Item 4   off",
+                      "  Item 5   off",
+                      "> Item 6   off",
+                      "  Item 7   off",
+                      "  Item 8   off",
+                      "  (7/12)",
+                      "",
+                      "  Description 6",
+                      "",
+                      "  Type to search · Enter/Space to change · Esc to cancel"
+                    ]
+                  }
+                ],
+                "press": {
+                  "result": {
+                    "handled": true,
+                    "focus": true,
+                    "render": null
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 6   off",
+                    "  Item 7   off",
+                    "> Item 8   off",
+                    "  Item 9   off",
+                    "  Item 10  off",
+                    "  (9/12)",
+                    "",
+                    "  Description 8",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ]
+                },
+                "click": {
+                  "result": {
+                    "handled": true,
+                    "focus": false,
+                    "render": null
+                  },
+                  "rows": [
+                    "> \u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                    "",
+                    "  Item 6   off",
+                    "  Item 7   off",
+                    "> Item 8   on",
+                    "  Item 9   off",
+                    "  Item 10  off",
+                    "  (9/12)",
+                    "",
+                    "  Description 8",
+                    "",
+                    "  Type to search · Enter/Space to change · Esc to cancel"
+                  ],
+                  "changes": [
+                    {
+                      "id": "item-8",
+                      "value": "on"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "settings-list-search-row-forwards-and-separator-is-inert",
+          "dimensions": {
+            "columns": 80,
+            "rows": 6
+          },
+          "inputs": {
+            "itemCount": 4,
+            "maxVisible": 5,
+            "typedQuery": "it",
+            "edited": "X",
+            "searchClick": {
+              "x": 3,
+              "y": 0
+            }
+          },
+          "expected": {
+            "search": {
+              "rows": [
+                "> it\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                "",
+                "> Item 0  off",
+                "  Item 1  off",
+                "  Item 2  off",
+                "  Item 3  off",
+                "",
+                "  Type to search · Enter/Space to change · Esc to cancel"
+              ],
+              "typedQuery": "it",
+              "searchRow": {
+                "x": 3,
+                "y": 0,
+                "width": 80,
+                "height": 6,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorColumnBeforeClick": -1,
+                "afterClick": "> i\u001b_pi:fc\u0007t\u001b_pi:/fc\u0007",
+                "cursorColumnAfterClick": -1,
+                "queryAfterType": "iXt",
+                "edited": "X"
+              },
+              "separatorRow": {
+                "x": 3,
+                "y": 1,
+                "width": 80,
+                "height": 6,
+                "result": null
+              },
+              "firstItemRow": {
+                "x": 3,
+                "y": 2,
+                "width": 80,
+                "height": 6,
+                "press": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "rowsAfterPress": [
+                  "> i\u001b_pi:fc\u0007t\u001b_pi:/fc\u0007",
+                  "",
+                  "> Item 0  off",
+                  "  Item 1  off",
+                  "  Item 2  off",
+                  "  Item 3  off",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ],
+                "click": {
+                  "handled": true,
+                  "focus": false,
+                  "render": null
+                },
+                "changesAfterClick": [
+                  {
+                    "id": "item-0",
+                    "value": "on"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "name": "alternate-screen-nested-input-click-keeps-host-focus",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "overlayWidth": 20,
+            "overlayHeight": 4,
+            "value": "hi",
+            "columns": [
+              5,
+              3
+            ],
+            "typed": "!"
+          },
+          "expected": {
+            "overlays": [
+              {
+                "column": 5,
+                "hostFocusedBeforeOverlay": false,
+                "value": "hi!",
+                "hostFocusedAfterClick": true,
+                "screen": [
+                  "> hi!",
+                  "",
+                  "",
+                  ""
+                ]
+              },
+              {
+                "column": 3,
+                "hostFocusedBeforeOverlay": false,
+                "value": "!hi",
+                "hostFocusedAfterClick": true,
+                "screen": [
+                  "> !hi",
+                  "",
+                  "",
+                  ""
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "settings-submenu-click-closes-and-keeps-host-focus",
+          "dimensions": {
+            "columns": 30,
+            "rows": 6
+          },
+          "inputs": {
+            "submenuItems": [
+              "first",
+              "second"
+            ],
+            "settings": [
+              "theme",
+              "other"
+            ]
+          },
+          "expected": {
+            "submenu": {
+              "keys": [
+                "\r",
+                "\u001b[B",
+                "\r"
+              ],
+              "click": {
+                "press": "\u001b[<0;3;2M",
+                "release": "\u001b[<0;3;2m"
+              },
+              "submenuOpen": true,
+              "changesAfterClick": [
+                {
+                  "id": "theme",
+                  "value": "second"
+                }
+              ],
+              "focusedAfterClick": true,
+              "closedAfterClick": true,
+              "changesAfterKeys": [
+                {
+                  "id": "theme",
+                  "value": "second"
+                },
+                {
+                  "id": "other",
+                  "value": "on"
+                }
+              ],
+              "screens": [
+                [
+                  "> Theme  first",
+                  "  Other  off",
+                  "",
+                  "  Enter/Space to change · E...",
+                  "",
+                  ""
+                ],
+                [
+                  "→ First",
+                  "  Second",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                [
+                  "> Theme  second",
+                  "  Other  off",
+                  "",
+                  "  Enter/Space to change · E...",
+                  "",
+                  ""
+                ],
+                [
+                  "  Theme  second",
+                  "> Other  on",
+                  "",
+                  "  Enter/Space to change · E...",
+                  "",
+                  ""
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "name": "editor-alternate-screen-click-positions-cursor",
+          "dimensions": {
+            "columns": 20,
+            "rows": 6
+          },
+          "inputs": {
+            "text": "hello",
+            "typed": "X"
+          },
+          "expected": {
+            "editor": {
+              "text": "hello",
+              "columns": 20,
+              "rows": 6,
+              "click": {
+                "press": "\u001b[<0;3;2M",
+                "release": "\u001b[<0;3;2m"
+              },
+              "resolvedClick": {
+                "x": 2,
+                "y": 1,
+                "width": 20,
+                "height": 3
+              },
+              "cursorAfterClick": {
+                "line": 0,
+                "col": 2
+              },
+              "textAfterType": "heXllo",
+              "focused": true,
+              "screens": [
+                [
+                  "────────────────────",
+                  "hello",
+                  "────────────────────",
+                  "",
+                  "",
+                  ""
+                ],
+                [
+                  "────────────────────",
+                  "heXllo",
+                  "────────────────────",
+                  "",
+                  "",
+                  ""
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "name": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+          "dimensions": {
+            "columns": 20,
+            "rows": 24
+          },
+          "inputs": {
+            "typed": "X",
+            "cases": [
+              {
+                "label": "top-border-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 0,
+                "paddingX": 0
+              },
+              {
+                "label": "content-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 1,
+                "paddingX": 0
+              },
+              {
+                "label": "past-content-end",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 2,
+                "paddingX": 0
+              },
+              {
+                "label": "bottom-border-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 3,
+                "paddingX": 0
+              },
+              {
+                "label": "wrapped-first-segment-past-end",
+                "text": "abcdefghij",
+                "width": 6,
+                "x": 6,
+                "y": 1,
+                "paddingX": 0
+              },
+              {
+                "label": "wrapped-second-segment",
+                "text": "abcdefghij",
+                "width": 6,
+                "x": 2,
+                "y": 2,
+                "paddingX": 0
+              },
+              {
+                "label": "cjk-wide-grapheme",
+                "text": "世界",
+                "width": 20,
+                "x": 3,
+                "y": 1,
+                "paddingX": 0
+              },
+              {
+                "label": "cjk-past-end",
+                "text": "世界",
+                "width": 20,
+                "x": 5,
+                "y": 1,
+                "paddingX": 0
+              },
+              {
+                "label": "padded-content",
+                "text": "hello",
+                "width": 20,
+                "x": 4,
+                "y": 1,
+                "paddingX": 2
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "label": "top-border-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 0,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007              ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 5
+                },
+                "textAfterType": "helloX"
+              },
+              {
+                "label": "content-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 1,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007              ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 3
+                },
+                "textAfterType": "helXlo"
+              },
+              {
+                "label": "past-content-end",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 2,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007              ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 5
+                },
+                "textAfterType": "helloX"
+              },
+              {
+                "label": "bottom-border-row",
+                "text": "hello",
+                "width": 20,
+                "x": 3,
+                "y": 3,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007              ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 5
+                },
+                "textAfterType": "helloX"
+              },
+              {
+                "label": "wrapped-first-segment-past-end",
+                "text": "abcdefghij",
+                "width": 6,
+                "x": 6,
+                "y": 1,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "──────",
+                  "abcde ",
+                  "fghij\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                  "──────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 10
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 4
+                },
+                "textAfterType": "abcdXefghij"
+              },
+              {
+                "label": "wrapped-second-segment",
+                "text": "abcdefghij",
+                "width": 6,
+                "x": 2,
+                "y": 2,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "──────",
+                  "abcde ",
+                  "fghij\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+                  "──────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 10
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 7
+                },
+                "textAfterType": "abcdefgXhij"
+              },
+              {
+                "label": "cjk-wide-grapheme",
+                "text": "世界",
+                "width": 20,
+                "x": 3,
+                "y": 1,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "世界\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007               ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 2
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 1
+                },
+                "textAfterType": "世X界"
+              },
+              {
+                "label": "cjk-past-end",
+                "text": "世界",
+                "width": 20,
+                "x": 5,
+                "y": 1,
+                "paddingX": 0,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "世界\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007               ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 2
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 2
+                },
+                "textAfterType": "世界X"
+              },
+              {
+                "label": "padded-content",
+                "text": "hello",
+                "width": 20,
+                "x": 4,
+                "y": 1,
+                "paddingX": 2,
+                "prompt": null,
+                "rows": [
+                  "────────────────────",
+                  "  hello\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007            ",
+                  "────────────────────"
+                ],
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "cursorBefore": {
+                  "line": 0,
+                  "col": 5
+                },
+                "cursorAfterClick": {
+                  "line": 0,
+                  "col": 2
+                },
+                "textAfterType": "heXllo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "editor-drag-selects-and-copies-instead-of-moving-the-cursor",
+          "dimensions": {
+            "columns": 20,
+            "rows": 6
+          },
+          "inputs": {
+            "text": "hello world"
+          },
+          "expected": {
+            "drag": {
+              "text": "hello world",
+              "press": "\u001b[<0;1;2M",
+              "drag": "\u001b[<32;5;2M",
+              "release": "\u001b[<0;5;2m",
+              "copied": [
+                "hello"
+              ],
+              "cursorBefore": {
+                "line": 0,
+                "col": 11
+              },
+              "cursorAfter": {
+                "line": 0,
+                "col": 11
+              },
+              "textAfterDrag": "hello world",
+              "screen": [
+                "─────────── Copied!",
+                "hello world",
+                "────────────────────",
+                "",
+                "",
+                ""
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

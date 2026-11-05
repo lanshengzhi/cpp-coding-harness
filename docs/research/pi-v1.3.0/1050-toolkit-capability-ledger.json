@@ -19308,14 +19308,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-description-width-boundaries",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-description-width-boundaries",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -19336,17 +19335,18 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/ModelSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-description-width-boundaries"
   },
   {
    "id": "SelectItem.value",
@@ -19362,14 +19362,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-value-prefix-filter-and-selection-reset",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-value-prefix-filter-and-selection-reset",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19385,17 +19384,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/ModelSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-value-prefix-filter-and-selection-reset"
   },
   {
    "id": "SelectItem.label",
@@ -19411,14 +19411,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-narrow-wide-glyph-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-narrow-wide-glyph-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19434,17 +19433,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/ModelSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-narrow-wide-glyph-truncation"
   },
   {
    "id": "SelectItem.description",
@@ -19460,14 +19460,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-unicode-description-normalization",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-unicode-description-normalization",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19483,17 +19482,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/ModelSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-unicode-description-normalization"
   },
   {
    "id": "SelectList",
@@ -19509,14 +19509,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -19559,17 +19558,18 @@
    ],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectList.items",
@@ -19585,14 +19585,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-value-prefix-filter-and-selection-reset",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-value-prefix-filter-and-selection-reset",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19608,17 +19607,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-value-prefix-filter-and-selection-reset"
   },
   {
    "id": "SelectList.filteredItems",
@@ -19634,14 +19634,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-value-prefix-filter-and-selection-reset",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-value-prefix-filter-and-selection-reset",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19657,17 +19656,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-value-prefix-filter-and-selection-reset"
   },
   {
    "id": "SelectList.selectedIndex",
@@ -19683,14 +19683,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19706,17 +19705,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectList.mousePressedIndex",
@@ -19732,14 +19732,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-press-selects-and-click-activates",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/mouse-components.json",
+    "scenario": "select-list-press-selects-and-click-activates",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19755,17 +19754,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/MouseComponentsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-press-selects-and-click-activates"
   },
   {
    "id": "SelectList.maxVisible",
@@ -19781,14 +19781,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-centered-five-row-window",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-centered-five-row-window",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19804,17 +19803,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-centered-five-row-window"
   },
   {
    "id": "SelectList.theme",
@@ -19830,14 +19830,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19853,17 +19852,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectList.layout",
@@ -19879,14 +19879,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19902,17 +19901,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectList.onSelect",
@@ -19928,14 +19928,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -19951,17 +19950,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectList.onCancel",
@@ -19977,14 +19977,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20000,17 +19999,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectList.onSelectionChange",
@@ -20026,14 +20026,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-value-prefix-filter-and-selection-reset",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-value-prefix-filter-and-selection-reset",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20049,17 +20048,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-value-prefix-filter-and-selection-reset"
   },
   {
    "id": "SelectList.constructor",
@@ -20075,14 +20075,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20098,17 +20097,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectList.setFilter",
@@ -20124,14 +20124,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-value-prefix-filter-and-selection-reset",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-value-prefix-filter-and-selection-reset",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20147,17 +20146,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-value-prefix-filter-and-selection-reset"
   },
   {
    "id": "SelectList.setSelectedIndex",
@@ -20173,14 +20173,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-value-prefix-filter-and-selection-reset",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-value-prefix-filter-and-selection-reset",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20196,17 +20195,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-value-prefix-filter-and-selection-reset"
   },
   {
    "id": "SelectList.invalidate",
@@ -20222,14 +20222,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20245,17 +20244,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectList.render",
@@ -20271,14 +20271,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-centered-five-row-window",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-centered-five-row-window",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20294,17 +20293,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-centered-five-row-window"
   },
   {
    "id": "SelectList.handleMouse",
@@ -20320,14 +20320,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-wheel-hover-and-scrolled-rows",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/mouse-components.json",
+    "scenario": "select-list-wheel-hover-and-scrolled-rows",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20343,17 +20342,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/MouseComponentsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-wheel-hover-and-scrolled-rows"
   },
   {
    "id": "SelectList.handleInput",
@@ -20369,14 +20369,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-unbound-key-forwarding",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-unbound-key-forwarding",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20392,17 +20391,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-unbound-key-forwarding"
   },
   {
    "id": "SelectList.getVisibleRange",
@@ -20418,14 +20418,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-centered-five-row-window",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-centered-five-row-window",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20441,17 +20440,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-centered-five-row-window"
   },
   {
    "id": "SelectList.renderItem",
@@ -20467,14 +20467,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-description-width-boundaries",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-description-width-boundaries",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20490,17 +20489,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-description-width-boundaries"
   },
   {
    "id": "SelectList.getPrimaryColumnWidth",
@@ -20516,14 +20516,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20539,17 +20538,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectList.getPrimaryColumnBounds",
@@ -20565,14 +20565,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20588,17 +20587,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectList.truncatePrimary",
@@ -20614,14 +20614,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20637,17 +20636,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectList.getDisplayValue",
@@ -20663,14 +20663,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20686,17 +20685,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectList.notifySelectionChange",
@@ -20712,14 +20712,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20735,17 +20734,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectList.getSelectedItem",
@@ -20761,14 +20761,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20784,17 +20783,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SessionSelectorComponentTest.cpp",
-     "tests/coding_agent/tui/ThinkingSelectorTest.cpp"
+     "tests/coding_agent/tui/ThinkingSelectorTest.cpp",
+     "tests/tui/SelectListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectListLayoutOptions",
@@ -20810,14 +20810,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -20838,13 +20837,15 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectListLayoutOptions.minPrimaryColumnWidth",
@@ -20860,14 +20861,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20883,13 +20883,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectListLayoutOptions.maxPrimaryColumnWidth",
@@ -20905,14 +20907,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20928,13 +20929,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectListLayoutOptions.truncatePrimary",
@@ -20950,14 +20953,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -20973,13 +20975,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectListTheme",
@@ -20995,14 +20999,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -21025,13 +21028,15 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectListTheme.selectedPrefix",
@@ -21047,14 +21052,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21070,13 +21074,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectListTheme.selectedText",
@@ -21092,14 +21098,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21115,13 +21120,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-cycling-and-selection"
   },
   {
    "id": "SelectListTheme.description",
@@ -21137,14 +21144,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-description-width-boundaries",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-description-width-boundaries",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21160,13 +21166,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-description-width-boundaries"
   },
   {
    "id": "SelectListTheme.scrollInfo",
@@ -21182,14 +21190,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-centered-five-row-window",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-centered-five-row-window",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21205,13 +21212,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-centered-five-row-window"
   },
   {
    "id": "SelectListTheme.noMatch",
@@ -21227,14 +21236,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-value-prefix-filter-and-selection-reset",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-value-prefix-filter-and-selection-reset",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21250,13 +21258,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-value-prefix-filter-and-selection-reset"
   },
   {
    "id": "SelectListTruncatePrimaryContext",
@@ -21272,14 +21282,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -21302,13 +21311,15 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectListTruncatePrimaryContext.text",
@@ -21324,14 +21335,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21347,13 +21357,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectListTruncatePrimaryContext.maxWidth",
@@ -21369,14 +21381,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21392,13 +21403,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectListTruncatePrimaryContext.columnWidth",
@@ -21414,14 +21427,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21437,13 +21449,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectListTruncatePrimaryContext.item",
@@ -21459,14 +21473,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21482,13 +21495,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SelectListTruncatePrimaryContext.isSelected",
@@ -21504,14 +21519,13 @@
    "consumer": "settings/commands selectors",
    "boundary": "SelectList; product chrome moves to composition",
    "implementation_ticket": null,
-   "scenario": "E07 SelectList",
+   "scenario": "select-list-primary-column-layout-and-custom-truncation",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SelectList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
+    "scenario": "select-list-primary-column-layout-and-custom-truncation",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21527,13 +21541,15 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SelectList; product chrome moves to composition",
     "consumer": "settings/commands selectors",
-    "tests": []
+    "tests": [
+     "tests/tui/SelectListTest.cpp"
+    ]
    },
-   "comparisonCase": "E07 SelectList"
+   "comparisonCase": "select-list-primary-column-layout-and-custom-truncation"
   },
   {
    "id": "SettingItem",
@@ -21549,14 +21565,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -21582,17 +21597,18 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/tui/KeybindingsContextTest.cpp",
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingItem.id",
@@ -21608,14 +21624,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-update-value-and-select-item",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-update-value-and-select-item",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21632,17 +21647,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/tui/KeybindingsContextTest.cpp",
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-update-value-and-select-item"
   },
   {
    "id": "SettingItem.label",
@@ -21658,14 +21674,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21682,17 +21697,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/tui/KeybindingsContextTest.cpp",
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingItem.description",
@@ -21708,14 +21724,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21732,17 +21747,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/tui/KeybindingsContextTest.cpp",
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingItem.currentValue",
@@ -21758,14 +21774,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21782,17 +21797,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/tui/KeybindingsContextTest.cpp",
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingItem.values",
@@ -21808,14 +21824,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21832,17 +21847,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/tui/KeybindingsContextTest.cpp",
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingItem.submenu",
@@ -21858,14 +21874,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-submenu-navigation-and-lifecycle",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-submenu-navigation-and-lifecycle",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21882,17 +21897,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/tui/KeybindingsContextTest.cpp",
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-submenu-navigation-and-lifecycle"
   },
   {
    "id": "SettingItem.done",
@@ -21908,14 +21924,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-submenu-navigation-and-lifecycle",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-submenu-navigation-and-lifecycle",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -21932,17 +21947,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/tui/KeybindingsContextTest.cpp",
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-submenu-navigation-and-lifecycle"
   },
   {
    "id": "SettingsList",
@@ -21958,14 +21974,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -22007,17 +22022,18 @@
    ],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingsList.items",
@@ -22033,14 +22049,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22057,17 +22072,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingsList.filteredItems",
@@ -22083,14 +22099,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-search-filtering-and-input",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-search-filtering-and-input",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22107,17 +22122,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-search-filtering-and-input"
   },
   {
    "id": "SettingsList.theme",
@@ -22133,14 +22149,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22157,17 +22172,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingsList.mousePressedIndex",
@@ -22183,14 +22199,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-press-selects-and-click-activates",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/mouse-components.json",
+    "scenario": "settings-list-press-selects-and-click-activates",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22207,17 +22222,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/MouseComponentsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-press-selects-and-click-activates"
   },
   {
    "id": "SettingsList.maxVisible",
@@ -22233,14 +22249,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-centered-five-row-window",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-centered-five-row-window",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22257,17 +22272,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-centered-five-row-window"
   },
   {
    "id": "SettingsList.onChange",
@@ -22283,14 +22299,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22307,17 +22322,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingsList.onCancel",
@@ -22333,14 +22349,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22357,17 +22372,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingsList.searchInput",
@@ -22383,14 +22399,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-search-filtering-and-input",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-search-filtering-and-input",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22407,17 +22422,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-search-filtering-and-input"
   },
   {
    "id": "SettingsList.searchEnabled",
@@ -22433,14 +22449,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-search-filtering-and-input",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-search-filtering-and-input",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22457,17 +22472,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-search-filtering-and-input"
   },
   {
    "id": "SettingsList.submenuItemIndex",
@@ -22483,14 +22499,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-submenu-navigation-and-lifecycle",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-submenu-navigation-and-lifecycle",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22507,17 +22522,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-submenu-navigation-and-lifecycle"
   },
   {
    "id": "SettingsList.navigateAfterClose",
@@ -22533,14 +22549,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-submenu-navigation-and-lifecycle",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-submenu-navigation-and-lifecycle",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22557,17 +22572,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-submenu-navigation-and-lifecycle"
   },
   {
    "id": "SettingsList.constructor",
@@ -22583,14 +22599,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22607,17 +22622,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingsList.invalidate",
@@ -22633,14 +22649,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-update-value-and-select-item",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-update-value-and-select-item",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22657,17 +22672,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-update-value-and-select-item"
   },
   {
    "id": "SettingsList.render",
@@ -22683,14 +22699,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22707,17 +22722,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingsList.renderMainList",
@@ -22733,14 +22749,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22757,17 +22772,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingsList.handleMouse",
@@ -22783,14 +22799,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-wheel-hover-and-scrolled-rows",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/mouse-components.json",
+    "scenario": "settings-list-wheel-hover-and-scrolled-rows",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22807,17 +22822,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/MouseComponentsTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-wheel-hover-and-scrolled-rows"
   },
   {
    "id": "SettingsList.handleInput",
@@ -22833,14 +22849,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22857,17 +22872,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingsList.getDisplayItems",
@@ -22883,14 +22899,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-search-filtering-and-input",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-search-filtering-and-input",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22907,17 +22922,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-search-filtering-and-input"
   },
   {
    "id": "SettingsList.getVisibleRange",
@@ -22933,14 +22949,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-centered-five-row-window",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-centered-five-row-window",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -22957,17 +22972,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-centered-five-row-window"
   },
   {
    "id": "SettingsList.activateItem",
@@ -22983,14 +22999,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -23007,17 +23022,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingsList.closeSubmenu",
@@ -23033,14 +23049,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-submenu-navigation-and-lifecycle",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-submenu-navigation-and-lifecycle",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -23057,17 +23072,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-submenu-navigation-and-lifecycle"
   },
   {
    "id": "SettingsList.applyFilter",
@@ -23083,14 +23099,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-search-filtering-and-input",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-search-filtering-and-input",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -23107,17 +23122,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-search-filtering-and-input"
   },
   {
    "id": "SettingsList.addHintLine",
@@ -23133,14 +23149,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -23157,17 +23172,18 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
      "tests/architecture/PublicHeaderBoundaryTest.cpp",
      "tests/coding_agent/tui/SettingsSelectorTest.cpp",
-     "tests/tui/KeybindingsContextTest.cpp"
+     "tests/tui/KeybindingsContextTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingsListTheme",
@@ -23183,14 +23199,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -23214,15 +23229,16 @@
    ],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingsListTheme.label",
@@ -23238,14 +23254,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -23262,15 +23277,16 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingsListTheme.value",
@@ -23286,14 +23302,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -23310,15 +23325,16 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingsListTheme.description",
@@ -23334,14 +23350,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -23358,15 +23373,16 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "SettingsListTheme.cursor",
@@ -23382,14 +23398,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-cycling-and-selection",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-cycling-and-selection",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -23406,15 +23421,16 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-cycling-and-selection"
   },
   {
    "id": "SettingsListTheme.hint",
@@ -23430,14 +23446,13 @@
    "consumer": "settings UI",
    "boundary": "SettingsList submenu/selection",
    "implementation_ticket": null,
-   "scenario": "E07 SettingsList",
+   "scenario": "settings-list-description-and-hint",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E07 SettingsList",
-    "result": "historical pi-v1.0.4 evidence family; no dedicated v1.3.0 observation for this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "unchanged-frozen-source"
+    "artifact": "fixtures/pi-v1.3.0/audit-1219/settings-list.json",
+    "scenario": "settings-list-description-and-hint",
+    "result": "frozen pi-v1.3.0 observation recaptured by #1219",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded"
@@ -23454,15 +23469,16 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": false,
-   "comparisonRoute": "unchanged-frozen-source",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "SettingsList submenu/selection",
     "consumer": "settings UI",
     "tests": [
-     "tests/tui/MouseComponentsTest.cpp"
+     "tests/tui/MouseComponentsTest.cpp",
+     "tests/tui/SettingsListTest.cpp"
     ]
    },
-   "comparisonCase": "E07 SettingsList"
+   "comparisonCase": "settings-list-description-and-hint"
   },
   {
    "id": "Spacer",

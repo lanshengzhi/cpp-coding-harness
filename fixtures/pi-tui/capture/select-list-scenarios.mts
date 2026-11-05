@@ -23,7 +23,7 @@ export async function captureSelectList(piCheckout: string) {
 		};
 	};
 	const sourceEndpoints = [
-		"packages/tui/src/components/select-list.ts:constructor,render,handleInput,getSelectedItem,setFilter,setSelectedIndex",
+		"packages/tui/src/components/select-list.ts:constructor,render,handleInput,getSelectedItem,setFilter,setSelectedIndex,getPrimaryColumnBounds,getPrimaryColumnWidth,truncatePrimary,renderItem,getDisplayValue",
 		"packages/tui/src/keybindings.ts:getKeybindings",
 		"packages/tui/src/utils.ts:visibleWidth,truncateToWidth",
 	];
@@ -157,6 +157,40 @@ export async function captureSelectList(piCheckout: string) {
 		return observe(normalizedDescriptionList, 80);
 	});
 
+	const customTruncateCalls: any[] = [];
+	const customLayout = {
+		minPrimaryColumnWidth: 15,
+		maxPrimaryColumnWidth: 25,
+		truncatePrimary: (context: any) => {
+			customTruncateCalls.push({
+				text: context.text,
+				maxWidth: context.maxWidth,
+				columnWidth: context.columnWidth,
+				itemValue: context.item.value,
+				isSelected: context.isSelected,
+			});
+			return `[${context.text}]`;
+		},
+	};
+	const customList = new SelectList(
+		[
+			{ value: "short", label: "Short", description: "Short description" },
+			{ value: "medium-length", label: "Medium Length", description: "Medium description" },
+			{
+				value: "long-item-exceeding-columns",
+				label: "Very Long Item Label Exceeding Maximum Primary Column Width",
+				description: "Long description",
+			},
+		],
+		5,
+		theme,
+		customLayout,
+	);
+	const customObservations = [40, 50, 80].map((width) => ({
+		width,
+		...observe(customList, width),
+	}));
+
 	return {
 		sourceEndpoints,
 		scenarios: [
@@ -201,6 +235,18 @@ export async function captureSelectList(piCheckout: string) {
 				dimensions: { columns: 24, rows: 3 },
 				inputs: { keys: bubbleInputs },
 				expected: { observations: bubbling },
+			},
+			{
+				name: "select-list-primary-column-layout-and-custom-truncation",
+				dimensions: { columns: 80, rows: 5 },
+				inputs: {
+					layout: { minPrimaryColumnWidth: 15, maxPrimaryColumnWidth: 25 },
+					widths: [40, 50, 80],
+				},
+				expected: {
+					observations: customObservations,
+					truncateCalls: customTruncateCalls,
+				},
 			},
 		],
 	};
