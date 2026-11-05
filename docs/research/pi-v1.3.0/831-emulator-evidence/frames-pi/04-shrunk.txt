@@ -1,0 +1,30 @@
+ /home/lansy/Work/github/coding-agent/pi/packages
+ /coding-agent/docs/providers.md
+
+ /home/lansy/Work/github/coding-agent/pi/packages
+ /coding-agent/docs/models.md
+
+ Warning: tmux extended-keys is off. Modified
+ Enter keys may not work. Add `set -g
+ extended-keys on` to ~/.tmux.conf and restart
+ tmux.
+
+──────────────────────────────────────────────────
+ Update Available
+ New version 1.5.0 is available. Run pi update
+ Changelog: https://pi.dev/changelog
+──────────────────────────────────────────────────
+
+──────────────────────────────────────────────────
+/paste line 1
+paste line 2
+paste line 3
+paste line 4
+paste line 5
+paste line 6
+paste line 7
+paste line 8
+
+──────────────────────────────────────────────────
+/tmp/pike831.iQzv4d/ws
+0.0%/0 (auto)                              unknown

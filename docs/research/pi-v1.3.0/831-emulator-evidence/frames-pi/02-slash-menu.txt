@@ -1,0 +1,30 @@
+ into a provider via OAuth or API key. See:
+
+ /home/lansy/Work/github/coding-agent/pi/packages
+ /coding-agent/docs/providers.md
+
+ /home/lansy/Work/github/coding-agent/pi/packages
+ /coding-agent/docs/models.md
+
+ Warning: tmux extended-keys is off. Modified
+ Enter keys may not work. Add `set -g
+ extended-keys on` to ~/.tmux.conf and restart
+ tmux.
+
+──────────────────────────────────────────────────
+ Update Available
+ New version 1.5.0 is available. Run pi update
+ Changelog: https://pi.dev/changelog
+──────────────────────────────────────────────────
+
+──────────────────────────────────────────────────
+/
+──────────────────────────────────────────────────
+→ settings       Open settings menu
+  model          <provider/model> — Select model
+  tree           Navigate session tree (switch b
+  thinking       <level> — Set thinking level
+  scoped-models  Enable/disable models for Ctrl+
+  (1/26)
+/tmp/pike831.iQzv4d/ws
+0.0%/0 (auto)                              unknown

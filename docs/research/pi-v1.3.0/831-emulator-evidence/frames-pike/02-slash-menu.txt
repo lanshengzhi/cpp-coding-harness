@@ -1,0 +1,30 @@
+ escape interrupt · ctrl+c/ctrl+d clear/exit · /
+ commands · ! bash · ctrl+o more
+ Press ctrl+o to show full startup help and
+ loaded resources.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+──────────────────────────────────────────────────
+/
+──────────────────────────────────────────────────
+→ clear
+  commands
+  compact        Manually compact the session co
+  copy           Copy last agent message to clip
+  exit           Quit pike
+  (1/25)
+/tmp/pike831.7aCGSb/ws
+0.0%/1.0M (auto)       auto/glm-5.3-flash • medium

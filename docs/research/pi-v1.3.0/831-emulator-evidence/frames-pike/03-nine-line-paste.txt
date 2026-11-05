@@ -1,0 +1,30 @@
+ escape interrupt · ctrl+c/ctrl+d clear/exit · /
+ commands · ! bash · ctrl+o more
+ Press ctrl+o to show full startup help and
+ loaded resources.
+
+
+
+
+
+
+
+
+
+
+
+
+
+──────────────────────────────────────────────────
+/paste line 1
+paste line 2
+paste line 3
+paste line 4
+paste line 5
+paste line 6
+paste line 7
+paste line 8
+paste line 9
+──────────────────────────────────────────────────
+/tmp/pike831.7aCGSb/ws
+0.0%/1.0M (auto)       auto/glm-5.3-flash • medium
