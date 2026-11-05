@@ -5,7 +5,7 @@ Experimental C++23 coding-agent runtime with strict Owner packages and safety bo
 ## Start gate
 
 1. Inspect `git status --short`. User owns pre-existing modified or untracked files; preserve unrelated work.
-2. Fetch named issue or PRD (`gh issue view <n> --comments`); read only the task's context below.
+2. Fetch named issue or PRD (`gh issue view <n>`; comments via `gh issue comments <n>` — note `gh issue view --comments` silently prints nothing on zero-comment issues in gh 2.102.1); read only the task's context below.
 3. Stop exploring once behavior, authoritative seam, constraints, and validation path are named.
 4. Settle technical directions only after the smallest probe measures cost.
 
