@@ -1,0 +1,45 @@
+# Ops: lane scheduling and concurrency rules
+
+Status as of 2026-11-05. Rules the chief of staff follows when dispatching subagent lanes for pi alignment work, and the incident record that motivated them. Complements [conventions](conventions.md); sources cited, never copied.
+
+## Lane types
+
+- **Code/evidence lane**: touches `src/`, `tests/`, `build/`, `docs/research/pi-v1.3.0/`, the ledger/deliveries/frontier/baselines files, or `consolidate_audits.py`. Requires the main checkout exclusively.
+- **Light task**: GitHub operations (`gh`), `docs/wiki/` edits, or read-only research. Parallel-safe with anything.
+
+## Rules
+
+1. **One code lane at a time in the main checkout.** The serial-merger contract (#1187) means every lane's endpoint is the same ledger; end states must be produced serially. Queued lanes start only after the previous lane's handoff.
+2. **Handoff protocol.** A lane is complete only when: full gate green + pushed to origin main + report delivered. The next lane starts from the new HEAD.
+3. **Parallel whitelist.** Only light tasks may run alongside a code lane. Two code lanes never overlap, in any sessions (the AGENTS.md concurrency section carries the same rule to other pi sessions).
+4. **Push per milestone** (owner rule, 2026-11-05): each completed lane pushes immediately; commits are never batched locally.
+
+## Procedure adaptations
+
+- **Governance skill**: this project uses `$implement` (one ticket per session; commit to the current branch), not `implement-spec`. Reason recorded 2026-11-05: the serial-merger contract (#1187) requires lane end states to be produced serially into the shared ledger, which `implement-spec`'s worktree-per-ticket concurrency cannot satisfy without the split-lane delivery rework (#1208 direction). `implement`'s lighter contract matches the lane model exactly.
+- **No bespoke lane skill**: a custom `pi-alignment-lane` skill was drafted on 2026-11-05 but the owner revoked it the same day — dispatch prompts reference the installed mattpocock skills (`implement`, `tdd`, `code-review`) plus repo docs (this page, the consolidation-1058 README, validation.md, AGENTS.md's 并发约束). The lane contract in brief: one ticket per session; lane-lock acquire/release; frozen capture before behavior change; delivery only through the consolidation contract; exit gate green + push + disposition comment.
+- **Lane sizing**: one ticket per lane/session (owner rule, 2026-11-05, after two multi-ticket lanes were cut off mid-delivery); the prompt carries only ticket identity and task-specific stop conditions/reuse hints.
+- **Dispatch form**: the task is exactly two parts — the inlined `implement` skill body (the exact product of pi's `/skill:` expansion; T3's delegate wrapper prefix breaks `/skill:` at task start, verified 2026-11-05) and one line `Ticket: #NNNN`. No other prose: AGENTS.md auto-loads repo rules (locks, push-per-lane, gh workarounds), and durable context lives in the ticket body/comments. The chief of staff verifies push and lock release at completion instead of repeating instructions.
+
+## Lane exit checklist
+
+Hard conditions, checked by the chief of staff on every lane report: full gate green (consolidate check, evidence suites, `receipt_boundary.py` exit 0, `audit_evidence verify`, format-check, `git diff --check`); full `ctest --preset vcpkg` run once; `code-review` skill run over the lane's commit range with findings fixed or recorded; pushed to origin main; lane lock released; every assigned issue has a disposition comment.
+
+## Incident record
+
+- **2026-11-05, collision**: the chief of staff dispatched two code lanes (codemode #1192–#1196 and durable symlink parity) into the same checkout in parallel. The lanes' source paths were disjoint, but the shared resources — the `build/` ninja tree, the read-modify-write evidence pipeline (`1058-deliveries.json`, ledger, frontier, `baselines.json`), and `testedRevision` pinning semantics — made interleaving unsafe (last-writer-wins on delivery records; ledger no longer describing one coherent tree). Detected on user question; the second lane was cancelled before committing (it left no residue; its work was later redone serially as ADR 0076 + commit 942d178be).
+- **Rule change same day**: owner approved the three-layer mitigation (dispatch discipline; this page plus an AGENTS.md concurrency section; a `lane-lock` tool with fail-closed integration into the build/ledger entry points). Track implementation in [evidence history](evidence-and-delivery-history.md).
+- **2026-11-05, lane-lock delivered**: `scripts/dev/lane-lock.sh` (POSIX sh, git-only; atomic `acquire`/`release`/`status` on repo-root `.lane-lock.json`; 4-hour staleness with takeover; fail-closed release; `taskId` from `CCH_LANE_TASK_ID`), fail-closed integration into `consolidate_audits.py build`/`check` (a foreign lock refuses; the caller proves its lane with `CCH_LANE_NAME`, and only the owning lane sets `CCH_LANE_LOCK_SKIP=1`; the 13 receipts pinning the tool carry a `revalidationLaneLock` entry), behavioral regressions in `tests/dev/LaneLockTest.py`, and the AGENTS.md 并发约束 section. Commit `9603e2354213071f7853bc44a7d3fa084bc7a1a5`.
+- **2026-11-05, lane-lock takeover hardened (#1228)**: the retro-review blocker fixed the stale-takeover TOCTOU race — the takeover is now a mkdir compare-and-swap on a `.lane-lock.json.takeover` claim directory (winner re-validates staleness inside its claim; a leaked claim older than 60s is cleared and retried) instead of a non-atomic check-then-delete that let two contenders racing a stale lock both unlink-and-recreate it. `tests/dev/LaneLockTest.py` gains the deterministic two-contender race regression (scripted participants, rm-park interlock, SIGSTOP) plus claim-lifecycle cases (16 cases total); the 13 receipts pinning the tool additionally carry a `revalidation1228` entry.
+- **2026-11-05, lane-lock bypass and JSON injection closed (#1233)**: the retro-review major fixed two holes in the `9603e2354` mitigation — `consolidate_audits.py` returned before reading `.lane-lock.json` when `CCH_LANE_LOCK_SKIP=1` was set, so any process could bypass the build/check gate from a foreign lane, and `lane-lock.sh` interpolated `CCH_LANE_AGENT`/`CCH_LANE_TASK_ID` into the machine-written lock JSON with no whitelist, so a quote-bearing value could corrupt the lock or inject a fake `"lane"` field. The gate now reads the lock first: the skip proceeds only from the named holding lane (`CCH_LANE_NAME` match) or from an unreadable lock (the documented escape hatch, since no holder can be identified), and the tool refuses identity values outside `[A-Za-z0-9._:@#-]` outright — fail closed like an invalid lane name, never escaped or silently rewritten. `tests/dev/LaneLockTest.py` is at 21 cases (+5: foreign-skip refusal, unreadable-lock skip and refusal, agent/taskId whitelist accept and refusal); the 13 receipts pinning the tool carry a `revalidation1233` entry with the drifted `consolidate_audits.py` digest rebound.
+
+## Owner checkpoints
+
+- **2026-11-05, TUI gate**: the owner ordered a pause after the bugfix lane (#1035/#831/#1167) completes. The chief of staff must report and wait for explicit confirmation before dispatching the TUI batch waves (#1209–#1225). Lifted same day ("继续"), TUI waves dispatched as lanes of 5/5/4/3.
+- **2026-11-05, retro code-review**: owed over the pushed v1.3.0 range (`6ca7b49..HEAD`) before #1126 acceptance, to cover the review steps skipped by earlier lanes; scheduled as a standalone lane after TUI-1. Completed 2026-11-05 across R1–R3 sub-ranges (4 blockers #1226–#1229, 5 majors #1230–#1234, minor rollup #1235; summary on #1126).
+
+## Future: parallel lanes
+
+Parallel code lanes become viable only after the delivery system supports split-lane delivery files with mechanical merge (the direction of #1208), plus per-worktree locks and a global merge-window lock. Until then, sequential lanes are the shortest total-time path. See the worktree analysis in the 2026-11-05 session record.
+
+Related: [index](index.md), [goals](goals.md), [conventions](conventions.md).
