@@ -232,7 +232,7 @@
      "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 36,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml",
@@ -730,7 +730,7 @@
       "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 36,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1213.xml",
@@ -759,7 +759,7 @@
      "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 36,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml",
@@ -1443,7 +1443,7 @@
       "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 36,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1213.xml",
@@ -1739,7 +1739,7 @@
      "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 19,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml",
@@ -2336,7 +2336,7 @@
       "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 19,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1213.xml",
@@ -3597,7 +3597,7 @@
      "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 16,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml",
@@ -4186,7 +4186,7 @@
       "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 16,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1213.xml",
@@ -4894,7 +4894,7 @@
      "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 89,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml",
@@ -5348,7 +5348,7 @@
       "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 89,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1213.xml",
@@ -5376,7 +5376,7 @@
      "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 89,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml",
@@ -5797,7 +5797,7 @@
       "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 89,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1213.xml",
@@ -6004,7 +6004,7 @@
      "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 13,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml",
@@ -6520,9 +6520,7 @@
    "revalidation1213": {
     "reason": "The TUI route-batch lane registered five frozen families (audit-1209, audit-1210, audit-1211, audit-1212, audit-1213) in fixtures/pi-v1.3.0/baselines.json; this receipt pins the registry, so the exact selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
     "changedInputs": [
-     "fixtures/pi-v1.3.0/baselines.json",
-     "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
-     "docs/research/pi-v1.3.0/1182-tui-route-batches.json"
+     "fixtures/pi-v1.3.0/baselines.json"
     ],
     "previousValidation": {
      "command": [
@@ -6535,7 +6533,7 @@
       "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 13,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1213.xml",
@@ -7686,7 +7684,7 @@
      "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 52,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml",
@@ -7878,7 +7876,7 @@
       "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 52,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1213.xml",
@@ -7991,7 +7989,7 @@
      "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 5,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml",
@@ -8211,7 +8209,7 @@
       "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 5,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1213.xml",
@@ -8340,7 +8338,7 @@
      "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 9,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml",
@@ -8595,7 +8593,7 @@
       "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 9,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1213.xml",
@@ -9023,7 +9021,7 @@
      "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 8,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml",
@@ -9605,7 +9603,7 @@
       "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 8,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1213.xml",
@@ -9690,7 +9688,7 @@
      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 3,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml",
@@ -9768,7 +9766,7 @@
       "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml"
      ],
      "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-     "recordedAt": "2026-11-05T11:42:33Z",
+     "recordedAt": "2026-11-05T12:40:44Z",
      "selected": 3,
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1213.xml",
@@ -9781,9 +9779,9 @@
    "id": "1213-mouse-wheel-routing",
    "ticket": "1213",
    "implementationCommits": [
-    "bf8e9c304bff398cb76b501016131bcd063b9e6f",
     "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e",
+    "2275b80fd4ed26c405c56e7d3c33f3205b423acb"
    ],
    "report": "docs/research/pi-v1.3.0/1213-mouse-wheel-routing.md",
    "inputs": [
@@ -9801,7 +9799,7 @@
     },
     {
      "path": "tests/tui/AltScreenSearchTest.cpp",
-     "sha256": "3a78f0fe73a24dc16974ad6ef976d90a80f735ff7504bdb31b25cce751e21a8b"
+     "sha256": "cdeeab300f9abd34f5c8bc2d16abb07a8a44508ac55a98fad6263e84679e1587"
     },
     {
      "path": "tests/tui/MouseEvidenceTest.cpp",
@@ -9857,11 +9855,11 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1213.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 15,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1213.xml",
-     "sha256": "d3b9ed57eefcba03d9585174401dda468ac343ab93b451ca616434a4ab5b6c57"
+     "sha256": "056ef9bba23303b4662dea33645727f35d252ca21fca9e63acbcb370dde9abb9"
     }
    },
    "rows": [
@@ -10229,9 +10227,9 @@
    "id": "1212-transcript-selection",
    "ticket": "1212",
    "implementationCommits": [
-    "bf8e9c304bff398cb76b501016131bcd063b9e6f",
     "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e",
+    "2275b80fd4ed26c405c56e7d3c33f3205b423acb"
    ],
    "report": "docs/research/pi-v1.3.0/1212-transcript-selection.md",
    "inputs": [
@@ -10253,7 +10251,7 @@
     },
     {
      "path": "tests/tui/AltScreenTest.cpp",
-     "sha256": "8f9f9c6b266cbff794e799f134301bc2f90d13e1b9d12110174dbe39c35ba6b7"
+     "sha256": "90fcc7d01036cdc242b642eb3619601c768b86012ba2e1ea8a04e8774331ea72"
     },
     {
      "path": "tests/tui/MouseComponentsTest.cpp",
@@ -10321,11 +10319,11 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1212.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 28,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1212.xml",
-     "sha256": "7ff21a03dddb5c0b2ef14dd01727bde34d2c717518d701391027f275f58f9762"
+     "sha256": "af56f02af00a4f2501932ad408cfddde2a7d1789576acaf9df09633d3ae4fa11"
     }
    },
    "rows": [
@@ -10999,9 +10997,9 @@
    "id": "1211-alt-screen-viewport",
    "ticket": "1211",
    "implementationCommits": [
-    "bf8e9c304bff398cb76b501016131bcd063b9e6f",
     "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e",
+    "2275b80fd4ed26c405c56e7d3c33f3205b423acb"
    ],
    "report": "docs/research/pi-v1.3.0/1211-alt-screen-viewport.md",
    "inputs": [
@@ -11023,11 +11021,11 @@
     },
     {
      "path": "tests/tui/AltScreenSearchTest.cpp",
-     "sha256": "3a78f0fe73a24dc16974ad6ef976d90a80f735ff7504bdb31b25cce751e21a8b"
+     "sha256": "cdeeab300f9abd34f5c8bc2d16abb07a8a44508ac55a98fad6263e84679e1587"
     },
     {
      "path": "tests/tui/AltScreenTest.cpp",
-     "sha256": "8f9f9c6b266cbff794e799f134301bc2f90d13e1b9d12110174dbe39c35ba6b7"
+     "sha256": "90fcc7d01036cdc242b642eb3619601c768b86012ba2e1ea8a04e8774331ea72"
     },
     {
      "path": "tests/tui/AltScreenViewportTest.cpp",
@@ -11115,11 +11113,11 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1211.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 34,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1211.xml",
-     "sha256": "2dcfcdef68159aa8415e453007c84bb7e1100c0883794a81c98914512ef81284"
+     "sha256": "6c3a1bce158b5ad4b25bccf6c0a87e5409cc7507843a8dd2fbc8b036d67ed2e8"
     }
    },
    "rows": [
@@ -12099,9 +12097,9 @@
    "id": "1210-regular-renderer",
    "ticket": "1210",
    "implementationCommits": [
-    "bf8e9c304bff398cb76b501016131bcd063b9e6f",
     "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e",
+    "2275b80fd4ed26c405c56e7d3c33f3205b423acb"
    ],
    "report": "docs/research/pi-v1.3.0/1210-regular-renderer.md",
    "inputs": [
@@ -12175,7 +12173,7 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1210.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 10,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1210.xml",
@@ -12445,9 +12443,9 @@
    "id": "1209-root-tui-lifecycle",
    "ticket": "1209",
    "implementationCommits": [
-    "bf8e9c304bff398cb76b501016131bcd063b9e6f",
     "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "b825fcbeab2d47211daa8828e46d078e6cf1de6e"
+    "b825fcbeab2d47211daa8828e46d078e6cf1de6e",
+    "2275b80fd4ed26c405c56e7d3c33f3205b423acb"
    ],
    "report": "docs/research/pi-v1.3.0/1209-root-tui-lifecycle.md",
    "inputs": [
@@ -12501,7 +12499,7 @@
     },
     {
      "path": "tests/tui/TuiTest.cpp",
-     "sha256": "d804db32f3da6f51fae3bcf5ca4d4da765e5594e77dda7f417a902994e86276d"
+     "sha256": "9cd75a58c368505253b9d4271536c94dd8195a76a50caa8ad9cbb4a907ef753a"
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
@@ -12565,11 +12563,11 @@
      "docs/research/pi-v1.3.0/deliveries/1213-issue1209.xml"
     ],
     "testedRevision": "cace872ea8c25fbb49450766fa114e6e467174d1",
-    "recordedAt": "2026-11-05T11:57:26Z",
+    "recordedAt": "2026-11-05T12:41:32Z",
     "selected": 30,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1213-issue1209.xml",
-     "sha256": "4e6bc7d2bace2dd44bc298a2b7a3340349f4ce869c9b4e793978fd4139a2c4bc"
+     "sha256": "141f019e1cff558f5f44924d8490bba818f97cf40960c55c5240a471986e9692"
     }
    },
    "rows": [

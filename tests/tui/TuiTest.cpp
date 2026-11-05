@@ -1477,18 +1477,6 @@ namespace {
 /// The frozen write log's `write` entries only, in order: callback records
 /// interleave in the artifact to prove ordering, but the terminal bytes are
 /// what the C++ terminal records.
-[[nodiscard]] std::vector<std::string> root_frozen_writes(const cch::support::JsonValue& log) {
-    std::vector<std::string> writes;
-    for (const auto& entry : log.get_array()) {
-        if (entry.at("source").get_string() == "write")
-            writes.push_back(entry.at("data").get_string());
-    }
-    return writes;
-}
-
-/// The terminal byte stream with write chunking removed: pi emits a
-/// synchronized frame as one write while the C++ pipeline may split it; the
-/// contractual content is the byte sequence.
 [[nodiscard]] std::string root_joined_output(const cch::tui::VirtualTerminal& terminal) {
     std::string output;
     for (const auto& chunk : terminal.output())
@@ -1874,6 +1862,10 @@ TEST_CASE("pi-v1.3.0 terminal color query replays the frozen late-reply delivery
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.start());
     std::vector<cch::tui::TerminalColors> late;
+    // Lifetime contract (CODING_STANDARDS §7.5): the sink captures `late` by
+    // reference and outlives the query; the test joins the query future and
+    // injects the late replies before `late` leaves scope, so the callback
+    // cannot run after its target dies.
     auto future = tui.query_terminal_colors(cch::tui::TerminalColorsQueryOptions{
             .timeout = std::chrono::milliseconds{40},
             .on_late_reply = [&late](cch::tui::TerminalColors colors) { late.push_back(std::move(colors)); },

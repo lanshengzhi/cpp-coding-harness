@@ -210,8 +210,10 @@ TEST_CASE("pi-v1.3.0 fullscreen search index reuses cached matches until its inp
     check_fullscreen_search_index_reuses_cached_matches_until_its_inpu(*bundle);
 }
 
-
-void check_fullscreen_search_renders_input_before_applying_truncated_re(const JsonValue&) {
+// The frozen bundles carry no per-scenario input for this component-level
+// render contract, so the helper takes no bundle; the v1.3.0 case below still
+// pins the audit-1211 artifact by loading it.
+void check_fullscreen_search_renders_input_before_applying_truncated_re() {
     const auto registry = cch::tests::fullscreen_registry();
     cch::tui::AltScreenSearchComponent component([](std::string) {}, *registry);
     for (const char value : std::string{"abcdefghij"}) {
@@ -232,13 +234,13 @@ TEST_CASE("fullscreen search renders input before applying truncated result widt
         "[tui][alt-screen-search][issue1010]") {
     const auto bundle = search_evidence();
     REQUIRE(bundle);
-    check_fullscreen_search_renders_input_before_applying_truncated_re(*bundle);
+    check_fullscreen_search_renders_input_before_applying_truncated_re();
 }
 
 TEST_CASE("pi-v1.3.0 fullscreen search renders input before applying truncated result width", "[tui][alt-screen-search][issue1211][compat-pi]") {
     const auto bundle = audit1211_search_bundle();
     REQUIRE(bundle);
-    check_fullscreen_search_renders_input_before_applying_truncated_re(*bundle);
+    check_fullscreen_search_renders_input_before_applying_truncated_re();
 }
 
 

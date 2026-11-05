@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -1282,6 +1283,17 @@ void check_selection_reset_scenario(const cch::support::JsonValue& bundle, std::
     REQUIRE(tui.render());
 
     std::size_t clicks = 0;
+    const auto coordinate = [](const std::string& text, std::size_t begin, std::size_t end) {
+        while (end > begin && text[end - 1] == ' ')
+            --end; // frozen spellings pad before "->"
+        while (begin < end && text[begin] == ' ')
+            ++begin; // and after it
+        std::ptrdiff_t value = 0;
+        const auto parsed = std::from_chars(text.data() + begin, text.data() + end, value);
+        REQUIRE(parsed.ec == std::errc{});
+        REQUIRE(parsed.ptr == text.data() + end);
+        return value;
+    };
     const auto click_at = [&](std::ptrdiff_t x, std::ptrdiff_t y) {
         REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";" + std::to_string(y) + "M"));
         REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";" + std::to_string(y) + "m"));
@@ -1294,15 +1306,15 @@ void check_selection_reset_scenario(const cch::support::JsonValue& bundle, std::
             // window and repeats within it (600 ms then 150 ms).
             now += std::chrono::milliseconds{clicks == 0 ? 600 : 150};
             ++clicks;
-            const auto x = std::stoll(command.substr(6, command.find(",") - 6));
-            const auto y = std::stoll(command.substr(command.find(",") + 1, command.find(")") - command.find(",") - 1));
+            const auto x = coordinate(command, 6, command.find(","));
+            const auto y = coordinate(command, command.find(",") + 1, command.find(")"));
             click_at(x, y);
             REQUIRE(tui.render());
             phases.push_back(tui.selection_text_trace().value_or("<no selection>"));
         } else if (command.starts_with("press(")) {
             now += std::chrono::milliseconds{150};
-            const auto x = std::stoll(command.substr(6, command.find(",") - 6));
-            const auto y = std::stoll(command.substr(command.find(",") + 1, command.find(")") - command.find(",") - 1));
+            const auto x = coordinate(command, 6, command.find(","));
+            const auto y = coordinate(command, command.find(",") + 1, command.find(")"));
             REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";" + std::to_string(y) + "M"));
             REQUIRE(tui.render());
         } else if (command.starts_with("drag(")) {
@@ -1311,14 +1323,14 @@ void check_selection_reset_scenario(const cch::support::JsonValue& bundle, std::
             const auto arrow = command.find("->");
             std::string end = command;
             if (arrow != std::string::npos) {
-                const auto x1 = std::stoll(command.substr(5, command.find(",") - 5));
-                const auto y1 = std::stoll(command.substr(command.find(",") + 1, arrow - command.find(",") - 1));
+                const auto x1 = coordinate(command, 5, command.find(","));
+                const auto y1 = coordinate(command, command.find(",") + 1, arrow);
                 REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x1) + ";" + std::to_string(y1) + "M"));
                 end = command.substr(0, arrow - 1) + command.substr(command.find("->"));
                 end = "drag(" + command.substr(arrow + 2);
             }
-            const auto x2 = std::stoll(end.substr(5, end.find(",") - 5));
-            const auto y2 = std::stoll(end.substr(end.find(",") + 1, end.find(")") - end.find(",") - 1));
+            const auto x2 = coordinate(end, 5, end.find(","));
+            const auto y2 = coordinate(end, end.find(",") + 1, end.find(")"));
             REQUIRE(terminal.inject_input("\x1b[<32;" + std::to_string(x2) + ";" + std::to_string(y2) + "M"));
             REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x2) + ";" + std::to_string(y2) + "m"));
             REQUIRE(tui.render());
