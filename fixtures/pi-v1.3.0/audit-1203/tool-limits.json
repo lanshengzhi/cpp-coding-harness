@@ -2,7 +2,7 @@
   "schema": "pike/pi-v1.3.0-audit-evidence/1",
   "baseline": "pi-v1.3.0",
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
-  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "capturedAt": "2026-11-05T05:42:08.301Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -34,7 +34,7 @@
         "lastContentLine": "3000",
         "retainedLineCount": 2000,
         "diagnostics": [
-          "[info] Full output: /tmp/tmp-krANgt/pi-output-506cae82-22c3-44ea-ac26-a8b8ff9c1a0f.log",
+          "[info] Full output: /tmp/tmp-G7eScL/pi-output-8e4f34f4-4ef2-45dc-bc9b-e985d3055f71.log",
           "[warn] Output truncated to its end: 1000 lines, 3893 bytes dropped"
         ],
         "isError": false
@@ -48,7 +48,7 @@
         "lastContentLine": "3000",
         "retainedLineCount": 2000,
         "diagnostics": [
-          "[info] Full output: /tmp/tmp-krANgt/pi-output-506cae82-22c3-44ea-ac26-a8b8ff9c1a0f.log",
+          "[info] Full output: /tmp/tmp-G7eScL/pi-output-8e4f34f4-4ef2-45dc-bc9b-e985d3055f71.log",
           "[warn] Output truncated to its end: 1000 lines, 3893 bytes dropped"
         ],
         "isError": false

@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1203",
   "family": "audit-1203",
-  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "capturedAt": "2026-11-05T05:42:08.301Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -15,12 +15,12 @@
   },
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1203/capture-1203.mts",
-    "sha256": "284c6e44130481f9b2912461649c2309c394c1d5b68aaede703be9b79c769319",
+    "sha256": "b1cc288934f14b1220c585082367be146538e747549487f76397f1b22500fa6a",
     "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1203/capture-1203.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1203/capture-1203.mts",
-        "sha256": "284c6e44130481f9b2912461649c2309c394c1d5b68aaede703be9b79c769319"
+        "sha256": "b1cc288934f14b1220c585082367be146538e747549487f76397f1b22500fa6a"
       }
     ]
   },
@@ -29,7 +29,7 @@
       "path": "settings.json",
       "family": "audit-1203",
       "bytes": 3166,
-      "sha256": "c052f950e7a07e436f0a50e3e2d610d367d7812a7850642ef90a4f9c621447ec",
+      "sha256": "921b0574d6e04691e93f8b855736b02df0b8abd460e42fa9a156276747289715",
       "sourceEndpoints": [
         "packages/durable/src/harness/agent.ts:DEFAULT_RETRY_POLICY,DEFAULT_COMPACTION_POLICY,DEFAULT_PROGRESS_POLICY,resolveSettings"
       ],
@@ -136,7 +136,7 @@
       "path": "compaction.json",
       "family": "audit-1203",
       "bytes": 3107,
-      "sha256": "3d608354015e5345a4d9f74b961528fe7df14ade8f44cc06578a335da9f2ad4e",
+      "sha256": "ff89a13a0471ccc64b6e41fd7ce175bb0d3db66992293970dda1104696fa6059",
       "sourceEndpoints": [
         "packages/durable/src/harness/compaction.ts:CompactionTask,selectCut",
         "packages/durable/src/harness/generation.ts:GenerationTask",
@@ -241,8 +241,8 @@
     {
       "path": "ownership.json",
       "family": "audit-1203",
-      "bytes": 2144,
-      "sha256": "bc796e17f1e56b50f2b78cece4de3b76815da26368374510cdf50899600a6683",
+      "bytes": 2161,
+      "sha256": "073bbc3bbf7d57a2911195db276629a07080b99debf4f6b0248d25880fefa1a6",
       "sourceEndpoints": [
         "packages/durable/src/types.ts:TaskOptions.background,ConversationAbortOptions",
         "packages/durable/src/harness/scheduler.ts:TaskScheduler,#loadScopes,#walkDown,#settleIdle,waitForTask",
@@ -280,7 +280,7 @@
           "normalizations": []
         },
         {
-          "name": "an idle wait resolves with live background work and holds on a live foreground task",
+          "name": "an idle wait holds on a live foreground task while background work stays live at the v1.3.0 baseline",
           "inputs": {
             "tasks": [
               "background gated",
@@ -310,7 +310,7 @@
       "path": "tasks.json",
       "family": "audit-1203",
       "bytes": 4101,
-      "sha256": "46497be7a20c1bd43da248037b193f1cd0fb083b394269581c42b0347d5611de",
+      "sha256": "5b5d164f0ff2cb803693f4ffd515c10873e56f731388e900c2448bf12b7b4977",
       "sourceEndpoints": [
         "packages/durable/src/types.ts:TaskDefinition.hooks,TaskDefinition.migrate,TaskOutcome,TaskState,TaskRecord",
         "packages/durable/src/harness/define.ts:defineTask,hook",
@@ -455,7 +455,7 @@
       "path": "tool-search.json",
       "family": "audit-1203",
       "bytes": 2037,
-      "sha256": "391e5ea5a04f8b89887ce3e3405978454d3221a98a76f0e9eb954e0e684c6843",
+      "sha256": "5acf75831a178cc7f3c07651a5f3e63b1c02b08951209636af9d6d1ca0bf2ae4",
       "sourceEndpoints": [
         "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool,createToolSearchExtension",
         "packages/durable/src/harness/agent.ts:addTools",
@@ -522,7 +522,7 @@
       "path": "steering.json",
       "family": "audit-1203",
       "bytes": 3154,
-      "sha256": "a63d885a95e52d9b9bf5a53fd40ae3207ca3d278a239f61807c1d9c60c0b6a89",
+      "sha256": "748872220df8147c0bf301b68650aaa9de67c9ebe65e71eec97ce3c38b3fdb58",
       "sourceEndpoints": [
         "packages/durable/src/harness/inbox.ts:applyBoundary,prepareBoundary,InboxDoc",
         "packages/durable/src/harness/submissions.ts:Submissions",
@@ -635,7 +635,7 @@
       "path": "extensions.json",
       "family": "audit-1203",
       "bytes": 1494,
-      "sha256": "69fe655e2cebdc3721faba70c00048c0ef668a40109a62dbca67a3cc97247787",
+      "sha256": "e9d9c649dab685d8eb74590bc9504c4f4105a5cd0fc4c7b9144c193201a2e878",
       "sourceEndpoints": [
         "packages/durable/src/harness/types.ts:Extension,GenerationHooks,ToolHooks,HookApi",
         "packages/durable/src/harness/registry.ts:createRegistry",
@@ -681,7 +681,7 @@
       "path": "env-watch.json",
       "family": "audit-1203",
       "bytes": 1342,
-      "sha256": "893db1f1d0d554a76eb2751b6eb2eeaa8123475608b400ae8dc3848dbbbf048e",
+      "sha256": "e713e09e4ef8b51654b2920dae15fbd9b7e8eee58c537b1dedb67ea0def05c31",
       "sourceEndpoints": [
         "packages/durable/src/env/index.ts:ExecutionEnv.watch,WatchTarget,WatchChange",
         "packages/durable/src/env/node.ts:NodeExecutionEnv.watch"
@@ -725,7 +725,7 @@
       "path": "tool-limits.json",
       "family": "audit-1203",
       "bytes": 1862,
-      "sha256": "6c97684d817ecdb1e9df4e79ba801573b79b3213ec538b1adeca27f9d62dbe4b",
+      "sha256": "c601b742e491c68561dac3c99128bff73b1b2e0583ec8b3eb85e1eff1689a24c",
       "sourceEndpoints": [
         "packages/durable/src/tools/bash.ts:createBashTool,runCommand",
         "packages/durable/src/truncate.ts:DEFAULT_MAX_BYTES,DEFAULT_MAX_LINES"
@@ -749,7 +749,7 @@
             "lastContentLine": "3000",
             "retainedLineCount": 2000,
             "diagnostics": [
-              "[info] Full output: /tmp/tmp-krANgt/pi-output-506cae82-22c3-44ea-ac26-a8b8ff9c1a0f.log",
+              "[info] Full output: /tmp/tmp-G7eScL/pi-output-8e4f34f4-4ef2-45dc-bc9b-e985d3055f71.log",
               "[warn] Output truncated to its end: 1000 lines, 3893 bytes dropped"
             ],
             "isError": false
@@ -763,7 +763,7 @@
             "lastContentLine": "3000",
             "retainedLineCount": 2000,
             "diagnostics": [
-              "[info] Full output: /tmp/tmp-krANgt/pi-output-506cae82-22c3-44ea-ac26-a8b8ff9c1a0f.log",
+              "[info] Full output: /tmp/tmp-G7eScL/pi-output-8e4f34f4-4ef2-45dc-bc9b-e985d3055f71.log",
               "[warn] Output truncated to its end: 1000 lines, 3893 bytes dropped"
             ],
             "isError": false
@@ -778,7 +778,7 @@
       "path": "codemode.json",
       "family": "audit-1203",
       "bytes": 3772,
-      "sha256": "9273ef19e293cdabc808025a1eba25a2638fa12a622b6b39fb8f144ad47de0ca",
+      "sha256": "b5617a4786e540d9505da246b0a690d72cc2f2dec385d7bde957e4358abbe418",
       "sourceEndpoints": [
         "packages/durable/src/codemode/codemode.ts:createCodemodeTool,CodemodeRunDoc,CodemodeJournalDoc,OUTPUT_LIMITS",
         "packages/durable/src/codemode/models.ts:CATALOG_GLOBALS,MODEL_CALLS",
@@ -890,7 +890,7 @@
       "path": "tool-task.json",
       "family": "audit-1203",
       "bytes": 1170,
-      "sha256": "3a970cc0837a5a1831ae7a44289050aeb4904e503d10da07ac6b08d508602d10",
+      "sha256": "f0516e18aa5051908bdc2b3c97c35b6ca511c80fceb66a26f9840553617c8998",
       "sourceEndpoints": [
         "packages/durable/src/harness/tool.ts:ToolTask",
         "packages/durable/src/harness/scheduler.ts:abortConversation",

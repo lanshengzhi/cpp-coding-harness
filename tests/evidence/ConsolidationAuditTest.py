@@ -693,7 +693,7 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # 109 pre-#1192/1194 receipts plus codemode-execute-outcome, codemode-worker-close
         # (#1192), codemode-portable-entry (#1194) and the durable sidecar/ordering rows
         # (#1180-sidecar-symlink-parity).
-        self.assertEqual(len(delivered), 114)
+        self.assertEqual(len(delivered), 147)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)

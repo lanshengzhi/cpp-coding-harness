@@ -2,7 +2,7 @@
   "schema": "pike/pi-v1.3.0-audit-evidence/1",
   "baseline": "pi-v1.3.0",
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
-  "capturedAt": "2026-11-05T05:07:59.706Z",
+  "capturedAt": "2026-11-05T05:42:08.301Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -48,7 +48,7 @@
       "normalizations": []
     },
     {
-      "name": "an idle wait resolves with live background work and holds on a live foreground task",
+      "name": "an idle wait holds on a live foreground task while background work stays live at the v1.3.0 baseline",
       "inputs": {
         "tasks": [
           "background gated",

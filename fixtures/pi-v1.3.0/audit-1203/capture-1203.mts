@@ -477,7 +477,7 @@ const entryKinds = async (chat: ChatBundle) => (await allEntries(chat.root)).map
 		await idleWait;
 		scenarios.push(
 			scenario(
-				"an idle wait resolves with live background work and holds on a live foreground task",
+				"an idle wait holds on a live foreground task while background work stays live at the v1.3.0 baseline",
 				{ tasks: ["background gated", "foreground gated"], waits: ["waitForIdle"] },
 				{
 					idleWithBackground: idleWithBackground ?? "resolved",

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="8"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-05T14:35:39"
+	>
+	<testcase name="frozen audit-1201 OSC color replies replay through the C++ parser" classname="frozen audit-1201 OSC color replies replay through the C++ parser" time="0.201952" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1201;theme;tui"/>
+		</properties>
+		<system-out>Filters: "frozen audit-1201 OSC color replies replay through the C++ parser"
+Randomness seeded to: 682977318
+===============================================================================
+All tests passed (39 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen audit-1201 clipboard availability and unavailable outcomes replay in C++" classname="frozen audit-1201 clipboard availability and unavailable outcomes replay in C++" time="0.172449" status="run">
+		<properties>
+			<property name="cmake_labels" value="clipboard;issue1201;tui"/>
+		</properties>
+		<system-out>Filters: "frozen audit-1201 clipboard availability and unavailable outcomes replay in C++"
+Randomness seeded to: 582972113
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen audit-1201 palette assembly binds at sixteen replies through the C++ query" classname="frozen audit-1201 palette assembly binds at sixteen replies through the C++ query" time="0.1759" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1201;theme;tui"/>
+		</properties>
+		<system-out>Filters: "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query"
+Randomness seeded to: 3334875132
+===============================================================================
+All tests passed (69 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen audit-1201 scheme reports replay through the C++ parser" classname="frozen audit-1201 scheme reports replay through the C++ parser" time="0.170765" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1201;theme;tui"/>
+		</properties>
+		<system-out>Filters: "frozen audit-1201 scheme reports replay through the C++ parser"
+Randomness seeded to: 133951614
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the C++ Editor exposes the frozen EditorComponent capability surface" classname="the C++ Editor exposes the frozen EditorComponent capability surface" time="0.169261" status="run">
+		<properties>
+			<property name="cmake_labels" value="editor;issue1201;tui"/>
+		</properties>
+		<system-out>Filters: "the C++ Editor exposes the frozen EditorComponent capability surface"
+Randomness seeded to: 453169341
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame" classname="the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame" time="0.171417" status="run">
+		<properties>
+			<property name="cmake_labels" value="editor;issue1201;tui"/>
+		</properties>
+		<system-out>Filters: "the C++ Editor replays the frozen audit-1201 autocomplete cap and padding frame"
+Randomness seeded to: 1885624635
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the C++ Editor replays the frozen audit-1201 typing history and paste scenarios" classname="the C++ Editor replays the frozen audit-1201 typing history and paste scenarios" time="0.171672" status="run">
+		<properties>
+			<property name="cmake_labels" value="editor;issue1201;tui"/>
+		</properties>
+		<system-out>Filters: "the C++ Editor replays the frozen audit-1201 typing history and paste scenarios"
+Randomness seeded to: 2882823967
+===============================================================================
+All tests passed (71 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen audit-1201 transcoder fallback convert retry and clear replay in C++" classname="frozen audit-1201 transcoder fallback convert retry and clear replay in C++" time="0.205487" status="run">
+		<properties>
+			<property name="cmake_labels" value="coding_agent;image;issue1201;transcoder;tui"/>
+		</properties>
+		<system-out>Filters: "frozen audit-1201 transcoder fallback convert retry and clear replay in C++"
+Randomness seeded to: 1258849914
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

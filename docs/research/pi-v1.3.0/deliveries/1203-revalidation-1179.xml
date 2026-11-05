@@ -1,0 +1,587 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="52"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="29"
+	timestamp="2026-11-05T14:33:12"
+	>
+	<testcase name="Remote deterministic execution applies reversed answers by result number" classname="Remote deterministic execution applies reversed answers by result number" time="1.68186" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1099;remote"/>
+		</properties>
+		<system-out>Filters: "Remote deterministic execution applies reversed answers by result number"
+Randomness seeded to: 1368908548
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Remote deterministic execution runs the script remotely and answers through deliver" classname="Remote deterministic execution runs the script remotely and answers through deliver" time="1.61104" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1099;remote"/>
+		</properties>
+		<system-out>Filters: "Remote deterministic execution runs the script remotely and answers through deliver"
+Randomness seeded to: 181878337
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="RemoteCodemodeSandbox batches output instead of making one exchange per line" classname="RemoteCodemodeSandbox batches output instead of making one exchange per line" time="3.80168" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;remote"/>
+		</properties>
+		<system-out>Filters: "RemoteCodemodeSandbox batches output instead of making one exchange per line"
+Randomness seeded to: 363638480
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="RemoteCodemodeSandbox caps the interrupt budget and memory at the remote&apos;s limits" classname="RemoteCodemodeSandbox caps the interrupt budget and memory at the remote&apos;s limits" time="23.0986" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;remote"/>
+		</properties>
+		<system-out>Filters: "RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits"
+Randomness seeded to: 1218424670
+[2026-11-05 14:33:35.582] [error] Memory grow page failed -- exceeded limit page size: 128
+[2026-11-05 14:33:35.582] [error] Memory grow page failed -- exceeded limit page size: 128
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit" classname="RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit" time="0.603349" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;remote"/>
+		</properties>
+		<system-out>Filters: "RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit"
+Randomness seeded to: 3465790165
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason" classname="RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason" time="0.0148181" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;remote"/>
+		</properties>
+		<system-out>Filters: "RemoteCodemodeSandbox reports failing\, silent or unreachable remote as sandbox error with transport reason"
+Randomness seeded to: 3183398550
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="RemoteCodemodeSandbox runs tools in the caller and the script on the remote" classname="RemoteCodemodeSandbox runs tools in the caller and the script on the remote" time="1.27914" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;remote"/>
+		</properties>
+		<system-out>Filters: "RemoteCodemodeSandbox runs tools in the caller and the script on the remote"
+Randomness seeded to: 3729597764
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately" classname="RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately" time="1.28391" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;remote"/>
+		</properties>
+		<system-out>Filters: "RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately"
+Randomness seeded to: 1613869868
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a normal codemode run is not deterministic while start is" classname="a normal codemode run is not deterministic while start is" time="2.41776" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1179;spec"/>
+		</properties>
+		<system-out>Filters: "a normal codemode run is not deterministic while start is"
+Randomness seeded to: 388758514
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller aborting while a tool waits keeps partial output and cancels the call" classname="a public codemode caller aborting while a tool waits keeps partial output and cancels the call" time="1.29499" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;inline;issue1097;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller aborting while a tool waits keeps partial output and cancels the call"
+Randomness seeded to: 3289835858
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller applies reversed answers by result number not arrival order" classname="a public codemode caller applies reversed answers by result number not arrival order" time="1.27741" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller applies reversed answers by result number not arrival order"
+Randomness seeded to: 3575779418
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller binds a dotted global into its frozen namespace and spreads arguments" classname="a public codemode caller binds a dotted global into its frozen namespace and spreads arguments" time="1.30269" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;globals;issue1091;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller binds a dotted global into its frozen namespace and spreads arguments"
+Randomness seeded to: 1506979771
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller catches unknown tools and thrown tool errors with error call status" classname="a public codemode caller catches unknown tools and thrown tool errors with error call status" time="1.45599" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;errors;issue1179;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller catches unknown tools and thrown tool errors with error call status"
+Randomness seeded to: 3970824320
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller collects mixed output in order with the console marker and image MIME" classname="a public codemode caller collects mixed output in order with the console marker and image MIME" time="1.27873" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1092;output;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller collects mixed output in order with the console marker and image MIME"
+Randomness seeded to: 1650802858
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller counts the interrupt budget across tool waits" classname="a public codemode caller counts the interrupt budget across tool waits" time="1.33353" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;inline;issue1097;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller counts the interrupt budget across tool waits"
+Randomness seeded to: 490733030
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller fails the run when the guest hits its output item limit" classname="a public codemode caller fails the run when the guest hits its output item limit" time="10.0211" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1092;limits;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller fails the run when the guest hits its output item limit"
+Randomness seeded to: 4234365754
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets UTC and no WeakRef in a deterministic run" classname="a public codemode caller gets UTC and no WeakRef in a deterministic run" time="1.25247" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets UTC and no WeakRef in a deterministic run"
+Randomness seeded to: 3033865025
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run" classname="a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run" time="1.2713" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run"
+Randomness seeded to: 3408509216
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets during for the result the VM was processing when the script ended" classname="a public codemode caller gets during for the result the VM was processing when the script ended" time="3.67298" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets during for the result the VM was processing when the script ended"
+Randomness seeded to: 405768328
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets illegal start options refused before any VM exists" classname="a public codemode caller gets illegal start options refused before any VM exists" time="0.030361" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets illegal start options refused before any VM exists"
+Randomness seeded to: 3820154608
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller gets the fingerprint before the first call and a reused result number is refused" classname="a public codemode caller gets the fingerprint before the first call and a reused result number is refused" time="2.83919" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller gets the fingerprint before the first call and a reused result number is refused"
+Randomness seeded to: 715613301
+===============================================================================
+All tests passed (31 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller keeps a call waiting when its answer cannot be serialized" classname="a public codemode caller keeps a call waiting when its answer cannot be serialized" time="1.26363" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller keeps a call waiting when its answer cannot be serialized"
+Randomness seeded to: 3670771083
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller numbers globals with tools and gets rejection properties on the script Error" classname="a public codemode caller numbers globals with tools and gets rejection properties on the script Error" time="1.25762" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller numbers globals with tools and gets rejection properties on the script Error"
+Randomness seeded to: 3187517560
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller reads a store snapshot across calls and drops failed writes" classname="a public codemode caller reads a store snapshot across calls and drops failed writes" time="3.63925" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1091;spec;store"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller reads a store snapshot across calls and drops failed writes"
+Randomness seeded to: 1443739670
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller records an unawaited call as cancelled and aborts it" classname="a public codemode caller records an unawaited call as cancelled and aborts it" time="1.26619" status="run">
+		<properties>
+			<property name="cmake_labels" value="calls;codemode;issue1091;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller records an unawaited call as cancelled and aborts it"
+Randomness seeded to: 3692805521
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller records settled calls with ok and error statuses" classname="a public codemode caller records settled calls with ok and error statuses" time="1.27961" status="run">
+		<properties>
+			<property name="cmake_labels" value="calls;codemode;issue1091;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller records settled calls with ok and error statuses"
+Randomness seeded to: 3042491450
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically" classname="a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically" time="1.26728" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically"
+Randomness seeded to: 3316611812
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller rejects invalid globals at construction with the frozen errors" classname="a public codemode caller rejects invalid globals at construction with the frozen errors" time="0.0025712" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;globals;issue1091;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller rejects invalid globals at construction with the frozen errors"
+Randomness seeded to: 950497675
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller replays a deterministic run from the same start seed and answers" classname="a public codemode caller replays a deterministic run from the same start seed and answers" time="1.69444" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller replays a deterministic run from the same start seed and answers"
+Randomness seeded to: 1651427981
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller reports a pre-aborted run with the abort reason and never starts it" classname="a public codemode caller reports a pre-aborted run with the abort reason and never starts it" time="0.0372256" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;inline;issue1097;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller reports a pre-aborted run with the abort reason and never starts it"
+Randomness seeded to: 658915151
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller reports a script error with its name message stack and prior output" classname="a public codemode caller reports a script error with its name message stack and prior output" time="1.28348" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;errors;issue1092;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller reports a script error with its name message stack and prior output"
+Randomness seeded to: 3713307963
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller reports guest memory exhaustion as an out-of-memory script error" classname="a public codemode caller reports guest memory exhaustion as an out-of-memory script error" time="4.59426" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1092;limits;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller reports guest memory exhaustion as an out-of-memory script error"
+Randomness seeded to: 1557308258
+[2026-11-05 14:33:27.105] [error] Memory grow page failed -- exceeded limit page size: 128
+[2026-11-05 14:33:27.105] [error] Memory grow page failed -- exceeded limit page size: 128
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors" classname="a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors" time="3.65687" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;errors;issue1092;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors"
+Randomness seeded to: 1569538994
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller reports the deadline when a tool waits past it and keeps partial output" classname="a public codemode caller reports the deadline when a tool waits past it and keeps partial output" time="1.31426" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;inline;issue1097;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller reports the deadline when a tool waits past it and keeps partial output"
+Randomness seeded to: 2557431808
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller returns its value and text output from a successful budgeted run" classname="a public codemode caller returns its value and text output from a successful budgeted run" time="1.27747" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;inline;issue1097;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller returns its value and text output from a successful budgeted run"
+Randomness seeded to: 817782393
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller sees a seed mismatch change randomness without changing the start time" classname="a public codemode caller sees a seed mismatch change randomness without changing the start time" time="6.96592" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1093;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller sees a seed mismatch change randomness without changing the start time"
+Randomness seeded to: 2206284932
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller stops pure computation with the interrupt budget, not the deadline" classname="a public codemode caller stops pure computation with the interrupt budget, not the deadline" time="11.9112" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;inline;issue1097;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller stops pure computation with the interrupt budget\, not the deadline"
+Randomness seeded to: 2702316749
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller stringifies text and accepts image blocks with the frozen type errors" classname="a public codemode caller stringifies text and accepts image blocks with the frozen type errors" time="2.43724" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1179;output;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller stringifies text and accepts image blocks with the frozen type errors"
+Randomness seeded to: 1167607763
+===============================================================================
+All tests passed (46 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a public codemode caller treats exit() as success with prior output and the write set" classname="a public codemode caller treats exit() as success with prior output and the write set" time="1.24516" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1092;output;spec"/>
+		</properties>
+		<system-out>Filters: "a public codemode caller treats exit() as success with prior output and the write set"
+Randomness seeded to: 1411954063
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a run-supplied jsName overrides the derived script name" classname="a run-supplied jsName overrides the derived script name" time="1.25491" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;deterministic;issue1179;spec"/>
+		</properties>
+		<system-out>Filters: "a run-supplied jsName overrides the derived script name"
+Randomness seeded to: 2212581182
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="codemode worker admission follows wasm load and releases a failed start once" classname="codemode worker admission follows wasm load and releases a failed start once" time="0.0402404" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1096;spec;worker"/>
+		</properties>
+		<system-out>Filters: "codemode worker admission follows wasm load and releases a failed start once"
+Randomness seeded to: 2007967811
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="codemode worker results settle before exit while admission stays bounded" classname="codemode worker results settle before exit while admission stays bounded" time="3.64257" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1096;spec;worker"/>
+		</properties>
+		<system-out>Filters: "codemode worker results settle before exit while admission stays bounded"
+Randomness seeded to: 2709275230
+===============================================================================
+All tests passed (40 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode declaration covers the frozen schema renderings" classname="the public codemode declaration covers the frozen schema renderings" time="0.00603456" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;declarations;issue1100;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode declaration covers the frozen schema renderings"
+Randomness seeded to: 1564566364
+===============================================================================
+All tests passed (52 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode declaration groups tools globals and namespaces with doc comments" classname="the public codemode declaration groups tools globals and namespaces with doc comments" time="0.00532921" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;declarations;issue1100;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode declaration groups tools globals and namespaces with doc comments"
+Randomness seeded to: 1656175550
+===============================================================================
+All tests passed (17 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode declaration preserves the relocated tool identifiers" classname="the public codemode declaration preserves the relocated tool identifiers" time="0.0051987" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;declarations;issue1064;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode declaration preserves the relocated tool identifiers"
+Randomness seeded to: 3741171446
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode declaration renders frozen schema types" classname="the public codemode declaration renders frozen schema types" time="0.00528234" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;declarations;issue1064;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode declaration renders frozen schema types"
+Randomness seeded to: 23496583
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode declaration renders frozen tool signatures samples and blocks" classname="the public codemode declaration renders frozen tool signatures samples and blocks" time="0.00541986" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;declarations;issue1100;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode declaration renders frozen tool signatures samples and blocks"
+Randomness seeded to: 4249649194
+===============================================================================
+All tests passed (24 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode prelude is the frozen sandbox prelude with output and store limits" classname="the public codemode prelude is the frozen sandbox prelude with output and store limits" time="0.0104665" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1179;limits;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode prelude is the frozen sandbox prelude with output and store limits"
+Randomness seeded to: 3622376415
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode source parser keeps only a first-line options command" classname="the public codemode source parser keeps only a first-line options command" time="0.00443095" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1064;source;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode source parser keeps only a first-line options command"
+Randomness seeded to: 3547772676
+===============================================================================
+All tests passed (70 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode source parser rejects a misplaced options line with its line number" classname="the public codemode source parser rejects a misplaced options line with its line number" time="0.0043192" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1100;source;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode source parser rejects a misplaced options line with its line number"
+Randomness seeded to: 2241334219
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the public codemode source parser rejects invalid options and empty input with typed errors" classname="the public codemode source parser rejects invalid options and empty input with typed errors" time="0.00458699" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;issue1100;source;spec"/>
+		</properties>
+		<system-out>Filters: "the public codemode source parser rejects invalid options and empty input with typed errors"
+Randomness seeded to: 2484633539
+===============================================================================
+All tests passed (66 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an over-limit script is interrupted with a timeout error" classname="an over-limit script is interrupted with a timeout error" time="1.29402" status="run">
+		<properties>
+			<property name="cmake_labels" value="codemode;coding_agent;issue874;spec"/>
+		</properties>
+		<system-out>Filters: "an over-limit script is interrupted with a timeout error"
+Randomness seeded to: 4092315254
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

@@ -174,7 +174,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -229,14 +229,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1101.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1101.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1101.xml",
-     "sha256": "0ac7cdeb4faf6badfc3a9d400e982bb6c5b260c528715e83bbbefa131aa9df18"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1101.xml",
+     "sha256": "584bcabad62e572ee78ea1ba1910755e04390925a0d2dbc290cc18858df53c08"
     }
    },
    "rows": [
@@ -683,6 +683,30 @@
       "sha256": "19f2502b2d53fbef417524fd32982e951dc6d11da21ccf57423f958aca5bfdc4"
      }
     }
+   },
+   "revalidation1203": {
+    "reason": "#1203 adds 21 durable scenarioLinks to the consolidation plan (the captured audit-1203 observations). This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rerun into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1101.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1101.xml",
+      "sha256": "0ac7cdeb4faf6badfc3a9d400e982bb6c5b260c528715e83bbbefa131aa9df18"
+     }
+    }
    }
   },
   {
@@ -702,14 +726,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1090.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1090.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1090.xml",
-     "sha256": "bdf88112bd3886b7b52d4e441ef6d558b44fc98a4dddad41dd65adbd500e41d9"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1090.xml",
+     "sha256": "fd2bab6e5284c1446916fae1d4972b50f9cdab9f4f00138cb53150cc2b043edf"
     }
    },
    "inputs": [
@@ -755,7 +779,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
     },
     {
      "path": "src/durable/CodingTools.cpp",
@@ -1348,6 +1372,30 @@
       "sha256": "8db7d91f22031c031141c0d41b2c5a2a6d66541ec7012d56181fa06b0c55dce6"
      }
     }
+   },
+   "revalidation1203": {
+    "reason": "#1203 registers the audit-1203 family in the shared baseline registry. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rerun into a fresh JUnit artifact. No new claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1090.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1090.xml",
+      "sha256": "bdf88112bd3886b7b52d4e441ef6d558b44fc98a4dddad41dd65adbd500e41d9"
+     }
+    }
    }
   },
   {
@@ -1607,11 +1655,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -1634,14 +1682,14 @@
      "-L",
      "issue1118",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1118.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1118.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1118.xml",
-     "sha256": "a669370425d5cb61863db09eab1f8e45f6f43e26c02070827c3b9486f017829f"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1118.xml",
+     "sha256": "6b51494bd9c9b03b63767854eaa920917157e5c0dd911fff8fa518083284868f"
     }
    },
    "rows": [
@@ -2184,6 +2232,31 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1118.xml",
       "sha256": "4040d7d890b483d3cfc95308003b5232514f0af458133550346927da2433aa8f"
+     }
+    }
+   },
+   "revalidation1203": {
+    "reason": "#1203 captures the 21 unobserved durable rows at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1203 family and the consolidation plan links all 21 rows' obligations to the captured scenarios. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digests are refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1118.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1118.xml",
+      "sha256": "a669370425d5cb61863db09eab1f8e45f6f43e26c02070827c3b9486f017829f"
      }
     }
    }
@@ -3412,7 +3485,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -3420,7 +3493,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
     }
    ],
    "validation": {
@@ -3431,14 +3504,14 @@
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1181.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1181.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1181.xml",
-     "sha256": "f9ab7cfc11a4c8b943c263e33c291ded74a3855f197091bdd51280a28ac653c9"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1181.xml",
+     "sha256": "fd67191454ecc63e9d0cb5adcd3a6e4841797c6aa95888e3aa9d42655f62652f"
     }
    },
    "rows": [
@@ -3975,6 +4048,31 @@
       "sha256": "eff3b7e78990ddebb6ea7816ff7464fde4cdfc1b596671a260ad87a2fa2978ea"
      }
     }
+   },
+   "revalidation1203": {
+    "reason": "#1203 captures the 21 unobserved durable rows at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1203 family and the consolidation plan links all 21 rows' obligations to the captured scenarios. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digests are refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1181.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1181.xml",
+      "sha256": "f9ab7cfc11a4c8b943c263e33c291ded74a3855f197091bdd51280a28ac653c9"
+     }
+    }
    }
   },
   {
@@ -4301,14 +4399,14 @@
      "-L",
      "issue1184",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1184.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1184.xml"
     ],
-    "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
-    "recordedAt": "2026-11-05T01:41:59Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1184.xml",
-     "sha256": "1456cc1256d98fdbf58a191e07f1d5050aea4db17e58bc64b5ef5492de876493"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1184.xml",
+     "sha256": "2b6ecde78bbf013bce82f6752a07b18ea3c9c5eb0b50274e0ee2c7e65736f1a5"
     }
    },
    "rows": [
@@ -4477,7 +4575,7 @@
     },
     {
      "path": "tests/durable/HarnessWorkflowTest.cpp",
-     "sha256": "d209173dd27df70d46cc252494e5439231311cbeaad11f84acf3e48974b2f68f"
+     "sha256": "8e16a672b21fe4cf1886a8c16834e45ccfc5fd9440cd1f2116a54f3b9d2590d1"
     },
     {
      "path": "tests/durable/Outcome.hpp",
@@ -4620,6 +4718,30 @@
       "sha256": "99ed09b1c1737e0e649697f659c62423529778d50fcd48bc82837570e5cdbf33"
      }
     }
+   },
+   "revalidation1203": {
+    "reason": "#1203 adds the [issue1203] settings comparison to HarnessWorkflowTest.cpp, a pinned test input of this receipt; the receipt's claimed rows, scenarios and routing digest are unchanged. The changed input digest is refreshed and the exact selection was rerun into a fresh JUnit artifact. No new claim is made.",
+    "changedInputs": [
+     "tests/durable/HarnessWorkflowTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1184",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1184.xml"
+     ],
+     "testedRevision": "2fd077c4dcf3bed89655648e20c214718150387a",
+     "recordedAt": "2026-11-05T01:41:59Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1192-revalidation-1184.xml",
+      "sha256": "1456cc1256d98fdbf58a191e07f1d5050aea4db17e58bc64b5ef5492de876493"
+     }
+    }
    }
   },
   {
@@ -4637,14 +4759,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1186.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1186.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1186.xml",
-     "sha256": "c3d65fd22e763315cd15aa65be508e375f4082aee726f0ab2723ece821541e1a"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1186.xml",
+     "sha256": "4a66b460809624203053e824e473756b79df5ccf12cb85894f3df6ebf5b64d4e"
     }
    },
    "rows": [
@@ -4818,11 +4940,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5046,6 +5168,31 @@
       "sha256": "e1acd715a6644f336f42dce3ee16061075cfb563be1a69cf82a70618de62debc"
      }
     }
+   },
+   "revalidation1203": {
+    "reason": "#1203 captures the 21 unobserved durable rows at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1203 family and the consolidation plan links all 21 rows' obligations to the captured scenarios. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digests are refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1186.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1186.xml",
+      "sha256": "c3d65fd22e763315cd15aa65be508e375f4082aee726f0ab2723ece821541e1a"
+     }
+    }
    }
   },
   {
@@ -5064,14 +5211,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1188.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1188.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1188.xml",
-     "sha256": "1526cba0f63f5bb94190ef7105efd6f9361501347ab1bb03ddae3b03fb99bf80"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1188.xml",
+     "sha256": "395346ad24920d274ee4b460ff81ae12a063c4c2f34524f5c9fc93e243109a46"
     }
    },
    "rows": [
@@ -5239,7 +5386,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -5441,6 +5588,30 @@
       "sha256": "39c9f78b64c60d0ae7305ce34e4fd8656d19c2fc8f49593304267a653dd71f56"
      }
     }
+   },
+   "revalidation1203": {
+    "reason": "#1203 adds 21 durable scenarioLinks to the consolidation plan (the captured audit-1203 observations). This receipt's own rows, scenarios and routing digest are unchanged; the changed input digest is refreshed and its exact selection was rerun into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1188.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1188.xml",
+      "sha256": "1526cba0f63f5bb94190ef7105efd6f9361501347ab1bb03ddae3b03fb99bf80"
+     }
+    }
    }
   },
   {
@@ -5632,14 +5803,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1182.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1182.xml",
-     "sha256": "da4ab725ec1f9264566892d1326429b877ed6c5d461d51ac0e27a7e0e9320ef0"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1182.xml",
+     "sha256": "d8700a771a5a8adc68525661c07a11d40d7afee6ffac19424cf8f522657424c4"
     }
    },
    "rows": [
@@ -5862,7 +6033,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -5886,7 +6057,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6090,6 +6261,31 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1182.xml",
       "sha256": "ac9d14a886a380cd7ac86e702b0d0b77fa6993a529902802a7abdd81d9722609"
+     }
+    }
+   },
+   "revalidation1203": {
+    "reason": "#1203 captures the 21 unobserved durable rows at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1203 family and the consolidation plan links all 21 rows' obligations to the captured scenarios. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digests are refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1182.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1182.xml",
+      "sha256": "da4ab725ec1f9264566892d1326429b877ed6c5d461d51ac0e27a7e0e9320ef0"
      }
     }
    }
@@ -6296,11 +6492,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7233,14 +7429,14 @@
      "-R",
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1179.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1179.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1179.xml",
-     "sha256": "5a1c17162fbffa8cadeb48cff725199c5a42766c4232048465604a201a1e4776"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1179.xml",
+     "sha256": "b500f50ce7a50b165fb1bbbed0645846443711350f8e6f0f9e89fb89cefe092f"
     }
    },
    "revalidation1179m": {
@@ -7380,6 +7576,31 @@
       "sha256": "2199c9637122fad2ae26b1e440109ad90ccf98e86208d32c21aa842f6f75fda8"
      }
     }
+   },
+   "revalidation1203": {
+    "reason": "#1203 captures the 21 unobserved durable rows at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1203 family and the consolidation plan links all 21 rows' obligations to the captured scenarios. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digests are refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1179.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1179.xml",
+      "sha256": "5a1c17162fbffa8cadeb48cff725199c5a42766c4232048465604a201a1e4776"
+     }
+    }
    }
   },
   {
@@ -7448,11 +7669,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7483,14 +7704,14 @@
      "-R",
      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1176.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1176.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1176.xml",
-     "sha256": "fd2ad96d7754de3931963bd396f6339f369f72a9925a208ed325d6301360fa23"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1176.xml",
+     "sha256": "abc4884063f2c3d51d05fc718c8d89f367b819165fac954df72afaced31b4ab3"
     }
    },
    "rows": [
@@ -7658,6 +7879,31 @@
       "sha256": "c3ee3e2fa0afc7830ddbca235c8899b5e957aae29cbf3977fb742ea77b17486d"
      }
     }
+   },
+   "revalidation1203": {
+    "reason": "#1203 captures the 21 unobserved durable rows at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1203 family and the consolidation plan links all 21 rows' obligations to the captured scenarios. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digests are refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1176.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1176.xml",
+      "sha256": "fd2ad96d7754de3931963bd396f6339f369f72a9925a208ed325d6301360fa23"
+     }
+    }
    }
   },
   {
@@ -7722,11 +7968,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7777,14 +8023,14 @@
      "-R",
      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1177.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1177.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:02:35Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1177.xml",
-     "sha256": "fcd42f0f7d8e505817d58a71d7f5f2153880431c04920259f5e4446aaabf30b6"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1177.xml",
+     "sha256": "0f07c92f45efea8cff6ab488f96893016690fa9ef6c5ee4f2f4d7b7397d32616"
     }
    },
    "rows": [
@@ -7985,6 +8231,31 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1180-revalidation-1177.xml",
       "sha256": "7e2c7cc1d96bd36f8c141167dcb917b9b7b4aa6b30f41b49373ba1af4fd91841"
+     }
+    }
+   },
+   "revalidation1203": {
+    "reason": "#1203 captures the 21 unobserved durable rows at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1203 family and the consolidation plan links all 21 rows' obligations to the captured scenarios. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digests are refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1177.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:02:35Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-revalidation-1177.xml",
+      "sha256": "fcd42f0f7d8e505817d58a71d7f5f2153880431c04920259f5e4446aaabf30b6"
      }
     }
    }
@@ -8384,7 +8655,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "72b917ff020a6efd2f79449deeed2431423ad404066eb7296a36ffeafd567863"
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
     },
     {
      "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
@@ -8392,7 +8663,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "4b019db2afcdc62ab5c8addb829859c50a0f88310130ff6bf20c8cc0a0db365e"
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
     }
    ],
    "validation": {
@@ -8405,14 +8676,14 @@
      "-L",
      "issue1201",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1201.xml"
     ],
-    "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
-    "recordedAt": "2026-11-05T04:04:06Z",
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
     "selected": 8,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives.xml",
-     "sha256": "55d0b53844a0af69cac539d38b4542909754ea31ed652d2e41336a2e33ca74e1"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1201.xml",
+     "sha256": "bc77ec214dc4dddd23fd12c8b0af3c8ad27ffaf6bbb3b245238826b5d82cda2b"
     }
    },
    "rows": [
@@ -8942,6 +9213,170 @@
       "test": "frozen audit-1201 transcoder fallback convert retry and clear replay in C++",
       "testSource": "tests/coding_agent/tui/ImageTranscoderTest.cpp",
       "reason": "A converter registry that caches the failing result across a replacement passes the fallback and single-conversion checks; the frozen retry observation requires a fresh image to convert under the new transcoder after the cache-clearing setter."
+     }
+    }
+   ],
+   "revalidation1203": {
+    "reason": "#1203 captures the 21 unobserved durable rows at the frozen pi-v1.3.0 baseline: the shared baseline registry gains the audit-1203 family and the consolidation plan links all 21 rows' obligations to the captured scenarios. This receipt's own rows, scenarios and routing digest are unchanged; the changed input digests are refreshed and its exact selection was rebuilt and rerun on the merged tree into a fresh JUnit artifact. No new claim is made. The #1203 lane also drops the three delivery-backed rows from the plan TM-durable-unobserved-capture mapping (a mapped row may not also carry a delivery-backed ticket); the plan digest is refreshed with no rows/scenarios/routing changes to this receipt.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1201",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives.xml"
+     ],
+     "testedRevision": "db59d4bc26582da844c089f84d2e1dcbf3da16a1",
+     "recordedAt": "2026-11-05T04:04:06Z",
+     "selected": 8,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives.xml",
+      "sha256": "55d0b53844a0af69cac539d38b4542909754ea31ed652d2e41336a2e33ca74e1"
+     }
+    }
+   }
+  },
+  {
+   "id": "1203-durable-captures",
+   "ticket": "1203",
+   "implementationCommits": [
+    "5cd9af8f6255addefc8dc903b7800e54b3bcbbb8",
+    "829b14edda102541133f7a92dbf54989a05bbf67"
+   ],
+   "report": "docs/research/pi-v1.3.0/1203-durable-captures.md",
+   "routingSha256": "724e464a2d600384fcaa6b13ff308327712c77f909d3bf8b254ed85d55b3d956",
+   "inputs": [
+    {
+     "path": "tests/durable/HarnessOwnershipTest.cpp",
+     "sha256": "c824b4d1d64c05ca752f4da1df5664de007f407b742e3abe9b4855497473eee7"
+    },
+    {
+     "path": "tests/durable/HarnessSubmissionsTest.cpp",
+     "sha256": "17baa60dfaded2c71acf906a4e54d2486a18d9cbafb2f6ddf8deebf00fd3e9a1"
+    },
+    {
+     "path": "tests/durable/HarnessWorkflowTest.cpp",
+     "sha256": "8e16a672b21fe4cf1886a8c16834e45ccfc5fd9440cd1f2116a54f3b9d2590d1"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1203/ownership.json",
+     "sha256": "073bbc3bbf7d57a2911195db276629a07080b99debf4f6b0248d25880fefa1a6"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1203/steering.json",
+     "sha256": "748872220df8147c0bf301b68650aaa9de67c9ebe65e71eec97ce3c38b3fdb58"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1203/settings.json",
+     "sha256": "921b0574d6e04691e93f8b855736b02df0b8abd460e42fa9a156276747289715"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/baselines.json",
+     "sha256": "6939d71da642f64733dc7677ec578f91d5928e8afa5dd2bca24f5a263f66fc45"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "sha256": "ef5cecb23cb7d7b2c6d3414a5a7784c3db912f12038058a370318452be99f874"
+    },
+    {
+     "path": "src/durable/Harness.cpp",
+     "sha256": "c3c328226286c8c0f955e56647bcdb39107761b10a6f5f5d4332c1dd378fa0c8"
+    },
+    {
+     "path": "src/durable/WorkflowRuntime.cpp",
+     "sha256": "e47cf1057556f9da69255ed61faf8e74c521838dcfcdad84106e491128350942"
+    },
+    {
+     "path": "src/durable/Session.cpp",
+     "sha256": "10cf6b34038fe8b65900851fd79217aba5e5f8f46c0028e11947972e597db4a7"
+    },
+    {
+     "path": "src/durable/include/cch/durable/Harness.hpp",
+     "sha256": "9b342358dbd931e0ac67ecd75abb006d47b70021371be4bd87512494fa0ebe5f"
+    },
+    {
+     "path": "src/durable/include/cch/durable/Workflow.hpp",
+     "sha256": "4d52e0c61486f87a0c653f80f2395447c837521f3001cd6a59671709add37116"
+    }
+   ],
+   "validation": {
+    "command": [
+     "ctest",
+     "--preset",
+     "vcpkg",
+     "-LE",
+     "architecture",
+     "-L",
+     "issue1203",
+     "--output-junit",
+     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures.xml"
+    ],
+    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+    "recordedAt": "2026-11-05T05:36:39Z",
+    "selected": 3,
+    "junit": {
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures.xml",
+     "sha256": "59798a1ebef6420408b0d9139c4f2b3aabc3517f89d3a79dde85c32f9d6c3610"
+    }
+   },
+   "rows": [
+    {
+     "id": "cch_durable:background-ownership-boundary",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1203/ownership.json",
+       "scenario": "a background child survives a conversation abort while a direct abort reaches it",
+       "test": "the audit-1203 frozen background-ownership boundary observation replays in C++",
+       "testSource": "tests/durable/HarnessOwnershipTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the audit-1203 frozen background-ownership boundary observation replays in C++",
+      "testSource": "tests/durable/HarnessOwnershipTest.cpp",
+      "reason": "The frozen scenario places the child with background:true; a scheduler that lets a conversation abort reach background work settles the child in the conversation abort and fails the recorded still-running observation, and a direct abort that skips the abort handler fails the recorded outcome."
+     }
+    },
+    {
+     "id": "cch_durable:submission-queues",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1203/steering.json",
+       "scenario": "a duplicate request ID returns the existing submission without queueing the payload twice",
+       "test": "the audit-1203 frozen duplicate-request observation replays in C++",
+       "testSource": "tests/durable/HarnessSubmissionsTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the audit-1203 frozen duplicate-request observation replays in C++",
+      "testSource": "tests/durable/HarnessSubmissionsTest.cpp",
+      "reason": "The resubmitted payload differs from the admitted one; an admission that queues the changed payload produces a second pi.user entry and fails the frozen transcript, and returning a new submission id fails the recorded same-submission observation."
+     }
+    },
+    {
+     "id": "cch_durable:harness-settings-defaults",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1203/settings.json",
+       "scenario": "the harness settings defaults resolve with the frozen object-merge rules",
+       "test": "the audit-1203 frozen harness settings defaults replay in the C++ settings",
+       "testSource": "tests/durable/HarnessWorkflowTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "the audit-1203 frozen harness settings defaults replay in the C++ settings",
+      "testSource": "tests/durable/HarnessWorkflowTest.cpp",
+      "reason": "The frozen defaults pin every field (retry enabled/3/2000/60000, compaction enabled/16384/20000/32768, one-at-a-time steering and follow-up); a default that drifts in any single field still compiles and passes a smoke run but fails the recorded frozen value."
      }
     }
    ]

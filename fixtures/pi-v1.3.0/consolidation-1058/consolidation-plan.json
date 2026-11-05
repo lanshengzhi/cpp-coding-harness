@@ -880,7 +880,7 @@
   },
   {
    "ticket": "1055",
-   "scenario": "an idle wait resolves with live background work and holds on a live foreground task",
+   "scenario": "an idle wait holds on a live foreground task while background work stays live at the v1.3.0 baseline",
    "rows": [
     "idle-waits"
    ],
@@ -5255,23 +5255,20 @@
     "id": "TM-durable-unobserved-capture",
     "ticket": "#1203",
     "history": false,
-    "note": "Proposal section 2 group 5 -> N1 (#1203, filed): no v1.3.0 frozen observation exists; #1203 owns the captures and routes follow-up receipts to #1180. node-env-watch is also tracked by the environment-IO route (#1158, #1197-#1200); the codemode-* rows overlap the closed #1170-#1172 slices.",
+    "note": "Proposal section 2 group 5 -> N1 (#1203, filed): no v1.3.0 frozen observation exists; #1203 owns the captures and routes follow-up receipts to #1180. node-env-watch is also tracked by the environment-IO route (#1158, #1197-#1200); the codemode-* rows overlap the closed #1170-#1172 slices. background-ownership-boundary, submission-queues and harness-settings-defaults are dropped: the 1203-durable-captures receipt now backs their #1203 tickets (a mapped row may not also carry a delivery-backed ticket); the remaining 18 rows keep the mapping.",
     "rows": [
      "cch_durable:background-compaction",
-     "cch_durable:background-ownership-boundary",
      "cch_durable:builtin-tool-limits",
      "cch_durable:codemode-limits",
      "cch_durable:codemode-models",
      "cch_durable:codemode-output",
      "cch_durable:codemode-replay",
-     "cch_durable:harness-settings-defaults",
      "cch_durable:idle-waits",
      "cch_durable:native-run-triggering",
      "cch_durable:node-env-watch",
      "cch_durable:overflow-compaction-retry",
      "cch_durable:steering-boundary-placement",
      "cch_durable:steering-followup",
-     "cch_durable:submission-queues",
      "cch_durable:task-hooks",
      "cch_durable:task-outcomes",
      "cch_durable:task-scheduler-outcomes",
