@@ -1,0 +1,50 @@
+{
+  "issue": "#1229",
+  "receipt": "1209-root-tui-lifecycle",
+  "withdrawnAt": "2026-11-06",
+  "reason": "Per-claim withdrawal under #1229 (retro-review blocker): the claim's only comparison cites tests/tui/ScreenStateGoldenTest.cpp against audit-1209/screen-state.json, and that suite replays the frozen styled-cells and common-root-lifecycle frames in a static virtual terminal; it never exercises preserveScreen/alternate-screen exit options, the renderNow() synchronous render bypass, or handleMouse()/mouse-event propagation (none of preserveScreen, renderNow or handleMouse appears in the suite), and the remaining rows' specific members (mode/terminal queries, invalidate, mouse layout, focus queries) are likewise never called. Sixteen of the thirty rows #1229 enumerates overlap the #1236 discriminating-case withdrawal; these fourteen claims are the rest. Each row was marked verified by no evidence exercising its specific behavior, so the claim is withdrawn from promotion through the checked-in per-claim withdrawal channel and the row reverts to source-audit status until a dedicated frozen scenario lands (expected under TUI batches B8/B13/B16, #1216/#1221/#1224).",
+  "claims": [
+    {
+      "id": "cch_tui:TUI.renderNow"
+    },
+    {
+      "id": "cch_tui:TUI.mode"
+    },
+    {
+      "id": "cch_tui:TUI.terminal"
+    },
+    {
+      "id": "cch_tui:Container.render"
+    },
+    {
+      "id": "cch_tui:Container.invalidate"
+    },
+    {
+      "id": "cch_tui:Container.handleMouse"
+    },
+    {
+      "id": "cch_tui:Container.mouseLayout"
+    },
+    {
+      "id": "cch_tui:Component.handleInput"
+    },
+    {
+      "id": "cch_tui:Component.invalidate"
+    },
+    {
+      "id": "cch_tui:Component.render"
+    },
+    {
+      "id": "cch_tui:Component.handleMouse"
+    },
+    {
+      "id": "cch_tui:Focusable"
+    },
+    {
+      "id": "cch_tui:Focusable.focused"
+    },
+    {
+      "id": "cch_tui:TuiMode"
+    }
+  ]
+}

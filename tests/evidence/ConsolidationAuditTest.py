@@ -110,6 +110,10 @@ class DeliveryEvidenceTest(unittest.TestCase):
         self.addCleanup(self.verify_patch.stop)
 
     def check(self):
+        updates, _bounded = consolidate.delivery_updates(self.rows, self.delivery)
+        return updates
+
+    def check_bounded(self):
         return consolidate.delivery_updates(self.rows, self.delivery)
 
     def test_routing_digest_is_stable_and_binds_row_scenario_and_artifact(self) -> None:
@@ -193,14 +197,28 @@ class DeliveryEvidenceTest(unittest.TestCase):
         with self.assertRaisesRegex(consolidate.ConsolidationError, "did not run"):
             self.check()
 
-    def test_rejects_incomplete_coverage_and_remaining_boundaries(self) -> None:
+    def test_rejects_incomplete_coverage(self) -> None:
         self.rows[0]["comparisonScenarios"].append("uncompared error")
         with self.assertRaisesRegex(consolidate.ConsolidationError, "audit obligations"):
             self.check()
         self.rows[0]["comparisonScenarios"].pop()
+
+    def test_bounded_claim_validates_but_never_promotes_its_row(self) -> None:
+        """A non-empty remainingBoundary bounds the claim: validated, not promoted (#1229)."""
         self.claim["remainingBoundary"] = ["unverified input"]
-        with self.assertRaisesRegex(consolidate.ConsolidationError, "incomplete delivery"):
-            self.check()
+        updates, bounded = self.check_bounded()
+        self.assertEqual(updates, {})
+        self.assertEqual(bounded, {"cch_mcp:example"})
+        # The bounded claim stays in the receipt with its boundary text.
+        self.assertEqual(self.claim["remainingBoundary"], ["unverified input"])
+
+    def test_malformed_remaining_boundary_fails_closed(self) -> None:
+        for bad in ("unverified input", [""], [1]):
+            with self.subTest(boundary=bad):
+                self.claim["remainingBoundary"] = bad
+                with self.assertRaisesRegex(consolidate.ConsolidationError, "remainingBoundary"):
+                    self.check_bounded()
+        self.claim["remainingBoundary"] = []
 
     def test_rejects_unregistered_scenario_and_missing_negative_control(self) -> None:
         self.artifacts.clear()
@@ -296,8 +314,9 @@ class WithdrawnClaimsTest(unittest.TestCase):
         self.verify_patch.start()
         self.addCleanup(self.verify_patch.stop)
 
-    def updates(self, withdrawn=None) -> dict:
-        return consolidate.delivery_updates(self.rows, self.delivery, withdrawn)
+    def updates(self, withdrawn=None):
+        updates, _bounded = consolidate.delivery_updates(self.rows, self.delivery, withdrawn)
+        return updates
 
     def test_withdrawal_of_one_claim_leaves_sibling_intact(self) -> None:
         withdrawn = {("example", "cch_mcp:example"): []}
@@ -325,14 +344,23 @@ class WithdrawnClaimsTest(unittest.TestCase):
         full = {"records": self.delivery["records"]}
         with self.assertRaisesRegex(consolidate.ConsolidationError, "unknown receipt"):
             consolidate.withdrawn_reference_map(
-                {"example-missing": {"claims": [{"id": "cch_mcp:example"}]}}, full)
+                {("example-missing", "#1202"): {"claims": [{"id": "cch_mcp:example"}]}}, full)
         with self.assertRaisesRegex(consolidate.ConsolidationError, "unknown claim"):
             consolidate.withdrawn_reference_map(
-                {"example": {"claims": [{"id": "cch_mcp:absent"}]}}, full)
+                {("example", "#1202"): {"claims": [{"id": "cch_mcp:absent"}]}}, full)
         with self.assertRaisesRegex(consolidate.ConsolidationError, "unknown comparison"):
             consolidate.withdrawn_reference_map(
-                {"example": {"claims": [{"id": "cch_mcp:example",
+                {("example", "#1202"): {"claims": [{"id": "cch_mcp:example",
                                            "withdrawnComparisons": ["not a scenario"]}]}}, full)
+
+    def test_two_records_withdrawing_the_same_claim_fail_closed(self) -> None:
+        full = {"records": self.delivery["records"]}
+        duplicate = {
+            ("example", "#1202"): {"claims": [{"id": "cch_mcp:example"}]},
+            ("example", "#1229"): {"claims": [{"id": "cch_mcp:example"}]},
+        }
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "withdrawn twice"):
+            consolidate.withdrawn_reference_map(duplicate, full)
 
     def test_malformed_withdrawal_records_fail_closed(self) -> None:
         research = self.root / "docs" / "research" / "pi-v1.3.0"
@@ -349,7 +377,7 @@ class WithdrawnClaimsTest(unittest.TestCase):
             "issue": "#1202", "receipt": "example", "withdrawnAt": "2026-11-05",
             "reason": "withdrawn", "claims": [{"id": "cch_mcp:example"}],
         })
-        self.assertEqual(set(consolidate.load_withdrawn_claims()), {"example"})
+        self.assertEqual(set(consolidate.load_withdrawn_claims()), {("example", "#1202")})
         (research / "1202-withdrawn-example-claims.json").unlink()
         for key in ("issue", "receipt", "withdrawnAt", "reason", "claims"):
             record = {"issue": "#1202", "receipt": "example", "withdrawnAt": "2026-11-05",
@@ -360,6 +388,45 @@ class WithdrawnClaimsTest(unittest.TestCase):
                 with self.assertRaisesRegex(consolidate.ConsolidationError, "withdrawal record"):
                     consolidate.load_withdrawn_claims()
                 (research / "1202-withdrawn-example-claims.json").unlink()
+
+    def test_records_are_keyed_by_receipt_and_issue(self) -> None:
+        """One receipt may carry withdrawals from several issues, never two from one (#1229)."""
+        research = self.root / "docs" / "research" / "pi-v1.3.0"
+        research.mkdir(parents=True)
+        deliveries_path = research / "1058-deliveries.json"
+        path_patch = patch.object(consolidate, "DELIVERIES_PATH", deliveries_path)
+        path_patch.start()
+        self.addCleanup(path_patch.stop)
+
+        def write(name: str, issue: str) -> None:
+            (research / name).write_text(json.dumps({
+                "issue": issue, "receipt": "example", "withdrawnAt": "2026-11-06",
+                "reason": "withdrawn", "claims": [{"id": "cch_mcp:example"}],
+            }), encoding="utf-8")
+
+        write("1202-withdrawn-example-claims.json", "#1202")
+        write("1229-withdrawn-example-claims.json", "#1229")
+        self.assertEqual(
+            set(consolidate.load_withdrawn_claims()),
+            {("example", "#1202"), ("example", "#1229")},
+        )
+        write("1202-withdrawn-example-claims.json", "#1229")
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "duplicate withdrawal record"):
+            consolidate.load_withdrawn_claims()
+
+    def test_issue_must_be_a_ticket_reference(self) -> None:
+        research = self.root / "docs" / "research" / "pi-v1.3.0"
+        research.mkdir(parents=True)
+        deliveries_path = research / "1058-deliveries.json"
+        path_patch = patch.object(consolidate, "DELIVERIES_PATH", deliveries_path)
+        path_patch.start()
+        self.addCleanup(path_patch.stop)
+        (research / "1229-withdrawn-example-claims.json").write_text(json.dumps({
+            "issue": "1229", "receipt": "example", "withdrawnAt": "2026-11-06",
+            "reason": "withdrawn", "claims": [{"id": "cch_mcp:example"}],
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "issue is not a #<issue>"):
+            consolidate.load_withdrawn_claims()
 
     def test_empty_withdrawals_leave_the_deliveries_unchanged(self) -> None:
         self.assertIs(consolidate.apply_withdrawals(self.delivery, {}), self.delivery)
@@ -601,10 +668,14 @@ class ReanchoredLedgerTest(unittest.TestCase):
     1181-mcp-comparisons) pass scripts/evidence/receipt_boundary.py and the
     per-claim withdrawal records were removed: the full claims of those 13 rows
     promote again and the rows are delivery-backed verified. The #1104/#1189 whole-record
-    withdrawals are unaffected and stay withdrawn. The #1236 per-claim
-    withdrawals (182 claims across the seven 1201-1213 receipts) and the #1226
-    withdrawal of cch_mcp:mcp-request-auth stay withdrawn: the effective
-    deliveries embedded in the ledger carry those claims absent.
+    withdrawals are unaffected and stay withdrawn. The #1226 withdrawal of
+    cch_mcp:mcp-request-auth stays withdrawn: the effective deliveries embedded
+    in the ledger carry that claim absent. The 182 claims #1236 withdrew across the
+    seven 1201-1213 receipts are superseded by the #1229 bounded-claim disposition:
+    each claim keeps its full comparisons but carries a non-empty remainingBoundary
+    entry, so it stays validated yet does not promote its row (the seven
+    1202-withdrawn-<receipt>-claims.json records were removed in the same slice;
+    their content is preserved in git history).
     """
 
     REANCHORED = {
@@ -693,12 +764,39 @@ class ReanchoredLedgerTest(unittest.TestCase):
         )
         self.assertEqual(len(read_image["comparisons"]), 4)
 
+    def test_ledger_embeds_the_1229_bounded_and_withdrawn_claims(self) -> None:
+        """The seven 1201-1213 receipts embed their full claims: the 182 bounded
+        claims keep their comparisons with a remainingBoundary entry, and the
+        fourteen #1229-withdrawn 1209 claims drop from the effective receipt."""
+        bounded_counts = {
+            "1201-terminal-primitives": (25, 30),
+            "1203-durable-captures": (3, 3),
+            "1209-root-tui-lifecycle": (70, 99),
+            "1210-regular-renderer": (9, 15),
+            "1211-alt-screen-viewport": (49, 57),
+            "1212-transcript-selection": (23, 39),
+            "1213-mouse-wheel-routing": (3, 21),
+        }
+        for receipt, (bounded, total) in bounded_counts.items():
+            with self.subTest(receipt=receipt):
+                record = self.deliveries[receipt]
+                self.assertEqual(len(record["rows"]), total)
+                self.assertEqual(
+                    sum(1 for claim in record["rows"] if claim["remainingBoundary"]), bounded
+                )
+        root_tui_ids = {claim["id"] for claim in self.deliveries["1209-root-tui-lifecycle"]["rows"]}
+        for row_id in Withdrawn1229LedgerTest.WITHDRAWN_1229:
+            self.assertNotIn(row_id, root_tui_ids)
+
     def test_every_verified_row_is_delivery_backed(self) -> None:
         delivered = [row["id"] for row in self.ledger["rows"] if "delivery" in row]
         # Tripwire on the delivery-backed row count: 392 before the #1236
-        # per-claim withdrawals (182 claims across the seven 1201-1213 receipts)
-        # and this lane's #1226 withdrawal of cch_mcp:mcp-request-auth.
-        self.assertEqual(len(delivered), 209)
+        # per-claim withdrawals (182 claims across the seven 1201-1213 receipts),
+        # 209 after the #1226 withdrawal of cch_mcp:mcp-request-auth, and 195 after
+        # #1229 withdraws the fourteen unexercised ScreenStateGoldenTest claims from
+        # 1209-root-tui-lifecycle (the 182 discriminating-case rows were already
+        # reverted and stay reverted as bounded claims).
+        self.assertEqual(len(delivered), 195)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)
@@ -716,6 +814,29 @@ class ReanchoredLedgerTest(unittest.TestCase):
             if claim["id"] == "cch_durable:image-processor"
         )
         self.assertEqual(len(image_processor["comparisons"]), 2)
+
+    def test_no_identical_discriminating_case_without_a_boundary(self) -> None:
+        """The #1229 stop condition: across the seven 1201-1213 receipts no claim has
+        a discriminatingCase.test string-equal to one of its comparisons[].test unless
+        the claim records the limitation in its remainingBoundary."""
+        full = load(ROOT / "docs" / "research" / "pi-v1.3.0" / "1058-deliveries.json")
+        tickets = ("1201", "1203", "1209", "1210", "1211", "1212", "1213")
+        checked = 0
+        for record in full["records"]:
+            if record["ticket"] not in tickets:
+                continue
+            for claim in record["rows"]:
+                dc = claim.get("discriminatingCase")
+                if not dc:
+                    continue
+                checked += 1
+                if dc["test"] in {c["test"] for c in claim["comparisons"]}:
+                    self.assertTrue(
+                        claim["remainingBoundary"],
+                        f"{record['id']}:{claim['id']} cites its happy-path test as the "
+                        "discriminating case without a remainingBoundary disposition",
+                    )
+        self.assertEqual(checked, 278)
 
     def test_committed_ledger_matches_a_fresh_build(self) -> None:
         plan = load(PLAN)
@@ -784,6 +905,127 @@ class WithdrawnClaimsLedgerTest(unittest.TestCase):
             [claim["id"] for claim in record["claims"]],
             ["cch_mcp:mcp-request-auth"],
         )
+
+
+class Withdrawn1229LedgerTest(unittest.TestCase):
+    """#1229 disposes of the two evidence-integrity findings on the 1201-1213 receipts.
+
+    Fix 1: fourteen ScreenStateGoldenTest-cited root-TUI-lifecycle claims whose cited
+    tests never exercise the row's specific behavior (preserveScreen/alternate-screen
+    exits, renderNow, mouse handling, mode/terminal queries, invalidate, focus queries)
+    are withdrawn through the per-claim channel
+    (1229-withdrawn-1209-root-tui-lifecycle-claims.json, keyed alongside the removed
+    #1236 record by (receipt, issue)). The rows revert to source-audit status.
+
+    Fix 2: the 182 non-discriminating discriminatingCase citations across the seven
+    receipts are recorded as bounded claims — a non-empty remainingBoundary entry in the
+    receipt itself — superseding the #1236 withdrawal records; the claims stay validated
+    but do not promote their rows, which remain at their reverted source-audit status
+    until a genuinely discriminating case is delivered.
+    """
+
+    WITHDRAWN_1229 = [
+        "cch_tui:TUI.renderNow",
+        "cch_tui:TUI.mode",
+        "cch_tui:TUI.terminal",
+        "cch_tui:Container.render",
+        "cch_tui:Container.invalidate",
+        "cch_tui:Container.handleMouse",
+        "cch_tui:Container.mouseLayout",
+        "cch_tui:Component.handleInput",
+        "cch_tui:Component.invalidate",
+        "cch_tui:Component.render",
+        "cch_tui:Component.handleMouse",
+        "cch_tui:Focusable",
+        "cch_tui:Focusable.focused",
+        "cch_tui:TuiMode",
+    ]
+
+    BOUNDED_182 = {
+        "1201-terminal-primitives": 25,
+        "1203-durable-captures": 3,
+        "1209-root-tui-lifecycle": 70,
+        "1210-regular-renderer": 9,
+        "1211-alt-screen-viewport": 49,
+        "1212-transcript-selection": 23,
+        "1213-mouse-wheel-routing": 3,
+    }
+
+    def setUp(self) -> None:
+        self.ledger = load(LEDGER)
+        self.rows = {row["id"]: row for row in self.ledger["rows"]}
+        self.full = load(
+            ROOT / "docs" / "research" / "pi-v1.3.0" / "1058-deliveries.json"
+        )
+
+    def test_withdrawn_rows_revert_to_source_audit_status(self) -> None:
+        for row_id in self.WITHDRAWN_1229:
+            with self.subTest(row=row_id):
+                row = self.rows[row_id]
+                self.assertEqual(row["verification"], "unverified")
+                self.assertEqual(row["implementation"], "implemented")
+                self.assertIsNone(row["implementation_ticket"])
+                self.assertNotIn("delivery", row)
+                self.assertNotIn("auditStatus", row)
+
+    def test_full_receipt_keeps_the_claim_and_the_effective_drops_it(self) -> None:
+        full_record = next(
+            record
+            for record in self.full["records"]
+            if record["id"] == "1209-root-tui-lifecycle"
+        )
+        self.assertEqual(len(full_record["rows"]), 113)
+        self.assertIn(
+            "cch_tui:TUI.renderNow",
+            [claim["id"] for claim in full_record["rows"]],
+        )
+        effective = {record["id"]: record for record in self.ledger["deliveries"]["records"]}
+        self.assertEqual(len(effective["1209-root-tui-lifecycle"]["rows"]), 99)
+        self.assertNotIn(
+            "cch_tui:TUI.renderNow",
+            [claim["id"] for claim in effective["1209-root-tui-lifecycle"]["rows"]],
+        )
+
+    def test_withdrawal_record_names_the_claims(self) -> None:
+        record = load(
+            ROOT
+            / "docs"
+            / "research"
+            / "pi-v1.3.0"
+            / "1229-withdrawn-1209-root-tui-lifecycle-claims.json"
+        )
+        self.assertEqual(record["issue"], "#1229")
+        self.assertEqual(record["receipt"], "1209-root-tui-lifecycle")
+        self.assertEqual(
+            [claim["id"] for claim in record["claims"]], self.WITHDRAWN_1229
+        )
+
+    def test_bounded_rows_stay_at_their_source_audit_status(self) -> None:
+        """The 182 bounded rows were reverted by #1236 and stay reverted: no delivery
+        association, no verified label, and no ticket mapping conflicts."""
+        full_records = {record["id"]: record for record in self.full["records"]}
+        for receipt, count in self.BOUNDED_182.items():
+            record = full_records[receipt]
+            bounded = [
+                claim
+                for claim in record["rows"]
+                if claim.get("remainingBoundary")
+            ]
+            self.assertEqual(len(bounded), count, receipt)
+            for claim in bounded:
+                with self.subTest(receipt=receipt, row=claim["id"]):
+                    self.assertTrue(claim["remainingBoundary"][0].startswith("#1229"))
+                    row = self.rows[claim["id"]]
+                    self.assertNotIn("delivery", row)
+                    self.assertNotEqual(row["verification"], "verified")
+
+    def test_the_1236_withdrawal_records_are_removed(self) -> None:
+        """The limitation now lives in the receipts' remainingBoundary entries."""
+        research = ROOT / "docs" / "research" / "pi-v1.3.0"
+        for receipt in self.BOUNDED_182:
+            self.assertFalse(
+                (research / f"1202-withdrawn-{receipt}-claims.json").exists(), receipt
+            )
 
 
 class TicketMappedLedgerTest(unittest.TestCase):
@@ -865,9 +1107,10 @@ class TicketMappedLedgerTest(unittest.TestCase):
 
     def test_unreferenced_rows_match_the_recorded_sets_and_the_rulings_are_applied(self) -> None:
         null_refs, draft_refs = consolidate.unreferenced_ticket_rows(self.ledger["rows"])
-        # Withdrawn claims (#1236 durable-captures, #1226 mcp-request-auth) revert
-        # to source-audit status, so they carry no delivery ticket until a genuine
-        # re-delivery; the #1058-draft TUI rows remain as the check reports them.
+        # Reverted rows carry no delivery ticket until a genuine re-delivery: the
+        # #1229 bounded durable-captures rows and the #1226 mcp-request-auth
+        # withdrawal stay unreferenced; the #1058-draft TUI rows remain as the
+        # check reports them.
         self.assertEqual(null_refs, self.WITHDRAWN_UNREFERENCED)
         self.assertEqual(draft_refs, self.UNREFERENCED_1058_DRAFT)
         for row_id in self.RULED_ABORT_ADMISSION_1148:

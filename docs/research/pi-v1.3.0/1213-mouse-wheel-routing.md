@@ -63,3 +63,17 @@ observation (`audit-1050/overlay-routing.json`, scenario
 `overlay-unhandled-wheel-scrolls-transcript`) pins the divergence. A whole-row
 claim waits on the C++ implementation fix; per the batch boundaries this
 comparison lane does not change behavior.
+
+## 2026-11-06 disposition (#1229)
+
+Retro-review blocker #1229 reconciled this receipt's evidence integrity. The
+3 claims whose `discriminatingCase.test` string-equals one of the same
+row's `comparisons[].test` entries now carry a non-empty `remainingBoundary`
+entry in `1058-deliveries.json`: each claim stays validated but bounded and no
+longer promotes its row, superseding the intermediate #1236 per-claim
+withdrawal record for this receipt (removed; preserved in git history). The
+rows revert to their source-audit status until a genuinely discriminating
+negative/control/boundary case is delivered. No cited test, pinned input,
+scenario mapping or routing digest changed; see
+[1229-withdrawn-1209-root-tui-lifecycle-claims.json](1229-withdrawn-1209-root-tui-lifecycle-claims.json)
+for receipts that also carry a #1229 withdrawal.

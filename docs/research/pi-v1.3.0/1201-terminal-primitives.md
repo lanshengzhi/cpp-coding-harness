@@ -62,3 +62,17 @@ The historical pi-v1.0.4 family stays registered under its own baseline; no
 relabelling occurred. The clipboard `null` (empty) and transfer-failure
 (reject) outcomes need a live X server, which the headless capture host lacks;
 the interface spells them and the unavailable outcome is captured dynamically.
+
+## 2026-11-06 disposition (#1229)
+
+Retro-review blocker #1229 reconciled this receipt's evidence integrity. The
+25 claims whose `discriminatingCase.test` string-equals one of the same
+row's `comparisons[].test` entries now carry a non-empty `remainingBoundary`
+entry in `1058-deliveries.json`: each claim stays validated but bounded and no
+longer promotes its row, superseding the intermediate #1236 per-claim
+withdrawal record for this receipt (removed; preserved in git history). The
+rows revert to their source-audit status until a genuinely discriminating
+negative/control/boundary case is delivered. No cited test, pinned input,
+scenario mapping or routing digest changed; see
+[1229-withdrawn-1209-root-tui-lifecycle-claims.json](1229-withdrawn-1209-root-tui-lifecycle-claims.json)
+for receipts that also carry a #1229 withdrawal.

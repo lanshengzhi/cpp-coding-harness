@@ -48,16 +48,31 @@ channel.
 
 ## Per-claim withdrawal
 
-A receipt that stays otherwise active can withdraw exactly the claims #1202 disputed through a
-checked-in `1202-withdrawn-<receipt>-claims.json` record next to `1058-deliveries.json`. The record
+A receipt that stays otherwise active can withdraw exactly the claims an issue disputed through
+a checked-in `<issue>-withdrawn-<receipt>-claims.json` record next to `1058-deliveries.json` (the
+`1202-withdrawn-*-claims.json` family is the original naming). The record
 names the issue, the receipt, the exact claim ids (whole rows, or single comparisons within a claim
-via `withdrawnComparisons`), a reason and a date, and preserves the full withdrawn claims. `build`
-and `check` validate every reference against the full receipts, fail-closed on unknown ids, validate
-the full receipt as without the channel, and skip the withdrawn claims for promotion: their rows
-revert to source-audit status, a lane-recorded `verified` downgrades fail-closed to `unverified`,
-and the ledger embeds the effective deliveries with withdrawn claims absent and withdrawn
-comparisons dropped from their claim. With no withdrawal record present the build is byte-identical
-to a build without the channel.
+via `withdrawnComparisons`), a reason and a date, and preserves the full withdrawn claims. Records
+are keyed by (receipt, issue): one receipt may carry withdrawals from several issues, but never two
+records from the same issue, and two records may not withdraw the same claim. `build` and `check`
+validate every reference against the full receipts, fail-closed on unknown ids, validate the full
+receipt as without the channel, and skip the withdrawn claims for promotion: their rows revert to
+source-audit status, a lane-recorded `verified` downgrades fail-closed to `unverified`, and the
+ledger embeds the effective deliveries with withdrawn claims absent and withdrawn comparisons
+dropped from their claim. With no withdrawal record present the build is byte-identical to a build
+without the channel.
+
+## Bounded claims (a non-empty remainingBoundary)
+
+A delivery claim whose `remainingBoundary` list is non-empty is a bounded claim: `build` and
+`check` validate it exactly like any other claim (pinned inputs, registered scenarios, passing
+comparison and discriminating cases), but it does not promote its row. The reviewed receipt keeps
+the bounded claim with its boundary text, so an incompletely discriminating comparison is visible
+in the receipt itself instead of only in a subtraction record; the ledger embeds the claim with
+its boundary, and the row keeps its source-audit status under the same fail-closed downgrade rule
+as a withdrawn claim. A row verifies only through a complete, unbounded, unwithdrawn claim.
+Issue #1229 uses this channel for the 182 non-discriminating discriminating-case citations across
+the seven 1201-1213 receipts.
 
 ## Receipt artifact anchoring (#1202 boundary check)
 

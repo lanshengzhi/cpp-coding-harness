@@ -16,15 +16,26 @@ shorthand). A longer already-qualified pointer, a different symbol list on the s
 outside the scope keep the lane's recorded provenance, and `appliedCorrections` names only the
 corrections that actually rewrote a pointer.
 
-A checked-in per-claim withdrawal record (`1202-withdrawn-*-claims.json` next to the deliveries
-file) subtracts exactly the claims #1202 disputed from a receipt that stays otherwise active:
-a whole claim, or single comparisons within a claim. `build` and `check` validate every withdrawal
-reference against the full receipts, fail-closed on unknown ids, validate the full receipt exactly
-as before, and then skip the withdrawn claims for promotion; the rows they claimed revert to their
-source-audit status, and a lane-recorded `verified` downgrades fail-closed to `unverified` because
-that label is delivery-backed only. The ledger embeds the effective deliveries: withdrawn claims
-are absent and withdrawn comparisons drop from their claim. With no withdrawal record present the
-deliveries are embedded unchanged and the build is byte-identical to a build without the channel.
+A checked-in per-claim withdrawal record (`<issue>-withdrawn-<receipt>-claims.json` next to the
+deliveries file, e.g. the `1202-withdrawn-*-claims.json` family) subtracts exactly the claims an
+issue disputed from a receipt that stays otherwise active: a whole claim, or single comparisons
+within a claim. Records are keyed by (receipt, issue), so one receipt may carry a withdrawal from
+several issues but never two records from the same issue. `build` and `check` validate every
+withdrawal reference against the full receipts, fail-closed on unknown ids, validate the full
+receipt exactly as before, and then skip the withdrawn claims for promotion; the rows they claimed
+revert to their source-audit status, and a lane-recorded `verified` downgrades fail-closed to
+`unverified` because that label is delivery-backed only. The ledger embeds the effective
+deliveries: withdrawn claims are absent and withdrawn comparisons drop from their claim. With no
+withdrawal record present the deliveries are embedded unchanged and the build is byte-identical to
+a build without the channel.
+
+A delivery claim whose `remainingBoundary` list is non-empty is a bounded claim: it is validated
+exactly like any other claim (pinned inputs, registered scenarios, passing comparison and
+discriminating cases), but it does not promote its row, and the row keeps its source-audit status
+under the same fail-closed downgrade rule as a withdrawn claim. The reviewed receipt keeps the
+bounded claim with its boundary text instead of a separate subtraction record; the ledger embeds
+the claim with its boundary, so an incomplete comparison is visible in the receipt itself. Only a
+complete, unbounded, unwithdrawn claim verifies its row.
 
 The plan's checked-in `ticketMappings` section (proposal E1 of the #1183 reconciliation,
 docs/wiki/pi-alignment/reconciliation-1183-proposal-2026-11-04.md) retargets the consolidated
@@ -61,7 +72,7 @@ sys.path.insert(0, str(ROOT / "scripts/evidence"))
 import audit_evidence as audit
 
 DELIVERIES_PATH = ROOT / "docs/research/pi-v1.3.0/1058-deliveries.json"
-WITHDRAWN_CLAIMS_GLOB = "1202-withdrawn-*-claims.json"
+WITHDRAWN_CLAIMS_GLOB = "*-withdrawn-*-claims.json"
 PLAN_PATH = ROOT / "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
 LEDGER_PATH = ROOT / "docs/research/pi-v1.3.0/1058-consolidated-capability-ledger.json"
 FRONTIER_PATH = ROOT / "docs/research/pi-v1.3.0/1058-implementation-frontier.json"
@@ -642,15 +653,16 @@ def passed_delivery_tests(validation: dict, delivery_id: str = "") -> set[str]:
     return names
 
 
-def load_withdrawn_claims() -> dict[str, dict]:
-    """Checked-in per-claim withdrawal records, keyed by receipt id.
+def load_withdrawn_claims() -> dict[tuple[str, str], dict]:
+    """Checked-in per-claim withdrawal records, keyed by (receipt id, issue).
 
     A withdrawal record names the issue, the receipt, the exact claims (whole rows, or single
     comparisons within a claim), a reason and a date, and preserves the full withdrawn claims as
-    the audit counterpart of the active receipt. Shape validation is fail-closed; reference
-    existence against the full receipts is `withdrawn_reference_map`.
+    the audit counterpart of the active receipt. One receipt may carry withdrawals from several
+    issues (keyed separately), but never two records from the same issue. Shape validation is
+    fail-closed; reference existence against the full receipts is `withdrawn_reference_map`.
     """
-    withdrawals: dict[str, dict] = {}
+    withdrawals: dict[tuple[str, str], dict] = {}
     for path in sorted(DELIVERIES_PATH.parent.glob(WITHDRAWN_CLAIMS_GLOB)):
         record = load_json(path)
         label = path.name
@@ -660,8 +672,12 @@ def load_withdrawn_claims() -> dict[str, dict]:
                 isinstance(record.get(key), str) and record[key].strip(),
                 f"{label}: withdrawal record needs a non-empty {key}",
             )
-        receipt = record["receipt"]
-        require(receipt not in withdrawals, f"{label}: duplicate withdrawal record for {receipt}")
+        require(
+            re.fullmatch(r"#\d+", record["issue"]) is not None,
+            f"{label}: withdrawal record issue is not a #<issue> reference: {record['issue']!r}",
+        )
+        key = (record["receipt"], record["issue"])
+        require(key not in withdrawals, f"{label}: duplicate withdrawal record for {key[0]} {key[1]}")
         claims = record.get("claims")
         require(isinstance(claims, list) and claims, f"{label}: withdrawal record names no claims")
         seen: set[str] = set()
@@ -678,22 +694,23 @@ def load_withdrawn_claims() -> dict[str, dict]:
                     isinstance(scenario, str) and scenario,
                     f"{label}: {claim['id']}: withdrawn comparison is not a scenario name",
                 )
-        withdrawals[receipt] = record
+        withdrawals[key] = record
     return withdrawals
 
 
 def withdrawn_reference_map(
-    withdrawals: dict[str, dict], deliveries: dict
+    withdrawals: dict[tuple[str, str], dict], deliveries: dict
 ) -> dict[tuple[str, str], list[str]]:
     """Validate every withdrawal against the full receipts; return the subtraction map.
 
     The map is keyed by (receipt id, row id); the value lists the withdrawn comparison
     scenarios, empty for a whole-claim withdrawal. Unknown receipt, claim or comparison ids
-    fail closed: a withdrawal may only name what the committed receipts actually claim.
+    fail closed: a withdrawal may only name what the committed receipts actually claim, and
+    two records may not withdraw the same claim.
     """
     records = {record.get("id"): record for record in deliveries.get("records") or []}
     references: dict[tuple[str, str], list[str]] = {}
-    for receipt, record in withdrawals.items():
+    for (receipt, _issue), record in withdrawals.items():
         delivery = records.get(receipt)
         require(delivery is not None, f"withdrawal record names unknown receipt {receipt}")
         claims = {claim.get("id"): claim for claim in delivery.get("rows") or []}
@@ -710,7 +727,9 @@ def withdrawn_reference_map(
                     scenario in available,
                     f"{receipt}:{row_id}: withdrawal names unknown comparison {scenario}",
                 )
-            references[(receipt, row_id)] = scenarios
+            key = (receipt, row_id)
+            require(key not in references, f"{receipt}: {row_id} is withdrawn twice")
+            references[key] = scenarios
     return references
 
 
@@ -865,7 +884,7 @@ def delivery_routing_digest(rows: list[dict], claims: list[dict], artifacts: dic
 
 def delivery_updates(
     rows: list[dict], deliveries: dict, withdrawn: dict[tuple[str, str], list[str]] | None = None
-) -> dict[str, dict]:
+) -> tuple[dict[str, dict], set[str]]:
     """Accept explicit whole-row comparisons; audit bytes and membership stay unchanged.
 
     Digests bind the selected implementation, test, fixture and JUnit files. Scenario-to-test
@@ -873,7 +892,9 @@ def delivery_updates(
     JUnit result alone cannot establish them. No command stored in a receipt is executed here.
     The full receipts are validated exactly as without the withdrawal channel; `withdrawn`
     (the checked-in per-claim subtraction map) then gates promotion, so a withdrawn claim is
-    audited but cannot verify its row and the row reverts to its source-audit status.
+    audited but cannot verify its row and the row reverts to its source-audit status. A claim
+    with a non-empty `remainingBoundary` is bounded: validated the same way, but it likewise
+    does not promote its row. Returns (updates, bounded rows).
     """
     withdrawn = withdrawn or {}
     require(deliveries.get("schema") == "pike/pi-v1.3.0-capability-deliveries/1", "delivery schema mismatch")
@@ -888,6 +909,7 @@ def delivery_updates(
     by_id = {row["id"]: row for row in rows}
     record_ids: set[str] = set()
     updates: dict[str, dict] = {}
+    bounded: set[str] = set()
     for record in records:
         identity = record.get("id")
         require(isinstance(identity, str) and identity and identity not in record_ids, "duplicate or missing delivery id")
@@ -914,7 +936,13 @@ def delivery_updates(
             require(row_id in by_id and row_id not in updates, f"{identity}: unknown or duplicate delivered row {row_id}")
             row = by_id[row_id]
             require(row["membership"] == "supported", f"{row_id}: delivery cannot change membership")
-            require(claim.get("remainingBoundary") == [], f"{row_id}: incomplete delivery cannot verify a whole row")
+            boundary = claim.get("remainingBoundary")
+            require(
+                isinstance(boundary, list)
+                and all(isinstance(item, str) and item.strip() for item in boundary),
+                f"{row_id}: remainingBoundary must be a list of non-empty strings",
+            )
+            bounded_claim = bool(boundary)
             comparisons = claim.get("comparisons")
             require(isinstance(comparisons, list) and comparisons, f"{row_id}: missing comparisons")
             obligations: set[str] = set()
@@ -937,8 +965,13 @@ def delivery_updates(
             require(control.get("testSource") in paths and control["testSource"].startswith("tests/"),
                     f"{row_id}: discriminating source is not pinned")
             if (identity, row_id) in withdrawn:
-                # A checked-in #1202 withdrawal subtracts this claim from promotion; the full
+                # A checked-in withdrawal subtracts this claim from promotion; the full
                 # claim stays validated above, and the row reverts to its source-audit status.
+                continue
+            if bounded_claim:
+                # A bounded claim keeps its validated comparisons but cannot verify its row:
+                # the receipt itself records why, and the row stays at source-audit status.
+                bounded.add(row_id)
                 continue
             first = comparisons[0]
             updates[row_id] = {
@@ -960,7 +993,7 @@ def delivery_updates(
             }
         require(record.get("routingSha256") == delivery_routing_digest(rows, claims, artifacts),
                 f"{identity}: delivery routing digest mismatch")
-    return updates
+    return updates, bounded
 
 
 def build_ledger(
@@ -1089,7 +1122,7 @@ def build_ledger(
     deliveries = load_json(DELIVERIES_PATH)
     withdrawals = load_withdrawn_claims()
     withdrawn = withdrawn_reference_map(withdrawals, deliveries)
-    updates = delivery_updates(rows, deliveries, withdrawn)
+    updates, bounded = delivery_updates(rows, deliveries, withdrawn)
     for row in rows:
         if row["id"] not in updates:
             continue
@@ -1098,10 +1131,12 @@ def build_ledger(
         row.update(update)
     withdrawn_rows = {row_id for _, row_id in withdrawn}
     for row in rows:
-        # A withdrawn claim reverts the row to its source-audit status. A lane-recorded
-        # 'verified' is delivery-backed only in this consolidation, so a withdrawn row carrying
-        # it downgrades fail-closed (owner decision 2) until its claim is re-anchored.
-        if row["id"] not in updates and row["id"] in withdrawn_rows and row["verification"] == "verified":
+        # A withdrawn or bounded claim reverts the row to its source-audit status. A
+        # lane-recorded 'verified' is delivery-backed only in this consolidation, so such a
+        # row carrying it downgrades fail-closed (owner decision 2) until its claim is
+        # re-anchored or its boundary is closed.
+        if row["id"] not in updates and row["verification"] == "verified" \
+                and (row["id"] in withdrawn_rows or row["id"] in bounded):
             row["verification"] = "unverified"
 
     apply_ticket_mappings(rows, ticket_mapping_map(load_ticket_mappings(plan)))
@@ -1346,7 +1381,7 @@ def check_ledger(
     deliveries = load_json(DELIVERIES_PATH)
     withdrawals = load_withdrawn_claims()
     withdrawn = withdrawn_reference_map(withdrawals, deliveries)
-    updates = delivery_updates(rows, deliveries, withdrawn)
+    updates, _bounded = delivery_updates(rows, deliveries, withdrawn)
     for row in rows:
         require((row["id"] in updates) == ("delivery" in row), f"{row['id']}: delivery association mismatch")
         if row["id"] in updates:

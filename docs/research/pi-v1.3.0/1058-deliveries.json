@@ -178,7 +178,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -751,6 +751,12 @@
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
+    ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
    }
   },
@@ -1732,7 +1738,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -2372,6 +2378,12 @@
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
+    ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
    }
   },
@@ -3093,7 +3105,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -3264,6 +3276,12 @@
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
+    ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
    }
   },
@@ -3616,7 +3634,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -4277,6 +4295,12 @@
       "sha256": "a5f77081d01ebda3363c7b2388a57ea614a392a0a97a44269504047065c8d348"
      }
     }
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -4492,7 +4516,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4604,6 +4628,12 @@
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
+    ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
    }
   },
@@ -4820,7 +4850,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4987,6 +5017,12 @@
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
+    ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
    }
   },
@@ -5194,7 +5230,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -5484,6 +5520,12 @@
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
     ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -5681,7 +5723,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -5948,6 +5990,12 @@
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
     ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -6048,7 +6096,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -6142,6 +6190,12 @@
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
+    ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
    }
   },
@@ -6418,7 +6472,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -6714,6 +6768,12 @@
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
     ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -6926,7 +6986,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -8072,6 +8132,12 @@
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
     ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -8148,7 +8214,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -8420,6 +8486,12 @@
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
     ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -8492,7 +8564,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "3bf95d69d874d050140554ffb02ffcb9182f521692bf9640ec6e0b9e708f8a33"
+     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -8818,6 +8890,12 @@
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
      "scripts/dev/lane-lock.sh",
      "tests/dev/LaneLockTest.py"
+    ]
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
    }
   },
@@ -9318,7 +9396,9 @@
     },
     {
      "id": "cch_coding_agent:TerminalColorScheme",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/terminal-colors.json",
@@ -9335,7 +9415,9 @@
     },
     {
      "id": "cch_coding_agent:parseTerminalColorSchemeReport",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/terminal-colors.json",
@@ -9352,7 +9434,9 @@
     },
     {
      "id": "cch_coding_agent:TerminalColors",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/terminal-colors.json",
@@ -9369,7 +9453,9 @@
     },
     {
      "id": "cch_coding_agent:TerminalColors.foreground",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/terminal-colors.json",
@@ -9386,7 +9472,9 @@
     },
     {
      "id": "cch_coding_agent:TerminalColors.background",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/terminal-colors.json",
@@ -9403,7 +9491,9 @@
     },
     {
      "id": "cch_coding_agent:TerminalColors.palette",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/terminal-colors.json",
@@ -9437,7 +9527,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.getText",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9454,7 +9546,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.setText",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9471,7 +9565,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.handleInput",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9488,7 +9584,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.onChange",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9505,7 +9603,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.onSubmit",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9522,7 +9622,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.addToHistory",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9539,7 +9641,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.insertTextAtCursor",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9556,7 +9660,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.getExpandedText",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9573,7 +9679,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.setAutocompleteProvider",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9590,7 +9698,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.setAutocompleteMaxVisible",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9607,7 +9717,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.setPaddingX",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9624,7 +9736,9 @@
     },
     {
      "id": "cch_coding_agent:EditorComponent.borderColor",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/editor-component.json",
@@ -9641,7 +9755,9 @@
     },
     {
      "id": "cch_coding_agent:NativeClipboard",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/native-clipboard.json",
@@ -9658,7 +9774,9 @@
     },
     {
      "id": "cch_coding_agent:NativeClipboard.getText",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/native-clipboard.json",
@@ -9675,7 +9793,9 @@
     },
     {
      "id": "cch_coding_agent:NativeClipboard.getImage",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/native-clipboard.json",
@@ -9692,7 +9812,9 @@
     },
     {
      "id": "cch_coding_agent:NativeClipboard.getFilePaths",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/native-clipboard.json",
@@ -9709,7 +9831,9 @@
     },
     {
      "id": "cch_coding_agent:NativeClipboard.setText",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/native-clipboard.json",
@@ -9726,7 +9850,9 @@
     },
     {
      "id": "cch_coding_agent:getNativeClipboard",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/native-clipboard.json",
@@ -9743,7 +9869,9 @@
     },
     {
      "id": "cch_coding_agent:setImageTranscoder",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/image-transcoder.json",
@@ -9829,6 +9957,10 @@
       "sha256": "8eb0768c66cb25c56b5830171dcf81e0a7eb14e93b622d4e25e96c151045094c"
      }
     }
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 25 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
+    "changedInputs": []
    }
   },
   {
@@ -9917,7 +10049,9 @@
    "rows": [
     {
      "id": "cch_durable:background-ownership-boundary",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1203/ownership.json",
@@ -9934,7 +10068,9 @@
     },
     {
      "id": "cch_durable:submission-queues",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1203/steering.json",
@@ -9951,7 +10087,9 @@
     },
     {
      "id": "cch_durable:harness-settings-defaults",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1203/settings.json",
@@ -9992,6 +10130,10 @@
       "sha256": "6d8bbdf2f3cc7533155942b762b6e10c9758a7db115ad99963b6edf56a772e06"
      }
     }
+   },
+   "revalidation1229": {
+    "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 3 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
+    "changedInputs": []
    }
   },
   {
@@ -10203,7 +10345,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.setWheelScrollLines",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -10220,7 +10364,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreenOptions.wheelScrollLines",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -10254,7 +10400,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.mouseEnabled",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/mouse.json",
@@ -10440,7 +10588,11 @@
      }
     }
    ],
-   "routingSha256": "57405680077b10e1b24a632a60eb85fef02fbb7f963b3124176d4ce7cc5b8ed8"
+   "routingSha256": "57405680077b10e1b24a632a60eb85fef02fbb7f963b3124176d4ce7cc5b8ed8",
+   "revalidation1229": {
+    "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 3 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
+    "changedInputs": []
+   }
   },
   {
    "id": "1212-transcript-selection",
@@ -10582,7 +10734,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.copyOnSelect",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10599,7 +10753,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.copySelection",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10616,7 +10772,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.copySelectionToClipboard",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10633,7 +10791,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.copyTextToClipboard",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10667,7 +10827,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.getClickCount",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10701,7 +10863,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.getCopyOnSelect",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10718,7 +10882,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.getLineSelection",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10820,7 +10986,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.getWordSelection",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10837,7 +11005,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.handleRightClickPaste",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10905,7 +11075,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.onRightClickPaste",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -10939,7 +11111,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.selectionAutoScrollDirection",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -10990,7 +11164,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.selectionFocus",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -11007,7 +11183,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.selectionGranularity",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -11041,7 +11219,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.setCopyOnSelect",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -11058,7 +11238,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.stopSelectionAutoScroll",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11075,7 +11257,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.updateSelectionAutoScroll",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11092,7 +11276,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.updateSelectionFocus",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -11109,7 +11295,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreenOptions.copyOnSelect",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -11126,7 +11314,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreenOptions.copySelection",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -11143,7 +11333,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreenOptions.onRightClickPaste",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1212/selection.json",
@@ -11160,7 +11352,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.clearTextSelection",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/padding-and-selection-reset.json",
@@ -11177,7 +11371,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.resetTextSelection",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/padding-and-selection-reset.json",
@@ -11194,7 +11390,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.lastClick",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/padding-and-selection-reset.json",
@@ -11210,7 +11408,11 @@
      }
     }
    ],
-   "routingSha256": "693e2de5400d2992f7334e1d9e2fc6ea595002994a1fe68fbf0adda6ea28dc8a"
+   "routingSha256": "693e2de5400d2992f7334e1d9e2fc6ea595002994a1fe68fbf0adda6ea28dc8a",
+   "revalidation1229": {
+    "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 23 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
+    "changedInputs": []
+   }
   },
   {
    "id": "1211-alt-screen-viewport",
@@ -11376,7 +11578,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.applySearchHighlights",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -11393,7 +11597,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.applySearchTextHighlight",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -11410,7 +11616,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.beforeTerminalStart",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11427,7 +11635,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.beforeTerminalStop",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11444,7 +11654,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.closeSearch",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -11461,7 +11673,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.compositeFlashes",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-nav.json",
@@ -11495,7 +11709,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.constructor",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11512,7 +11728,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.currentLayout",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11529,7 +11747,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.doRender",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -11546,7 +11766,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.flashes",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-nav.json",
@@ -11563,7 +11785,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.getMountedRoots",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11580,7 +11804,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.getPrimaryScrollView",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11614,7 +11840,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.getSearchNavigationDirectionAt",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -11631,7 +11859,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.implicitDocument",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11648,7 +11878,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.implicitScrollView",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11682,7 +11914,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.lastDocument",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11699,7 +11933,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.layoutRoot",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11716,7 +11952,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.navigateSearch",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -11767,7 +12005,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.previousScreen",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11784,7 +12024,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.refreshSearch",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -11801,7 +12043,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.resetRenderState",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -11818,7 +12062,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.savedCapabilities",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11835,7 +12081,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.scrollBy",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11852,7 +12100,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.scrollScrollbarToPointer",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/scrollbar.json",
@@ -11869,7 +12119,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.scrollToBottom",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11886,7 +12138,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.scrollToEndIndicator",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-nav.json",
@@ -11903,7 +12157,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.scrollToEndIndicatorRect",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-nav.json",
@@ -11920,7 +12176,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.scrollToPrompt",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-nav.json",
@@ -11937,7 +12195,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.scrollToTop",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -11954,7 +12214,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.scrollbarDrag",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/scrollbar.json",
@@ -11971,7 +12233,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.scrollbarHover",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/scrollbar.json",
@@ -11988,7 +12252,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.searchCurrentMatchStyle",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -12005,7 +12271,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.searchMatchStyle",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -12022,7 +12290,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.searchNavigationButtonStyle",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -12039,7 +12309,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.setLayoutRoot",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -12056,7 +12328,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.setScrollbarHover",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/scrollbar.json",
@@ -12073,7 +12347,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.stopScrollbarDrag",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/scrollbar.json",
@@ -12090,7 +12366,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.stopScrollbarHover",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/scrollbar.json",
@@ -12107,7 +12385,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.toggleSearch",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -12124,7 +12404,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.updateSearchQuery",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -12141,7 +12423,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.updateScrollbarHover",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/scrollbar.json",
@@ -12158,7 +12442,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.viewportTop",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -12175,7 +12461,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreenOptions",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/scroll-view.json",
@@ -12209,7 +12497,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreenOptions.scrollToEndIndicator",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-nav.json",
@@ -12226,7 +12516,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreenOptions.searchCurrentMatchStyle",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -12243,7 +12535,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreenOptions.searchMatchStyle",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -12260,7 +12554,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreenOptions.searchNavigationButtonStyle",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1211/alt-screen-search.json",
@@ -12277,7 +12573,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/padding-and-selection-reset.json",
@@ -12294,7 +12592,9 @@
     },
     {
      "id": "cch_tui:TuiAltScreen.render",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/cursor-composition.json",
@@ -12310,7 +12610,11 @@
      }
     }
    ],
-   "routingSha256": "d38fd947c7276ca0fcbadef9ce4fc959aef818b277043edde6ee014bbea3bf9c"
+   "routingSha256": "d38fd947c7276ca0fcbadef9ce4fc959aef818b277043edde6ee014bbea3bf9c",
+   "revalidation1229": {
+    "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 49 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
+    "changedInputs": []
+   }
   },
   {
    "id": "1210-regular-renderer",
@@ -12487,7 +12791,9 @@
     },
     {
      "id": "cch_tui:TuiMainScreenRenderState",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1210/renderer-switch.json",
@@ -12504,7 +12810,9 @@
     },
     {
      "id": "cch_tui:TuiMainScreenRenderState.cursorRow",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1210/product-cursor-layout.json",
@@ -12521,7 +12829,9 @@
     },
     {
      "id": "cch_tui:TuiMainScreenRenderState.hardwareCursorRow",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1210/product-cursor-layout.json",
@@ -12538,7 +12848,9 @@
     },
     {
      "id": "cch_tui:TuiMainScreenRenderState.maxLinesRendered",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1210/renderer-switch.json",
@@ -12555,7 +12867,9 @@
     },
     {
      "id": "cch_tui:TuiMainScreenRenderState.previousHeight",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1210/renderer-switch.json",
@@ -12572,7 +12886,9 @@
     },
     {
      "id": "cch_tui:TuiMainScreenRenderState.previousLines",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1210/fullscreen-exit-output.json",
@@ -12589,7 +12905,9 @@
     },
     {
      "id": "cch_tui:TuiMainScreenRenderState.previousViewportTop",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1210/fullscreen-exit-output.json",
@@ -12606,7 +12924,9 @@
     },
     {
      "id": "cch_tui:TuiMainScreenRenderState.previousWidth",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1210/renderer-switch.json",
@@ -12640,7 +12960,9 @@
     },
     {
      "id": "cch_tui:TuiMainScreen.doRender",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/cursor-composition.json",
@@ -12656,7 +12978,11 @@
      }
     }
    ],
-   "routingSha256": "16c906ce72b38769624fb00de1cc5218e8317c5318cfadff4a2b684f04e7d07e"
+   "routingSha256": "16c906ce72b38769624fb00de1cc5218e8317c5318cfadff4a2b684f04e7d07e",
+   "revalidation1229": {
+    "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 9 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed.",
+    "changedInputs": []
+   }
   },
   {
    "id": "1209-root-tui-lifecycle",
@@ -12792,7 +13118,9 @@
    "rows": [
     {
      "id": "cch_tui:TUI",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -12809,7 +13137,9 @@
     },
     {
      "id": "cch_tui:TUI.addChild",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -12826,7 +13156,9 @@
     },
     {
      "id": "cch_tui:TUI.removeChild",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -12843,7 +13175,9 @@
     },
     {
      "id": "cch_tui:TUI.setFocus",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -12860,7 +13194,9 @@
     },
     {
      "id": "cch_tui:TUI.clear",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -12877,7 +13213,9 @@
     },
     {
      "id": "cch_tui:TUI.start",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -12894,7 +13232,9 @@
     },
     {
      "id": "cch_tui:TUI.stop",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -12928,7 +13268,9 @@
     },
     {
      "id": "cch_tui:TUI.children",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -12979,7 +13321,9 @@
     },
     {
      "id": "cch_tui:Container",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -12996,7 +13340,9 @@
     },
     {
      "id": "cch_tui:Container.addChild",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -13013,7 +13359,9 @@
     },
     {
      "id": "cch_tui:Container.children",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -13030,7 +13378,9 @@
     },
     {
      "id": "cch_tui:Container.clear",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -13047,7 +13397,9 @@
     },
     {
      "id": "cch_tui:Container.removeChild",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -13132,7 +13484,9 @@
     },
     {
      "id": "cch_tui:Component",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -13251,7 +13605,9 @@
     },
     {
      "id": "cch_tui:TuiStopOptions",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -13268,7 +13624,9 @@
     },
     {
      "id": "cch_tui:TuiStopOptions.preserveScreen",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/screen-state.json",
@@ -13302,7 +13660,9 @@
     },
     {
      "id": "cch_tui:Component.wantsKeyRelease",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13319,7 +13679,9 @@
     },
     {
      "id": "cch_tui:TUI.addInputListener",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13336,7 +13698,9 @@
     },
     {
      "id": "cch_tui:TUI.removeInputListener",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13353,7 +13717,9 @@
     },
     {
      "id": "cch_tui:TuiInputListener",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13370,7 +13736,9 @@
     },
     {
      "id": "cch_tui:TuiInputListenerResult",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13387,7 +13755,9 @@
     },
     {
      "id": "cch_tui:TUI.onDebug",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13404,7 +13774,9 @@
     },
     {
      "id": "cch_tui:diag.debugKey",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13421,7 +13793,9 @@
     },
     {
      "id": "cch_tui:TUI.onTerminalColorSchemeChange",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13438,7 +13812,9 @@
     },
     {
      "id": "cch_tui:TUI.setTerminalColorSchemeNotifications",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13455,7 +13831,9 @@
     },
     {
      "id": "cch_tui:TUI.requestRender",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13472,7 +13850,9 @@
     },
     {
      "id": "cch_tui:TUI.fullRedraws",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13489,7 +13869,9 @@
     },
     {
      "id": "cch_tui:TUI.getClearOnShrink",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13506,7 +13888,9 @@
     },
     {
      "id": "cch_tui:TUI.setClearOnShrink",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13523,7 +13907,9 @@
     },
     {
      "id": "cch_tui:TUI.showOverlay",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/cursor-composition.json",
@@ -13540,7 +13926,9 @@
     },
     {
      "id": "cch_tui:TUI.hasOverlay",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13574,7 +13962,9 @@
     },
     {
      "id": "cch_tui:OverlayHandle",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13591,7 +13981,9 @@
     },
     {
      "id": "cch_tui:OverlayHandle.focus",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13608,7 +14000,9 @@
     },
     {
      "id": "cch_tui:OverlayHandle.getBounds",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13625,7 +14019,9 @@
     },
     {
      "id": "cch_tui:OverlayHandle.hide",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13642,7 +14038,9 @@
     },
     {
      "id": "cch_tui:OverlayHandle.isFocused",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13659,7 +14057,9 @@
     },
     {
      "id": "cch_tui:OverlayHandle.isHidden",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13676,7 +14076,9 @@
     },
     {
      "id": "cch_tui:OverlayHandle.setHidden",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13727,7 +14129,9 @@
     },
     {
      "id": "cch_tui:OverlayBounds",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13744,7 +14148,9 @@
     },
     {
      "id": "cch_tui:OverlayBounds.col",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13761,7 +14167,9 @@
     },
     {
      "id": "cch_tui:OverlayBounds.height",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13778,7 +14186,9 @@
     },
     {
      "id": "cch_tui:OverlayBounds.row",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13795,7 +14205,9 @@
     },
     {
      "id": "cch_tui:OverlayBounds.width",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13846,7 +14258,9 @@
     },
     {
      "id": "cch_tui:OverlayMargin.left",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13880,7 +14294,9 @@
     },
     {
      "id": "cch_tui:OverlayMargin.top",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13897,7 +14313,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13931,7 +14349,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions.col",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13948,7 +14368,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions.margin",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13965,7 +14387,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions.maxHeight",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -13982,7 +14406,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions.minWidth",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -14016,7 +14442,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions.offsetX",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -14033,7 +14461,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions.offsetY",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -14050,7 +14480,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions.row",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -14067,7 +14499,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions.visible",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -14084,7 +14518,9 @@
     },
     {
      "id": "cch_tui:OverlayOptions.width",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -14152,7 +14588,9 @@
     },
     {
      "id": "cch_tui:isFocusable",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -14169,7 +14607,9 @@
     },
     {
      "id": "cch_tui:isViewportTUI",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -14186,7 +14626,9 @@
     },
     {
      "id": "cch_tui:compositeTuiLine",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1209/root-extras.json",
@@ -14220,7 +14662,9 @@
     },
     {
      "id": "cch_tui:ViewportTUI.setLayoutRoot",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1210/renderer-switch.json",
@@ -14237,7 +14681,9 @@
     },
     {
      "id": "cch_tui:TUI.queryTerminalColors",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/terminal-colors.json",
@@ -14254,7 +14700,9 @@
     },
     {
      "id": "cch_tui:TUI.timeoutMs",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1201/terminal-colors.json",
@@ -14288,7 +14736,9 @@
     },
     {
      "id": "cch_tui:TuiMouseEvent",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/mouse.json",
@@ -14339,7 +14789,9 @@
     },
     {
      "id": "cch_tui:TuiMouseEvent.clickCount",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/mouse.json",
@@ -14543,7 +14995,9 @@
     },
     {
      "id": "cch_tui:TuiMouseEventResult",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/mouse.json",
@@ -14594,7 +15048,9 @@
     },
     {
      "id": "cch_tui:TuiMouseEventResult.handled",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/mouse.json",
@@ -14611,7 +15067,9 @@
     },
     {
      "id": "cch_tui:TuiMouseEventResult.render",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1213/mouse.json",
@@ -14628,7 +15086,9 @@
     },
     {
      "id": "cch_tui:CURSOR_MARKER",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/cursor-composition.json",
@@ -14645,7 +15105,9 @@
     },
     {
      "id": "cch_tui:renderFakeCursor",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/cursor-composition.json",
@@ -14662,7 +15124,9 @@
     },
     {
      "id": "cch_tui:tui:fake-cursor-marker-constants",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/cursor-composition.json",
@@ -14679,7 +15143,9 @@
     },
     {
      "id": "cch_tui:tui:resolveFakeCursors",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "#1229 (ADR 0075 clauses 2 and 5): the discriminating case cites the same recorded test as this row's happy-path comparison, so it exercises no independent negative/control/boundary path; the claim stays validated but bounded and does not promote the row until a genuinely discriminating case is delivered."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1050/cursor-composition.json",
@@ -14712,7 +15178,11 @@
      }
     }
    ],
-   "routingSha256": "2c4ea0d35260db3e79a1f8e09270313aa6d5b0151a06d77b83cfbfc3ac118047"
+   "routingSha256": "2c4ea0d35260db3e79a1f8e09270313aa6d5b0151a06d77b83cfbfc3ac118047",
+   "revalidation1229": {
+    "reason": "Issue #1229 (retro-review blocker) records the non-discriminating discriminating case disposition for this receipt: the 70 claims whose discriminatingCase.test string-equals one of the same row's comparisons[].test entries now carry a non-empty remainingBoundary entry, so each claim is validated but bounded and does not promote its row until a genuinely discriminating negative/control/boundary case is delivered (ADR 0075 clauses 2 and 5). The #1236 withdrawal record for these claims is removed: the limitation now lives in the receipt itself. No cited test, pinned input, scenario mapping or routing digest changed. Fourteen further claims whose only comparison cites tests/tui/ScreenStateGoldenTest.cpp without exercising the row's specific behavior (preserveScreen, renderNow, mouse handling and the remaining members) are withdrawn through 1229-withdrawn-1209-root-tui-lifecycle-claims.json.",
+    "changedInputs": []
+   }
   }
  ]
 }

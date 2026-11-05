@@ -41,7 +41,9 @@ command, UTC capture time and selected count.
 Every claimed row must be supported and map **each of its exact audit comparison
 scenarios** to a registered frozen artifact and a passing CTest case whose source
 is pinned. A passing discriminating case and its reason are required. The remaining
-boundary list must be explicitly empty. Missing cases, skipped/failed cases,
+boundary list must be explicitly empty for a claim to verify its row: a non-empty
+list bounds the claim (validated, but the row keeps its source-audit status) and the
+receipt itself records the limitation. Missing cases, skipped/failed cases,
 duplicate claims, unknown rows/scenarios, wrong baseline/revision and changed
 selected source/test/result bytes all reject the delivery. No record can alter
 membership or promote an adjacent row.
