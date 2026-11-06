@@ -106,14 +106,10 @@ struct AgentSessionSnapshot {
     harness::session::SessionMetadata metadata{};
     harness::session::SessionTopology topology{harness::session::SessionTopology::Linear};
     std::optional<std::filesystem::path> session_path{std::nullopt};
-    /// Workspace and provider availability values used by the frontend footer.
-    /// They are copied into the read model so a projection never reaches back
-    /// into the live Session or ModelRuntime for business state.
+    /// Workspace value used by the frontend footer. It is copied into the
+    /// read model so a projection never reaches back into the live Session
+    /// for business state.
     std::filesystem::path workspace{};
-    /// True only for an active subscription-backed credential. This is not
-    /// inferred from provider capabilities or the provider id alone.
-    bool using_subscription{false};
-    std::size_t available_provider_count{0};
     std::vector<ToolExecutionSnapshot> tool_executions{};
     RunState run_state{};
     RecoveryState recovery_state{};

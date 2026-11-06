@@ -88,6 +88,18 @@ constexpr std::string_view kReasoningAndPlainKeyed = R"({
   }
 })";
 
+/// The gateway-only shape: every discovered model carries provider `magpie`.
+constexpr std::string_view kSingleGatewayProvider = R"({
+  "providers": {
+    "magpie": {
+      "baseUrl": "http://127.0.0.1:3425/v1",
+      "api": "openai-completions",
+      "apiKey": "dummy-magpie-key",
+      "models": [{"id": "gateway-1", "name": "Gateway One", "reasoning": false}]
+    }
+  }
+})";
+
 struct Running {
     // Terminal first: it must outlive the io_context, whose shutdown destroys
     // the interactive-mode coroutine frame (and its Tui) last.
@@ -172,6 +184,50 @@ TEST_CASE("Ctrl+L opens the model selector and Enter selects a model with the Mo
     REQUIRE(running.terminal.inject_input(""));
     drain_ready(running.io);
     CHECK(session->snapshot().agent_state.model.id == "beta-1");
+
+    REQUIRE(running.terminal.inject_input("\x04"));
+    drain_ready(running.io);
+    REQUIRE(running.run_result);
+    CHECK(*running.run_result);
+}
+
+TEST_CASE("ModelSelector single-provider gateway catalog renders no provider badge or /model provider description",
+        "[coding_agent][tui][model-selector][e2e][issue1237][spec]") {
+    Fixture fixture;
+    fixture.write_models(kSingleGatewayProvider);
+    Running running;
+    auto session = boot(fixture, running);
+    REQUIRE(session->model() == "gateway-1");
+
+    // Ctrl+L opens the selector; the row is the model id alone because the
+    // active catalog spans one provider (issue #1237).
+    REQUIRE(running.terminal.inject_input("\x0c"));
+    drain_ready(running.io);
+    auto screen = visible_screen(running.terminal);
+    CHECK(screen.find("Only showing models from the local Magpie gateway.") != std::string::npos);
+    CHECK(screen.find("✓ gateway-1") != std::string::npos);
+    CHECK(screen.find("[magpie]") == std::string::npos);
+
+    REQUIRE(running.terminal.inject_input("\x1b"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input(""));
+    drain_ready(running.io);
+
+    // `/model ` lists the model id without a constant provider description;
+    // the inserted value remains the stable `provider/id` reference.
+    REQUIRE(running.terminal.inject_input("/model "));
+    drain_ready(running.io);
+    screen = visible_screen(running.terminal);
+    CHECK(screen.find("gateway-1") != std::string::npos);
+    CHECK(screen.find("magpie") == std::string::npos);
+    REQUIRE(running.terminal.inject_input("\t"));
+    drain_ready(running.io);
+    screen = visible_screen(running.terminal);
+    CHECK(screen.find("/model magpie/gateway-1") != std::string::npos);
+    REQUIRE(running.terminal.inject_input("\r"));
+    drain_ready(running.io);
+    screen = visible_screen(running.terminal);
+    CHECK(screen.find("Model: gateway-1") != std::string::npos);
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);

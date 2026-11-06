@@ -199,22 +199,40 @@ void ModelSelectorComponent::set_scope(bool scoped) {
     ++items_revision_;
 }
 
+bool ModelSelectorComponent::has_multiple_active_providers() const {
+    // Callers hold the mutex (or run in the ctor).
+    if (active_models_.size() < 2) return false;
+    const auto& first_provider = active_models_.front().provider;
+    return std::any_of(active_models_.begin() + 1, active_models_.end(), [&first_provider](const ModelItem& item) {
+        return item.provider != first_provider;
+    });
+}
+
 std::vector<cch::tui::SelectItem> ModelSelectorComponent::build_select_items() const {
     // Callers hold the mutex (or run in the ctor).
     std::vector<cch::tui::SelectItem> items;
     items.reserve(active_models_.size());
+    // The gateway-only catalog assigns every discovered model the same
+    // provider, so a per-row `[magpie]` badge would identify nothing. Render
+    // pi's muted provider badge only while the active set actually spans more
+    // than one provider (issue #1237).
+    const bool show_provider_badge = has_multiple_active_providers();
     for (const auto& item : active_models_) {
         const bool current = is_current(item.model);
         // pi `updateList`: the row is `cursor` (two cells, drawn by SelectList)
         // + `currentMarker` (the accent `✓ ` for the current model, two spaces
-        // otherwise) + the model id + the muted provider badge. The marker is
+        // otherwise) + the model id, plus the muted provider badge only while
+        // the active set spans multiple providers. The marker is
         // unstyled text inside the label because SelectList styles the selected
         // row as one run: a styled marker would reset the row's own color for
         // the id behind it, while on the selected row marker and id resolve to
         // the same accent cell run (ThinkingSelector composes its marker the
         // same way).
         std::string label{current ? "✓ " : "  "};
-        label += item.id + " " + theme_.foreground(ThemeToken::Muted, "[" + item.provider + "]");
+        label += item.id;
+        if (show_provider_badge) {
+            label += " " + theme_.foreground(ThemeToken::Muted, "[" + item.provider + "]");
+        }
         items.push_back(cch::tui::SelectItem{
                 .value = item.provider + "/" + item.id,
                 .label = std::move(label),

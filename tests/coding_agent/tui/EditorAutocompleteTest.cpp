@@ -13,6 +13,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -53,6 +54,25 @@ public:
 
     std::vector<cch::tui::AutocompleteRequest> requests;
 };
+
+[[nodiscard]] cch::tui::SlashCommand* find_slash_command(
+        std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>>& commands,
+        std::string_view name) {
+    for (auto& item : commands) {
+        if (auto* command = std::get_if<cch::tui::SlashCommand>(&item); command != nullptr && command->name == name) {
+            return command;
+        }
+    }
+    return nullptr;
+}
+
+[[nodiscard]] std::string completion_description(
+        const std::vector<cch::tui::AutocompleteItem>& items, std::string_view value) {
+    for (const auto& item : items) {
+        if (item.value == value) return item.description;
+    }
+    return "<missing>";
+}
 
 } // namespace
 
@@ -101,6 +121,44 @@ TEST_CASE("Native TUI /mcp autocomplete offers actions and eligible server names
     CHECK((*login_servers)[0].value == "login remote");
     CHECK((*login_servers)[0].label == "remote");
     CHECK((*login_servers)[0].description == "connected · 0 tools");
+}
+
+TEST_CASE("EditorAutocomplete /model completion omits a constant single-provider description",
+        "[coding_agent][tui][autocomplete][issue1237][spec]") {
+    // The gateway-only catalog assigns every model provider `magpie`; the
+    // completion keeps `value = provider/id` but drops the constant
+    // description (issue #1237).
+    auto single = std::make_shared<cch::coding_agent::tui::ModelCompletionSnapshot>(
+            cch::coding_agent::tui::ModelCompletionSnapshot{
+                    {.id = "gateway-1", .provider = "magpie", .name = "Gateway One"},
+                    {.id = "gateway-2", .provider = "magpie", .name = "Gateway Two"},
+            });
+    auto commands = cch::coding_agent::tui::command_autocomplete_commands({}, {}, single, nullptr, false);
+    auto* model_command = find_slash_command(commands, "model");
+    REQUIRE(model_command != nullptr);
+    REQUIRE(model_command->get_argument_completions);
+    const auto single_items = model_command->get_argument_completions("");
+    REQUIRE(single_items);
+    REQUIRE(single_items->size() == 2);
+    CHECK(completion_description(*single_items, "magpie/gateway-1").empty());
+    CHECK(completion_description(*single_items, "magpie/gateway-2").empty());
+    CHECK(single_items->front().label == "gateway-1");
+
+    // A multi-provider catalog keeps the provider description.
+    auto multiple = std::make_shared<cch::coding_agent::tui::ModelCompletionSnapshot>(
+            cch::coding_agent::tui::ModelCompletionSnapshot{
+                    {.id = "alpha-1", .provider = "alpha", .name = "Alpha One"},
+                    {.id = "beta-1", .provider = "beta", .name = "Beta One"},
+            });
+    auto multi_commands = cch::coding_agent::tui::command_autocomplete_commands({}, {}, multiple, nullptr, false);
+    auto* multi_model_command = find_slash_command(multi_commands, "model");
+    REQUIRE(multi_model_command != nullptr);
+    REQUIRE(multi_model_command->get_argument_completions);
+    const auto multi_items = multi_model_command->get_argument_completions("");
+    REQUIRE(multi_items);
+    REQUIRE(multi_items->size() == 2);
+    CHECK(completion_description(*multi_items, "alpha/alpha-1") == "alpha");
+    CHECK(completion_description(*multi_items, "beta/beta-1") == "beta");
 }
 
 TEST_CASE("Native TUI command palette omits the retired model login and logout commands",

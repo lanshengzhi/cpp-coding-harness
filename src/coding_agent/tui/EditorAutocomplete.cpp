@@ -59,40 +59,47 @@ std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>> co
             // pi `createBaseAutocompleteProvider`: `/model` argument
             // completion over `getModelSearchText`, value `provider/id`,
             // label `id`, description `provider`. The description stays
-            // plain: the combined provider prepends the argument hint.
+            // plain: the combined provider prepends the argument hint. The
+            // gateway catalog has one provider, so a constant description
+            // identifies nothing; keep it only for a multi-provider catalog
+            // (issue #1237).
+            const bool single_provider_catalog =
+                    model_completion && !model_completion->empty() &&
+                    std::all_of(model_completion->begin(),
+                            model_completion->end(),
+                            [&model_completion](const ModelCompletionItem& candidate) {
+                                return candidate.provider == model_completion->front().provider;
+                            });
             cch::tui::SlashCommand slash;
             slash.name = std::string{command.name};
             slash.description = std::string{command.description};
             slash.argument_hint = std::string{command.argument_hint};
             slash.get_argument_completions =
-                [model_completion](std::string_view prefix)
-                -> std::optional<std::vector<cch::tui::AutocompleteItem>> {
-                    if (!model_completion || model_completion->empty()) return std::nullopt;
-                    std::vector<ModelSearchItem> items;
-                    items.reserve(model_completion->size());
-                    for (const auto& candidate : *model_completion) {
-                        items.push_back(ModelSearchItem{
+                    [model_completion, single_provider_catalog](
+                            std::string_view prefix) -> std::optional<std::vector<cch::tui::AutocompleteItem>> {
+                if (!model_completion || model_completion->empty()) return std::nullopt;
+                std::vector<ModelSearchItem> items;
+                items.reserve(model_completion->size());
+                for (const auto& candidate : *model_completion) {
+                    items.push_back(ModelSearchItem{
                             .id = candidate.id,
                             .provider = candidate.provider,
-                            .name = candidate.name.empty()
-                                ? std::nullopt
-                                : std::optional<std::string>{candidate.name},
-                        });
-                    }
-                    const auto filtered = cch::tui::fuzzy_filter(
-                        std::move(items), prefix, get_model_search_text);
-                    if (filtered.empty()) return std::nullopt;
-                    std::vector<cch::tui::AutocompleteItem> result;
-                    result.reserve(filtered.size());
-                    for (const auto& item : filtered) {
-                        result.push_back(cch::tui::AutocompleteItem{
+                            .name = candidate.name.empty() ? std::nullopt : std::optional<std::string>{candidate.name},
+                    });
+                }
+                const auto filtered = cch::tui::fuzzy_filter(std::move(items), prefix, get_model_search_text);
+                if (filtered.empty()) return std::nullopt;
+                std::vector<cch::tui::AutocompleteItem> result;
+                result.reserve(filtered.size());
+                for (const auto& item : filtered) {
+                    result.push_back(cch::tui::AutocompleteItem{
                             .value = item.provider + "/" + item.id,
                             .label = item.id,
-                            .description = item.provider,
-                        });
-                    }
-                    return result;
-                };
+                            .description = single_provider_catalog ? std::string{} : item.provider,
+                    });
+                }
+                return result;
+            };
             items.push_back(std::move(slash));
         } else if (command.name == "mcp") {
             // pi `extensions/mcp/index.ts` `getArgumentCompletions`: action

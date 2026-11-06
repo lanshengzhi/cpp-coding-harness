@@ -392,7 +392,6 @@ FooterData SessionUiBinding::compute_footer_data() {
     const auto& model = snapshot.agent_state.model;
     data.context_window = static_cast<std::size_t>(model.context_window);
     data.model_id = model.id;
-    data.provider = model.provider;
     data.model_reasoning = model.reasoning;
     data.thinking_level = snapshot.agent_state.thinking_level.empty()
         ? std::string{"off"}
@@ -430,11 +429,9 @@ FooterData SessionUiBinding::compute_footer_data() {
         }
     }
 
-    // Subscription and provider availability are read-model values. The
-    // binding deliberately does not reach into AgentSession or ModelRuntime;
-    // attach and overflow recovery therefore render the same footer state.
-    data.using_subscription = snapshot.using_subscription;
-    data.available_provider_count = snapshot.available_provider_count;
+    // Subscription and provider availability are no longer part of the
+    // footer read model: the gateway catalog has one provider and no
+    // subscription credential (issue #1237).
 
     if (hooks_.auto_compact_enabled != nullptr) {
         if (const auto enabled = hooks_.auto_compact_enabled(); enabled) {

@@ -38,22 +38,12 @@ struct FooterData {
     std::size_t context_window{0};
     /// pi footer `autoCompactEnabled` — renders the ` (auto)` context suffix.
     bool auto_compact_enabled{true};
-    /// Active model provider id (pi `state.model?.provider`) — rendered as
-    /// the `(provider)` prefix when multiple providers are available.
-    std::string provider;
     /// Active model id (pi `state.model?.id || "no-model"`).
     std::string model_id;
     /// Active thinking level wire name (`off`..`max`).
     std::string thinking_level{"off"};
     /// Whether the active model supports reasoning.
     bool model_reasoning{false};
-    /// Whether the active credential represents a subscription-backed
-    /// provider — renders the ` (sub)` cost marker. API-key Kimi and
-    /// OpenRouter account OAuth are deliberately excluded.
-    bool using_subscription{false};
-    /// Unique providers with available models (pi
-    /// `getAvailableProviderCount`); >1 renders the `(provider)` prefix.
-    std::size_t available_provider_count{0};
 };
 
 /// pi `footer.ts` `formatTokens`: compact token counts for the stats line
@@ -68,9 +58,11 @@ struct FooterData {
 
 /// pi `FooterComponent`: the footer's two-line layout — the dim
 /// cwd/git-branch line and the stats line (usage totals, cache hit rate,
-/// cost with the `(sub)` marker, colored context percent, and the
-/// right-aligned model name with thinking level and provider prefix). The
-/// extension-statuses and xp lines stay out of the subset (G2).
+/// cost, colored context percent, and the right-aligned model name with
+/// thinking level). The provider prefix and subscription marker are omitted:
+/// the gateway-only catalog has one provider and no subscription credential
+/// (issue #1237). The extension-statuses and xp lines stay out of the subset
+/// (G2).
 class Footer final : public cch::tui::Component {
 public:
     explicit Footer(const LiveTheme& theme) : theme_(theme) {}

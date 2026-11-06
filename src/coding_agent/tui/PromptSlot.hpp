@@ -14,7 +14,7 @@ namespace cch::coding_agent::tui {
 
 /// One awaiting user-prompt result (pi's extension prompt slot): first
 /// resolution wins, posted to the consumer executor so the channel is only
-/// ever touched from one thread. The login dialog and the session
+/// ever touched from one thread. The session trust/import prompts and the
 /// missing-cwd prompt share it.
 struct PromptSlot : public std::enable_shared_from_this<PromptSlot> {
     explicit PromptSlot(boost::asio::any_io_executor executor)

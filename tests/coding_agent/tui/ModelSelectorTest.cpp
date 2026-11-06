@@ -56,6 +56,18 @@ constexpr std::string_view kThreeKeyedProviders = R"({
   }
 })";
 
+/// The gateway-only shape: every discovered model carries provider `magpie`.
+constexpr std::string_view kSingleGatewayProvider = R"({
+  "providers": {
+    "magpie": {
+      "baseUrl": "http://127.0.0.1:3425/v1",
+      "api": "openai-completions",
+      "apiKey": "dummy-magpie-key",
+      "models": [{"id": "gateway-1", "name": "Gateway One"}, {"id": "gateway-2", "name": "Gateway Two"}]
+    }
+  }
+})";
+
 [[nodiscard]] std::shared_ptr<const tui::KeybindingRegistry> test_keybindings() {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
@@ -224,6 +236,62 @@ TEST_CASE("ModelSelector renders the scope text, search input, and sorted list w
     CHECK(cancellations == 0);
 }
 
+TEST_CASE("ModelSelector renders the provider badge only while more than one provider is active",
+        "[coding_agent][tui][model-selector][issue1237][spec]") {
+    boost::asio::io_context io;
+    auto theme = test_theme();
+
+    // Gateway-only catalog: every model shares provider `magpie`, so the row
+    // is just the model id and the value stays the provider/id reference.
+    {
+        RuntimeFixture fixture{kSingleGatewayProvider};
+        std::optional<ai::Model> selected;
+        auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+                theme,
+                test_keybindings(),
+                nullptr,
+                fixture.runtime,
+                io.get_executor(),
+                std::vector<cch::coding_agent::ScopedModel>{},
+                [&selected](ai::Model model) { selected = std::move(model); },
+                [] {},
+                [&io] { (void)io; });
+
+        const auto rendered = selector->render(90);
+        REQUIRE(rendered);
+        const auto screen = join_lines(rendered->lines);
+        CHECK(screen.find("gateway-1") != std::string::npos);
+        CHECK(screen.find("gateway-2") != std::string::npos);
+        CHECK(screen.find("[magpie]") == std::string::npos);
+
+        static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "enter"}));
+        REQUIRE(selected.has_value());
+        CHECK(selected->provider == "magpie");
+        CHECK(selected->id == "gateway-1");
+    }
+
+    // Multi-provider catalog: the existing pi badge is preserved.
+    {
+        RuntimeFixture fixture;
+        auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+                theme,
+                test_keybindings(),
+                nullptr,
+                fixture.runtime,
+                io.get_executor(),
+                std::vector<cch::coding_agent::ScopedModel>{},
+                [](ai::Model) {},
+                [] {},
+                [&io] { (void)io; });
+
+        const auto rendered = selector->render(90);
+        REQUIRE(rendered);
+        const auto screen = join_lines(rendered->lines);
+        CHECK(screen.find("alpha-1 [alpha]") != std::string::npos);
+        CHECK(screen.find("beta-1 [beta]") != std::string::npos);
+    }
+}
+
 TEST_CASE("ModelSelector refreshes the live Magpie catalog in the background",
         "[coding_agent][tui][model-selector][magpie][spec]") {
     tests::TempWorkspace agent_dir;
@@ -269,7 +337,11 @@ TEST_CASE("ModelSelector refreshes the live Magpie catalog in the background",
     }
     auto refreshed = selector->render(90);
     REQUIRE(refreshed);
-    CHECK(join_lines(refreshed->lines).find("group/new-model [magpie]") != std::string::npos);
+    const auto refreshed_screen = join_lines(refreshed->lines);
+    CHECK(refreshed_screen.find("group/new-model") != std::string::npos);
+    // The gateway-only catalog has one provider, so the row carries no
+    // constant `[magpie]` badge (issue #1237).
+    CHECK(refreshed_screen.find("[magpie]") == std::string::npos);
     REQUIRE(transport->requests.size() == 2);
     CHECK(transport->requests.back().url == "http://127.0.0.1:34259/v1/models");
 }
@@ -466,7 +538,9 @@ TEST_CASE("ModelSelector toggles the all/scoped scope on Tab when scoped models 
         const auto screen = join_lines(rendered->lines);
         CHECK(screen.find("Scope:") != std::string::npos);
         CHECK(screen.find("(all/scoped)") != std::string::npos);
-        CHECK(screen.find("alpha-1 [alpha]") != std::string::npos);
+        // The scoped set spans one provider, so the row carries no badge.
+        CHECK(screen.find("alpha-1") != std::string::npos);
+        CHECK(screen.find("[alpha]") == std::string::npos);
         CHECK(screen.find("beta-1") == std::string::npos);
     }
 
@@ -483,7 +557,10 @@ TEST_CASE("ModelSelector toggles the all/scoped scope on Tab when scoped models 
     {
         const auto rendered = selector->render(70);
         REQUIRE(rendered);
-        CHECK(join_lines(rendered->lines).find("beta-1") == std::string::npos);
+        const auto screen = join_lines(rendered->lines);
+        CHECK(screen.find("alpha-1") != std::string::npos);
+        CHECK(screen.find("[alpha]") == std::string::npos);
+        CHECK(screen.find("beta-1") == std::string::npos);
     }
 }
 

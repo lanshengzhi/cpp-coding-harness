@@ -109,9 +109,14 @@ private:
     void load_models_from_snapshot();
     void start_refresh();
     void set_scope(bool scoped);
+    /// Whether the current scope's models span more than one provider. The
+    /// selector renders the per-row `[provider]` badge only then; a
+    /// gateway-only catalog has one provider and the badge would be constant.
+    [[nodiscard]] bool has_multiple_active_providers() const;
     /// The current scope's models as SelectList items: value is the unique
-    /// `provider/id` reference, the label is the `✓ id [provider]` row whose
-    /// current-model marker leads the label, and the search text is the pi
+    /// `provider/id` reference, the label is the `✓ id` row whose current-model
+    /// marker leads the label (with pi's `[provider]` badge only while the
+    /// active set spans multiple providers), and the search text is the pi
     /// `getModelSelectorSearchText` text so ranking matches the hand-rolled
     /// fuzzy filter it replaces. Callers hold the mutex (or run in the ctor).
     [[nodiscard]] std::vector<cch::tui::SelectItem> build_select_items() const;

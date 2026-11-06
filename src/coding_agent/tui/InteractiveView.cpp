@@ -578,7 +578,7 @@ support::Expected<std::vector<std::string>> InteractiveView::render_editor_regio
         std::size_t width, std::optional<MainScreenEditorBudget> regular_budget) {
     std::vector<std::string> editor_lines;
     if (editor_replacement_) {
-        // pi's editorContainer swap: the login dialog/selector renders in
+        // pi's editorContainer swap: the replacement selector renders in
         // the editor slot with no autocomplete rows.
         if (auto replaced = editor_replacement_->render(width); !replaced) {
             return std::unexpected(replaced.error());

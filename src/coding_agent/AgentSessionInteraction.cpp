@@ -31,7 +31,6 @@
 #include <exception>
 #include <format>
 #include <optional>
-#include <set>
 #include <string_view>
 #include <utility>
 
@@ -1045,26 +1044,12 @@ support::ExpectedVoid AgentSession::Impl::set_entry_label(std::string_view entry
 
 AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
     const auto state = agent_ ? agent_->state() : agent::AgentState{};
-    const auto runtime = services_.model_runtime;
-    std::set<std::string> providers;
-    if (!scoped_models_.empty()) {
-        for (const auto& scoped : scoped_models_) {
-            providers.insert(scoped.model.provider);
-        }
-    } else if (runtime) {
-        for (const auto& available : runtime->models()) {
-            providers.insert(available.provider);
-        }
-    }
-
     return AgentSessionSnapshot{
             .agent_state = state,
             .metadata = session_.metadata,
             .topology = session_.topology,
             .session_path = session_path_,
             .workspace = session_.workspace,
-            .using_subscription = false,
-            .available_provider_count = providers.size(),
             .tool_executions = tool_executions_,
             .run_state = run_state_,
             .recovery_state = recovery_state_,

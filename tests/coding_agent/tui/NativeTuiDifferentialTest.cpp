@@ -440,7 +440,11 @@ void check_model_selector_status(const tui::VirtualTerminal& terminal) {
 void check_model_selector_layout(const tui::VirtualTerminal& terminal) {
     const auto rows = terminal.screen();
     const auto search_row = row_containing(rows, "> ");
-    const auto model_row = row_containing(rows, "→ ✓ faux-1 [faux]");
+    // Intentional single-provider divergence from the frozen pi audit-1051
+    // frame (issue #1237): pi renders the constant `[faux]` badge, while Pike
+    // omits the per-row provider badge when the active catalog spans one
+    // provider. Row placement and marker column still match the snapshot.
+    const auto model_row = row_containing(rows, "→ ✓ faux-1");
     const auto save_hint_row = row_containing(rows, "Enter to select");
 
     REQUIRE(search_row.has_value());

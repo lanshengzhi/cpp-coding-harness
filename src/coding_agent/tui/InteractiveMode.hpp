@@ -40,8 +40,8 @@ class InteractiveSessionRun;
 // separate and may coalesce, but this path never drops an admitted action.
 
 /// Open a URL in the platform browser (pi `openBrowser`: detached argv spawn,
-/// never through a shell, best-effort). Fire-and-forget; the login dialog's
-/// auth-URL view requests it (ADR 0032).
+/// never through a shell, best-effort). Fire-and-forget; the MCP OAuth login
+/// flow requests it for the authorization URL (ADR 0032).
 struct OpenBrowserAction {
     std::string url;
 };

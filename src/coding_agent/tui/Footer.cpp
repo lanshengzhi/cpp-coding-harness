@@ -76,8 +76,8 @@ support::Expected<cch::tui::RenderResult> Footer::render(std::size_t width) {
     }
 
     // Stats line parts in pi's order: input/output, cache reads/writes, the
-    // cache hit rate, the cost (with the subscription marker), and the
-    // context usage with its auto-compaction suffix.
+    // cache hit rate, the cost, and the context usage with its
+    // auto-compaction suffix.
     std::vector<std::string> stats_parts;
     if (data_.input) stats_parts.push_back("\xe2\x86\x91" + format_tokens(data_.input));
     if (data_.output) stats_parts.push_back("\xe2\x86\x93" + format_tokens(data_.output));
@@ -86,11 +86,8 @@ support::Expected<cch::tui::RenderResult> Footer::render(std::size_t width) {
     if ((data_.cache_read > 0 || data_.cache_write > 0) && data_.cache_hit_rate) {
         stats_parts.push_back(std::format("CH{:.1f}%", *data_.cache_hit_rate));
     }
-    if (data_.cost > 0 || data_.using_subscription) {
-        stats_parts.push_back(std::format(
-            "${:.3f}{}",
-            data_.cost,
-            data_.using_subscription ? " (sub)" : ""));
+    if (data_.cost > 0) {
+        stats_parts.push_back(std::format("${:.3f}", data_.cost));
     }
 
     const auto auto_indicator = data_.auto_compact_enabled ? " (auto)" : "";
@@ -127,26 +124,14 @@ support::Expected<cch::tui::RenderResult> Footer::render(std::size_t width) {
         stats_left_width = cch::tui::visible_width(stats_left);
     }
 
-    // Right side: the model name, the thinking level when the model supports
-    // reasoning, and the provider prefix when more than one provider is
-    // available (pi's fallback drops the provider prefix when it would not
-    // fit with the minimum two-space padding).
+    // Right side: the model name and the thinking level when the model
+    // supports reasoning. The gateway-only catalog has one provider, so the
+    // footer never renders pi's `(provider)` prefix (issue #1237).
     const auto& model_name = data_.model_id.empty() ? "no-model" : data_.model_id;
-    std::string right_side_without_provider = model_name;
+    std::string right_side = model_name;
     if (data_.model_reasoning) {
-        right_side_without_provider = data_.thinking_level == "off"
-                                              ? model_name + " \xe2\x80\xa2 thinking off"
-                                              : model_name + " \xe2\x80\xa2 " + data_.thinking_level;
-    }
-    std::string right_side = right_side_without_provider;
-    if (data_.available_provider_count > 1 && !data_.provider.empty()) {
-        const auto prefixed = std::format(
-            "({}) {}", data_.provider, right_side_without_provider);
-        constexpr std::size_t kMinPadding = 2;
-        if (stats_left_width + kMinPadding + cch::tui::visible_width(prefixed) <=
-            width) {
-            right_side = prefixed;
-        }
+        right_side = data_.thinking_level == "off" ? model_name + " \xe2\x80\xa2 thinking off"
+                                                   : model_name + " \xe2\x80\xa2 " + data_.thinking_level;
     }
     const auto right_side_width = cch::tui::visible_width(right_side);
     const auto total_needed = stats_left_width + 2 + right_side_width;

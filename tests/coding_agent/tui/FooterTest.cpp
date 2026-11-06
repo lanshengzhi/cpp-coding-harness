@@ -176,7 +176,6 @@ TEST_CASE("Footer renders pi's two lines: dim pwd with branch and the stats line
     data.model_id = "claude-sonnet";
     data.model_reasoning = true;
     data.thinking_level = "medium";
-    data.available_provider_count = 1;
     footer.footer.set_data(std::move(data));
 
     const auto [pwd_line, stats_line] = rendered_lines(footer.footer, 80);
@@ -228,41 +227,42 @@ TEST_CASE("Footer omits zero stats parts like pi", "[coding_agent][tui][footer][
     CHECK(stats_line.find("deepseek-chat") != std::string::npos);
 }
 
-TEST_CASE("Footer shows the subscription marker and provider prefix", "[coding_agent][tui][footer][issue411][spec]") {
+TEST_CASE("Footer omits the subscription marker and provider prefix",
+        "[coding_agent][tui][footer][issue411][issue1237][spec]") {
     auto fixture = FooterFixture{};
     auto& footer = fixture.footer;
     coding_agent::tui::FooterData data;
     data.cwd = "/tmp";
     data.cost = 0.5;
-    data.using_subscription = true;
     data.context_window = 100000;
-    data.provider = "openai-codex";
     data.model_id = "gpt-5.5";
-    data.available_provider_count = 2;
     footer.set_data(std::move(data));
 
     const auto [pwd_line, stats_line] = rendered_lines(footer, 80);
     CHECK(pwd_line.starts_with("/tmp"));
-    CHECK(stats_line.find("$0.500 (sub)") != std::string::npos);
-    CHECK(stats_line.find("(openai-codex) gpt-5.5") != std::string::npos);
+    CHECK(stats_line.find("$0.500") != std::string::npos);
+    // The gateway-only footer has one provider and no subscription
+    // credential, so neither pi marker renders (issue #1237).
+    CHECK(stats_line.find("(sub)") == std::string::npos);
+    CHECK(stats_line.find("(openai-codex)") == std::string::npos);
+    CHECK(stats_line.find("gpt-5.5") != std::string::npos);
 }
 
-TEST_CASE("Footer does not mark API-key Kimi as a subscription", "[coding_agent][tui][footer][issue763][spec]") {
+TEST_CASE("Footer does not mark API-key Kimi as a subscription or prefix its provider",
+        "[coding_agent][tui][footer][issue763][issue1237][spec]") {
     auto fixture = FooterFixture{};
     coding_agent::tui::FooterData data;
     data.cwd = "/tmp";
     data.cost = 0.5;
-    data.using_subscription = false;
-    data.provider = "kimi-coding";
     data.model_id = "kimi-for-coding";
-    data.available_provider_count = 2;
     fixture.footer.set_data(std::move(data));
 
     const auto [pwd_line, stats_line] = rendered_lines(fixture.footer, 80);
     CHECK(pwd_line.starts_with("/tmp"));
     CHECK(stats_line.find("$0.500 (sub)") == std::string::npos);
     CHECK(stats_line.find("$0.500") != std::string::npos);
-    CHECK(stats_line.find("(kimi-coding) kimi-for-coding") != std::string::npos);
+    CHECK(stats_line.find("(kimi-coding) kimi-for-coding") == std::string::npos);
+    CHECK(stats_line.find("kimi-for-coding") != std::string::npos);
 }
 
 TEST_CASE("Footer colors the context percent by threshold and dims the stats",
