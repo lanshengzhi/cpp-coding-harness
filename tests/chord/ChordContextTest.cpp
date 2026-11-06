@@ -223,6 +223,26 @@ TEST_CASE("without abort signal masks cancellation while preserving typed values
     check_frozen_state(*frozen_with_signal, visible, key);
 }
 
+// The masked context must remain detached when cancellation happens after it is created.
+TEST_CASE("a masked context retains its value when its parent is cancelled later",
+        "[chord][context][cancellation][issue1240][spec]") {
+    const auto frozen =
+            context_cancellation_scenario("withoutAbortSignal removes cancellation while preserving typed values");
+    const auto* frozen_masked = frozen.object_member("masked");
+    const auto value = frozen.inputs_string("value");
+    REQUIRE(frozen_masked != nullptr);
+    REQUIRE(value.has_value());
+
+    const auto key = create_context_key<std::string>("value");
+    auto parent = with_cancel(background_context());
+    const auto context = with_context_value(key, *value, parent.context());
+    const auto masked = without_abort_signal(context);
+    parent.cancel("cleanup-cancel");
+
+    CHECK(context.aborted());
+    check_frozen_state(*frozen_masked, masked, key);
+}
+
 // The discriminating case for the frozen child/parent cancellation rows
 // (fixtures/pi-v1.3.0/audit-1057/context-cancellation.json): the frozen child keeps its own
 // first reason after a competing external stop, and the frozen parent reason reaches an
