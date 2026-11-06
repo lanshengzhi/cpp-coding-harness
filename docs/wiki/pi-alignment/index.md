@@ -15,6 +15,7 @@ Shared historical record for aligning Pike with upstream pi. Created 2026-11-04 
 - [Baseline timeline](baseline-timeline.md): which pi revision each ADR selected, from v0.83.0 to v1.3.0.
 - [ADR 0075 scope](adr-0075-scope.md): what the accepted v1.3.0 target includes, excludes and supersedes.
 - [Evidence and delivery history](evidence-and-delivery-history.md): the #1044 umbrella, ledger, reconciliations and evidence-integrity findings.
+- [Evidence artifact growth, 2026-11-06](evidence-artifact-growth-2026-11-06.md): why every lane commits a rebuilt 5.5 MB ledger, its measured git cost, and the three representation options raised.
 
 ## Operations
 - [Ops: lanes and concurrency](ops-lanes.md): lane types, the one-code-lane rule, handoff protocol, and the 2026-11-05 collision record.
