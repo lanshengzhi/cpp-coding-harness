@@ -91,10 +91,12 @@ unverified with the named blockers below.
   review; its exact recorded selection was rerun under the lane identity into
   `deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml` (9/9). The
   #1182 issue1182 selection was rerun after the route-batch index rebuild
-  (13/13); the rebuild was byte-identical to the reviewed index, so the #1182
-  receipt, its index pin and its prior revalidation records are unchanged. The
-  22 other revalidations recorded by the original Slice B delivery remain in
-  place because their pinned inputs did not move.
+  (13/13). The rebuild moved the index, so that receipt's index pin was rebound
+  (`68633f8be2` → `3dd313e34c`) and a `revalidation1221StdinIndex` record with
+  `deliveries/1182-tui-revalidation-1221-stdin-index.xml` was added; the prior
+  revalidation records are retained. The 22 other revalidations recorded by the
+  original Slice B delivery remain in place because their pinned inputs did not
+  move.
 - Consolidation `build`/`check`: PASS, 1464 source rows, 609 delivery-backed
   rows (602 before slice A; slice B promotes seven and keeps
   `cch_tui:StdinBuffer.flush` bounded), 1007 scenarios (590 named by a row, 87

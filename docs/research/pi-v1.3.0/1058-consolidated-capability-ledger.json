@@ -8393,7 +8393,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
-            "sha256": "d8b195b5ad96d59e2efcd15af2b9b82c8925c695564836699169e3ffe7fd3311"
+            "sha256": "0975f050c652489a8ca5a71d62be3070268c845c75f5f9bc91a5c81df6ebdec3"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -8401,7 +8401,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
-            "sha256": "3dd313e34c6e3ce1cbd880876978db270ac67f0cf364cfeff5d9bb2d08891020"
+            "sha256": "abfa7b8cf4a6423ebbeaaab71643bf226805527505d18c836c324ba3813a4502"
           },
           {
             "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
@@ -9037,6 +9037,31 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-stdin.xml",
               "sha256": "e24557567df24c7f17272392ff0777f49cb4fa16c51e9dfd8518139cf2ef27b8"
+            }
+          }
+        },
+        "revalidation1221BoundedRows": {
+          "reason": "The #1221 B13 stdin-framing review found delivered_rows() counting bounded claims as delivered: cch_tui:StdinBuffer.flush left B13's rows and the batch's implementation obligation was nulled while the consolidated ledger kept the row partial. tui_route_batches.py now skips claims with a non-empty remainingBoundary and the route-batch index was rebuilt; the generator this receipt pins is the changed file, so its digest is refreshed alongside. This receipt pins that index, so its exact recorded selection was rerun after the rebuild and only the index digest was refreshed; no row, comparison scenario or routing digest of this receipt changes.",
+          "changedInputs": [
+            "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1221-bounded-index.xml"
+            ],
+            "testedRevision": "8f5dc42638569c41ed7376a7cd73fa7c9e92e13a",
+            "recordedAt": "2026-11-06T10:01:24Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1221-bounded-index.xml",
+              "sha256": "a206c9ba48b41fc35ef70d44b2f4e552cf101c99c7efcc3fe5733eb4b654f7cb"
             }
           }
         }

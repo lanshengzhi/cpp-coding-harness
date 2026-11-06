@@ -409,9 +409,12 @@ def supported_rows(ledger: dict) -> list[dict]:
 
 
 def delivered_rows(deliveries: dict) -> set[str]:
+    """Rows a claim promoted. A bounded claim records evidence without promoting its row."""
     ids: set[str] = set()
     for record in deliveries.get("records", []):
         for claim in record.get("rows", []):
+            if claim.get("remainingBoundary"):
+                continue
             ids.add(claim["id"])
     return ids
 
