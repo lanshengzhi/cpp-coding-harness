@@ -8696,7 +8696,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
-            "sha256": "0bdc2d10474a1c550ed128cea72d0fae0bfd17da20d931c9b30845a67abc4348"
+            "sha256": "174ac672da6223621cf80849ae5e1336fff439510306b5b886203987ae57ee9e"
           },
           {
             "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
@@ -9421,6 +9421,25 @@
               "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1244.xml",
               "sha256": "254ddab05e8b2806319834b35d9917434b0a9fb65691ea5ea582735730062df9"
             }
+          }
+        },
+        "revalidation1245": {
+          "reason": "The index moves only the newly delivered terminal clear row out of B13; existing receipt claims and comparisons remain unchanged.",
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "issue1182",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml"
+          ],
+          "testedRevision": "6b08e8573949780dc1f20d199749b5b85edb2716",
+          "recordedAt": "2026-11-06T18:27:05Z",
+          "selected": 13,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml",
+            "sha256": "dc5aa87866954f38c244d747fb0c9a89abf8ef6062e4db3d7a0c54f82abfcfe9"
           }
         }
       },
@@ -13068,7 +13087,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
-            "sha256": "857fa8bba35d23ec9fc0d22875c6772fa3000bba87b36a511bd00ac3a411b3cf"
+            "sha256": "3023cf4049bac6497277f5e75568d000b647bf3e30989f25b85577b349987bbb"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -14104,6 +14123,29 @@
               "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml",
               "sha256": "42c532918c73db675398213e582ff291bb92734141e23eee63336c81f6930d48"
             }
+          }
+        },
+        "revalidation1245": {
+          "reason": "Row-specific re-audit changes only ProcessTerminal.clearScreen, outside these claims; their routes and comparisons remain unchanged.",
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-LE",
+            "architecture",
+            "-L",
+            "issue1201",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245.xml",
+            "-j",
+            "1"
+          ],
+          "testedRevision": "9a7166d07e9264e700f845aeccadf0be6b823d5c",
+          "recordedAt": "2026-11-06T18:16:55Z",
+          "selected": 9,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245.xml",
+            "sha256": "43cf2ad4367be6e78c5a75610ddf308bf077948af33deae4125c77c97c83bc27"
           }
         }
       },
@@ -30985,6 +31027,108 @@
             }
           }
         }
+      },
+      {
+        "id": "1245-terminal-clear",
+        "ticket": "1245",
+        "implementationCommits": [
+          "9a7166d07e9264e700f845aeccadf0be6b823d5c"
+        ],
+        "report": "docs/research/pi-v1.3.0/1245-terminal-write-recipe.md",
+        "routingSha256": "ba64c134f6243a26f4f0f6bf7dd4a0c8f2911b772dbc7e48ec3d09e6a4a1cfed",
+        "inputs": [
+          {
+            "path": "src/tui/ProcessTerminal.cpp",
+            "sha256": "09e2bf18f2f0a4e88259981b62c286d41c045838978d5498304c9dd426e4d1d1"
+          },
+          {
+            "path": "src/tui/include/cch/tui/ProcessTerminal.hpp",
+            "sha256": "3c6dd83086b840ed093ca326dbc05d7355fff9f6d29087b40c7713444eb09aab"
+          },
+          {
+            "path": "src/tui/include/cch/tui/Terminal.hpp",
+            "sha256": "7b130808ac69a6eae1ddca6dd6a2bbe9ab4e9bafaeeba1ae394c0d8094a2bedd"
+          },
+          {
+            "path": "src/tui/VirtualTerminal.cpp",
+            "sha256": "48074b2efa483063a40bbf45f487815d561b6cb8ddff7656cb937704df1319e2"
+          },
+          {
+            "path": "src/tui/include/cch/tui/VirtualTerminal.hpp",
+            "sha256": "fecbfc4600fadd8bb220ad0dfdb1714b363b0f894f99ad2db0d3151657e587ba"
+          },
+          {
+            "path": "src/tui/Tui.cpp",
+            "sha256": "8b88602adbb6766a214c39c7724aaa5ffcd8af80cb61dfdb4cbbd6ba7f0bb81a"
+          },
+          {
+            "path": "tests/tui/ProcessTerminalTest.cpp",
+            "sha256": "7b196f4aa4c08892c765e7080abedc6b0670eecf2a2f56f110d80dbca31345e3"
+          },
+          {
+            "path": "tests/support/PseudoTerminal.hpp",
+            "sha256": "8ebaa1b4a64bdc41fe52caf52a9cf0d553697507e654cee3adddacbe73bfd6a0"
+          },
+          {
+            "path": "tests/support/PiTuiEvidence.hpp",
+            "sha256": "da93438f8fdbc833ccd61c3c4f9a5c21c9d174b39bc328dfe2970d993624d1fc"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1244-terminal-writes/terminal-writes.json",
+            "sha256": "ca9e1da87c31676ae5cb1dd6fcf9320c4fb35f42847041f3959eb21811639172"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/baselines.json",
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
+          },
+          {
+            "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
+            "sha256": "3023cf4049bac6497277f5e75568d000b647bf3e30989f25b85577b349987bbb"
+          },
+          {
+            "path": "src/tui/RenderPipeline.cpp",
+            "sha256": "bf56a816d3d492fb9eee5f990eb924358b07ed4c3b06149e0d5c53d8c1478c3c"
+          }
+        ],
+        "validation": {
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-R",
+            "^(Direct clear preserves scrollback while main-screen redraw clears it|Process Terminal clear screen emits the pi-exact clear and home bytes)$",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1245-terminal-clear.xml",
+            "-j",
+            "1"
+          ],
+          "testedRevision": "9a7166d07e9264e700f845aeccadf0be6b823d5c",
+          "recordedAt": "2026-11-06T18:16:55Z",
+          "selected": 2,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1245-terminal-clear.xml",
+            "sha256": "e05f3b02e4f72df6fe6d7cce7df569e5ad82a5a60d32385176085a14a9161a59"
+          }
+        },
+        "rows": [
+          {
+            "id": "cch_tui:ProcessTerminal.clearScreen",
+            "remainingBoundary": [],
+            "comparisons": [
+              {
+                "artifact": "audit-1244-terminal-writes/terminal-writes.json",
+                "scenario": "process-clear-screen",
+                "test": "Process Terminal clear screen emits the pi-exact clear and home bytes",
+                "testSource": "tests/tui/ProcessTerminalTest.cpp"
+              }
+            ],
+            "discriminatingCase": {
+              "test": "Direct clear preserves scrollback while main-screen redraw clears it",
+              "testSource": "tests/tui/ProcessTerminalTest.cpp",
+              "reason": "The real ProcessTerminal output parsed by VirtualTerminal rejects a terminal clear that also clears scrollback; the resize redraw half rejects a redraw that omits clearing scrollback."
+            }
+          }
+        ]
       }
     ]
   },
@@ -31274,24 +31418,24 @@
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 537,
+      "unverified": 536,
       "upstream-captured": 334,
-      "verified": 565
+      "verified": 566
     },
     "evidenceRoute": {
-      "captured": 899,
+      "captured": 900,
       "artifact-only": 0,
       "related-captured": 232,
       "declared-comparison": 29,
       "cpp-regression-only": 10,
       "unobserved": 29,
       "unobserved-static": 0,
-      "historical-v1.0.4": 218,
+      "historical-v1.0.4": 217,
       "not-audited": 19,
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 537,
+    "unobservedSupported": 536,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -31324,7 +31468,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 537,
+    "missingObservationRows": 536,
     "scenarioCoverage": {
       "scenarios": 1009,
       "scenarioNamed": 591,
@@ -89526,33 +89670,31 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "verified",
       "owner": "cch_tui",
       "consumer": "TuiMainScreen/TuiAltScreen/ProcessTerminal consumers",
       "consumerOwners": [
         "cch_tui"
       ],
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": null,
-      "scenario": "E02/E09/E12 terminal IO",
+      "implementation_ticket": "#1245",
+      "scenario": "process-clear-screen",
       "comparisonScenarios": [
-        "E02/E09/E12 terminal IO",
         "process-clear-screen"
       ],
       "evidence": {
-        "route": "historical-v1.0.4",
-        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-        "scenarioMatch": null,
-        "capturedScenarios": [],
-        "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member"
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1244-terminal-writes/terminal-writes.json",
+        "scenarioMatch": "direct",
+        "capturedScenarios": [
+          "process-clear-screen"
+        ],
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1245-terminal-write-recipe.md"
       },
-      "missingObservation": "only historical pi-v1.0.4 evidence; no v1.3.0 capture",
-      "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
-      ],
-      "remainingWork": "only historical pi-v1.0.4 evidence; no v1.3.0 capture",
-      "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1245; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1245-terminal-write-recipe.md",
       "lane": "1050",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -89565,7 +89707,26 @@
           "verification": "unverified",
           "owner": "cch_tui"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "implemented",
+        "verification": "unverified",
+        "evidence": {
+          "route": "historical-v1.0.4",
+          "artifact": "fixtures/pi-v1.3.0/audit-1244-terminal-writes/terminal-writes.json",
+          "scenarioMatch": null,
+          "capturedScenarios": [],
+          "result": "2026-11-06 row-specific re-audit: frozen pi-v1.3.0 clearScreen emits clear and home; this named capture replaces the historical terminal IO family for this row only."
+        },
+        "missingObservation": "only historical pi-v1.0.4 evidence; no v1.3.0 capture",
+        "gaps": [
+          "no v1.3.0 delivery receipt recorded"
+        ],
+        "remainingWork": "only historical pi-v1.0.4 evidence; no v1.3.0 capture",
+        "notes": "2026-11-06 #1245: re-audited this member against the named pi-v1.3.0 process-clear-screen capture; other historical terminal IO obligations are unchanged."
+      },
+      "delivery": "1245-terminal-clear"
     },
     {
       "id": "cch_tui:ProcessTerminal.columns",

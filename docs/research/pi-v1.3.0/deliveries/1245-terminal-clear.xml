@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="2"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-07T03:15:49"
+	>
+	<testcase name="Direct clear preserves scrollback while main-screen redraw clears it" classname="Direct clear preserves scrollback while main-screen redraw clears it" time="0.209701" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1245;terminal;tui"/>
+		</properties>
+		<system-out>Filters: "Direct clear preserves scrollback while main-screen redraw clears it"
+Randomness seeded to: 1302647851
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Process Terminal clear screen emits the pi-exact clear and home bytes" classname="Process Terminal clear screen emits the pi-exact clear and home bytes" time="0.417677" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue435;terminal;tui"/>
+		</properties>
+		<system-out>Filters: "Process Terminal clear screen emits the pi-exact clear and home bytes"
+Randomness seeded to: 3336591700
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>
