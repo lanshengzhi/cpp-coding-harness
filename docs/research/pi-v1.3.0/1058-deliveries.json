@@ -8278,14 +8278,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1221-stdin-index.xml"
+     "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1244.xml"
     ],
-    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-    "recordedAt": "2026-11-06T07:22:56Z",
+    "testedRevision": "f8892b41f85cc6b38505012913b58947647669de",
+    "recordedAt": "2026-11-06T16:53:12Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1221-stdin-index.xml",
-     "sha256": "0d4d9b048c699588829fe80dc227ef9d6d8b3daeb46655a7f3a27a70af8eae45"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1244.xml",
+     "sha256": "254ddab05e8b2806319834b35d9917434b0a9fb65691ea5ea582735730062df9"
     }
    },
    "rows": [
@@ -8448,7 +8448,7 @@
     },
     {
      "path": "src/tui/VirtualTerminal.cpp",
-     "sha256": "c08c9eba3fba837aac35bfa4cd62a87e2554451306eb9ce032ef79547ed9612a"
+     "sha256": "73e87547310ecb94ef2022b3edc4be7ac71de173a379c9658633248c9f33346c"
     },
     {
      "path": "src/tui/include/cch/tui/AltScreen.hpp",
@@ -9223,6 +9223,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1244": {
+    "reason": "The terminal clear and main-screen redraw split preserves the recorded scenarios; the original selection was rerun against the changed input.",
+    "changedInputs": [
+     "src/tui/VirtualTerminal.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1221-stdin-index.xml"
+     ],
+     "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+     "recordedAt": "2026-11-06T07:22:56Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1221-stdin-index.xml",
+      "sha256": "0d4d9b048c699588829fe80dc227ef9d6d8b3daeb46655a7f3a27a70af8eae45"
+     }
+    }
    }
   },
   {
@@ -17823,7 +17847,7 @@
     },
     {
      "path": "src/tui/RenderPipeline.cpp",
-     "sha256": "d4c8e8da45456b2ab6149a916940d95e28b704c923861bb4a212200c390f9aab"
+     "sha256": "bf56a816d3d492fb9eee5f990eb924358b07ed4c3b06149e0d5c53d8c1478c3c"
     },
     {
      "path": "src/tui/CursorMarkers.cpp",
@@ -17884,14 +17908,14 @@
      "-L",
      "issue1210",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-stdin.xml"
+     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244.xml"
     ],
-    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-    "recordedAt": "2026-11-06T07:20:17Z",
+    "testedRevision": "f8892b41f85cc6b38505012913b58947647669de",
+    "recordedAt": "2026-11-06T16:53:12Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-stdin.xml",
-     "sha256": "891d0128e8e15b12053d312f2b2c7c3a074a2e6ef4388cfca90217678622db27"
+     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244.xml",
+     "sha256": "0cd952fe9db11fe4b3f6065f9b4e49579ff9fc42056ab10e4a8a7f7a71a681ed"
     }
    },
    "rows": [
@@ -18508,6 +18532,32 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-keys.xml",
       "sha256": "c8d73a6bd0a902cefad16bfb61846c1785d18bd8cfa2c25d2ff3a7a2cec1d887"
+     }
+    }
+   },
+   "revalidation1244": {
+    "reason": "The terminal clear and main-screen redraw split preserves the recorded scenarios; the original selection was rerun against the changed input.",
+    "changedInputs": [
+     "src/tui/RenderPipeline.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1210",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-stdin.xml"
+     ],
+     "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+     "recordedAt": "2026-11-06T07:20:17Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-stdin.xml",
+      "sha256": "891d0128e8e15b12053d312f2b2c7c3a074a2e6ef4388cfca90217678622db27"
      }
     }
    }

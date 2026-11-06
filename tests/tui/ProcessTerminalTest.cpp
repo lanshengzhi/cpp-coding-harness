@@ -1135,7 +1135,7 @@ TEST_CASE("Process Terminal writes OSC 0 window titles", "[tui][terminal][issue3
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal clear screen emits the pi-exact clear-scrollback bytes",
+TEST_CASE("Process Terminal clear screen emits the pi-exact clear and home bytes",
         "[tui][terminal][issue435][compat-pi]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
@@ -1149,11 +1149,9 @@ TEST_CASE("Process Terminal clear screen emits the pi-exact clear-scrollback byt
     REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
             [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
-    // ADR 0037: the resize full-redraw path clears screen, homes, and clears
-    // the terminal's scroll history together (`\x1b[2J\x1b[H\x1b[3J`), matching
-    // pi's TuiMainScreen resize redraw.
+    // pi-v1.3.0 packages/tui/src/terminal.ts:567-569 clears and homes only.
     REQUIRE(terminal.clear_screen());
-    CHECK(cch::tests::read_available(pty->master.get()) == "\x1b[2J\x1b[H\x1b[3J");
+    CHECK(cch::tests::read_available(pty->master.get()) == "\x1b[2J\x1b[H");
     REQUIRE(terminal.stop());
 }
 

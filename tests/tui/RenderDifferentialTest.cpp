@@ -924,12 +924,11 @@ TEST_CASE("RenderPipeline cleared screen frame recovery under Busy", "[tui][rend
     REQUIRE(pipeline.render(std::move(initial_frame), dims, caps, false, false, false, std::nullopt));
     CHECK(pipeline.admitted_prefix(dims) == 4);
 
-    const auto clear_count_before = terminal.clear_count;
+    terminal.written_chunks.clear();
 
-    // Shrinking from 4 to 2 lines with clear_on_shrink=true triggers a clear_screen.
-    // In full_render(true), write 1 is line 0 ("X"), write 2 is line 1 ("Y").
-    // Inject Busy fault on write 2 (line 1).
-    terminal.fail_on_write_index = terminal.write_count + 2;
+    // The full-redraw clear is the first write, followed by lines X and Y.
+    // Refuse Y after the clear and X have been admitted.
+    terminal.fail_on_write_index = terminal.write_count + 3;
     terminal.fail_code = cch::support::ErrorCode::Busy;
 
     cch::tui::RenderResult shrink_frame1;
@@ -937,7 +936,8 @@ TEST_CASE("RenderPipeline cleared screen frame recovery under Busy", "[tui][rend
     auto res_shrink1 = pipeline.render(std::move(shrink_frame1), dims, caps, false, false, true, std::nullopt);
     REQUIRE_FALSE(res_shrink1);
     CHECK(res_shrink1.error().code == cch::support::ErrorCode::Busy);
-    CHECK(terminal.clear_count == clear_count_before + 1);
+    REQUIRE(terminal.written_chunks.size() == 2);
+    CHECK(terminal.written_chunks.front() == "\x1b[2J\x1b[H\x1b[3J");
     // Line 0 was admitted on the cleared screen.
     CHECK(pipeline.admitted_prefix(dims) == 1);
 
@@ -949,8 +949,6 @@ TEST_CASE("RenderPipeline cleared screen frame recovery under Busy", "[tui][rend
     shrink_frame2.lines = {"X", "Y"};
     auto res_shrink2 = pipeline.render(std::move(shrink_frame2), dims, caps, false, false, true, std::nullopt);
     REQUIRE(res_shrink2);
-    // Screen was NOT cleared again!
-    CHECK(terminal.clear_count == clear_count_before + 1);
     CHECK(pipeline.admitted_prefix(dims) == 2);
     // Only line 1 ("Y") was written on retry.
     REQUIRE(terminal.written_chunks.size() == 1);

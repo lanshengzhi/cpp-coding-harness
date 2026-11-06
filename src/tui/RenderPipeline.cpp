@@ -434,7 +434,9 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                     return std::unexpected(del_res.error());
                 }
             }
-            if (auto cleared = terminal_.clear_screen(); !cleared) {
+            // pi-v1.3.0 packages/tui/src/tui-main-screen.ts:282-286, fullRender(clear).
+            constexpr std::string_view kFullRedrawClear = "\x1b[2J\x1b[H\x1b[3J";
+            if (auto cleared = write_frame(kFullRedrawClear); !cleared) {
                 if (supports_sync) (void)terminal_.end_synchronized_update();
                 rollback();
                 return std::unexpected(cleared.error());

@@ -90,10 +90,8 @@ constexpr std::string_view kEndSync = "\x1b[?2026l";
     }
     return out;
 }
-// pi's resize full-redraw clears screen, homes, and clears scrollback
-// (packages/tui/src/terminal.ts clearScreen). The double records the emitted
-// sequence in output() so the byte-level `\x1b[3J` is pinned through the seam.
-constexpr std::string_view kClearScreenSequence = "\x1b[2J\x1b[H\x1b[3J";
+// pi-v1.3.0 packages/tui/src/terminal.ts:567-569, clearScreen.
+constexpr std::string_view kClearScreenSequence = "\x1b[2J\x1b[H";
 
 // Behavioral baseline: pi 83114817 packages/tui/src/terminal.ts
 // (setTitle OSC 0, setProgress OSC 9;4 active/clear sequences) and
@@ -251,16 +249,15 @@ template <typename T> void paint_tokens(T& impl, const std::vector<detail::Termi
         }
         if (token.kind == detail::TerminalTokenKind::ClearLine) {
             if (token.text.find("2J") != std::string::npos) {
+                impl.clear_screen_called = true;
                 impl.cells.assign(impl.dimensions.rows, std::vector<VirtualTerminalCell>(impl.dimensions.columns));
-                impl.scrollback_cells.clear();
                 impl.viewport_top = 0;
                 impl.scroll_origin = 0;
                 impl.images.clear();
                 detail::clear_image_metadata();
                 impl.cursor = {};
             } else if (token.text.find("3J") != std::string::npos) {
-                // Clear-scrollback only: this model keeps scrollback cells with
-                // the screen, so a bare 3J drops the history and keeps the screen.
+                impl.clear_scrollback_called = true;
                 impl.scrollback_cells.clear();
             } else if (impl.cursor.row < impl.cells.size()) {
                 impl.cells[impl.cursor.row].assign(impl.dimensions.columns,
@@ -604,13 +601,8 @@ TerminalModeState VirtualTerminal::modes() const { return impl_->modes; }
 support::ExpectedVoid VirtualTerminal::clear_screen() {
     if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     impl_->clear_screen_called = true;
-    // pi's resize full-redraw emits \x1b[2J\x1b[H\x1b[3J: clear screen, home,
-    // clear scrollback. The terminal's scroll history is cleared together
-    // with the screen so reflow starts clean.
-    impl_->clear_scrollback_called = true;
     impl_->output.push_back(std::string(kClearScreenSequence));
     impl_->cells.assign(impl_->dimensions.rows, std::vector<VirtualTerminalCell>(impl_->dimensions.columns));
-    impl_->scrollback_cells.clear();
     impl_->viewport_top = 0;
     impl_->scroll_origin = 0;
     impl_->images.clear();

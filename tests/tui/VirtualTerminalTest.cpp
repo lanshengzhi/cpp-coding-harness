@@ -97,8 +97,7 @@ TEST_CASE("VirtualTerminal resets the anchored origin on clear screen", "[tui][t
     REQUIRE(terminal.set_cursor({.column = 0, .row = 0}));
     CHECK(terminal.cursor() == tui::CursorPosition{.column = 0, .row = 1});
 
-    // The resize full-redraw clears screen, homes, and clears scrollback
-    // (pi's `\x1b[2J\x1b[H\x1b[3J`): the anchor resets to row 0 (ADR 0041).
+    // The terminal clear homes and resets the anchor to row 0 (ADR 0041).
     REQUIRE(terminal.clear_screen());
     CHECK(terminal.viewport_top() == 0);
     REQUIRE(terminal.set_cursor({.column = 0, .row = 0}));
@@ -188,16 +187,17 @@ TEST_CASE("VirtualTerminal flows the first Tui frame from the seeded shell curso
         CHECK(grown_screen[row].starts_with(std::format("line {:02}", row + 2)));
     }
 
-    // clear_screen homes and re-anchors at row 0 (ADR 0041).
+    // clear_screen homes and re-anchors while preserving existing scrollback.
     REQUIRE(tui.clear_screen());
     CHECK(terminal.viewport_top() == 0);
-    // The 12-line buffer overflows the 10-row screen from row 0, so the first
-    // two lines scroll into scrollback and the tail stays on screen.
+    REQUIRE(terminal.scrollback().size() == 5);
+    CHECK_FALSE(terminal.check_clear_scrollback_called());
+    // Two more lines enter scrollback when the frame is rendered again.
     REQUIRE(tui.render());
     const auto& rewritten = terminal.scrollback();
-    REQUIRE(rewritten.size() == 2);
-    CHECK(rewritten[0].starts_with("line 00"));
-    CHECK(rewritten[1].starts_with("line 01"));
+    REQUIRE(rewritten.size() == 7);
+    CHECK(rewritten[5].starts_with("line 00"));
+    CHECK(rewritten[6].starts_with("line 01"));
     CHECK(terminal.screen().front().starts_with("line 02"));
     CHECK(terminal.screen().back().starts_with("line 11"));
     REQUIRE(tui.stop());

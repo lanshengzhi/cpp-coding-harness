@@ -59,9 +59,8 @@ constexpr std::string_view kEnterAlternateScreen = "\x1b[?1049h";
 constexpr std::string_view kExitAlternateScreen = "\x1b[?1049l";
 constexpr std::string_view kDisableAutowrap = "\x1b[?7l";
 constexpr std::string_view kEnableAutowrap = "\x1b[?7h";
-// pi's resize full-redraw clears screen, homes, and clears scrollback
-// (packages/tui/src/terminal.ts clearScreen: `\x1b[2J\x1b[H\x1b[3J`).
-constexpr std::string_view kClearScreen = "\x1b[2J\x1b[H\x1b[3J";
+// pi-v1.3.0 packages/tui/src/terminal.ts:567-569, clearScreen.
+constexpr std::string_view kClearScreen = "\x1b[2J\x1b[H";
 constexpr std::string_view kBeginSynchronizedUpdate = "\x1b[?2026h";
 constexpr std::string_view kEndSynchronizedUpdate = "\x1b[?2026l";
 constexpr std::string_view kKeyboardProtocolPush = "\x1b[>7u";
