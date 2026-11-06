@@ -63,6 +63,32 @@ projection cost test measured 2.279 ms of processor time against its 2 ms
 bound; the Herdr PTY test required `TERM_PROGRAM=herdr`, which was unset.
 These checks do not establish emulator behavior or whole-row verification.
 
+## 2026-11-06 capture continuation
+
+The duplicate closing `] as const;` in the historical named TUI generator was
+removed. A v1.3.0 invocation now reaches its baseline guard and rejects the
+unregistered baseline before writing output. The existing v1.0.4 manifest's
+generator digest describes the original captured source bytes, not the repaired
+working copy; the historical artifact verifier still verifies all 36 artifacts.
+
+A separate candidate `fixtures/pi-v1.3.0/audit-1221` executes the clean frozen
+checkout at the registered revision. It records two key identity scenarios and
+three input framing scenarios. In that capture, complete recognized OSC and APC
+reply headers remain buffered across a 45 ms wait with a 15 ms timeout, while
+ambiguous Alt-bracket input is released. The candidate passes `audit_evidence.py
+check`, but is **not registered**: the shared registry is pinned by existing
+delivery receipts, whose exact selections and changed inputs must be individually
+reviewed and revalidated before registration. No prior receipt was rehashed.
+The capture does not cover `utils-ansi.json`, terminal startup or stop, or the
+complete keybinding surface. Its timer observations depend on host scheduling.
+
+The incremental build passed; eight existing focused shifted-symbol, fragmented
+reply and terminal fallback tests passed. They do not read this candidate bundle
+and are not new frozen comparisons or receipt evidence. The existing registered
+v1.3.0 verifier passed (76 bundles, 168 artifacts, 981 scenarios). No complete
+full-suite result was obtained in this continuation. Independent standards and
+specification reviews remain outstanding.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: this clarification and the focused tests do not

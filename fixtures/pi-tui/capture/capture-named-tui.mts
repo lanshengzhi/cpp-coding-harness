@@ -912,7 +912,6 @@ const artifacts = [
 	["alt-screen-nav.json", "alt-screen-nav", altScreenNavArtifact],
 	["cli-tui-mode.json", "cli-tui-mode", cliTuiModeArtifact],
 ] as const;
-] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");
 	writeFileSync(path.join(bundle, file), bytes);

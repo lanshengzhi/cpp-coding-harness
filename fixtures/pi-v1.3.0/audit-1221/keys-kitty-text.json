@@ -1,0 +1,205 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-06T01:34:22.880Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/keys.ts:parseKey,matchesKey,isKeyRepeat,isKeyRelease,setKittyProtocolActive"
+  ],
+  "scenarios": [
+    {
+      "name": "legacy-key-identity",
+      "inputs": {
+        "active": false,
+        "cases": [
+          {
+            "sequence": "a",
+            "bindings": [
+              "a",
+              "shift+a"
+            ]
+          },
+          {
+            "sequence": "!",
+            "bindings": [
+              "!",
+              "shift+1"
+            ]
+          },
+          {
+            "sequence": "\u001b[49:33;2u",
+            "bindings": [
+              "!",
+              "shift+1",
+              "shift+!"
+            ]
+          },
+          {
+            "sequence": "\u001b[97;5:2u",
+            "bindings": [
+              "ctrl+a",
+              "a"
+            ]
+          },
+          {
+            "sequence": "\u001b[97;5:3u",
+            "bindings": [
+              "ctrl+a",
+              "a"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        {
+          "parsed": "a",
+          "repeat": false,
+          "release": false,
+          "matches": [
+            true,
+            false
+          ]
+        },
+        {
+          "parsed": "!",
+          "repeat": false,
+          "release": false,
+          "matches": [
+            true,
+            false
+          ]
+        },
+        {
+          "parsed": "!",
+          "repeat": false,
+          "release": false,
+          "matches": [
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "parsed": "ctrl+a",
+          "repeat": true,
+          "release": false,
+          "matches": [
+            true,
+            false
+          ]
+        },
+        {
+          "parsed": "ctrl+a",
+          "repeat": false,
+          "release": true,
+          "matches": [
+            true,
+            false
+          ]
+        }
+      ],
+      "normalizations": []
+    },
+    {
+      "name": "kitty-active-key-identity",
+      "inputs": {
+        "active": true,
+        "cases": [
+          {
+            "sequence": "a",
+            "bindings": [
+              "a",
+              "shift+a"
+            ]
+          },
+          {
+            "sequence": "!",
+            "bindings": [
+              "!",
+              "shift+1"
+            ]
+          },
+          {
+            "sequence": "\u001b[49:33;2u",
+            "bindings": [
+              "!",
+              "shift+1",
+              "shift+!"
+            ]
+          },
+          {
+            "sequence": "\u001b[97;5:2u",
+            "bindings": [
+              "ctrl+a",
+              "a"
+            ]
+          },
+          {
+            "sequence": "\u001b[97;5:3u",
+            "bindings": [
+              "ctrl+a",
+              "a"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        {
+          "parsed": "a",
+          "repeat": false,
+          "release": false,
+          "matches": [
+            true,
+            false
+          ]
+        },
+        {
+          "parsed": "!",
+          "repeat": false,
+          "release": false,
+          "matches": [
+            true,
+            false
+          ]
+        },
+        {
+          "parsed": "!",
+          "repeat": false,
+          "release": false,
+          "matches": [
+            true,
+            true,
+            false
+          ]
+        },
+        {
+          "parsed": "ctrl+a",
+          "repeat": true,
+          "release": false,
+          "matches": [
+            true,
+            false
+          ]
+        },
+        {
+          "parsed": "ctrl+a",
+          "repeat": false,
+          "release": true,
+          "matches": [
+            true,
+            false
+          ]
+        }
+      ],
+      "normalizations": []
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-06T01:34:22.880Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/stdin-buffer.ts:StdinBuffer.process,StdinBuffer.destroy"
+  ],
+  "scenarios": [
+    {
+      "name": "fragmented-osc-reply",
+      "inputs": {
+        "chunks": [
+          "\u001b]10;rgb:ff/",
+          "00/00\u0007",
+          "x"
+        ],
+        "timeoutMs": 15,
+        "waitMs": 45
+      },
+      "expected": {
+        "afterWait": [],
+        "afterCompletion": [
+          "\u001b]10;rgb:ff/00/00\u0007",
+          "x"
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "fragmented-apc-reply",
+      "inputs": {
+        "chunks": [
+          "\u001b_Gi=1;",
+          "OK\u001b\\",
+          "x"
+        ],
+        "timeoutMs": 15,
+        "waitMs": 45
+      },
+      "expected": {
+        "afterWait": [],
+        "afterCompletion": [
+          "\u001b_Gi=1;OK\u001b\\",
+          "x"
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "ambiguous-alt-input",
+      "inputs": {
+        "chunks": [
+          "\u001b]hello"
+        ],
+        "timeoutMs": 15,
+        "waitMs": 45
+      },
+      "expected": {
+        "afterWait": [
+          "\u001b]",
+          "h",
+          "e",
+          "l",
+          "l",
+          "o"
+        ],
+        "afterCompletion": [
+          "\u001b]",
+          "h",
+          "e",
+          "l",
+          "l",
+          "o"
+        ]
+      },
+      "normalizations": []
+    }
+  ]
+}

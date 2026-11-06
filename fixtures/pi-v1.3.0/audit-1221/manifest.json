@@ -1,0 +1,306 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1221",
+  "family": "audit-1221",
+  "capturedAt": "2026-11-06T01:34:22.880Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1221/capture-1221.mts",
+    "sha256": "490e9ff3ca9bfe00e41f93c92bf334cd4e35a76c3e3c5116ffaff2678aa6d4f1",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1221/capture-1221.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1221/capture-1221.mts",
+        "sha256": "490e9ff3ca9bfe00e41f93c92bf334cd4e35a76c3e3c5116ffaff2678aa6d4f1"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "keys-kitty-text.json",
+      "family": "audit-1221",
+      "bytes": 4151,
+      "sha256": "5cc78a9fd39d3b4a3fd02975f948b2f7de5d9292bffe952e90706532585e77b2",
+      "sourceEndpoints": [
+        "packages/tui/src/keys.ts:parseKey,matchesKey,isKeyRepeat,isKeyRelease,setKittyProtocolActive"
+      ],
+      "scenarios": [
+        {
+          "name": "legacy-key-identity",
+          "inputs": {
+            "active": false,
+            "cases": [
+              {
+                "sequence": "a",
+                "bindings": [
+                  "a",
+                  "shift+a"
+                ]
+              },
+              {
+                "sequence": "!",
+                "bindings": [
+                  "!",
+                  "shift+1"
+                ]
+              },
+              {
+                "sequence": "\u001b[49:33;2u",
+                "bindings": [
+                  "!",
+                  "shift+1",
+                  "shift+!"
+                ]
+              },
+              {
+                "sequence": "\u001b[97;5:2u",
+                "bindings": [
+                  "ctrl+a",
+                  "a"
+                ]
+              },
+              {
+                "sequence": "\u001b[97;5:3u",
+                "bindings": [
+                  "ctrl+a",
+                  "a"
+                ]
+              }
+            ]
+          },
+          "expected": [
+            {
+              "parsed": "a",
+              "repeat": false,
+              "release": false,
+              "matches": [
+                true,
+                false
+              ]
+            },
+            {
+              "parsed": "!",
+              "repeat": false,
+              "release": false,
+              "matches": [
+                true,
+                false
+              ]
+            },
+            {
+              "parsed": "!",
+              "repeat": false,
+              "release": false,
+              "matches": [
+                true,
+                true,
+                false
+              ]
+            },
+            {
+              "parsed": "ctrl+a",
+              "repeat": true,
+              "release": false,
+              "matches": [
+                true,
+                false
+              ]
+            },
+            {
+              "parsed": "ctrl+a",
+              "repeat": false,
+              "release": true,
+              "matches": [
+                true,
+                false
+              ]
+            }
+          ],
+          "normalizations": []
+        },
+        {
+          "name": "kitty-active-key-identity",
+          "inputs": {
+            "active": true,
+            "cases": [
+              {
+                "sequence": "a",
+                "bindings": [
+                  "a",
+                  "shift+a"
+                ]
+              },
+              {
+                "sequence": "!",
+                "bindings": [
+                  "!",
+                  "shift+1"
+                ]
+              },
+              {
+                "sequence": "\u001b[49:33;2u",
+                "bindings": [
+                  "!",
+                  "shift+1",
+                  "shift+!"
+                ]
+              },
+              {
+                "sequence": "\u001b[97;5:2u",
+                "bindings": [
+                  "ctrl+a",
+                  "a"
+                ]
+              },
+              {
+                "sequence": "\u001b[97;5:3u",
+                "bindings": [
+                  "ctrl+a",
+                  "a"
+                ]
+              }
+            ]
+          },
+          "expected": [
+            {
+              "parsed": "a",
+              "repeat": false,
+              "release": false,
+              "matches": [
+                true,
+                false
+              ]
+            },
+            {
+              "parsed": "!",
+              "repeat": false,
+              "release": false,
+              "matches": [
+                true,
+                false
+              ]
+            },
+            {
+              "parsed": "!",
+              "repeat": false,
+              "release": false,
+              "matches": [
+                true,
+                true,
+                false
+              ]
+            },
+            {
+              "parsed": "ctrl+a",
+              "repeat": true,
+              "release": false,
+              "matches": [
+                true,
+                false
+              ]
+            },
+            {
+              "parsed": "ctrl+a",
+              "repeat": false,
+              "release": true,
+              "matches": [
+                true,
+                false
+              ]
+            }
+          ],
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "input.json",
+      "family": "audit-1221",
+      "bytes": 1776,
+      "sha256": "ffd2ea2172c028e8f733b370212bbdf1b928d6ad2b6248759b51a0b896415ae0",
+      "sourceEndpoints": [
+        "packages/tui/src/stdin-buffer.ts:StdinBuffer.process,StdinBuffer.destroy"
+      ],
+      "scenarios": [
+        {
+          "name": "fragmented-osc-reply",
+          "inputs": {
+            "chunks": [
+              "\u001b]10;rgb:ff/",
+              "00/00\u0007",
+              "x"
+            ],
+            "timeoutMs": 15,
+            "waitMs": 45
+          },
+          "expected": {
+            "afterWait": [],
+            "afterCompletion": [
+              "\u001b]10;rgb:ff/00/00\u0007",
+              "x"
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "fragmented-apc-reply",
+          "inputs": {
+            "chunks": [
+              "\u001b_Gi=1;",
+              "OK\u001b\\",
+              "x"
+            ],
+            "timeoutMs": 15,
+            "waitMs": 45
+          },
+          "expected": {
+            "afterWait": [],
+            "afterCompletion": [
+              "\u001b_Gi=1;OK\u001b\\",
+              "x"
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "ambiguous-alt-input",
+          "inputs": {
+            "chunks": [
+              "\u001b]hello"
+            ],
+            "timeoutMs": 15,
+            "waitMs": 45
+          },
+          "expected": {
+            "afterWait": [
+              "\u001b]",
+              "h",
+              "e",
+              "l",
+              "l",
+              "o"
+            ],
+            "afterCompletion": [
+              "\u001b]",
+              "h",
+              "e",
+              "l",
+              "l",
+              "o"
+            ]
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}
