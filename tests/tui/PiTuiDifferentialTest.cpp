@@ -302,6 +302,11 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS",
         // validated against the frozen v1.0.4 source and behavior instead
         // (`alt_screen_keybinding_definitions()`, scroll-view evidence).
         if (id.starts_with("tui.altScreen.")) continue;
+        // These defaults changed in the selected pi v1.3.0 baseline; its
+        // registered table comparison checks them against that revision.
+        if (id == "tui.editor.pageUp" || id == "tui.editor.pageDown" || id == "tui.editor.historyPrevious" ||
+                id == "tui.editor.historyNext")
+            continue;
         ++assembled;
 
         auto definition = std::find_if(
@@ -321,7 +326,7 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS",
     // `previousPrompt`/`nextPrompt` + search entries (all `tui.altScreen.*`
     // ids are skipped by the prefix guard above, which also covers the
     // pre-v1.0.4 `previousPrompt`/`nextPrompt` fixture rows).
-    CHECK(assembled == 32);
+    CHECK(assembled == 28);
 }
 
 TEST_CASE("terminal-image encoder bytes match the frozen pi encoders",

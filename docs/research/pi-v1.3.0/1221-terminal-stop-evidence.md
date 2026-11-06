@@ -259,6 +259,36 @@ sub-agent reviews were unavailable to this implementation sub-agent. These
 bounded results do not establish a whole-row receipt or a #1229 discriminating
 case for each row.
 
+## 2026-11-06 assembled keybinding alignment
+
+The regular-mode definitions now include `ctrl+pageUp` and `ctrl+pageDown`
+for editor page navigation and use the two v1.3.0 history descriptions. The
+registered table comparison checks those fields for every native definition;
+it still identifies `tui.input.copy` as missing. That action is explicitly
+known-but-unassembled, and adding it to the active registry without a consumer
+would change that contract without providing the action. Four fullscreen
+entries likewise remain outside the active runtime. Thus the union comparison
+is not a complete active table or a whole-row receipt.
+
+The native registry and context expose effective keys and replacement but do
+not expose pi's original user-binding and definition accessors, nor pi's global
+manager. The registered scenarios do not capture those accessors or global
+state, so no parity claim is made for them. No capability row was promoted;
+#1229 distinct controls and full row coverage are still needed.
+
+The registered table comparison initially failed on both key arrays and both
+history descriptions; after alignment, it passed together with the assembled
+table test and historical differential selection (three cases). The full
+incremental build passed. The unfiltered CTest run selected 4,523 tests: 4,507
+passed, five failed and 11 skipped. The four failures involving durable answer
+publication, terminal postdrain error classification, the quarantined projection
+cost bound (2.253 ms against 2 ms), and MCP reconnect each passed in an isolated
+four-test rerun. The Herdr PTY evidence case failed because
+`TERM_PROGRAM=herdr` was unset. The rerun does not make the full suite a pass.
+Formatting and `git diff --check` passed. Local standards and specification
+review found the partial coverage described above; independent reviews were not
+performed because this work was assigned to an implementation sub-agent.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: the captured observations do not compare all 110

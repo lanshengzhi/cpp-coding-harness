@@ -107,8 +107,8 @@ TEST_CASE("Keybinding definitions compare the complete frozen pi 1.3.0 table", "
     std::sort(descriptions_differ.begin(), descriptions_differ.end());
     std::sort(extra.begin(), extra.end());
     CHECK(missing == std::vector<std::string>{"tui.input.copy"});
-    CHECK((keys_differ == std::vector<std::string>{"tui.editor.pageDown", "tui.editor.pageUp"}));
-    CHECK((descriptions_differ == std::vector<std::string>{"tui.editor.historyNext", "tui.editor.historyPrevious"}));
+    CHECK(keys_differ.empty());
+    CHECK(descriptions_differ.empty());
     CHECK(extra.empty());
     CHECK(definitions.size() + missing.size() == frozen.size());
 }
@@ -229,11 +229,8 @@ TEST_CASE(
     CHECK(resolved->registry->key_text("tui.editor.cursorWordLeft") == "alt+left/ctrl+left/alt+b");
 }
 
-TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[tui][keybindings][issue382][spec]") {
-    // Re-verified action-for-action against pi 83114817
-    // packages/tui/src/keybindings.ts TUI_KEYBINDINGS: 21 tui.editor.*,
-    // 3 tui.input.*, and 6 tui.select.* with pi's default keys and
-    // descriptions.
+TEST_CASE("Builtin table retains the assembled pi default actions", "[tui][keybindings][issue382][spec]") {
+    // The assembled subset follows pi v1.3.0; fullscreen and copy are separate.
     struct FrozenEntry {
         std::string id;
         std::vector<std::string> keys;
@@ -250,8 +247,8 @@ TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[
             {"tui.editor.cursorLineEnd", {"end", "ctrl+e"}, "Move to line end"},
             {"tui.editor.jumpForward", {"ctrl+]"}, "Jump forward to character"},
             {"tui.editor.jumpBackward", {"ctrl+alt+]"}, "Jump backward to character"},
-            {"tui.editor.pageUp", {"pageUp"}, "Page up"},
-            {"tui.editor.pageDown", {"pageDown"}, "Page down"},
+            {"tui.editor.pageUp", {"pageUp", "ctrl+pageUp"}, "Page up"},
+            {"tui.editor.pageDown", {"pageDown", "ctrl+pageDown"}, "Page down"},
             {"tui.editor.deleteCharBackward", {"backspace"}, "Delete character backward"},
             {"tui.editor.deleteCharForward", {"delete", "ctrl+d"}, "Delete character forward"},
             {"tui.editor.deleteWordBackward", {"ctrl+w", "alt+backspace"}, "Delete word backward"},
@@ -261,8 +258,8 @@ TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[
             {"tui.editor.yank", {"ctrl+y"}, "Yank"},
             {"tui.editor.yankPop", {"alt+y"}, "Yank pop"},
             {"tui.editor.undo", {"ctrl+-"}, "Undo"},
-            {"tui.editor.historyPrevious", {}, "Previous history item"},
-            {"tui.editor.historyNext", {}, "Next history item"},
+            {"tui.editor.historyPrevious", {}, "Select previous prompt history entry"},
+            {"tui.editor.historyNext", {}, "Select next prompt history entry"},
             {"tui.input.newLine", {"shift+enter", "ctrl+j"}, "Insert newline"},
             {"tui.input.submit", {"enter"}, "Submit input"},
             {"tui.input.tab", {"tab"}, "Tab / autocomplete"},

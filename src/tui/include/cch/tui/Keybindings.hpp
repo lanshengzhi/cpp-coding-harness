@@ -108,7 +108,7 @@ struct KeybindingResolution {
 /// candidate order and the returned issues report the conflict.
 [[nodiscard]] support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionRequest request);
 
-/// Reusable regular-mode actions implemented by cch_tui, pinned to frozen pi v1.0.4.
+/// Reusable regular-mode actions implemented by cch_tui, aligned with pi v1.3.0.
 [[nodiscard]] std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions();
 
 /// Frozen fullscreen navigation actions, kept separate until the fullscreen

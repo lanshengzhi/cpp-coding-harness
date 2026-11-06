@@ -230,7 +230,7 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
 }
 
 std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions() {
-    // Compatibility baseline: pi 83114817, packages/tui/src/keybindings.ts.
+    // Compatibility baseline: pi v1.3.0, packages/tui/src/keybindings.ts.
     return {
             make_definition("tui.editor.cursorUp",
                     {"up"},
@@ -313,7 +313,7 @@ std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions() {
                     "Jump backward to character",
                     6),
             make_definition("tui.editor.pageUp",
-                    {"pageUp"},
+                    {"pageUp", "ctrl+pageUp"},
                     "Page up",
                     "Editor cursor",
                     "Navigation",
@@ -321,7 +321,7 @@ std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions() {
                     "Scroll by page",
                     7),
             make_definition("tui.editor.pageDown",
-                    {"pageDown"},
+                    {"pageDown", "ctrl+pageDown"},
                     "Page down",
                     "Editor cursor",
                     "Navigation",
@@ -383,8 +383,8 @@ std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions() {
                     "Cycle through the deleted text after pasting",
                     8),
             make_definition("tui.editor.undo", {"ctrl+-"}, "Undo", "Editor kill ring", "Editing", "undo", "Undo", 9),
-            make_definition("tui.editor.historyPrevious", {}, "Previous history item", "Editor history"),
-            make_definition("tui.editor.historyNext", {}, "Next history item", "Editor history"),
+            make_definition("tui.editor.historyPrevious", {}, "Select previous prompt history entry", "Editor history"),
+            make_definition("tui.editor.historyNext", {}, "Select next prompt history entry", "Editor history"),
             make_definition("tui.input.newLine",
                     {"shift+enter", "ctrl+j"},
                     "Insert newline",
