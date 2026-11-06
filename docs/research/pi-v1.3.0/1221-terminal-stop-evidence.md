@@ -469,6 +469,37 @@ skips include native TUI and cross-runtime evidence. This does not establish a
 full-suite pass or real terminal-emulator behavior. Independent standards and
 specification sub-agent reviews were unavailable to this implementation sub-agent.
 
+## Owner-boundary assessment after f3de208
+
+The authoritative owner for the reusable manager and these 27 keybinding rows
+is `cch_tui` (ADR 0075); `frontend_tui` in `cch_coding_agent` owns application
+configuration, action assembly and its consumers. The existing immutable
+`KeybindingRegistry` and shared `KeybindingsContext` are the current native
+seams, not proof that observable mutable pi behavior is equivalent. ADR 0075
+allows a different C++ representation but does not waive different observable
+results. The following are implementation and evidence blockers, not approved
+intentional divergences:
+
+| Affected rows | Concrete gap and next owner action |
+| --- | --- |
+| `KeybindingsManager.userBindings`, `getUserBindings`, `constructor`, `setUserBindings`, `rebuild`, `KeybindingsConfig` | `cch_tui` stores owned vectors and a snapshot remains unchanged when a caller mutates its input. Frozen pi retains the submitted object and aliases nested arrays returned by its accessor; mutation changes user state immediately, but not resolved keys until rebuild. A mutable caller-facing compatibility seam and a test of mutation before and after rebuild are needed without weakening existing snapshot lifetime guarantees. Scalar and singleton-array input shapes must also survive the accessor: vector normalization alone cannot distinguish them. |
+| `KeybindingDefinition`, `.defaultKeys`, `.description`, `KeybindingDefinitions`, `KeybindingsManager.definitions`, `getDefinition`, `constructor`, `rebuild` | `cch_tui` currently resolves definitions into effective entries; it does not retain a caller-observable original definition with pi's mutable reference behavior or scalar/array shape. Retain and compare original definitions through the owner seam, including a mutation followed by rebuild and an unknown ID. The frozen union-table comparison is not that test. |
+| `KeybindingsManager.getResolvedBindings`, `getKeys`, `keysById`, `matches`, `rebuild`, `conflicts`, `getConflicts`, `KeybindingConflict`, `.key`, `.keybindings` | `cch_tui` canonicalizes valid keys and rejects an entire invalid override, falling back to the default; frozen pi retains and deduplicates literal strings even when they are not valid key identifiers. Its conflicts include literal claims from known actions regardless of key validity. Compare invalid and valid keys mixed in one override, two actions claiming an invalid literal, unknown actions, and returned-copy mutation through the actual manager seam before claiming these rows. The existing literal-conflict comparison covers valid spellings only. |
+| `getKeybindings`, `setKeybindings`, `KeybindingsManager` | `cch_tui` has per-context replacement, not the frozen lazy process-global manager and its identity semantics. Establish the compatible owner-level access and replacement semantics and exercise old and new references independently; the current context replay does not compare the captured global identity. |
+| `TUI_KEYBINDINGS`, `Keybinding`, `Keybindings` | `cch_tui` owns the reusable definitions; `frontend_tui` assembles concrete consumers. `tui.input.copy` and the four half-page/line actions remain unassembled. Their owning consumer behavior and complete active-table comparison are needed before whole-row verification; a union of definition providers does not establish usable actions. |
+
+No new receipt is justified by this assessment: the named comparisons do not
+cover every listed behavior, and each proposed row still needs an independent
+#1229 discriminating control. The existing 110-row blocker disposition above
+continues to apply, including terminal and emulator evidence owned by #831 and
+#1035. No fixture, registry, delivery or ledger status was changed.
+
+The TUI shard built; the 20 CTest cases matching `Keybinding` and all 13 cases
+labelled `issue1221` passed. This documentation continuation did not run a new
+full suite; the preceding full-suite result and its Herdr host limitation are
+recorded above. Independent standards and specification reviews remain
+outstanding; the implementation sub-agent cannot start review sub-agents.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: the captured observations do not compare all 110
