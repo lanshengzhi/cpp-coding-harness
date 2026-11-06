@@ -53,7 +53,8 @@ struct EffectiveKeybinding {
 
 class KeybindingRegistry final {
 public:
-    explicit KeybindingRegistry(std::vector<EffectiveKeybinding> entries);
+    explicit KeybindingRegistry(
+            std::vector<EffectiveKeybinding> entries, std::vector<KeybindingOverride> user_bindings = {});
 
     [[nodiscard]] const EffectiveKeybinding* find(std::string_view id) const;
     [[nodiscard]] std::vector<std::string> keys(std::string_view id) const;
@@ -62,9 +63,12 @@ public:
             const KeyEvent& event, std::span<const std::string_view> candidate_ids) const;
     [[nodiscard]] std::string key_text(std::string_view id) const;
     [[nodiscard]] const std::vector<EffectiveKeybinding>& entries() const;
+    /// Original overrides, including unknown and invalid entries, before resolution.
+    [[nodiscard]] const std::vector<KeybindingOverride>& user_bindings() const;
 
 private:
     std::vector<EffectiveKeybinding> entries_;
+    std::vector<KeybindingOverride> user_bindings_;
 };
 
 /// Per-instance update handle for immutable keybinding snapshots. Copies share

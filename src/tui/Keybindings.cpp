@@ -56,7 +56,9 @@ namespace {
 
 } // namespace
 
-KeybindingRegistry::KeybindingRegistry(std::vector<EffectiveKeybinding> entries) : entries_(std::move(entries)) {}
+KeybindingRegistry::KeybindingRegistry(
+        std::vector<EffectiveKeybinding> entries, std::vector<KeybindingOverride> user_bindings)
+    : entries_(std::move(entries)), user_bindings_(std::move(user_bindings)) {}
 
 const EffectiveKeybinding* KeybindingRegistry::find(std::string_view id) const {
     const auto found =
@@ -96,6 +98,8 @@ std::string KeybindingRegistry::key_text(std::string_view id) const {
 }
 
 const std::vector<EffectiveKeybinding>& KeybindingRegistry::entries() const { return entries_; }
+
+const std::vector<KeybindingOverride>& KeybindingRegistry::user_bindings() const { return user_bindings_; }
 
 KeybindingsContext::KeybindingsContext() : state_(std::make_shared<State>(default_tui_keybindings())) {}
 
@@ -224,7 +228,7 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
     }
 
     return KeybindingResolution{
-            .registry = std::make_shared<const KeybindingRegistry>(std::move(entries)),
+            .registry = std::make_shared<const KeybindingRegistry>(std::move(entries), std::move(request.overrides)),
             .issues = std::move(issues),
     };
 }

@@ -74,6 +74,51 @@ TEST_CASE("Keybinding resolution compares frozen pi 1.3.0 manager cases", "[tui]
     }
 }
 
+TEST_CASE("Keybinding snapshots compare frozen user bindings and replacement", "[tui][keybindings][issue1221]") {
+    const auto bundle = tests::read_pi_v130_audit_candidate("audit-1221-manager-state", "manager-state.json");
+    REQUIRE(bundle);
+    const auto& scenario = tests::find_scenario(*bundle, "accessors-replacement-and-global-state");
+    const auto& expected = scenario.at("expected");
+    const std::vector<tui::KeybindingDefinition> definitions = {
+            {.id = "alpha", .default_keys = {"up", "ctrl+b", "up"}, .description = "Alpha"},
+            {.id = "beta", .default_keys = {"down"}, .description = "Beta"},
+            {.id = "gamma", .default_keys = {}, .description = "Gamma"}};
+    const auto initial = tui::resolve_keybindings({.definitions = definitions,
+            .overrides = {{.id = "alpha", .keys = {"down", "down"}},
+                    {.id = "gamma", .keys = {}},
+                    {.id = "unknown", .keys = {"ctrl+x"}}}});
+    REQUIRE(initial);
+    tui::KeybindingsContext context(initial->registry);
+    auto compare_user = [](const auto& registry, const auto& frozen) {
+        const auto& bindings = registry->user_bindings();
+        REQUIRE(bindings.size() == frozen.get_object().size());
+        for (const auto& binding : bindings) {
+            const auto& value = frozen.at(binding.id);
+            std::vector<std::string> keys;
+            if (value.template holds<std::string>())
+                keys.push_back(value.get_string());
+            else
+                for (const auto& key : value.get_array())
+                    keys.push_back(key.get_string());
+            CHECK(binding.keys == keys);
+        }
+    };
+    compare_user(context.snapshot(), expected.at("before").at("user"));
+    CHECK(context.keys("alpha") ==
+            std::vector<std::string>{expected.at("before").at("alphaKeys").get_array().at(0).get_string()});
+    auto saved = context.snapshot();
+    const auto replacement =
+            tui::resolve_keybindings({.definitions = definitions, .overrides = {{.id = "beta", .keys = {"up"}}}});
+    REQUIRE(replacement);
+    context.replace(replacement->registry);
+    compare_user(context.snapshot(), expected.at("after").at("user"));
+    compare_user(saved, expected.at("afterReturnedObjectMutation").at("user"));
+    CHECK(context.keys("beta") ==
+            std::vector<std::string>{expected.at("after").at("betaKeys").get_array().at(0).get_string()});
+    CHECK(saved->keys("beta") ==
+            std::vector<std::string>{expected.at("before").at("betaKeys").get_array().at(0).get_string()});
+}
+
 TEST_CASE("Keybinding definitions compare the complete frozen pi 1.3.0 table", "[tui][keybindings][issue1221]") {
     const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-keybindings", "keybindings.json");
     REQUIRE(bundle);

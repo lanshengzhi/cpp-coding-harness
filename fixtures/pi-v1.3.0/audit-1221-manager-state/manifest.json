@@ -1,0 +1,185 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1221",
+  "family": "audit-1221-manager-state",
+  "capturedAt": "2026-11-06T03:05:58.987Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1221-manager-state/capture-1221-manager-state.mts",
+    "sha256": "d0abf67485a0c08ee7637f6a12cf12712296f188d826c77382a94b66055f4e12",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1221-manager-state/capture-1221-manager-state.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1221-manager-state/capture-1221-manager-state.mts",
+        "sha256": "d0abf67485a0c08ee7637f6a12cf12712296f188d826c77382a94b66055f4e12"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "manager-state.json",
+      "family": "audit-1221-manager-state",
+      "bytes": 3610,
+      "sha256": "c944e44b60a8c4f0494493b3b6673e36f98c7372f965d19c18073f7b32f21af9",
+      "sourceEndpoints": [
+        "packages/tui/src/keybindings.ts:KeybindingsManager,getKeybindings,setKeybindings"
+      ],
+      "scenarios": [
+        {
+          "name": "accessors-replacement-and-global-state",
+          "inputs": {
+            "definitions": {
+              "alpha": {
+                "defaultKeys": [
+                  "up",
+                  "ctrl+b",
+                  "up"
+                ],
+                "description": "Alpha"
+              },
+              "beta": {
+                "defaultKeys": "down",
+                "description": "Beta"
+              },
+              "gamma": {
+                "defaultKeys": [],
+                "description": "Gamma"
+              }
+            },
+            "initial": {
+              "alpha": [
+                "down",
+                "down"
+              ],
+              "gamma": [],
+              "unknown": "ctrl+x"
+            },
+            "replacement": {
+              "beta": "up"
+            }
+          },
+          "expected": {
+            "before": {
+              "user": {
+                "alpha": [
+                  "down",
+                  "down"
+                ],
+                "gamma": [],
+                "unknown": "ctrl+x"
+              },
+              "resolved": {
+                "alpha": "down",
+                "beta": "down",
+                "gamma": []
+              },
+              "alphaKeys": [
+                "down"
+              ],
+              "betaKeys": [
+                "down"
+              ],
+              "definition": {
+                "defaultKeys": [
+                  "up",
+                  "ctrl+b",
+                  "up"
+                ],
+                "description": "Alpha"
+              },
+              "conflicts": []
+            },
+            "afterReturnedObjectMutation": {
+              "user": {
+                "alpha": [
+                  "down",
+                  "down"
+                ],
+                "gamma": [],
+                "unknown": "ctrl+x"
+              },
+              "resolved": {
+                "alpha": "down",
+                "beta": "down",
+                "gamma": []
+              },
+              "alphaKeys": [
+                "down"
+              ],
+              "betaKeys": [
+                "down"
+              ],
+              "definition": {
+                "defaultKeys": [
+                  "up",
+                  "ctrl+b",
+                  "up"
+                ],
+                "description": "Alpha"
+              },
+              "conflicts": []
+            },
+            "after": {
+              "user": {
+                "beta": "up"
+              },
+              "resolved": {
+                "alpha": [
+                  "up",
+                  "ctrl+b"
+                ],
+                "beta": "up",
+                "gamma": []
+              },
+              "alphaKeys": [
+                "up",
+                "ctrl+b"
+              ],
+              "betaKeys": [
+                "up"
+              ],
+              "definition": {
+                "defaultKeys": [
+                  "up",
+                  "ctrl+b",
+                  "up"
+                ],
+                "description": "Alpha"
+              },
+              "conflicts": []
+            },
+            "defaultGlobalRepeated": true,
+            "globalAfterSet": true,
+            "globalResolved": {
+              "alpha": [
+                "up",
+                "ctrl+b"
+              ],
+              "beta": "up",
+              "gamma": []
+            },
+            "globalAfterReplacement": true,
+            "oldManagerAfterReplacement": {
+              "alpha": [
+                "up",
+                "ctrl+b"
+              ],
+              "beta": "up",
+              "gamma": []
+            }
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}

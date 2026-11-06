@@ -335,6 +335,39 @@ have not been accepted as #1229 controls for complete row mappings. Independent
 standards and specification reviews remain outstanding. This investigation is
 documentation-only and makes no ledger, registry, fixture, or receipt change.
 
+## 2026-11-06 TUI manager accessor and state capture
+
+The separately pinned, unregistered `audit-1221-manager-state` candidate runs
+`KeybindingsManager`, `getKeybindings` and `setKeybindings` from the frozen
+v1.3.0 checkout. It records user bindings, definitions, resolved keys and
+conflicts before and after replacement; changing a property of the object
+returned by `getUserBindings` leaves the manager's properties unchanged. It
+also records lazy global identity, installation, replacement and the old
+manager's state. This observation does not exercise mutation of a nested array
+returned by the shallow-copy accessor.
+
+The native immutable registry now retains the original submitted overrides,
+including duplicate keys, empty bindings and unknown IDs. The candidate replay
+compares all captured user entries before and after replacement, plus selected
+resolved keys and the retained old native snapshot. Native override values are
+always vectors, so the comparison normalizes pi's scalar values; it does not
+establish scalar-versus-array representation parity. The native per-context
+snapshot is not pi's process-global manager: the captured global identity and
+mutation semantics have no native comparison here. The definition and conflict
+fields in this new scenario are captured but not compared by this replay.
+
+The candidate is not registered and supplies no delivery receipt. Registration
+would change registry and plan inputs pinned by existing receipts and requires
+their individual revalidation. No rows are promoted. The named assembly,
+terminal, framing, key and emulator blockers below continue to apply.
+
+The candidate integrity check and four focused keybinding tests passed. The
+incremental full build passed. The unfiltered CTest run selected 4,524 cases:
+4,512 passed, 11 skipped and the Herdr PTY evidence case failed because
+`TERM_PROGRAM=herdr` was unset. The warning gate passed. A local standards and
+specification review checked the changed code and the stated comparison limits;
+independent sub-agent reviews were unavailable in this implementation sub-agent.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: the captured observations do not compare all 110
