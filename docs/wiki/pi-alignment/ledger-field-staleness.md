@@ -16,4 +16,12 @@ Recurring problem, first recorded 2026-11-06 at `lanshengzhi/cpp-coding-harness@
 - Fail when a row is `verified` while `implementation` is `missing` or `consumer` says the owner is absent.
 - Both are cheap, mechanical, and would have caught the 2026-11-06 case; see [validation](../../agents/validation.md) §Acceptance discipline for why a text check alone is a check and not acceptance.
 
+## 2026-11-06 (later): the detectors were built, with recorded limits
+Delivered at `lanshengzhi/cpp-coding-harness@79379d90b` (issue #1239, record `docs/research/pi-v1.3.0/1239-stale-field-gates.md`). The section above stays as the proposal it was; this records what landed and what it cannot do.
+
+- `consolidate_audits.py` now fails closed on: `verified` + `implementation: missing`; `verified` + a `consumer`/`gaps` text describing the owner package as absent; `implementation: missing` + a built `src/<owner>/` + the owner named in the text; an `implementation_ticket` recorded closed in an offline snapshot; and an unbounded claim whose `discriminatingCase` reuses one of its own comparisons.
+- Pre-existing contradictions sit in `fixtures/pi-v1.3.0/consolidation-1058/1239-stale-fields.json` — **777 entries** at that commit, identity `{id, field, contradiction}`, `value` retained as evidence, with a count ratchet that fails the build when a recorded contradiction is resolved but not removed. Reading 777 as 777 real defects is wrong: the record states the regex escapes absence phrasings (`"cch_durable has not landed in tree yet"`) and falsely flags true text (`"verified that when optional cch_durable package configuration is missing, fallback defaults are used."`).
+- The issue-state snapshot is offline by design; a ticket closed after the snapshot date stays recorded open. The response is a 30-day age warning plus a recorded boundary, not a TTL failure. Refresh procedure: [delivery reconciliation](../../research/pi-v1.3.0/1058-delivery-reconciliation.md).
+- The same commit bounded 44 claims whose discriminating case reused a comparison; verified rows fell 609 → 565. Row lists and follow-ups: #1240 (chord 15), #1241 (codemode 19), #1242 (images/durable 6), #1243 (agent/application 4).
+
 Related: [evidence and delivery history](evidence-and-delivery-history.md), [v1.3.0 residual-gap audit](residual-gap-audit-2026-11-04.md), [index](index.md).

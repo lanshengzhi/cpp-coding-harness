@@ -28,6 +28,8 @@ Dated record, read at `lanshengzhi/cpp-coding-harness@6ca7b49` (2026-11-04). It 
 
 - **2026-11-06. #1239 receipt boundary.** Forty-four claims whose discriminating case reused a comparison were bounded, retaining their comparisons and reverting their rows to source-audit status. The measured verified count fell from 609 to 565; membership did not change. The [delivery record](../../research/pi-v1.3.0/1239-stale-field-gates.md) names every row and assigns independent cases to #1240–#1243.
 
+- **2026-11-06 (later). #1239 gates and the 44 bounded claims, at `79379d90b`.** The consolidation build/check now fail closed on the stale-field classes this page's correction described, and the #1229 discriminating-case assertion covers every receipt instead of seven. 44 claims whose `discriminatingCase` reused one of their own comparisons were bounded — comparisons kept, `remainingBoundary` recorded, rows reverted — so verified fell **609 → 565** with membership unchanged; #1240–#1243 own the independent cases. 777 pre-existing contradictions were recorded in a dated baseline with an owner ticket and date each, under a count ratchet; the record states the text check's escapes and false positives, so the count is not a defect count. Issue #1239 closed with `scripts/verify-closed-issue.sh` exit 0. Record: [1239-stale-field-gates](../../research/pi-v1.3.0/1239-stale-field-gates.md); limits: [ledger field staleness](ledger-field-staleness.md).
+
 Later state: [residual-gap audit 2026-11-04](residual-gap-audit-2026-11-04.md) (counts there replace the 2026-10-30 counts above).
 
 Related: [open questions](open-questions.md), [sources](sources.md), [index](index.md).
