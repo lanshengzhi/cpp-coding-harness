@@ -30,6 +30,7 @@ One code lane at a time in the main checkout (owner rule, 2026-11-05; lane defin
 - **Architecture, Owner packages, module structure, seams, or security boundaries:** read [architecture](docs/agents/architecture.md), [pi parity](docs/agents/pi-parity.md), and relevant ADRs.
 - **pi-ai catalog or upstream sync:** read `fixtures/pi-ai/README.md` and the module's ADR.
 - **Running or E2E tests:** read [usage](docs/usage.md); TUI seams live in `tests/coding_agent/tui/`. To drive CLI/TUI and capture evidence, read `.agents/skills/verify-pike/SKILL.md`.
+- **Any dispatched lane:** read [ops lanes](docs/wiki/pi-alignment/ops-lanes.md) before you start. Three rules bind every lane: (1) the frozen capture defines the expected behavior — align to it, and a deliberate divergence needs an owner ruling recorded as an ADR, which a lane may not invent; (2) size by rows touched (≤ ~25) and by evidence-pin blast radius, not by topic coherence; (3) if you cannot deliver the whole ticket, write what you established as a dated record under `docs/research/pi-v1.3.0/` and comment it on the ticket before you stop — a report alone leaves nothing behind.
 
 ## Agent skills
 
