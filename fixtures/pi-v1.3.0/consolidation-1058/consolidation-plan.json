@@ -1025,6 +1025,46 @@
  ],
  "orphanScenarios": [
   {
+   "family": "audit-1221-keybindings",
+   "artifact": "keybindings.json",
+   "scenario": "defaults-deduplicate",
+   "reason": "Supplemental keybinding observation; no complete row is routed to it.",
+   "rows": ["cch_tui:KeybindingsManager"],
+   "disposition": "#1221 compares a bounded slice without promoting a row."
+  },
+  {
+   "family": "audit-1221-keybindings",
+   "artifact": "keybindings.json",
+   "scenario": "overrides-disable-and-conflict",
+   "reason": "Supplemental keybinding observation; no complete row is routed to it.",
+   "rows": ["cch_tui:KeybindingsManager"],
+   "disposition": "#1221 compares a bounded slice without promoting a row."
+  },
+  {
+   "family": "audit-1221-keybindings",
+   "artifact": "keybindings.json",
+   "scenario": "unknown-claim-and-default-overlap",
+   "reason": "Supplemental keybinding observation; no complete row is routed to it.",
+   "rows": ["cch_tui:KeybindingsManager"],
+   "disposition": "#1221 compares a bounded slice without promoting a row."
+  },
+  {
+   "family": "audit-1221-keybindings",
+   "artifact": "keybindings.json",
+   "scenario": "replace-user-bindings",
+   "reason": "Supplemental keybinding observation; no complete row is routed to it.",
+   "rows": ["cch_tui:KeybindingsManager"],
+   "disposition": "#1221 compares a bounded slice without promoting a row."
+  },
+  {
+   "family": "audit-1221-keybindings",
+   "artifact": "keybindings.json",
+   "scenario": "builtin-definitions",
+   "reason": "Supplemental keybinding observation; no complete row is routed to it.",
+   "rows": ["cch_tui:TUI_KEYBINDINGS"],
+   "disposition": "#1221 compares a bounded slice without promoting a row."
+  },
+  {
    "family": "audit-1221-terminal-ansi",
    "artifact": "terminal-start-stop.json",
    "scenario": "no-reply",

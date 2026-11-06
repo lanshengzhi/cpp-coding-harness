@@ -317,6 +317,10 @@
           "manifest": "audit-1221/manifest.json",
           "manifestSha256": "cb7f6b42094ff7d824e7537a534ae08961a5343bfdd091fd2b208ae65014dbb1"
         },
+        "audit-1221-keybindings": {
+          "manifest": "audit-1221-keybindings/manifest.json",
+          "manifestSha256": "5d88f51fe6120db29e2c50b1acb9221246399726969bbbda1813d6fd542b30c0"
+        },
         "audit-1221-terminal-ansi": {
           "manifest": "audit-1221-terminal-ansi/manifest.json",
           "manifestSha256": "4fdb8b39668d43c7452b87889fe0dfc9e29998b5946a07d0ee8a1ae860430d17"

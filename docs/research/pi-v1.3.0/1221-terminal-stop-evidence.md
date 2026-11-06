@@ -222,13 +222,50 @@ remain with #831 and #1035. Independent standards and specification sub-agent
 reviews were not performed in this implementation sub-agent; a local review
 found the scope limitations above.
 
+## 2026-11-06 keybinding registration and table comparison
+
+The unchanged `audit-1221-keybindings` capture is registered as five
+supplemental orphan scenarios; no capability row is promoted. The registered
+verifier reports 79 bundles, 173 artifacts and 997 scenarios. All 23 receipts
+pinning the changed registry or consolidation plan were rerun with their exact
+recorded selections: 694 test executions passed, including overlaps. Their
+prior validation records and JUnit artifacts are retained; only the changed
+input digests were refreshed. Consolidation build and check passed; all 1,464
+ledger row objects remain identical and there are 332 explicit orphans.
+
+A native test compares all 47 frozen table entries with the union of the
+regular and fullscreen definition providers, checking IDs, default-key arrays
+and descriptions in both directions. The observed differences are: missing
+`tui.input.copy`; missing `ctrl+pageUp` and `ctrl+pageDown` on the respective
+editor defaults; and different descriptions for the two editor history
+entries. There are no extra IDs. The fullscreen provider includes four
+recognized definitions that are not assembled into the active runtime, so
+this union is not evidence that all 46 native definitions are usable there.
+
+The captured two-claimant conflict is compared to the full native diagnostic
+message, including both claimant names and their order. This is a string
+comparison, not a structured claimant-list interface; the public native issue
+type has no claimant list. The captured manager scenarios do not observe
+user-binding accessors or global manager state, and Pike exposes an explicit
+context rather than the same global manager seam. Those comparisons remain
+unverified. The frozen manager tests, table comparison and an independent
+conflict control passed (four cases). The incremental full build passed. The
+full CTest run selected 4,523 cases: 4,511 passed, one failed and 11 skipped.
+The failure was the Herdr PTY evidence case, whose `TERM_PROGRAM=herdr`
+precondition was unset. The consolidation check and boundary tests passed in
+the full run and in a two-case focused rerun. Formatting and `git diff --check`
+passed. A local standards and specification review was performed; independent
+sub-agent reviews were unavailable to this implementation sub-agent. These
+bounded results do not establish a whole-row receipt or a #1229 discriminating
+case for each row.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: the captured observations do not compare all 110
 rows with normal and distinct discriminating cases, provide whole-row delivery
-receipts, or establish real-emulator behavior. Keybinding tests include local
-resolution and conflict cases, but the available capture does not compare the
-complete keybinding surface against the named frozen baseline. Each row still
+receipts, or establish real-emulator behavior. Keybinding tests compare the captured table and selected resolution and conflict
+cases, but do not compare the complete manager and global-state surface against
+the named frozen baseline. Each row still
 needs its complete audit and the #1229 distinct discriminating case. PTY and
 process-stream bytes do not prove emulator behavior; terminal residuals on #831
 and #1035 remain with those owners. No capability status is promoted by this

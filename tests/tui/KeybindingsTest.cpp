@@ -12,7 +12,7 @@
 using namespace cch;
 
 TEST_CASE("Keybinding resolution compares frozen pi 1.3.0 manager cases", "[tui][keybindings][issue1221]") {
-    const auto bundle = tests::read_pi_v130_audit_candidate("audit-1221-keybindings", "keybindings.json");
+    const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-keybindings", "keybindings.json");
     REQUIRE(bundle);
     for (const auto name :
             {"defaults-deduplicate", "overrides-disable-and-conflict", "unknown-claim-and-default-overlap"}) {
@@ -63,12 +63,58 @@ TEST_CASE("Keybinding resolution compares frozen pi 1.3.0 manager cases", "[tui]
             REQUIRE(conflict != resolved->issues.end());
             REQUIRE(conflict->key);
             CHECK(*conflict->key == conflicts.front().at("key").get_string());
+            std::string claimants;
+            for (const auto& claimant : conflicts.front().at("keybindings").get_array()) {
+                if (!claimants.empty()) claimants += ", ";
+                claimants += claimant.get_string();
+            }
+            CHECK(conflict->message ==
+                    "key '" + *conflict->key + "' is assigned to multiple user actions: " + claimants);
         }
     }
 }
 
+TEST_CASE("Keybinding definitions compare the complete frozen pi 1.3.0 table", "[tui][keybindings][issue1221]") {
+    const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-keybindings", "keybindings.json");
+    REQUIRE(bundle);
+    const auto& frozen = tests::find_scenario(*bundle, "builtin-definitions").at("expected").get_object();
+    auto definitions = tui::builtin_tui_keybinding_definitions();
+    const auto fullscreen = tui::alt_screen_keybinding_definitions();
+    definitions.insert(definitions.end(), fullscreen.begin(), fullscreen.end());
+    std::vector<std::string> missing, keys_differ, descriptions_differ, extra;
+    for (const auto& [id, definition] : frozen) {
+        const auto found =
+                std::find_if(definitions.begin(), definitions.end(), [&](const auto& d) { return d.id == id; });
+        if (found == definitions.end()) {
+            missing.push_back(id);
+            continue;
+        }
+        std::vector<std::string> keys;
+        const auto& defaults = definition.at("defaultKeys");
+        if (defaults.holds<std::string>())
+            keys.push_back(defaults.get_string());
+        else
+            for (const auto& key : defaults.get_array())
+                keys.push_back(key.get_string());
+        if (found->default_keys != keys) keys_differ.push_back(id);
+        if (found->description != definition.at("description").get_string()) descriptions_differ.push_back(id);
+    }
+    for (const auto& definition : definitions) {
+        if (!frozen.contains(definition.id)) extra.push_back(definition.id);
+    }
+    std::sort(missing.begin(), missing.end());
+    std::sort(keys_differ.begin(), keys_differ.end());
+    std::sort(descriptions_differ.begin(), descriptions_differ.end());
+    std::sort(extra.begin(), extra.end());
+    CHECK(missing == std::vector<std::string>{"tui.input.copy"});
+    CHECK((keys_differ == std::vector<std::string>{"tui.editor.pageDown", "tui.editor.pageUp"}));
+    CHECK((descriptions_differ == std::vector<std::string>{"tui.editor.historyNext", "tui.editor.historyPrevious"}));
+    CHECK(extra.empty());
+    CHECK(definitions.size() + missing.size() == frozen.size());
+}
+
 TEST_CASE("Keybinding context replacement compares frozen manager rebuild", "[tui][keybindings][issue1221]") {
-    const auto bundle = tests::read_pi_v130_audit_candidate("audit-1221-keybindings", "keybindings.json");
+    const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-keybindings", "keybindings.json");
     REQUIRE(bundle);
     const auto& expected = tests::find_scenario(*bundle, "replace-user-bindings").at("expected");
     const std::vector<tui::KeybindingDefinition> definitions = {{.id = "alpha", .default_keys = {"up", "ctrl+b", "up"}},
