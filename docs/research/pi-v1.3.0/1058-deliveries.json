@@ -3503,14 +3503,14 @@
      "chord",
      "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1178.xml"
+     "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
     ],
-    "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
-    "recordedAt": "2026-11-04T20:01:09Z",
-    "selected": 89,
+    "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+    "recordedAt": "2026-11-06T19:10:26Z",
+    "selected": 90,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1178.xml",
-     "sha256": "61f711e99147d23e9836250b0d6a0b22b7783f346f781578be7ccaa2c0ec893b"
+     "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
+     "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
     }
    },
    "rows": [
@@ -4157,7 +4157,7 @@
     },
     {
      "path": "tests/chord/ChordContextTest.cpp",
-     "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
+     "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
     },
     {
      "path": "tests/chord/DeltaTest.cpp",
@@ -4415,6 +4415,31 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1240MaskedContext": {
+    "reason": "Added a frozen-context cancellation discriminator; reran the receipt selection after the pinned test source changed.",
+    "changedInputs": [
+     "tests/chord/ChordContextTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1178.xml"
+     ],
+     "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+     "recordedAt": "2026-11-04T20:01:09Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1178.xml",
+      "sha256": "61f711e99147d23e9836250b0d6a0b22b7783f346f781578be7ccaa2c0ec893b"
+     }
+    }
    }
   },
   {
@@ -5828,14 +5853,14 @@
      "chord",
      "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1185.xml"
+     "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
     ],
-    "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
-    "recordedAt": "2026-11-04T20:01:09Z",
-    "selected": 89,
+    "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+    "recordedAt": "2026-11-06T19:10:26Z",
+    "selected": 90,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1185.xml",
-     "sha256": "257dc92d04651651ba162464642d022f1e0d8b8e371ab895c79cda3107520923"
+     "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
+     "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
     }
    },
    "rows": [
@@ -6051,7 +6076,7 @@
     },
     {
      "path": "tests/chord/ChordContextTest.cpp",
-     "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
+     "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
     },
     {
      "path": "tests/chord/OutputTest.cpp",
@@ -6158,6 +6183,31 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1240MaskedContext": {
+    "reason": "Added a frozen-context cancellation discriminator; reran the receipt selection after the pinned test source changed.",
+    "changedInputs": [
+     "tests/chord/ChordContextTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1185.xml"
+     ],
+     "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+     "recordedAt": "2026-11-04T20:01:09Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1185.xml",
+      "sha256": "257dc92d04651651ba162464642d022f1e0d8b8e371ab895c79cda3107520923"
+     }
+    }
    }
   },
   {
@@ -6176,15 +6226,16 @@
      "vcpkg",
      "-L",
      "issue1184",
+     "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1184.xml"
+     "docs/research/pi-v1.3.0/deliveries/1240-context-revalidation.xml"
     ],
-    "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
-    "recordedAt": "2026-11-05T05:36:39Z",
+    "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+    "recordedAt": "2026-11-06T19:10:26Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1184.xml",
-     "sha256": "2b6ecde78bbf013bce82f6752a07b18ea3c9c5eb0b50274e0ee2c7e65736f1a5"
+     "path": "docs/research/pi-v1.3.0/deliveries/1240-context-revalidation.xml",
+     "sha256": "5472d33b8c2b6516b44a264d10c437035758ba7f82e588e88f9d34111acca88d"
     }
    },
    "rows": [
@@ -6333,7 +6384,7 @@
     },
     {
      "path": "tests/chord/ChordContextTest.cpp",
-     "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
+     "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
     },
     {
      "path": "tests/durable/DocumentLifecycleTest.cpp",
@@ -6559,6 +6610,30 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1240MaskedContext": {
+    "reason": "Added a frozen-context cancellation discriminator; reran the receipt selection after the pinned test source changed.",
+    "changedInputs": [
+     "tests/chord/ChordContextTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1184",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1184.xml"
+     ],
+     "testedRevision": "829b14edda102541133f7a92dbf54989a05bbf67",
+     "recordedAt": "2026-11-05T05:36:39Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-revalidation-1184.xml",
+      "sha256": "2b6ecde78bbf013bce82f6752a07b18ea3c9c5eb0b50274e0ee2c7e65736f1a5"
+     }
+    }
    }
   },
   {
@@ -6595,15 +6670,16 @@
      "vcpkg",
      "-L",
      "chord",
+     "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1244-capture.xml"
+     "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
     ],
-    "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-    "recordedAt": "2026-11-06T17:17:20Z",
-    "selected": 89,
+    "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+    "recordedAt": "2026-11-06T19:10:26Z",
+    "selected": 90,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1244-capture.xml",
-     "sha256": "a250dc83986eceb26c822fc727249180e2f43d98525293b01fcfb348c154caf5"
+     "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
+     "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
     }
    },
    "rows": [
@@ -6817,7 +6893,7 @@
     },
     {
      "path": "tests/chord/ChordContextTest.cpp",
-     "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
+     "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
     },
     {
      "path": "tests/chord/DeltaTest.cpp",
@@ -7449,6 +7525,30 @@
       "sha256": "72e93d6ce9f7ef612d86aaecf966938597e79708e50c410660251950599b28d9"
      }
     }
+   },
+   "revalidation1240MaskedContext": {
+    "reason": "Added a frozen-context cancellation discriminator; reran the receipt selection after the pinned test source changed.",
+    "changedInputs": [
+     "tests/chord/ChordContextTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1244-capture.xml"
+     ],
+     "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+     "recordedAt": "2026-11-06T17:17:20Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1244-capture.xml",
+      "sha256": "a250dc83986eceb26c822fc727249180e2f43d98525293b01fcfb348c154caf5"
+     }
+    }
    }
   },
   {
@@ -7486,15 +7586,16 @@
      "vcpkg",
      "-L",
      "chord",
+     "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1244-capture.xml"
+     "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
     ],
-    "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-    "recordedAt": "2026-11-06T17:17:20Z",
-    "selected": 89,
+    "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+    "recordedAt": "2026-11-06T19:10:26Z",
+    "selected": 90,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1244-capture.xml",
-     "sha256": "603c70a7bd32f0c6890269afb945e007eea1b1848735308bb1ecdbc83591dc57"
+     "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
+     "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
     }
    },
    "rows": [
@@ -7689,7 +7790,7 @@
     },
     {
      "path": "tests/chord/ChordContextTest.cpp",
-     "sha256": "03be04703ac18c3e8584c152d61b13bc7d057cc4f09f65bc96ff6fe94eecd867"
+     "sha256": "1a549dc32585229809c4fe25481f561bff6f0b3d7fb4531384f85a6b91c61e51"
     },
     {
      "path": "tests/chord/DeltaTest.cpp",
@@ -8288,6 +8389,30 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-stdin.xml",
       "sha256": "4c7c5b4857f2017453d2aab69046591671ede573d79af001a220e9d253a5298c"
+     }
+    }
+   },
+   "revalidation1240MaskedContext": {
+    "reason": "Added a frozen-context cancellation discriminator; reran the receipt selection after the pinned test source changed.",
+    "changedInputs": [
+     "tests/chord/ChordContextTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1244-capture.xml"
+     ],
+     "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+     "recordedAt": "2026-11-06T17:17:20Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1244-capture.xml",
+      "sha256": "603c70a7bd32f0c6890269afb945e007eea1b1848735308bb1ecdbc83591dc57"
      }
     }
    }
