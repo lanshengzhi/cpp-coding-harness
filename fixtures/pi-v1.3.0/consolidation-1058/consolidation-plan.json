@@ -1021,6 +1021,14 @@
     "codemode-replay"
    ],
    "authority": "#1203 frozen capture (audit-1203/codemode.json); whole-row comparison and receipts: #1180 owns the durable packet, with [issue1203] comparisons where testable"
+  },
+  {
+   "ticket": "1050",
+   "scenario": "process-clear-screen",
+   "rows": [
+    "ProcessTerminal.clearScreen"
+   ],
+   "authority": "#1244 frozen audit-1244-terminal-writes ProcessTerminal clear observation"
   }
  ],
  "orphanScenarios": [
@@ -1029,7 +1037,11 @@
    "artifact": "manager-alias.json",
    "scenario": "nested-user-array-and-conflict-copy",
    "reason": "Supplemental alias observation; native snapshots do not implement the frozen mutable manager alias.",
-   "rows": ["cch_tui:KeybindingsManager", "cch_tui:KeybindingsManager.getUserBindings", "cch_tui:KeybindingsManager.getConflicts"],
+   "rows": [
+    "cch_tui:KeybindingsManager",
+    "cch_tui:KeybindingsManager.getUserBindings",
+    "cch_tui:KeybindingsManager.getConflicts"
+   ],
    "disposition": "#1221 compares a bounded slice without promoting a row."
   },
   {
@@ -1037,7 +1049,11 @@
    "artifact": "manager-alias.json",
    "scenario": "literal-conflict-spellings",
    "reason": "Supplemental literal conflict observation; invalid keys and the complete manager surface remain unverified.",
-   "rows": ["cch_tui:KeybindingsManager", "cch_tui:KeybindingsManager.conflicts", "cch_tui:KeybindingsManager.getConflicts"],
+   "rows": [
+    "cch_tui:KeybindingsManager",
+    "cch_tui:KeybindingsManager.conflicts",
+    "cch_tui:KeybindingsManager.getConflicts"
+   ],
    "disposition": "#1221 compares a bounded slice without promoting a row."
   },
   {
@@ -1045,7 +1061,11 @@
    "artifact": "manager-state.json",
    "scenario": "accessors-replacement-and-global-state",
    "reason": "Supplemental manager-state observation; global state and accessor representation are not fully compared.",
-   "rows": ["cch_tui:KeybindingsManager", "cch_tui:getKeybindings", "cch_tui:setKeybindings"],
+   "rows": [
+    "cch_tui:KeybindingsManager",
+    "cch_tui:getKeybindings",
+    "cch_tui:setKeybindings"
+   ],
    "disposition": "#1221 compares a bounded slice without promoting a row."
   },
   {
@@ -1053,7 +1073,9 @@
    "artifact": "keybindings.json",
    "scenario": "defaults-deduplicate",
    "reason": "Supplemental keybinding observation; no complete row is routed to it.",
-   "rows": ["cch_tui:KeybindingsManager"],
+   "rows": [
+    "cch_tui:KeybindingsManager"
+   ],
    "disposition": "#1221 compares a bounded slice without promoting a row."
   },
   {
@@ -1061,7 +1083,9 @@
    "artifact": "keybindings.json",
    "scenario": "overrides-disable-and-conflict",
    "reason": "Supplemental keybinding observation; no complete row is routed to it.",
-   "rows": ["cch_tui:KeybindingsManager"],
+   "rows": [
+    "cch_tui:KeybindingsManager"
+   ],
    "disposition": "#1221 compares a bounded slice without promoting a row."
   },
   {
@@ -1069,7 +1093,9 @@
    "artifact": "keybindings.json",
    "scenario": "unknown-claim-and-default-overlap",
    "reason": "Supplemental keybinding observation; no complete row is routed to it.",
-   "rows": ["cch_tui:KeybindingsManager"],
+   "rows": [
+    "cch_tui:KeybindingsManager"
+   ],
    "disposition": "#1221 compares a bounded slice without promoting a row."
   },
   {
@@ -1077,7 +1103,9 @@
    "artifact": "keybindings.json",
    "scenario": "replace-user-bindings",
    "reason": "Supplemental keybinding observation; no complete row is routed to it.",
-   "rows": ["cch_tui:KeybindingsManager"],
+   "rows": [
+    "cch_tui:KeybindingsManager"
+   ],
    "disposition": "#1221 compares a bounded slice without promoting a row."
   },
   {
@@ -1085,7 +1113,9 @@
    "artifact": "keybindings.json",
    "scenario": "builtin-definitions",
    "reason": "Supplemental keybinding observation; no complete row is routed to it.",
-   "rows": ["cch_tui:TUI_KEYBINDINGS"],
+   "rows": [
+    "cch_tui:TUI_KEYBINDINGS"
+   ],
    "disposition": "#1221 compares a bounded slice without promoting a row."
   },
   {
@@ -1093,7 +1123,10 @@
    "artifact": "terminal-start-stop.json",
    "scenario": "no-reply",
    "reason": "Supplemental process-stream observation; startup and forwarded input are not fully compared.",
-   "rows": ["cch_tui:ProcessTerminal.start", "cch_tui:ProcessTerminal.stop"],
+   "rows": [
+    "cch_tui:ProcessTerminal.start",
+    "cch_tui:ProcessTerminal.stop"
+   ],
    "disposition": "#1221 compares a bounded slice; whole-row and emulator evidence remain open."
   },
   {
@@ -1101,7 +1134,10 @@
    "artifact": "terminal-start-stop.json",
    "scenario": "device-attributes",
    "reason": "Supplemental process-stream observation; startup and forwarded input are not fully compared.",
-   "rows": ["cch_tui:ProcessTerminal.start", "cch_tui:ProcessTerminal.stop"],
+   "rows": [
+    "cch_tui:ProcessTerminal.start",
+    "cch_tui:ProcessTerminal.stop"
+   ],
    "disposition": "#1221 compares a bounded slice; whole-row and emulator evidence remain open."
   },
   {
@@ -1109,7 +1145,10 @@
    "artifact": "terminal-start-stop.json",
    "scenario": "kitty-flags",
    "reason": "Supplemental process-stream observation; startup and forwarded input are not fully compared.",
-   "rows": ["cch_tui:ProcessTerminal.start", "cch_tui:ProcessTerminal.stop"],
+   "rows": [
+    "cch_tui:ProcessTerminal.start",
+    "cch_tui:ProcessTerminal.stop"
+   ],
    "disposition": "#1221 compares a bounded slice; whole-row and emulator evidence remain open."
   },
   {
@@ -1117,7 +1156,13 @@
    "artifact": "utils-ansi.json",
    "scenario": "plain",
    "reason": "Supplemental ANSI utility observation; no complete row is routed to it.",
-   "rows": ["cch_tui:sliceByColumn", "cch_tui:stripTerminalSequences", "cch_tui:truncateToWidth", "cch_tui:visibleWidth", "cch_tui:wrapTextWithAnsi"],
+   "rows": [
+    "cch_tui:sliceByColumn",
+    "cch_tui:stripTerminalSequences",
+    "cch_tui:truncateToWidth",
+    "cch_tui:visibleWidth",
+    "cch_tui:wrapTextWithAnsi"
+   ],
    "disposition": "#1221 compares this slice without promoting a row."
   },
   {
@@ -1125,7 +1170,13 @@
    "artifact": "utils-ansi.json",
    "scenario": "sgr-boundary",
    "reason": "Supplemental ANSI utility observation; no complete row is routed to it.",
-   "rows": ["cch_tui:sliceByColumn", "cch_tui:stripTerminalSequences", "cch_tui:truncateToWidth", "cch_tui:visibleWidth", "cch_tui:wrapTextWithAnsi"],
+   "rows": [
+    "cch_tui:sliceByColumn",
+    "cch_tui:stripTerminalSequences",
+    "cch_tui:truncateToWidth",
+    "cch_tui:visibleWidth",
+    "cch_tui:wrapTextWithAnsi"
+   ],
    "disposition": "#1221 compares this slice without promoting a row."
   },
   {
@@ -1133,7 +1184,13 @@
    "artifact": "utils-ansi.json",
    "scenario": "wide-hyperlink",
    "reason": "Supplemental ANSI utility observation; no complete row is routed to it.",
-   "rows": ["cch_tui:sliceByColumn", "cch_tui:stripTerminalSequences", "cch_tui:truncateToWidth", "cch_tui:visibleWidth", "cch_tui:wrapTextWithAnsi"],
+   "rows": [
+    "cch_tui:sliceByColumn",
+    "cch_tui:stripTerminalSequences",
+    "cch_tui:truncateToWidth",
+    "cch_tui:visibleWidth",
+    "cch_tui:wrapTextWithAnsi"
+   ],
    "disposition": "#1221 compares this slice without promoting a row."
   },
   {
@@ -4393,6 +4450,16 @@
     "cch_tui:TUI.setShowHardwareCursor"
    ],
    "disposition": "#1209 records the root product-cursor observation beside the routed comparisons; it does not promote a whole capability row."
+  },
+  {
+   "family": "audit-1244-terminal-writes",
+   "artifact": "terminal-writes.json",
+   "scenario": "main-screen-resize-redraw",
+   "reason": "Frozen resize redraw captured for the #1244 byte comparison; it is supplemental to the existing main-screen row obligations.",
+   "rows": [
+    "cch_tui:TuiMainScreen.doRender"
+   ],
+   "disposition": "#1244 compares this observation without claiming the broader renderer row."
   }
  ],
  "groups": [

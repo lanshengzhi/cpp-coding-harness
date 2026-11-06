@@ -1,0 +1,51 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-06T17:06:47.899Z",
+  "environment": {
+    "terminalOverrides": {
+      "PI_PROGRAM_STATUS": null,
+      "PI_TUI_WRITE_LOG": null
+    },
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/terminal.ts:ProcessTerminal.clearScreen",
+    "packages/tui/src/tui-main-screen.ts:TuiMainScreen.doRender"
+  ],
+  "scenarios": [
+    {
+      "name": "process-clear-screen",
+      "inputs": {
+        "operation": "clearScreen"
+      },
+      "expected": {
+        "bytes": "\u001b[2J\u001b[H"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "main-screen-resize-redraw",
+      "inputs": {
+        "columns": 8,
+        "initialRows": 3,
+        "resizedRows": 4,
+        "lines": [
+          "top",
+          "middle",
+          "bottom"
+        ]
+      },
+      "expected": {
+        "bytes": "\u001b[?2026h\u001b[2J\u001b[H\u001b[3Jtop     \u001b[0m\u001b]8;;\u0007\r\nmiddle  \u001b[0m\u001b]8;;\u0007\r\nbottom  \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+      },
+      "normalizations": []
+    }
+  ]
+}

@@ -1051,6 +1051,7 @@
     "default-device-attributes-before-reply",
     "default-reply-before-device-attributes",
     "override-enabled",
+    "process-clear-screen",
     "stdin-framing-buffer-lifecycle",
     "stdin-framing-flush",
     "stdin-framing-paste-lifecycle"

@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -259,14 +259,14 @@
             "-L",
             "^(issue1090|issue1101|issue1104)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1244-capture.xml"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-stdin.xml",
-            "sha256": "c7950b2bc8f4f1623e441484251dd962478c1681075c7e9243373b7cb51b4501"
+            "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1244-capture.xml",
+            "sha256": "a6295e17cea620948bd3515823a3ca6c383a1556a824e995f5db5b2cf53129ba"
           }
         },
         "rows": [
@@ -1112,6 +1112,30 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-stdin.xml",
+              "sha256": "c7950b2bc8f4f1623e441484251dd962478c1681075c7e9243373b7cb51b4501"
+            }
+          }
         }
       },
       {
@@ -1131,14 +1155,14 @@
             "-L",
             "^(issue1090|issue1101|issue1104)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1244-capture.xml"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-stdin.xml",
-            "sha256": "fbaa1c71878c417bc0f55f4d28b5565c2bf89a7093bf56333e0fd66420222776"
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1244-capture.xml",
+            "sha256": "42d44f7914bde911845fb31e389b8d7a5734dee2ea816fe9b6c51a2898d449b4"
           }
         },
         "inputs": [
@@ -1184,7 +1208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -2144,6 +2168,30 @@
               "sha256": "9f48d46748a6527af8b2db50f21c3030f42ebbd049330f9ad016dce90fab58f6"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-stdin.xml",
+              "sha256": "fbaa1c71878c417bc0f55f4d28b5565c2bf89a7093bf56333e0fd66420222776"
+            }
+          }
         }
       },
       {
@@ -2403,11 +2451,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2430,14 +2478,14 @@
             "-L",
             "issue1118",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1244-capture.xml"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-stdin.xml",
-            "sha256": "69dc3ff240ebaa1525adf8853a4b58398c00b4f2b1ef589dbada7404f544b945"
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1244-capture.xml",
+            "sha256": "4e64aae053ccb28cac4fc2c46a7dd0d5609533b1abb6ac0ea0243f9e3a2d53b6"
           }
         },
         "rows": [
@@ -3415,6 +3463,31 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-stdin.xml",
+              "sha256": "69dc3ff240ebaa1525adf8853a4b58398c00b4f2b1ef589dbada7404f544b945"
+            }
+          }
         }
       },
       {
@@ -4698,7 +4771,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4706,7 +4779,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           }
         ],
         "validation": {
@@ -4717,14 +4790,14 @@
             "-R",
             "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1244-capture.xml"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-stdin.xml",
-            "sha256": "034cba895a1cbd4b1213843f0574f0c2606a9b5e298e2d4d883794dc8808879c"
+            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1244-capture.xml",
+            "sha256": "19cd2fe05dac7cff7adafe2cc9f68d4b5922773496669f4818b3d6b83785c578"
           }
         },
         "rows": [
@@ -5663,6 +5736,31 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-stdin.xml",
+              "sha256": "034cba895a1cbd4b1213843f0574f0c2606a9b5e298e2d4d883794dc8808879c"
+            }
+          }
         }
       },
       {
@@ -6429,14 +6527,14 @@
             "-L",
             "chord",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1244-capture.xml"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-stdin.xml",
-            "sha256": "72e93d6ce9f7ef612d86aaecf966938597e79708e50c410660251950599b28d9"
+            "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1244-capture.xml",
+            "sha256": "a250dc83986eceb26c822fc727249180e2f43d98525293b01fcfb348c154caf5"
           }
         },
         "rows": [
@@ -6618,11 +6716,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7253,6 +7351,31 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-stdin.xml",
+              "sha256": "72e93d6ce9f7ef612d86aaecf966938597e79708e50c410660251950599b28d9"
+            }
+          }
         }
       },
       {
@@ -7271,14 +7394,14 @@
             "-L",
             "chord",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1244-capture.xml"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-stdin.xml",
-            "sha256": "4c7c5b4857f2017453d2aab69046591671ede573d79af001a220e9d253a5298c"
+            "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1244-capture.xml",
+            "sha256": "603c70a7bd32f0c6890269afb945e007eea1b1848735308bb1ecdbc83591dc57"
           }
         },
         "rows": [
@@ -7448,7 +7571,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -8049,6 +8172,30 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-stdin.xml",
+              "sha256": "4c7c5b4857f2017453d2aab69046591671ede573d79af001a220e9d253a5298c"
+            }
+          }
         }
       },
       {
@@ -8279,14 +8426,14 @@
             "-L",
             "issue1182",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1244.xml"
+            "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1244-capture.xml"
           ],
-          "testedRevision": "f8892b41f85cc6b38505012913b58947647669de",
-          "recordedAt": "2026-11-06T16:53:12Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1244.xml",
-            "sha256": "254ddab05e8b2806319834b35d9917434b0a9fb65691ea5ea582735730062df9"
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1244-capture.xml",
+            "sha256": "ce672a5d0ddc059fdb492b3c268e606a7087839f1dc8b765188a34e48d50a117"
           }
         },
         "rows": [
@@ -8449,7 +8596,7 @@
           },
           {
             "path": "src/tui/VirtualTerminal.cpp",
-            "sha256": "73e87547310ecb94ef2022b3edc4be7ac71de173a379c9658633248c9f33346c"
+            "sha256": "48074b2efa483063a40bbf45f487815d561b6cb8ddff7656cb937704df1319e2"
           },
           {
             "path": "src/tui/include/cch/tui/AltScreen.hpp",
@@ -8509,7 +8656,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -8533,7 +8680,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -8549,7 +8696,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
-            "sha256": "abfa7b8cf4a6423ebbeaaab71643bf226805527505d18c836c324ba3813a4502"
+            "sha256": "0bdc2d10474a1c550ed128cea72d0fae0bfd17da20d931c9b30845a67abc4348"
           },
           {
             "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
@@ -9248,6 +9395,33 @@
               "sha256": "0d4d9b048c699588829fe80dc227ef9d6d8b3daeb46655a7f3a27a70af8eae45"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "src/tui/VirtualTerminal.cpp",
+            "docs/research/pi-v1.3.0/1182-tui-route-batches.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1244.xml"
+            ],
+            "testedRevision": "f8892b41f85cc6b38505012913b58947647669de",
+            "recordedAt": "2026-11-06T16:53:12Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1244.xml",
+              "sha256": "254ddab05e8b2806319834b35d9917434b0a9fb65691ea5ea582735730062df9"
+            }
+          }
         }
       },
       {
@@ -9452,11 +9626,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -10421,14 +10595,16 @@
             "-R",
             "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 52,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-stdin.xml",
-            "sha256": "7749b0bdace72cb85a9f568538e5e204e42a41e4045f35cddbdd546550366abb"
+            "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1244-capture.xml",
+            "sha256": "536541f829f875d05044666401068c8d22060c0e2fcb62ef0b6b4b8ab053faec"
           }
         },
         "revalidation1179m": {
@@ -10975,6 +11151,31 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 52,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-stdin.xml",
+              "sha256": "7749b0bdace72cb85a9f568538e5e204e42a41e4045f35cddbdd546550366abb"
+            }
+          }
         }
       },
       {
@@ -11043,11 +11244,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -11078,14 +11279,16 @@
             "-R",
             "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-stdin.xml",
-            "sha256": "b350b53627fc70de07a102d8d80808ca2b2f679ea33bd9798fad9103322003de"
+            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1244-capture.xml",
+            "sha256": "78d6aefe643d47a9bdd33109b15031a8fb235108a5bed796cfc347950e53e9c1"
           }
         },
         "rows": [
@@ -11666,6 +11869,31 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-stdin.xml",
+              "sha256": "b350b53627fc70de07a102d8d80808ca2b2f679ea33bd9798fad9103322003de"
+            }
+          }
         }
       },
       {
@@ -11730,11 +11958,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -11785,14 +12013,16 @@
             "-R",
             "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-stdin.xml",
-            "sha256": "57c60b1f7c8538f54b52b29718ae950070681efca7ad8c8581dfa49a19d0b32f"
+            "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1244-capture.xml",
+            "sha256": "84d7a758d173cfb2b47da10b23b1472e39f67b4cc09008a99a67dd432a5a8f07"
           }
         },
         "rows": [
@@ -12404,6 +12634,31 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-stdin.xml",
+              "sha256": "57c60b1f7c8538f54b52b29718ae950070681efca7ad8c8581dfa49a19d0b32f"
+            }
+          }
         }
       },
       {
@@ -12809,7 +13064,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
@@ -12817,7 +13072,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           }
         ],
         "validation": {
@@ -12830,14 +13085,16 @@
             "-L",
             "issue1201",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "a4d33beaf82694ea1ed9df5b0d69c9ab3218f870",
-          "recordedAt": "2026-11-06T08:56:04Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml",
-            "sha256": "42c532918c73db675398213e582ff291bb92734141e23eee63336c81f6930d48"
+            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1244-capture.xml",
+            "sha256": "40d39c8e0fb53db4cae256f02eb6ff5891024a16af0861559f8955a80af29c7d"
           }
         },
         "rows": [
@@ -13821,6 +14078,33 @@
               "sha256": "bbf57c58d7a627ca8b7825185b0a3835c59aeac8f4c87c6a61774e244af73e52"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1201",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "a4d33beaf82694ea1ed9df5b0d69c9ab3218f870",
+            "recordedAt": "2026-11-06T08:56:04Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml",
+              "sha256": "42c532918c73db675398213e582ff291bb92734141e23eee63336c81f6930d48"
+            }
+          }
         }
       },
       {
@@ -13859,11 +14143,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
+            "sha256": "c321ac220a4b97317f3d46c1bb9ded5472ca41ff1e00b46e84ad2896bbdfd79e"
           },
           {
             "path": "src/durable/Harness.cpp",
@@ -13896,14 +14180,16 @@
             "-L",
             "issue1203",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 3,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-stdin.xml",
-            "sha256": "ed407d0715f213cc463fb112389db4e0d2963f7a59bf7dd6576ee657a7d6a239"
+            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1244-capture.xml",
+            "sha256": "32eede6a7ec471ccbcb81fc10c0a34bd8842beb027aefda7e545dc06fd9d375d"
           }
         },
         "rows": [
@@ -14339,6 +14625,33 @@
               "sha256": "c8db02790ee4b9633b5056187361a0c1d0ddcc2f439018fd9a209b43e303b9c2"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1203",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 3,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-stdin.xml",
+              "sha256": "ed407d0715f213cc463fb112389db4e0d2963f7a59bf7dd6576ee657a7d6a239"
+            }
+          }
         }
       },
       {
@@ -14381,7 +14694,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
@@ -14418,14 +14731,16 @@
             "-L",
             "issue1213",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 15,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-stdin.xml",
-            "sha256": "8fa233e64cbda421ea3df52397458ac3922a20b6c2582af20def253b82bf3ed7"
+            "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1244-capture.xml",
+            "sha256": "58043832ff20c6020b68887ade597b246e471339807b7b17e44bfc814c1b87af"
           }
         },
         "rows": [
@@ -15134,6 +15449,32 @@
               "sha256": "a9dc5c28afb0ef3bc1824d10eb503150ad7223f13e0d3cbf6a4ec774d73d527d"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1213",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 15,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-stdin.xml",
+              "sha256": "8fa233e64cbda421ea3df52397458ac3922a20b6c2582af20def253b82bf3ed7"
+            }
+          }
         }
       },
       {
@@ -15184,7 +15525,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -15229,14 +15570,16 @@
             "-L",
             "issue1212",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 29,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-stdin.xml",
-            "sha256": "fbef7a658488eea7fae40a741d3fe5c519ee17a685bfa0bf1927e2dea4972833"
+            "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1244-capture.xml",
+            "sha256": "887ed00f10e6a4499e7c6b4a7afb9d07bcdae3d7d24417a596d17d2cf15f85f4"
           }
         },
         "rows": [
@@ -16291,6 +16634,32 @@
               "sha256": "175273aa2a36c3631cd61e2e471daf02405d294c64485a98ce497a26268f9143"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1212",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 29,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-stdin.xml",
+              "sha256": "fbef7a658488eea7fae40a741d3fe5c519ee17a685bfa0bf1927e2dea4972833"
+            }
+          }
         }
       },
       {
@@ -16353,7 +16722,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -16410,14 +16779,16 @@
             "-L",
             "issue1211",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 34,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-stdin.xml",
-            "sha256": "62a851bf8d0c8aae6cbd430796a0f808560fb5570962b7b7b2caf7142c66f929"
+            "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1244-capture.xml",
+            "sha256": "095845ba6444a5a1c6c8e47ad2d7d3aaef507730a862467b28ae8b2f0b31d43e"
           }
         },
         "rows": [
@@ -17830,6 +18201,32 @@
               "sha256": "1f11c41c984001c3e133088fd0b54913b5dcc5c52ee17f342bcd1da0f5456763"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1211",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 34,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-stdin.xml",
+              "sha256": "62a851bf8d0c8aae6cbd430796a0f808560fb5570962b7b7b2caf7142c66f929"
+            }
+          }
         }
       },
       {
@@ -17872,7 +18269,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -17909,14 +18306,16 @@
             "-L",
             "issue1210",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244.xml"
+            "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "f8892b41f85cc6b38505012913b58947647669de",
-          "recordedAt": "2026-11-06T16:53:12Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244.xml",
-            "sha256": "0cd952fe9db11fe4b3f6065f9b4e49579ff9fc42056ab10e4a8a7f7a71a681ed"
+            "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244-capture.xml",
+            "sha256": "2465b7ee2977d9d5b8956f4b0db98b8405d37517a848f1697523cfb5dc5ff21a"
           }
         },
         "rows": [
@@ -18561,6 +18960,32 @@
               "sha256": "891d0128e8e15b12053d312f2b2c7c3a074a2e6ef4388cfca90217678622db27"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1210",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244.xml"
+            ],
+            "testedRevision": "f8892b41f85cc6b38505012913b58947647669de",
+            "recordedAt": "2026-11-06T16:53:12Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1244.xml",
+              "sha256": "0cd952fe9db11fe4b3f6065f9b4e49579ff9fc42056ab10e4a8a7f7a71a681ed"
+            }
+          }
         }
       },
       {
@@ -18627,7 +19052,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -18684,14 +19109,16 @@
             "-L",
             "issue1209",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 30,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-stdin.xml",
-            "sha256": "0016661350415b91028b0c55b448d7a275918478857aef3f688cd31a12e78820"
+            "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1244-capture.xml",
+            "sha256": "f264d33b64b51e488c46ce492625e80ade69b78b4b8570b04687ea538158db38"
           }
         },
         "rows": [
@@ -20860,6 +21287,32 @@
               "sha256": "a3ea11e53d6f943908143fac00e80b2378159fa8a3a74b540ecce1225b568fbc"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1209",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 30,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-stdin.xml",
+              "sha256": "0016661350415b91028b0c55b448d7a275918478857aef3f688cd31a12e78820"
+            }
+          }
         }
       },
       {
@@ -20900,7 +21353,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -20957,14 +21410,16 @@
             "-L",
             "issue1215",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 25,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-stdin.xml",
-            "sha256": "c644a98868afab5d03d1cfc5e607d68381112dc7d0eb8b4cd6a6b2b27c4c6700"
+            "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1244-capture.xml",
+            "sha256": "72b89a46043e72a4333b2993ca1a73349dcdc42fd784a801ac61a71554441d08"
           }
         },
         "rows": [
@@ -22664,6 +23119,32 @@
               "sha256": "85537c951d1283caf324abe8253df610371e281abbab2e9f327b14dd8375bceb"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1215",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 25,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-stdin.xml",
+              "sha256": "c644a98868afab5d03d1cfc5e607d68381112dc7d0eb8b4cd6a6b2b27c4c6700"
+            }
+          }
         }
       },
       {
@@ -22692,7 +23173,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -22733,14 +23214,16 @@
             "-L",
             "issue1216",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 29,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-stdin.xml",
-            "sha256": "dbfb56ec42716abb2fe39a2d7926f53130c2061a30147a33f7afa09b6542b275"
+            "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1244-capture.xml",
+            "sha256": "fa5026be3d5ac8b945f14757cb6e8e00d564dc6e36310ad6fa84f94010930131"
           }
         },
         "rows": [
@@ -23545,6 +24028,32 @@
               "sha256": "5a958ce7068af16791f92ac49ec23054827552fe2349888c0560fe078f75f094"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1216",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 29,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-stdin.xml",
+              "sha256": "dbfb56ec42716abb2fe39a2d7926f53130c2061a30147a33f7afa09b6542b275"
+            }
+          }
         }
       },
       {
@@ -23573,7 +24082,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1217/latex.json",
@@ -23598,14 +24107,16 @@
             "-L",
             "issue1217",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 29,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-stdin.xml",
-            "sha256": "12aa5aec95a3de997fd0672e0735ee6ac643a4128512e0b6647e2ff5f3bd5bdf"
+            "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1244-capture.xml",
+            "sha256": "88f6fddb9cbc9c7c54ff4bfc6332f187c78f8d3368ae1c94276ba637331de5db"
           }
         },
         "rows": [
@@ -24747,6 +25258,32 @@
               "sha256": "24c26a0d1bd96223517ee28d82bfe4921a6044c43ce22c09f4bd38c1aae96a8e"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1217",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 29,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-stdin.xml",
+              "sha256": "12aa5aec95a3de997fd0672e0735ee6ac643a4128512e0b6647e2ff5f3bd5bdf"
+            }
+          }
         }
       },
       {
@@ -24775,7 +25312,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1218/color.json",
@@ -24796,14 +25333,16 @@
             "-L",
             "issue1218",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-stdin.xml",
-            "sha256": "e164c195c63507ef516c7af423c6a2a6d7b92168959cf32672a49f9b112dbdb0"
+            "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1244-capture.xml",
+            "sha256": "e05ae35e70e28b16a0af6a72699cf46ddbbf93ad3715f7e9f0ae4f44f43c3976"
           }
         },
         "rows": [
@@ -25873,6 +26412,32 @@
               "sha256": "9d9f4e0e151204139755e9554263e3837ec3dc874a608a89555895bd594262db"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1218",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-stdin.xml",
+              "sha256": "e164c195c63507ef516c7af423c6a2a6d7b92168959cf32672a49f9b112dbdb0"
+            }
+          }
         }
       },
       {
@@ -25913,7 +26478,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
@@ -25942,14 +26507,16 @@
             "-L",
             "issue1219",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 32,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-stdin.xml",
-            "sha256": "a883ec9b48c7fe707edbb297510421a240379d51fa6afb5e15a45290b12c22c2"
+            "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1244-capture.xml",
+            "sha256": "f136d40a5d16fb2a481647c581f24f4b8e44bd73e811a94cc227038b598d3b73"
           }
         },
         "rows": [
@@ -27590,6 +28157,32 @@
               "sha256": "147b1c04efbb1854074ebe43ea606cd12250a3d6cd8f45110536195571ce0377"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1219",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 32,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-stdin.xml",
+              "sha256": "a883ec9b48c7fe707edbb297510421a240379d51fa6afb5e15a45290b12c22c2"
+            }
+          }
         }
       },
       {
@@ -27666,7 +28259,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -27707,14 +28300,16 @@
             "-L",
             "issue1220",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-stdin.xml"
+            "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
-          "recordedAt": "2026-11-06T07:20:17Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 69,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-stdin.xml",
-            "sha256": "1b5229d8b4f4b019efd9130733ebed1c35ae2b810993f75df8941fc25d2bb454"
+            "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1244-capture.xml",
+            "sha256": "747d1b585e6dbd7a8d9327ab380e87cd16ac3ee7f78580cdd2710693304428bd"
           }
         },
         "rows": [
@@ -29669,6 +30264,32 @@
               "sha256": "de0c33ce5032fe0b10bdcaf48414c01d8700288e9a1542a101646aef8b174482"
             }
           }
+        },
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1220",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-stdin.xml"
+            ],
+            "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+            "recordedAt": "2026-11-06T07:20:17Z",
+            "selected": 69,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-stdin.xml",
+              "sha256": "1b5229d8b4f4b019efd9130733ebed1c35ae2b810993f75df8941fc25d2bb454"
+            }
+          }
         }
       },
       {
@@ -29717,7 +30338,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
+            "sha256": "7a9950504c138a92af5ecd00e390a4624cad2fc3c96db458c2527396c8953daf"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
@@ -29774,14 +30395,16 @@
             "-L",
             "issue1221",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1221-issue1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1221-terminal-io-revalidation-1244-capture.xml",
+            "-j",
+            "1"
           ],
-          "testedRevision": "a4d33beaf82694ea1ed9df5b0d69c9ab3218f870",
-          "recordedAt": "2026-11-06T08:56:04Z",
+          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+          "recordedAt": "2026-11-06T17:17:20Z",
           "selected": 40,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1221-issue1221.xml",
-            "sha256": "982947b0365fb754fdc0fc5aa4a5e988a71d509f76ce17cb57f6b022d8bd038d"
+            "path": "docs/research/pi-v1.3.0/deliveries/1221-terminal-io-revalidation-1244-capture.xml",
+            "sha256": "6e2033fb52317ca8a7ff8cd40d6b438c514dabdc813e0fac90de5925f0b25371"
           }
         },
         "rows": [
@@ -30335,7 +30958,33 @@
             }
           }
         ],
-        "routingSha256": "1a988d4d2013e927ac53558a99d9e1a0c82c190b4e340d6d951e04471eae9429"
+        "routingSha256": "1a988d4d2013e927ac53558a99d9e1a0c82c190b4e340d6d951e04471eae9429",
+        "revalidation1244Capture": {
+          "reason": "Registered the #1244 terminal-writes capture and routed its direct-clear scenario; existing row mappings and frozen comparisons are unchanged. The exact selection was rerun; the virtual terminal pin is rebound where applicable.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1221",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1221-issue1221.xml"
+            ],
+            "testedRevision": "a4d33beaf82694ea1ed9df5b0d69c9ab3218f870",
+            "recordedAt": "2026-11-06T08:56:04Z",
+            "selected": 40,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1221-issue1221.xml",
+              "sha256": "982947b0365fb754fdc0fc5aa4a5e988a71d509f76ce17cb57f6b022d8bd038d"
+            }
+          }
+        }
       }
     ]
   },
@@ -30677,8 +31326,8 @@
     ],
     "missingObservationRows": 537,
     "scenarioCoverage": {
-      "scenarios": 1007,
-      "scenarioNamed": 590,
+      "scenarios": 1009,
+      "scenarioNamed": 591,
       "artifactCovered": 87,
       "orphaned": [
         "audit-1221-manager-alias/manager-alias.json:nested-user-array-and-conflict-copy",
@@ -31010,7 +31659,8 @@
         "audit-1209/product-cursor.json:switch-fullscreen-to-regular-live-false",
         "audit-1209/product-cursor.json:switch-fullscreen-to-regular-live-true",
         "audit-1209/product-cursor.json:switch-null-cursor-hides",
-        "audit-1209/product-cursor.json:switch-nested-box-padding"
+        "audit-1209/product-cursor.json:switch-nested-box-padding",
+        "audit-1244-terminal-writes/terminal-writes.json:main-screen-resize-redraw"
       ],
       "uncovered": []
     }
@@ -36565,6 +37215,16 @@
         "cch_tui:TUI.setShowHardwareCursor"
       ],
       "disposition": "#1209 records the root product-cursor observation beside the routed comparisons; it does not promote a whole capability row."
+    },
+    {
+      "family": "audit-1244-terminal-writes",
+      "artifact": "terminal-writes.json",
+      "scenario": "main-screen-resize-redraw",
+      "reason": "Frozen resize redraw captured for the #1244 byte comparison; it is supplemental to the existing main-screen row obligations.",
+      "rows": [
+        "cch_tui:TuiMainScreen.doRender"
+      ],
+      "disposition": "#1244 compares this observation without claiming the broader renderer row."
     }
   ],
   "correctionsIndex": [
@@ -88876,7 +89536,8 @@
       "implementation_ticket": null,
       "scenario": "E02/E09/E12 terminal IO",
       "comparisonScenarios": [
-        "E02/E09/E12 terminal IO"
+        "E02/E09/E12 terminal IO",
+        "process-clear-screen"
       ],
       "evidence": {
         "route": "historical-v1.0.4",

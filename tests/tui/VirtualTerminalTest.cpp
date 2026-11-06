@@ -108,6 +108,19 @@ TEST_CASE("VirtualTerminal resets the anchored origin on clear screen", "[tui][t
     REQUIRE(terminal.stop());
 }
 
+TEST_CASE("VirtualTerminal redraw clear chunk removes scrollback", "[tui][terminal][issue1244][spec]") {
+    tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.write("one\r\ntwo\r\nthree"));
+    REQUIRE(terminal.scrollback().size() == 1);
+    REQUIRE(terminal.write("\x1b[2J\x1b[H\x1b[3J"));
+    CHECK(terminal.scrollback().empty());
+    CHECK(terminal.check_clear_screen_called());
+    CHECK(terminal.check_clear_scrollback_called());
+    REQUIRE(terminal.stop());
+}
+
 TEST_CASE("VirtualTerminal validates seeded shell content before start", "[tui][terminal][issue476][spec]") {
     tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     const auto too_many = terminal.seed_shell_content(

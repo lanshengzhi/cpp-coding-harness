@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="34"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="7"
+	timestamp="2026-11-07T02:16:05"
+	>
+	<testcase name="an overlay&apos;s focused fake cursor resolves before it is spliced" classname="an overlay&apos;s focused fake cursor resolves before it is spliced" time="0.397962" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1209;issue1210;issue1211;issue1220;spec;tui"/>
+		</properties>
+		<system-out>Filters: "an overlay's focused fake cursor resolves before it is spliced"
+Randomness seeded to: 1841090603
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout" classname="pi-v1.3.0 AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout" time="0.214068" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout"
+Randomness seeded to: 2880557367
+===============================================================================
+All tests passed (61 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen flash replacement matches top-row replay" classname="pi-v1.3.0 AltScreen flash replacement matches top-row replay" time="0.211582" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen flash replacement matches top-row replay"
+Randomness seeded to: 764181191
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen indicator follows follow-end gating and click-to-end" classname="pi-v1.3.0 AltScreen indicator follows follow-end gating and click-to-end" time="0.208801" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen indicator follows follow-end gating and click-to-end"
+Randomness seeded to: 1193864518
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen navigates raw OSC 133 prompt rows and consumes releases" classname="pi-v1.3.0 AltScreen navigates raw OSC 133 prompt rows and consumes releases" time="0.206003" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen navigates raw OSC 133 prompt rows and consumes releases"
+Randomness seeded to: 2326614330
+===============================================================================
+All tests passed (49 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a primary scroll view without follow-end never shows the jump-to-end indicator" classname="pi-v1.3.0 a primary scroll view without follow-end never shows the jump-to-end indicator" time="0.212468" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a primary scroll view without follow-end never shows the jump-to-end indicator"
+Randomness seeded to: 1673263209
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an absolute scroll with disableFollow holds the last row until follow is restored" classname="pi-v1.3.0 an absolute scroll with disableFollow holds the last row until follow is restored" time="0.207151" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an absolute scroll with disableFollow holds the last row until follow is restored"
+Randomness seeded to: 1634226144
+===============================================================================
+All tests passed (42 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 appended rows move a followed viewport as the pi frame does" classname="pi-v1.3.0 appended rows move a followed viewport as the pi frame does" time="0.208202" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 appended rows move a followed viewport as the pi frame does"
+Randomness seeded to: 4092482703
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen navigation, releases, and indicator clicks match frozen pi" classname="pi-v1.3.0 fullscreen navigation, releases, and indicator clicks match frozen pi" time="0.226989" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;issue1213;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen navigation\, releases\, and indicator clicks match frozen pi"
+Randomness seeded to: 1576919363
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen search close restores previous overlay focus and resumes overlay input" classname="pi-v1.3.0 fullscreen search close restores previous overlay focus and resumes overlay input" time="0.212524" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen search close restores previous overlay focus and resumes overlay input"
+Randomness seeded to: 466679770
+===============================================================================
+All tests passed (34 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change" classname="pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change" time="0.205689" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen search index reuses cached matches until its inputs change"
+Randomness seeded to: 4083997909
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches" classname="pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches" time="0.228194" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;issue1215;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen search next and previous shortcuts wrap through matches"
+Randomness seeded to: 3185237113
+===============================================================================
+All tests passed (39 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen search preserves current and non-current highlight styles" classname="pi-v1.3.0 fullscreen search preserves current and non-current highlight styles" time="0.208169" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen search preserves current and non-current highlight styles"
+Randomness seeded to: 3816684907
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen search refreshes streamed transcript rows and resized overlays" classname="pi-v1.3.0 fullscreen search refreshes streamed transcript rows and resized overlays" time="0.212957" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen search refreshes streamed transcript rows and resized overlays"
+Randomness seeded to: 2668728750
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen search renders input before applying truncated result width" classname="pi-v1.3.0 fullscreen search renders input before applying truncated result width" time="0.205409" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen search renders input before applying truncated result width"
+Randomness seeded to: 425038734
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 nested viewport measurement, delta ownership and depth order match the pi frame" classname="pi-v1.3.0 nested viewport measurement, delta ownership and depth order match the pi frame" time="0.20848" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 nested viewport measurement\, delta ownership and depth order match the pi frame"
+Randomness seeded to: 2188877182
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 nested wheel routing consumes the child then chains only to its enclosing viewport" classname="pi-v1.3.0 nested wheel routing consumes the child then chains only to its enclosing viewport" time="0.211705" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 nested wheel routing consumes the child then chains only to its enclosing viewport"
+Randomness seeded to: 3977481265
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 scroll viewports follow the content end and report unused deltas as the pi frame does" classname="pi-v1.3.0 scroll viewports follow the content end and report unused deltas as the pi frame does" time="0.207042" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 scroll viewports follow the content end and report unused deltas as the pi frame does"
+Randomness seeded to: 2312528773
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 scrollbar modes reserve the content column and re-wrap the child" classname="pi-v1.3.0 scrollbar modes reserve the content column and re-wrap the child" time="0.206395" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 scrollbar modes reserve the content column and re-wrap the child"
+Randomness seeded to: 1945815666
+===============================================================================
+All tests passed (37 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 scrollbar thumb proportions, empty, tiny and single-column viewports match the frames" classname="pi-v1.3.0 scrollbar thumb proportions, empty, tiny and single-column viewports match the frames" time="0.211326" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 scrollbar thumb proportions\, empty\, tiny and single-column viewports match the frames"
+Randomness seeded to: 3177618343
+===============================================================================
+All tests passed (40 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 scrolled image placements match the pi crop geometry" classname="pi-v1.3.0 scrolled image placements match the pi crop geometry" time="0.211023" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 scrolled image placements match the pi crop geometry"
+Randomness seeded to: 1621036282
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 search ignores box drawing clicks as navigation controls" classname="pi-v1.3.0 search ignores box drawing clicks as navigation controls" time="0.217735" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 search ignores box drawing clicks as navigation controls"
+Randomness seeded to: 2962467050
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 search normalizes multiline queries and maps ANSI Unicode columns" classname="pi-v1.3.0 search normalizes multiline queries and maps ANSI Unicode columns" time="0.20547" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 search normalizes multiline queries and maps ANSI Unicode columns"
+Randomness seeded to: 3392403640
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 search opens and renders its frozen navigation controls" classname="pi-v1.3.0 search opens and renders its frozen navigation controls" time="0.209776" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;issue1213;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 search opens and renders its frozen navigation controls"
+Randomness seeded to: 3185326813
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 selection preserves the cell range through content and focus changes" classname="pi-v1.3.0 selection preserves the cell range through content and focus changes" time="0.210513" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 selection preserves the cell range through content and focus changes"
+Randomness seeded to: 711391744
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 selection reset drops the multi-click history like frozen pi" classname="pi-v1.3.0 selection reset drops the multi-click history like frozen pi" time="0.208093" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 selection reset drops the multi-click history like frozen pi"
+Randomness seeded to: 3492811569
+===============================================================================
+All tests passed (67 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 selection routing and multi-click scenarios replay against frozen pi" classname="pi-v1.3.0 selection routing and multi-click scenarios replay against frozen pi" time="0.251955" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 selection routing and multi-click scenarios replay against frozen pi"
+Randomness seeded to: 1272582167
+===============================================================================
+All tests passed (510 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the drag phases capture layout routing in the alternate screen" classname="pi-v1.3.0 the drag phases capture layout routing in the alternate screen" time="0.209989" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the drag phases capture layout routing in the alternate screen"
+Randomness seeded to: 1918366662
+===============================================================================
+All tests passed (67 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the hover phases drive the alternate-screen scrollbar" classname="pi-v1.3.0 the hover phases drive the alternate-screen scrollbar" time="0.208362" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the hover phases drive the alternate-screen scrollbar"
+Randomness seeded to: 1945271786
+===============================================================================
+All tests passed (50 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the implicit alternate-screen viewport matches the pi phases" classname="pi-v1.3.0 the implicit alternate-screen viewport matches the pi phases" time="0.208804" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the implicit alternate-screen viewport matches the pi phases"
+Randomness seeded to: 3252714590
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the overlay scrollbar keeps the background splice" classname="pi-v1.3.0 the overlay scrollbar keeps the background splice" time="0.210529" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the overlay scrollbar keeps the background splice"
+Randomness seeded to: 2954486922
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the transient scrollbar follows the timeline and overlay splice" classname="pi-v1.3.0 the transient scrollbar follows the timeline and overlay splice" time="0.206684" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the transient scrollbar follows the timeline and overlay splice"
+Randomness seeded to: 3339814641
+===============================================================================
+All tests passed (133 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 track clicks and drag phases drive the alternate-screen scrollbar" classname="pi-v1.3.0 track clicks and drag phases drive the alternate-screen scrollbar" time="0.212081" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;issue1213;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 track clicks and drag phases drive the alternate-screen scrollbar"
+Randomness seeded to: 3212076643
+===============================================================================
+All tests passed (127 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 wheel policy drives fixed, accelerated, burst, reset, and fractional deltas" classname="pi-v1.3.0 wheel policy drives fixed, accelerated, burst, reset, and fractional deltas" time="0.211829" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;issue1213;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 wheel policy drives fixed\, accelerated\, burst\, reset\, and fractional deltas"
+Randomness seeded to: 1324017318
+===============================================================================
+All tests passed (52 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

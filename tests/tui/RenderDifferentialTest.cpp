@@ -4,6 +4,7 @@
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
+#include "support/PiTuiEvidence.hpp"
 #include "tui/RenderPipeline.hpp"
 #include "tui/TuiTestHooks.hpp"
 
@@ -811,8 +812,19 @@ public:
         return inner_.set_scroll_margins(top_row, bottom_row);
     }
     cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
-    cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
-    cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
+    cch::support::ExpectedVoid begin_synchronized_update() override {
+        auto result = inner_.begin_synchronized_update();
+        if (result && record_sync) written_chunks.emplace_back("\x1b[?2026h");
+        return result;
+    }
+    cch::support::ExpectedVoid end_synchronized_update() override {
+        auto result = inner_.end_synchronized_update();
+        if (result && record_sync) written_chunks.emplace_back("\x1b[?2026l");
+        return result;
+    }
+    cch::support::ExpectedVoid inject_resize(cch::tui::TerminalDimensions dimensions) {
+        return inner_.inject_resize(dimensions);
+    }
     cch::support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }
     cch::support::ExpectedVoid apply_cell_pixel_dimensions(cch::tui::CellPixelDimensions pixels) override {
         return inner_.apply_cell_pixel_dimensions(pixels);
@@ -826,6 +838,7 @@ public:
         return inner_.drain_input(max_ms, idle_ms);
     }
 
+    bool record_sync{false};
     std::size_t clear_count{0};
     std::size_t write_count{0};
     std::size_t fail_on_write_index{std::numeric_limits<std::size_t>::max()};
@@ -837,6 +850,30 @@ private:
 };
 
 } // namespace
+
+TEST_CASE("Resize redraw bytes match frozen pi terminal writes", "[tui][render][issue1244][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1244-terminal-writes", "terminal-writes.json");
+    REQUIRE(bundle);
+    const auto& scenarios = bundle->at("scenarios").get_array();
+    const auto scenario = std::find_if(scenarios.begin(), scenarios.end(), [](const auto& value) {
+        return value.at("name").get_string() == "main-screen-resize-redraw";
+    });
+    REQUIRE(scenario != scenarios.end());
+    MockFaultyTerminal terminal({.columns = 8, .rows = 3});
+    terminal.record_sync = true;
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("top\nmiddle\nbottom", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.inject_resize({.columns = 8, .rows = 4}));
+    terminal.written_chunks.clear();
+    REQUIRE(tui.render());
+    std::string actual;
+    for (const auto& chunk : terminal.written_chunks)
+        actual += chunk;
+    CHECK(actual == scenario->at("expected").at("bytes").get_string());
+    REQUIRE(tui.stop());
+}
 
 TEST_CASE("RenderPipeline tracks admitted frame prefix and exact-once frame accounting under Busy",
         "[tui][render][issue986][spec]") {

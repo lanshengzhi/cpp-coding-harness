@@ -1,0 +1,72 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1244",
+  "family": "audit-1244-terminal-writes",
+  "capturedAt": "2026-11-06T17:06:47.899Z",
+  "environment": {
+    "terminalOverrides": {
+      "PI_PROGRAM_STATUS": null,
+      "PI_TUI_WRITE_LOG": null
+    },
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1244-terminal-writes/capture-terminal-writes.mts",
+    "sha256": "3c9d3279ba387d8bdc8a429ff00418cc868137c8d5757308ce6db47078ad767d",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1244-terminal-writes/capture-terminal-writes.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1244-terminal-writes/capture-terminal-writes.mts",
+        "sha256": "3c9d3279ba387d8bdc8a429ff00418cc868137c8d5757308ce6db47078ad767d"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "terminal-writes.json",
+      "family": "audit-1244-terminal-writes",
+      "bytes": 1319,
+      "sha256": "ca9e1da87c31676ae5cb1dd6fcf9320c4fb35f42847041f3959eb21811639172",
+      "sourceEndpoints": [
+        "packages/tui/src/terminal.ts:ProcessTerminal.clearScreen",
+        "packages/tui/src/tui-main-screen.ts:TuiMainScreen.doRender"
+      ],
+      "scenarios": [
+        {
+          "name": "process-clear-screen",
+          "inputs": {
+            "operation": "clearScreen"
+          },
+          "expected": {
+            "bytes": "\u001b[2J\u001b[H"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "main-screen-resize-redraw",
+          "inputs": {
+            "columns": 8,
+            "initialRows": 3,
+            "resizedRows": 4,
+            "lines": [
+              "top",
+              "middle",
+              "bottom"
+            ]
+          },
+          "expected": {
+            "bytes": "\u001b[?2026h\u001b[2J\u001b[H\u001b[3Jtop     \u001b[0m\u001b]8;;\u0007\r\nmiddle  \u001b[0m\u001b]8;;\u0007\r\nbottom  \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@
 #include "support/TempWorkspace.hpp"
 #include "support/UniqueFd.hpp"
 #include "support/PseudoTerminal.hpp"
+#include "support/PiTuiEvidence.hpp"
 
 #include <cch/support/Error.hpp>
 #include <boost/asio/executor_work_guard.hpp>
@@ -1150,8 +1151,15 @@ TEST_CASE("Process Terminal clear screen emits the pi-exact clear and home bytes
             [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
     // pi-v1.3.0 packages/tui/src/terminal.ts:567-569 clears and homes only.
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1244-terminal-writes", "terminal-writes.json");
+    REQUIRE(bundle);
+    const auto& scenarios = bundle->at("scenarios").get_array();
+    const auto scenario = std::find_if(scenarios.begin(), scenarios.end(), [](const auto& value) {
+        return value.at("name").get_string() == "process-clear-screen";
+    });
+    REQUIRE(scenario != scenarios.end());
     REQUIRE(terminal.clear_screen());
-    CHECK(cch::tests::read_available(pty->master.get()) == "\x1b[2J\x1b[H");
+    CHECK(cch::tests::read_available(pty->master.get()) == scenario->at("expected").at("bytes").get_string());
     REQUIRE(terminal.stop());
 }
 

@@ -248,7 +248,9 @@ template <typename T> void paint_tokens(T& impl, const std::vector<detail::Termi
             continue;
         }
         if (token.kind == detail::TerminalTokenKind::ClearLine) {
-            if (token.text.find("2J") != std::string::npos) {
+            const bool clear_screen = token.text.find("2J") != std::string::npos;
+            const bool clear_scrollback = token.text.find("3J") != std::string::npos;
+            if (clear_screen) {
                 impl.clear_screen_called = true;
                 impl.cells.assign(impl.dimensions.rows, std::vector<VirtualTerminalCell>(impl.dimensions.columns));
                 impl.viewport_top = 0;
@@ -256,10 +258,12 @@ template <typename T> void paint_tokens(T& impl, const std::vector<detail::Termi
                 impl.images.clear();
                 detail::clear_image_metadata();
                 impl.cursor = {};
-            } else if (token.text.find("3J") != std::string::npos) {
+            }
+            if (clear_scrollback) {
                 impl.clear_scrollback_called = true;
                 impl.scrollback_cells.clear();
-            } else if (impl.cursor.row < impl.cells.size()) {
+            }
+            if (!clear_screen && !clear_scrollback && impl.cursor.row < impl.cells.size()) {
                 impl.cells[impl.cursor.row].assign(impl.dimensions.columns,
                         VirtualTerminalCell{.grapheme = " ", .continuation = false, .style = {}});
             }
