@@ -8426,14 +8426,14 @@
             "-L",
             "issue1182",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1244-capture.xml"
+            "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "6b08e8573949780dc1f20d199749b5b85edb2716",
+          "recordedAt": "2026-11-06T18:27:05Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1244-capture.xml",
-            "sha256": "ce672a5d0ddc059fdb492b3c268e606a7087839f1dc8b765188a34e48d50a117"
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml",
+            "sha256": "dc5aa87866954f38c244d747fb0c9a89abf8ef6062e4db3d7a0c54f82abfcfe9"
           }
         },
         "rows": [
@@ -9425,21 +9425,26 @@
         },
         "revalidation1245": {
           "reason": "The index moves only the newly delivered terminal clear row out of B13; existing receipt claims and comparisons remain unchanged.",
-          "command": [
-            "ctest",
-            "--preset",
-            "vcpkg",
-            "-L",
-            "issue1182",
-            "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml"
+          "changedInputs": [
+            "docs/research/pi-v1.3.0/1182-tui-route-batches.json"
           ],
-          "testedRevision": "6b08e8573949780dc1f20d199749b5b85edb2716",
-          "recordedAt": "2026-11-06T18:27:05Z",
-          "selected": 13,
-          "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml",
-            "sha256": "dc5aa87866954f38c244d747fb0c9a89abf8ef6062e4db3d7a0c54f82abfcfe9"
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1244-capture.xml"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1244-capture.xml",
+              "sha256": "ce672a5d0ddc059fdb492b3c268e606a7087839f1dc8b765188a34e48d50a117"
+            }
           }
         }
       },
@@ -13087,7 +13092,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
-            "sha256": "3023cf4049bac6497277f5e75568d000b647bf3e30989f25b85577b349987bbb"
+            "sha256": "99eb2f524cdd450968dea8d6077ba637e8d21baa7e2337f1492410d2945235ca"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -13104,16 +13109,16 @@
             "-L",
             "issue1201",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1244-capture.xml",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245-review.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "51c90d0880947771c3b321a502d6803c8f5dfd7f",
+          "recordedAt": "2026-11-06T18:44:49Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1244-capture.xml",
-            "sha256": "40d39c8e0fb53db4cae256f02eb6ff5891024a16af0861559f8955a80af29c7d"
+            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245-review.xml",
+            "sha256": "ea09227e02139bb9cb3ee4c9520d0a36dbefd66d5c95f4c9c6086369626a2a29"
           }
         },
         "rows": [
@@ -14127,25 +14132,58 @@
         },
         "revalidation1245": {
           "reason": "Row-specific re-audit changes only ProcessTerminal.clearScreen, outside these claims; their routes and comparisons remain unchanged.",
-          "command": [
-            "ctest",
-            "--preset",
-            "vcpkg",
-            "-LE",
-            "architecture",
-            "-L",
-            "issue1201",
-            "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245.xml",
-            "-j",
-            "1"
+          "changedInputs": [
+            "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json"
           ],
-          "testedRevision": "9a7166d07e9264e700f845aeccadf0be6b823d5c",
-          "recordedAt": "2026-11-06T18:16:55Z",
-          "selected": 9,
-          "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245.xml",
-            "sha256": "43cf2ad4367be6e78c5a75610ddf308bf077948af33deae4125c77c97c83bc27"
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1201",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1244-capture.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1244-capture.xml",
+              "sha256": "40d39c8e0fb53db4cae256f02eb6ff5891024a16af0861559f8955a80af29c7d"
+            }
+          }
+        },
+        "revalidation1245Review": {
+          "reason": "Review fixes strengthen the terminal-clear discriminator and clarify the frozen source audit.",
+          "changedInputs": [
+            "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1201",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "9a7166d07e9264e700f845aeccadf0be6b823d5c",
+            "recordedAt": "2026-11-06T18:16:55Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245.xml",
+              "sha256": "43cf2ad4367be6e78c5a75610ddf308bf077948af33deae4125c77c97c83bc27"
+            }
           }
         }
       },
@@ -31063,7 +31101,7 @@
           },
           {
             "path": "tests/tui/ProcessTerminalTest.cpp",
-            "sha256": "7b196f4aa4c08892c765e7080abedc6b0670eecf2a2f56f110d80dbca31345e3"
+            "sha256": "b977a45f4a611274e07c6400383a12973b23ba2c6eaab6092534573af58ed6da"
           },
           {
             "path": "tests/support/PseudoTerminal.hpp",
@@ -31083,7 +31121,7 @@
           },
           {
             "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
-            "sha256": "3023cf4049bac6497277f5e75568d000b647bf3e30989f25b85577b349987bbb"
+            "sha256": "99eb2f524cdd450968dea8d6077ba637e8d21baa7e2337f1492410d2945235ca"
           },
           {
             "path": "src/tui/RenderPipeline.cpp",
@@ -31098,16 +31136,16 @@
             "-R",
             "^(Direct clear preserves scrollback while main-screen redraw clears it|Process Terminal clear screen emits the pi-exact clear and home bytes)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1245-terminal-clear.xml",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1245-terminal-clear-review.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "9a7166d07e9264e700f845aeccadf0be6b823d5c",
-          "recordedAt": "2026-11-06T18:16:55Z",
+          "testedRevision": "51c90d0880947771c3b321a502d6803c8f5dfd7f",
+          "recordedAt": "2026-11-06T18:44:49Z",
           "selected": 2,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1245-terminal-clear.xml",
-            "sha256": "e05f3b02e4f72df6fe6d7cce7df569e5ad82a5a60d32385176085a14a9161a59"
+            "path": "docs/research/pi-v1.3.0/deliveries/1245-terminal-clear-review.xml",
+            "sha256": "e43975b5a029a6ae241698bd4e46c3aaf4dcf361cecf53a391bcf362f07e4eaf"
           }
         },
         "rows": [
@@ -31128,7 +31166,34 @@
               "reason": "The real ProcessTerminal output parsed by VirtualTerminal rejects a terminal clear that also clears scrollback; the resize redraw half rejects a redraw that omits clearing scrollback."
             }
           }
-        ]
+        ],
+        "revalidation1245Review": {
+          "reason": "Review fixes strengthen the terminal-clear discriminator and clarify the frozen source audit.",
+          "changedInputs": [
+            "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
+            "tests/tui/ProcessTerminalTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(Direct clear preserves scrollback while main-screen redraw clears it|Process Terminal clear screen emits the pi-exact clear and home bytes)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1245-terminal-clear.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "9a7166d07e9264e700f845aeccadf0be6b823d5c",
+            "recordedAt": "2026-11-06T18:16:55Z",
+            "selected": 2,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1245-terminal-clear.xml",
+              "sha256": "e05f3b02e4f72df6fe6d7cce7df569e5ad82a5a60d32385176085a14a9161a59"
+            }
+          }
+        }
       }
     ]
   },
@@ -89717,7 +89782,7 @@
           "artifact": "fixtures/pi-v1.3.0/audit-1244-terminal-writes/terminal-writes.json",
           "scenarioMatch": null,
           "capturedScenarios": [],
-          "result": "2026-11-06 row-specific re-audit: frozen pi-v1.3.0 clearScreen emits clear and home; this named capture replaces the historical terminal IO family for this row only."
+          "result": "2026-11-06 row-specific re-audit: frozen pi-v1.3.0 packages/tui/src/terminal.ts:567-569 clearScreen emits clear and home; this named capture replaces the historical terminal IO family for this row only."
         },
         "missingObservation": "only historical pi-v1.0.4 evidence; no v1.3.0 capture",
         "gaps": [

@@ -137,3 +137,51 @@ artifacts and 1012 scenarios. Full Validation completed in 245 seconds: 4560
 selected, 4549 passed and 11 skipped. Format and diff checks passed. The
 source-audit comparison against `17cbbbe40` changed one row and left 42 other
 rows with the historical terminal IO scenario.
+
+### Review corrections
+
+The subsequent #1245 review required real scrollback content, a frozen source
+citation, and correctly rotated validation records. `ProcessTerminalTest.cpp`
+now seeds scrollback before both halves, checks the cells after the PTY output
+and the redraw, and exercises `VirtualTerminal::clear_screen()` as well. The
+1050 row's `evidence.result` cites `packages/tui/src/terminal.ts:567-569`, and
+`evidence.route` identifies the observed clear and home. No other source row
+changed. Commit `51c90d0` contains both pinned inputs.
+
+The measured pin set for these two changed inputs is `1201-terminal-primitives`
+(1050 ledger) and `1245-terminal-clear` (ledger and test). The previously changed
+route index remains pinned by the #1182 receipt. In `1058-deliveries.json`, the
+#1182 and #1201 `revalidation1245` entries retain `reason`, `changedInputs`,
+and `previousValidation`, with their earlier #1245 results rotated into primary
+`validation`. The fresh #1201 and #1245 runs each rotate primary `validation`
+again and record `revalidation1245Review` with the changed paths and previous
+validation. The refreshed input digests, JUnit paths and hashes are recorded in
+those receipts. The same second-row cost estimate above remains applicable.
+
+The continuation ran the following validation commands after acquiring lane
+`issue-1245-review` and committing the two changed inputs. The receipt selections
+were also run once with temporary output paths before the recorded JUnit runs.
+
+```sh
+cmake --build --preset vcpkg --target cch_tests_tui
+CCH_LANE_NAME=issue-1245-review ctest --preset vcpkg -R '^Direct clear preserves scrollback while main-screen redraw clears it$' --output-on-failure
+CCH_LANE_NAME=issue-1245-review ctest --preset vcpkg -LE architecture -L issue1201 --output-junit "$PWD/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1245-review.xml" -j 1
+CCH_LANE_NAME=issue-1245-review ctest --preset vcpkg -R '^(Direct clear preserves scrollback while main-screen redraw clears it|Process Terminal clear screen emits the pi-exact clear and home bytes)$' --output-junit "$PWD/docs/research/pi-v1.3.0/deliveries/1245-terminal-clear-review.xml" -j 1
+CCH_LANE_NAME=issue-1245-review python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build
+CCH_LANE_NAME=issue-1245-review python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check
+CCH_LANE_NAME=issue-1245-review python3 tests/evidence/ConsolidationAuditTest.py
+python3 scripts/evidence/receipt_boundary.py
+python3 scripts/evidence/audit_evidence.py verify
+python3 tests/evidence/TuiReconciliationTest.py
+scripts/format-check.sh 80ad9fd58
+git diff --check
+cmake --build --preset vcpkg
+TERM_PROGRAM=herdr CCH_LANE_NAME=issue-1245-review ctest --preset vcpkg
+```
+
+The focused test and receipt runs passed (1, 9 and 2 cases). Consolidation
+passed with 566 delivery-backed rows, the audit suite passed 91 tests, the route
+suite passed 11 tests, the receipt boundary passed 32 receipts and frozen
+evidence remained at 84 bundles, 180 artifacts and 1012 scenarios. Full
+Validation passed with 4560 selected, 4549 passed and 11 skipped in 251.58
+seconds; format and diff checks were clean.
