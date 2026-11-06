@@ -214,6 +214,34 @@ TEST_CASE("strict JSON rejects non-finite numbers at any depth", "[chord][json][
     CHECK(copied.error().message == frozen_normalized_message(*frozen_nested_message));
 }
 
+// The frozen placeholder names NaN, which the support value represents as a double.
+// Rejecting this nested value distinguishes recursive validation from a root-only check.
+TEST_CASE("copy strict JSON rejects the frozen nested non-finite value", "[chord][json][issue1186][issue1240][spec]") {
+    const auto frozen = typed_json_scenario("copyJson rejects a non-finite number nested below the root");
+    const auto* input = frozen.inputs_member("value");
+    const auto* failure = frozen.object_member("failure");
+    REQUIRE(input != nullptr);
+    REQUIRE(failure != nullptr);
+    const auto message = support::json_string_member(*failure, "message");
+    REQUIRE(message.has_value());
+
+    auto nested = *input;
+    auto* outer = object_of(nested);
+    REQUIRE(outer != nullptr);
+    auto* inner = outer->at("outer").get_if<JsonValue::object_t>();
+    REQUIRE(inner != nullptr);
+    auto* values = inner->at("inner").get_if<JsonValue::array_t>();
+    REQUIRE(values != nullptr);
+    REQUIRE(values->size() == 2);
+    REQUIRE(values->at(1).get_string() == "NaN");
+    values->at(1) = JsonValue{std::nan("")};
+
+    const auto copied = copy_strict_json(nested);
+    REQUIRE_FALSE(copied);
+    CHECK(copied.error().code == ErrorCode::Validation);
+    CHECK(copied.error().message == frozen_normalized_message(*message));
+}
+
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json
 // "copyJson copies strict JSON without retaining aliases". The frozen input value drives the
 // copy; mutating the copy's `left` must leave `right` and the source at the frozen values, and
