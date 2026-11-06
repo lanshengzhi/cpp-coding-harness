@@ -116,6 +116,40 @@ TEST_CASE("Keybinding conflicts distinguish literal spellings of the same key", 
     CHECK(result->conflicts[0].keybindings == claimants);
 }
 
+TEST_CASE("Keybinding resolution reports conflicting_user_key diagnostics for different literal spellings that "
+          "canonicalize to the same key",
+        "[tui][keybindings][issue1221]") {
+    const auto result = tui::resolve_keybindings({
+            .definitions =
+                    {
+                            {.id = "first", .default_keys = {}},
+                            {.id = "second", .default_keys = {}},
+                            {.id = "third", .default_keys = {}},
+                            {.id = "fourth", .default_keys = {}},
+                    },
+            .overrides =
+                    {
+                            {.id = "first", .keys = {"ctrl+shift+up"}},
+                            {.id = "second", .keys = {"shift+ctrl+up"}},
+                            {.id = "third", .keys = {"esc"}},
+                            {.id = "fourth", .keys = {"escape"}},
+                    },
+    });
+    REQUIRE(result);
+    // Literal string collisions remain separate for pi KeybindingsManager.getConflicts() parity.
+    CHECK(result->conflicts.empty());
+    // Canonical key collisions must still report conflicting_user_key diagnostics.
+    REQUIRE(result->issues.size() == 2);
+    CHECK(result->issues[0].code == "conflicting_user_key");
+    REQUIRE(result->issues[0].key);
+    CHECK(*result->issues[0].key == "shift+ctrl+up");
+    CHECK(result->issues[0].message == "key 'shift+ctrl+up' is assigned to multiple user actions: first, second");
+    CHECK(result->issues[1].code == "conflicting_user_key");
+    REQUIRE(result->issues[1].key);
+    CHECK(*result->issues[1].key == "escape");
+    CHECK(result->issues[1].message == "key 'escape' is assigned to multiple user actions: third, fourth");
+}
+
 TEST_CASE("Keybinding snapshots compare frozen user bindings and replacement", "[tui][keybindings][issue1221]") {
     const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-manager-state", "manager-state.json");
     REQUIRE(bundle);

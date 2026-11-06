@@ -169,6 +169,8 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
     std::set<std::string, std::less<>> overridden_actions;
     std::map<std::string, std::vector<std::string>, std::less<>> user_claims;
     std::vector<std::string> claimed_keys;
+    std::map<std::string, std::vector<std::string>, std::less<>> canonical_user_claims;
+    std::vector<std::string> claimed_canonical_keys;
     for (const auto& override : request.overrides) {
         const auto definition = definition_indices.find(override.id);
         if (definition == definition_indices.end()) {
@@ -215,6 +217,11 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
                 if (inserted) claimed_keys.push_back(key);
                 claim->second.push_back(entry.id);
             }
+            for (const auto& key : entry.keys) {
+                auto [claim, inserted] = canonical_user_claims.try_emplace(key);
+                if (inserted) claimed_canonical_keys.push_back(key);
+                claim->second.push_back(entry.id);
+            }
         }
     }
 
@@ -223,6 +230,12 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
         const auto& claimants = user_claims.at(key);
         if (claimants.size() > 1) {
             conflicts.push_back({.key = key, .keybindings = claimants});
+        }
+    }
+
+    for (const auto& key : claimed_canonical_keys) {
+        const auto& claimants = canonical_user_claims.at(key);
+        if (claimants.size() > 1) {
             std::string actions;
             for (const auto& claimant : claimants) {
                 if (!actions.empty()) actions += ", ";
