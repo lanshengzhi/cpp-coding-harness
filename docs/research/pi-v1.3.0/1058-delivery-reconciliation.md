@@ -61,8 +61,10 @@ ticket alone establishes none of those properties. Changes outside a record's
 selected inputs require a review of whether that record remains applicable.
 
 The offline stale-field gate reads `fixtures/pi-v1.3.0/consolidation-1058/1239-stale-fields.json`.
-Its dated baseline identifies each existing contradiction, its exact field value and its owner
-(#1180 for durable, #1044 otherwise); #1238 is retained as the historical durable reference.
+Its dated baseline identifies each existing contradiction by row, field and contradiction, and
+records the field value as historical evidence plus its owner (#1180 for durable, #1044 otherwise);
+#1238 is retained as the historical durable reference. The gate requires resolved entries to be
+removed but allows wording changes while the same contradiction remains.
 To refresh issue states, fetch both `gh issue list --state open --limit 2000 --json number` and
 `gh issue list --state closed --limit 2000 --json number` outside build/check, confirm the lists
 are complete, and update `ticketStates` and `recordedAt` in the fixture. Review each newly closed

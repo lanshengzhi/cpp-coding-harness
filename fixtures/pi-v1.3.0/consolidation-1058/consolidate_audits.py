@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import datetime
 import hashlib
 import json
 import os
@@ -1025,12 +1026,23 @@ def stale_field_violations(rows: list[dict], root: Path, closed: set[str]) -> li
 
 
 def check_stale_fields(rows: list[dict], root: Path, closed: set[str], baseline: list[dict]) -> None:
-    recorded = [{key: entry[key] for key in ("id", "field", "contradiction", "value")} for entry in baseline]
-    require(len({json.dumps(entry, sort_keys=True) for entry in recorded}) == len(recorded),
-            "duplicate stale-field baseline entry")
-    for violation in stale_field_violations(rows, root, closed):
-        require(violation in recorded,
+    keys = ("id", "field", "contradiction")
+    recorded = {tuple(entry[key] for key in keys) for entry in baseline}
+    require(len(recorded) == len(baseline), "duplicate stale-field baseline entry")
+    violations = stale_field_violations(rows, root, closed)
+    for violation in violations:
+        require(tuple(violation[key] for key in keys) in recorded,
                 f"{violation['id']}: {violation['field']}: {violation['contradiction']}")
+    require(len(violations) == len(recorded),
+            f"{len(recorded) - len(violations)} baseline entries are resolved and must be removed")
+
+
+def warn_stale_snapshot(recorded_at: str) -> None:
+    recorded = datetime.date.fromisoformat(recorded_at)
+    age = (datetime.datetime.now(datetime.timezone.utc).date() - recorded).days
+    if age > 30:
+        print(f"warning: implementation_ticket snapshot is {age} days old (older than 30 days); refresh it",
+              file=sys.stderr)
 
 
 def build_ledger(
@@ -1951,6 +1963,7 @@ def main() -> int:
     scenario_index = build_scenario_index(bundles)
     ledger = build_ledger(plan, bundles, scenario_index)
     stale_input = load_json(ROOT / "fixtures/pi-v1.3.0/consolidation-1058/1239-stale-fields.json")
+    warn_stale_snapshot(stale_input["recordedAt"])
     states = stale_input["ticketStates"]
     require(isinstance(states, dict) and all(re.fullmatch(r"[0-9]+", number) and state in ("open", "closed")
                                              for number, state in states.items()),

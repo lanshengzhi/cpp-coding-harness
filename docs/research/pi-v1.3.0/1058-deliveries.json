@@ -178,7 +178,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -1073,6 +1073,12 @@
    },
    "revalidation1239": {
     "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
@@ -2375,7 +2381,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -3373,6 +3379,12 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -4111,7 +4123,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4292,6 +4304,12 @@
    },
    "revalidation1239": {
     "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
@@ -4646,7 +4664,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -5638,6 +5656,12 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -5855,7 +5879,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -5977,6 +6001,12 @@
    },
    "revalidation1239": {
     "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
@@ -6195,7 +6225,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -6372,6 +6402,12 @@
    },
    "revalidation1239": {
     "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
@@ -6589,7 +6625,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -7210,6 +7246,12 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -7409,7 +7451,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -8000,6 +8042,12 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -8100,7 +8148,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -8204,6 +8252,12 @@
    },
    "revalidation1239": {
     "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
@@ -8482,7 +8536,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -9163,6 +9217,12 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -9375,7 +9435,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -10884,6 +10944,12 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -10960,7 +11026,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -11569,6 +11635,12 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -11641,7 +11713,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
+     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -12298,6 +12370,12 @@
    },
    "revalidation1239": {
     "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1239Review": {
+    "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]

@@ -12,7 +12,9 @@ the checker's printed coverage note are the observable results.
 from __future__ import annotations
 
 import copy
+import datetime
 import hashlib
+import io
 import importlib.util
 import json
 import re
@@ -94,7 +96,7 @@ class StaleLedgerFieldsTest(unittest.TestCase):
 
     def test_build_and_check_both_reject_a_new_contradiction(self):
         self.row.update(verification="verified", implementation="missing")
-        snapshot = {"ticketStates": {}, "baseline": []}
+        snapshot = {"recordedAt": datetime.date.today().isoformat(), "ticketStates": {}, "baseline": []}
         for command in ("build", "check"):
             with self.subTest(command=command), patch.object(sys, "argv", ["consolidate", command]), \
                     patch.object(consolidate, "load_json", side_effect=[{}, snapshot]), \
@@ -106,13 +108,74 @@ class StaleLedgerFieldsTest(unittest.TestCase):
                 with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*implementation.*verified"):
                     consolidate.main()
 
-    def test_baseline_accepts_only_the_recorded_contradiction_and_value(self):
+    def test_resolved_baseline_entries_must_be_removed(self):
+        baseline = [{"id": "cch_durable:example", "field": "consumer",
+                     "contradiction": "names built owner while implementation is missing", "value": "old"}]
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "1 baseline entries are resolved"):
+            consolidate.check_stale_fields([self.row], self.root, set(), baseline)
+
+    def test_rewording_a_still_contradictory_gap_keeps_its_identity(self):
+        self.row.update(implementation="missing", gaps=["cch_durable is needed"])
+        baseline = consolidate.stale_field_violations([self.row], self.root, set())
+        self.row["gaps"] = ["cch_durable still needs work"]
+        consolidate.check_stale_fields([self.row], self.root, set(), baseline)
+
+    def test_duplicate_baseline_identity_is_rejected_even_if_value_differs(self):
         self.row.update(implementation="missing", consumer="cch_durable")
-        violation = consolidate.stale_field_violations([self.row], self.root, set())[0]
-        consolidate.check_stale_fields([self.row], self.root, set(), [violation])
-        self.row["consumer"] = "cch_durable new contradiction"
-        with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*consumer"):
-            consolidate.check_stale_fields([self.row], self.root, set(), [violation])
+        entry = consolidate.stale_field_violations([self.row], self.root, set())[0]
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "duplicate stale-field baseline entry"):
+            consolidate.check_stale_fields([self.row], self.root, set(), [entry, {**entry, "value": "different"}])
+
+    def run_snapshot(self, snapshot):
+        with patch.object(sys, "argv", ["consolidate", "build"]), \
+                patch.object(consolidate, "load_json", side_effect=[{}, snapshot]), \
+                patch.object(consolidate, "registered_families", return_value=set()), \
+                patch.object(consolidate, "build_bundle_index", return_value={}), \
+                patch.object(consolidate, "build_scenario_index", return_value={}), \
+                patch.object(consolidate, "build_ledger", return_value={"rows": [self.row]}), \
+                patch.object(consolidate, "ROOT", self.root):
+            consolidate.main()
+
+    def test_invalid_issue_state_is_rejected(self):
+        snapshot = {"recordedAt": "2026-11-06", "ticketStates": {"123": "unknown"}, "baseline": []}
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "invalid recorded implementation_ticket states"):
+            self.run_snapshot(snapshot)
+
+    def test_implementation_ticket_absent_from_snapshot_is_rejected(self):
+        self.row["implementation_ticket"] = "#123"
+        snapshot = {"recordedAt": "2026-11-06", "ticketStates": {}, "baseline": []}
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*#123.*no recorded issue state"):
+            self.run_snapshot(snapshot)
+
+    def test_baseline_requires_owner_and_date(self):
+        entry = {"id": "example", "field": "consumer", "contradiction": "old", "value": "old",
+                 "ownerTicket": "#123", "recordedAt": "2026-11-06"}
+        for missing in ("ownerTicket", "recordedAt"):
+            with self.subTest(missing=missing):
+                snapshot = {"recordedAt": "2026-11-06", "ticketStates": {},
+                            "baseline": [{k: v for k, v in entry.items() if k != missing}]}
+                with self.assertRaisesRegex(consolidate.ConsolidationError, "example.*owner ticket and date"):
+                    self.run_snapshot(snapshot)
+
+    def test_snapshot_older_than_30_days_warns_without_failing(self):
+        for days, warns in ((30, False), (31, True)):
+            with self.subTest(days=days), patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                recorded = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=days)).isoformat()
+                consolidate.warn_stale_snapshot(recorded)
+                self.assertEqual("older than 30 days" in stderr.getvalue(), warns)
+
+    def test_build_warns_and_succeeds_with_old_snapshot(self):
+        recorded = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=31)).isoformat()
+        snapshot = {"recordedAt": recorded, "ticketStates": {}, "baseline": []}
+        report = self.root / "report.md"
+        report.write_text("report", encoding="utf-8")
+        with patch.object(consolidate, "REPORT_PATH", report), \
+                patch.object(consolidate, "LEDGER_PATH", self.root / "ledger.json"), \
+                patch.object(consolidate, "render_status_counts", return_value="report"), \
+                patch("sys.stderr", new_callable=io.StringIO) as stderr, \
+                patch("sys.stdout", new_callable=io.StringIO):
+            self.run_snapshot(snapshot)
+            self.assertIn("older than 30 days", stderr.getvalue())
 
 
 class DeliveryEvidenceTest(unittest.TestCase):
