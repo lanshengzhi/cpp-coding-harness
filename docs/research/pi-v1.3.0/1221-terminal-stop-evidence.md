@@ -289,6 +289,52 @@ Formatting and `git diff --check` passed. Local standards and specification
 review found the partial coverage described above; independent reviews were not
 performed because this work was assigned to an implementation sub-agent.
 
+## 2026-11-06 accessor and assembly investigation
+
+The earlier statement that no user-binding accessor was captured applies to
+`audit-1221-keybindings`, not every registered capture. The registered
+`audit-1049/configuration-schema.json` scenario `keybindings manager migrates
+legacy names, keeps unknown actions, drops invalid values and reloads` captures
+`getUserBindings()` before and after reload through the **coding-agent**
+manager. `tests/coding_agent/tui/KeybindingsManagerTest.cpp` exercises the
+corresponding Pike loader and checks all initial IDs, the first initial value,
+and the reloaded ID. It does not read and compare every captured user value or
+the reloaded value. Its caller is also the coding-agent manager, whereas this
+batch names the TUI manager. It is useful related evidence, not a complete
+comparison or a receipt for `cch_tui:KeybindingsManager.getUserBindings`.
+The native coding-agent result does expose a `user_bindings` projection; the
+TUI registry and context do not expose pi's original manager object or all its
+accessors. These are separate seams and should not be conflated.
+
+`src/tui/Keybindings.cpp` supplies definitions for the four fullscreen
+half-page and line actions, but `is_known_unassembled_tui_keybinding` and
+`src/coding_agent/tui/KeybindingsManager.cpp` deliberately classify those
+four as unavailable in the active manager. `tui.input.copy` is also known but
+unassembled and has no corresponding TUI definition in the compared union.
+The active manager diagnoses such overrides instead of installing no-op
+bindings. Assembling definitions alone would not supply their runtime action;
+consumer behavior and comparisons remain necessary. The existing union-table
+comparison therefore cannot establish the active `TUI_KEYBINDINGS` row.
+
+### Row disposition and named blockers
+
+The issue contains 110 rows. None has a #1221 whole-row delivery receipt;
+all 110 remain unverified. The following mutually exclusive rules identify a
+blocker for every row, using the names in the issue as the authoritative list:
+
+| Rows selected from the issue | Count | Named blocker |
+| --- | ---: | --- |
+| Names beginning `Keybinding`, plus `TUI_KEYBINDINGS`, `getKeybindings`, and `setKeybindings` | 27 | **Manager and assembly coverage:** frozen comparisons cover selected resolution, replacement and definition cases, but omit the complete accessor and global-state behavior; the active table also has the five unassembled actions described above. A distinct #1229 control and a whole-row mapping must be established for each row. |
+| Names beginning `ProcessTerminal` or `Terminal`, plus `diag.PI_TUI_WRITE_LOG` | 54 | **Terminal lifecycle and output coverage:** the registered process-stream comparison covers selected startup and negotiation writes and the complete captured stop stream, not all startup output, forwarded input, timers, diagnostics, or each named terminal operation. Real-emulator evidence is still needed for any emulator-disposition claim; terminal residuals remain with #831 and #1035. Each row also needs a distinct control and whole-row mapping. |
+| Names beginning `StdinBuffer`, plus `stdin-buffer:fragmented-terminal-replies` | 18 | **Framing and timer coverage:** three registered scenarios compare selected fragmented replies and ambiguous input with a modeled deadline, not the complete framing, paste, lifecycle, buffer and actual timer behavior. Each row needs its full applicable comparisons and a distinct control. |
+| All remaining issue rows (`Key`, `KeyEventType`, `KeyId`, `decodeKittyPrintable`, `isKeyRelease`, `isKeyRepeat`, `isKittyProtocolActive`, `keys:shifted-symbol-matching`, `matchesKey`, `parseKey`, `setKittyProtocolActive`) | 11 | **Key identity and protocol coverage:** two registered key scenarios compare the captured identities, repeat/release flags and selected positive and negative matches, but do not establish the full key, protocol-state and parsing surface or a distinct control for every named row. |
+
+These blocker groups are conservative dispositions, not findings that every
+individual behavior is absent. The existing candidate controls listed above
+have not been accepted as #1229 controls for complete row mappings. Independent
+standards and specification reviews remain outstanding. This investigation is
+documentation-only and makes no ledger, registry, fixture, or receipt change.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: the captured observations do not compare all 110
