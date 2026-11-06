@@ -1180,16 +1180,24 @@ TEST_CASE("Direct clear preserves scrollback while main-screen redraw clears it"
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<MinimalShell>()));
     REQUIRE(tui.start());
+    REQUIRE(terminal.write("one\r\ntwo\r\nthree\r\nfour"));
+    REQUIRE_FALSE(terminal.scrollback_cells().empty());
     REQUIRE(terminal.write(clear_output));
     CHECK(terminal.check_clear_screen_called());
     CHECK_FALSE(terminal.check_clear_scrollback_called());
+    CHECK_FALSE(terminal.scrollback_cells().empty());
+    REQUIRE(terminal.clear_screen());
+    CHECK_FALSE(terminal.scrollback_cells().empty());
     REQUIRE(tui.render());
     (void)terminal.check_clear_screen_called();
     (void)terminal.check_clear_scrollback_called();
+    REQUIRE(terminal.write("\x1b[Hone\r\ntwo\r\nthree\r\nfour"));
+    REQUIRE_FALSE(terminal.scrollback_cells().empty());
     REQUIRE(terminal.inject_resize({.columns = 10, .rows = 3}));
     REQUIRE(tui.render());
     CHECK(terminal.check_clear_screen_called());
     CHECK(terminal.check_clear_scrollback_called());
+    CHECK(terminal.scrollback_cells().empty());
     REQUIRE(tui.stop());
 }
 

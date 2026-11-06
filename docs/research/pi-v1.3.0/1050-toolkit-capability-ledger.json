@@ -30837,10 +30837,10 @@
    "evidence": {
     "artifact": "fixtures/pi-v1.3.0/audit-1244-terminal-writes/terminal-writes.json",
     "scenario": "process-clear-screen",
-    "result": "2026-11-06 row-specific re-audit: frozen pi-v1.3.0 clearScreen emits clear and home; this named capture replaces the historical terminal IO family for this row only.",
+    "result": "2026-11-06 row-specific re-audit: frozen pi-v1.3.0 packages/tui/src/terminal.ts:567-569 clearScreen emits clear and home; this named capture replaces the historical terminal IO family for this row only.",
     "historicalBaseline": "pi-v1.0.4",
     "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "route": "frozen-clear-screen-and-home"
    },
    "gaps": [
     "no v1.3.0 delivery receipt recorded"
