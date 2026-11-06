@@ -3493,6 +3493,26 @@
       {
         "id": "1178-chord-comparisons",
         "ticket": "1178",
+        "revalidation1240": {
+          "reason": "The 15 #1240 claims remain bounded; their missing independent frozen-scenario distinctions are recorded in remainingBoundary. The existing chord selection was rerun without promoting rows.",
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1240-chord-revalidation.xml"
+          ],
+          "testedRevision": "f0ac0d592a488fc0afe5f5ff3c1dcb213a16c66a",
+          "recordedAt": "2026-11-06T18:55:17.434Z",
+          "selected": 89,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-revalidation.xml",
+            "sha256": "7a0f8a2c62af6ab8d886c33cad8100c4430861466f09cff0be64ff8ca2604163"
+          }
+        },
         "implementationCommits": [
           "4f92d811f1ced9aca2141c1b7ce6464733aea80d",
           "1ed6a12009781efdb8142b00908f49d2600a20e1",
@@ -3595,7 +3615,8 @@
           {
             "id": "cch_chord:context:without-abort-signal",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must mask a cancelled parent while retaining its typed value."
             ],
             "comparisons": [
               {
@@ -3614,7 +3635,8 @@
           {
             "id": "cch_chord:delta:batch-application",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must apply multiple batches in order without mutating the base or returning an intermediate revision."
             ],
             "comparisons": [
               {
@@ -3650,7 +3672,8 @@
           {
             "id": "cch_chord:delta:immutable-application",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must observe both base immutability and untouched subtree identity, which deep copying would break."
             ],
             "comparisons": [
               {
@@ -3669,7 +3692,8 @@
           {
             "id": "cch_chord:delta:mutable-application",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must preserve a leading write when a later operation fails, which whole-batch prevalidation would suppress."
             ],
             "comparisons": [
               {
@@ -3705,7 +3729,8 @@
           {
             "id": "cch_chord:delta:overlap",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must enforce both the search cap and zero-scan boundary against an unbounded suffix search."
             ],
             "comparisons": [
               {
@@ -3724,7 +3749,8 @@
           {
             "id": "cch_chord:delta:prepare-replace",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must reject aborted and foreign prepared replacements instead of adopting them."
             ],
             "comparisons": [
               {
@@ -3857,7 +3883,8 @@
           {
             "id": "cch_chord:state:attached-hydration",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must hydrate at the latest buffered sequence without replaying intermediate frames."
             ],
             "comparisons": [
               {
@@ -3947,7 +3974,8 @@
           {
             "id": "cch_chord:state:dispose",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must observe separate attachment release counts across repeated disposal."
             ],
             "comparisons": [
               {
@@ -3984,7 +4012,8 @@
           {
             "id": "cch_chord:state:listener-error",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must report a listener failure after unsubscribe without changing deliveries."
             ],
             "comparisons": [
               {
@@ -5766,6 +5795,26 @@
       {
         "id": "1185-chord-delta-ingestion",
         "ticket": "1185",
+        "revalidation1240": {
+          "reason": "The 15 #1240 claims remain bounded; their missing independent frozen-scenario distinctions are recorded in remainingBoundary. The existing chord selection was rerun without promoting rows.",
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1240-chord-revalidation.xml"
+          ],
+          "testedRevision": "f0ac0d592a488fc0afe5f5ff3c1dcb213a16c66a",
+          "recordedAt": "2026-11-06T18:55:17.434Z",
+          "selected": 89,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-revalidation.xml",
+            "sha256": "7a0f8a2c62af6ab8d886c33cad8100c4430861466f09cff0be64ff8ca2604163"
+          }
+        },
         "implementationCommits": [
           "86afd3134c9fb04a1f2bd6b4a3c33d69e0d2a4dd",
           "60b043a722f137cd89ba64d89c9caa06332c6e58"
@@ -5862,7 +5911,8 @@
           {
             "id": "cch_chord:Chord:draft",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must revoke an escaped draft handle after abort while preserving the committed revision."
             ],
             "comparisons": [
               {
@@ -6515,6 +6565,26 @@
       {
         "id": "1186-chord-typed-json",
         "ticket": "1186",
+        "revalidation1240": {
+          "reason": "The 15 #1240 claims remain bounded; their missing independent frozen-scenario distinctions are recorded in remainingBoundary. The existing chord selection was rerun without promoting rows.",
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1240-chord-revalidation.xml"
+          ],
+          "testedRevision": "f0ac0d592a488fc0afe5f5ff3c1dcb213a16c66a",
+          "recordedAt": "2026-11-06T18:55:17.434Z",
+          "selected": 89,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-revalidation.xml",
+            "sha256": "7a0f8a2c62af6ab8d886c33cad8100c4430861466f09cff0be64ff8ca2604163"
+          }
+        },
         "implementationCommits": [
           "4f548771c5f866c86624fb48e7e1977be84f2942"
         ],
@@ -6541,7 +6611,8 @@
           {
             "id": "cch_chord:json:copy-json",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must mutate a copy and check that both its source and sibling remain unchanged."
             ],
             "comparisons": [
               {
@@ -6572,7 +6643,8 @@
           {
             "id": "cch_chord:json:strict-validation",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must reject nested non-finite values, which root-only validation would accept."
             ],
             "comparisons": [
               {
@@ -6597,7 +6669,8 @@
           {
             "id": "cch_chord:json:json-value",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must reject a nested non-finite value rather than normalize it to null."
             ],
             "comparisons": [
               {
@@ -6616,7 +6689,8 @@
           {
             "id": "cch_chord:Chord:json",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must observe both detachment from the source container and immutable Chord-copy sharing."
             ],
             "comparisons": [
               {
@@ -7381,6 +7455,26 @@
       {
         "id": "1188-chord-observer-serialization",
         "ticket": "1188",
+        "revalidation1240": {
+          "reason": "The 15 #1240 claims remain bounded; their missing independent frozen-scenario distinctions are recorded in remainingBoundary. The existing chord selection was rerun without promoting rows.",
+          "command": [
+            "ctest",
+            "--preset",
+            "vcpkg",
+            "-L",
+            "chord",
+            "--output-on-failure",
+            "--output-junit",
+            "docs/research/pi-v1.3.0/deliveries/1240-chord-revalidation.xml"
+          ],
+          "testedRevision": "f0ac0d592a488fc0afe5f5ff3c1dcb213a16c66a",
+          "recordedAt": "2026-11-06T18:55:17.434Z",
+          "selected": 89,
+          "junit": {
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-revalidation.xml",
+            "sha256": "7a0f8a2c62af6ab8d886c33cad8100c4430861466f09cff0be64ff8ca2604163"
+          }
+        },
         "implementationCommits": [
           "10671a1816a9cb9dcbbbf29f771cc68aef36a845",
           "a80581bc81cbe2923ccbfa160194de8031438312"
@@ -7408,7 +7502,8 @@
           {
             "id": "cch_chord:state:delivery-order",
             "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
+              "No separate frozen-scenario CTest case has been established for this claim: it must hold one listener while another frame arrives, then observe serialized and eventual delivery."
             ],
             "comparisons": [
               {
