@@ -191,6 +191,37 @@ the exact row and its complete scenario set. The local keybinding conflict test
 checks candidate-order behavior for two contexts; its built-in default-table
 comparison names revision `83114817`, not the required v1.3.0 revision.
 
+## 2026-11-06 keybinding candidate continuation
+
+A separate, unregistered `audit-1221-keybindings` candidate records the frozen
+v1.3.0 built-in definitions and four manager scenarios: deduplicated defaults,
+user conflicts and disabled keys, an unknown user claim overlapping a default,
+and replacing user bindings after a conflict. The candidate manifest and
+artifact pass `audit_evidence.py check`. Two C++ comparisons exercise matching,
+resolved keys, conflict count and key, and replacement through the public
+registry/context seam. An independent test checks that an override overlapping
+an untouched default creates no user conflict while both actions still match.
+The C++ conflict diagnostic does not expose pi's claimant list; the comparisons
+do not establish parity for that field, user-binding accessors, global manager
+state, all inputs, or every detail of replacement. The frozen built-in table is
+captured but not fully compared: for example, pi's editor page-up and page-down
+defaults include control-modified keys, and pi includes `tui.input.copy` and
+additional fullscreen actions. Pike's regular-mode table targets an older
+revision and splits or leaves some actions unassembled. No whole-row claim or
+receipt is made. Registering this candidate would change the shared registry
+and requires revalidation of the affected receipts before any promotion.
+
+The focused comparisons and independent control pass (three tests); the full
+incremental build and registered evidence verifier pass. The full CTest run
+selected 4,522 tests: 4,509 passed, two failed and 11 were skipped. The MCP
+server-death test passed on an isolated rerun; the Herdr PTY case requires
+`TERM_PROGRAM=herdr`, which was unset. This rerun does not make the full suite
+a pass. Real terminal-emulator behavior remains unverified; the prior
+process-stream and PTY evidence does not establish it. Terminal residuals
+remain with #831 and #1035. Independent standards and specification sub-agent
+reviews were not performed in this implementation sub-agent; a local review
+found the scope limitations above.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: the captured observations do not compare all 110

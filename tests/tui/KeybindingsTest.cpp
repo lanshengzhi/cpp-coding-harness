@@ -1,5 +1,7 @@
 #include <cch/tui/Keybindings.hpp>
 
+#include "support/PiTuiEvidence.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -8,6 +10,99 @@
 #include <vector>
 
 using namespace cch;
+
+TEST_CASE("Keybinding resolution compares frozen pi 1.3.0 manager cases", "[tui][keybindings][issue1221]") {
+    const auto bundle = tests::read_pi_v130_audit_candidate("audit-1221-keybindings", "keybindings.json");
+    REQUIRE(bundle);
+    for (const auto name :
+            {"defaults-deduplicate", "overrides-disable-and-conflict", "unknown-claim-and-default-overlap"}) {
+        INFO(name);
+        const auto& scenario = tests::find_scenario(*bundle, name);
+        tui::KeybindingResolutionRequest request;
+        request.definitions = {{.id = "alpha", .default_keys = {"up", "ctrl+b", "up"}, .description = "Alpha"},
+                {.id = "beta", .default_keys = {"down"}, .description = "Beta"},
+                {.id = "gamma", .default_keys = {}, .description = "Gamma"}};
+        if (std::string_view{name} == "overrides-disable-and-conflict") {
+            request.overrides = {{.id = "alpha", .keys = {"down", "down"}},
+                    {.id = "beta", .keys = {"down"}},
+                    {.id = "gamma", .keys = {}}};
+        } else if (std::string_view{name} == "unknown-claim-and-default-overlap") {
+            request.overrides = {{.id = "alpha", .keys = {"down"}}, {.id = "unknown", .keys = {"down"}}};
+        }
+        const auto resolved = tui::resolve_keybindings(std::move(request));
+        REQUIRE(resolved);
+        const auto& expected = scenario.at("expected");
+        const auto& sequences = scenario.at("inputs").at("sequences").get_array();
+        for (const auto id : {"alpha", "beta", "gamma"}) {
+            const auto& frozen_keys = expected.at("resolved").at(id);
+            std::vector<std::string> keys;
+            if (frozen_keys.holds<std::string>()) {
+                keys.push_back(frozen_keys.get_string());
+            } else {
+                for (const auto& key : frozen_keys.get_array())
+                    keys.push_back(key.get_string());
+            }
+            CHECK(resolved->registry->keys(id) == keys);
+            const auto& matches = expected.at("matches").at(id).get_array();
+            REQUIRE(matches.size() == sequences.size());
+            for (std::size_t i = 0; i < sequences.size(); ++i) {
+                const auto event = tui::parse_key(sequences[i].get_string(), false);
+                REQUIRE(event);
+                CHECK(resolved->registry->matches(*event, id) == matches[i].get_boolean());
+            }
+        }
+        const auto& conflicts = expected.at("conflicts").get_array();
+        const auto conflict_count = std::count_if(resolved->issues.begin(),
+                resolved->issues.end(),
+                [](const auto& issue) { return issue.code == "conflicting_user_key"; });
+        CHECK(static_cast<std::size_t>(conflict_count) == conflicts.size());
+        if (!conflicts.empty()) {
+            const auto conflict = std::find_if(resolved->issues.begin(), resolved->issues.end(), [](const auto& issue) {
+                return issue.code == "conflicting_user_key";
+            });
+            REQUIRE(conflict != resolved->issues.end());
+            REQUIRE(conflict->key);
+            CHECK(*conflict->key == conflicts.front().at("key").get_string());
+        }
+    }
+}
+
+TEST_CASE("Keybinding context replacement compares frozen manager rebuild", "[tui][keybindings][issue1221]") {
+    const auto bundle = tests::read_pi_v130_audit_candidate("audit-1221-keybindings", "keybindings.json");
+    REQUIRE(bundle);
+    const auto& expected = tests::find_scenario(*bundle, "replace-user-bindings").at("expected");
+    const std::vector<tui::KeybindingDefinition> definitions = {{.id = "alpha", .default_keys = {"up", "ctrl+b", "up"}},
+            {.id = "beta", .default_keys = {"down"}},
+            {.id = "gamma", .default_keys = {}}};
+    const auto initial = tui::resolve_keybindings({.definitions = definitions,
+            .overrides = {{.id = "alpha", .keys = {"down"}}, {.id = "beta", .keys = {"down"}}}});
+    REQUIRE(initial);
+    REQUIRE(expected.at("before").at("conflicts").get_array().size() == 1);
+    REQUIRE(initial->issues.size() == 1);
+    tui::KeybindingsContext context(initial->registry);
+    const auto replacement =
+            tui::resolve_keybindings({.definitions = definitions, .overrides = {{.id = "alpha", .keys = {"ctrl+b"}}}});
+    REQUIRE(replacement);
+    context.replace(replacement->registry);
+    const auto& after = expected.at("after");
+    CHECK(after.at("conflicts").get_array().empty());
+    CHECK(replacement->issues.empty());
+    for (const auto id : {"alpha", "beta"}) {
+        CHECK(context.keys(id) == std::vector<std::string>{after.at("resolved").at(id).get_string()});
+    }
+    CHECK(context.keys("gamma").empty());
+}
+
+TEST_CASE("Keybinding conflicts require two user claims, not an overlapping default", "[tui][keybindings][issue1221]") {
+    tui::KeybindingResolutionRequest request;
+    request.definitions = {{.id = "alpha", .default_keys = {"up"}}, {.id = "beta", .default_keys = {"down"}}};
+    request.overrides = {{.id = "alpha", .keys = {"down"}}};
+    const auto result = tui::resolve_keybindings(std::move(request));
+    REQUIRE(result);
+    CHECK(result->issues.empty());
+    CHECK(result->registry->matches(tui::KeyEvent{.key = "down"}, "alpha"));
+    CHECK(result->registry->matches(tui::KeyEvent{.key = "down"}, "beta"));
+}
 
 TEST_CASE("Keybindings defines history navigation actions", "[tui][keybindings][issue898][spec]") {
     const auto defs = cch::tui::builtin_tui_keybinding_definitions();

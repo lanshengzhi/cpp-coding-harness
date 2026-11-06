@@ -1,0 +1,545 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1221",
+  "family": "audit-1221-keybindings",
+  "capturedAt": "2026-11-06T02:22:37.387Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1221-keybindings/capture-1221-keybindings.mts",
+    "sha256": "5553d05309722ce07b646c6e4cc26cc680a4407e8081e7cd75c9cffe907deb9e",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1221-keybindings/capture-1221-keybindings.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1221-keybindings/capture-1221-keybindings.mts",
+        "sha256": "5553d05309722ce07b646c6e4cc26cc680a4407e8081e7cd75c9cffe907deb9e"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "keybindings.json",
+      "family": "audit-1221-keybindings",
+      "bytes": 12768,
+      "sha256": "8d9dfb74d106363ce7a2970a8e930ad3513114eff0184b257b178c0c7ee981a3",
+      "sourceEndpoints": [
+        "packages/tui/src/keybindings.ts:KeybindingsManager,TUI_KEYBINDINGS"
+      ],
+      "scenarios": [
+        {
+          "name": "defaults-deduplicate",
+          "inputs": {
+            "definitions": {
+              "alpha": {
+                "defaultKeys": [
+                  "up",
+                  "ctrl+b",
+                  "up"
+                ],
+                "description": "Alpha"
+              },
+              "beta": {
+                "defaultKeys": "down",
+                "description": "Beta"
+              },
+              "gamma": {
+                "defaultKeys": [],
+                "description": "Gamma"
+              }
+            },
+            "user": {},
+            "sequences": [
+              "\u001b[A",
+              "\u001b[B",
+              "\u0002",
+              "x"
+            ]
+          },
+          "expected": {
+            "resolved": {
+              "alpha": [
+                "up",
+                "ctrl+b"
+              ],
+              "beta": "down",
+              "gamma": []
+            },
+            "conflicts": [],
+            "matches": {
+              "alpha": [
+                true,
+                false,
+                true,
+                false
+              ],
+              "beta": [
+                false,
+                true,
+                false,
+                false
+              ],
+              "gamma": [
+                false,
+                false,
+                false,
+                false
+              ]
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "overrides-disable-and-conflict",
+          "inputs": {
+            "definitions": {
+              "alpha": {
+                "defaultKeys": [
+                  "up",
+                  "ctrl+b",
+                  "up"
+                ],
+                "description": "Alpha"
+              },
+              "beta": {
+                "defaultKeys": "down",
+                "description": "Beta"
+              },
+              "gamma": {
+                "defaultKeys": [],
+                "description": "Gamma"
+              }
+            },
+            "user": {
+              "alpha": [
+                "down",
+                "down"
+              ],
+              "beta": "down",
+              "gamma": []
+            },
+            "sequences": [
+              "\u001b[A",
+              "\u001b[B",
+              "\u0002",
+              "x"
+            ]
+          },
+          "expected": {
+            "resolved": {
+              "alpha": "down",
+              "beta": "down",
+              "gamma": []
+            },
+            "conflicts": [
+              {
+                "key": "down",
+                "keybindings": [
+                  "alpha",
+                  "beta"
+                ]
+              }
+            ],
+            "matches": {
+              "alpha": [
+                false,
+                true,
+                false,
+                false
+              ],
+              "beta": [
+                false,
+                true,
+                false,
+                false
+              ],
+              "gamma": [
+                false,
+                false,
+                false,
+                false
+              ]
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "unknown-claim-and-default-overlap",
+          "inputs": {
+            "definitions": {
+              "alpha": {
+                "defaultKeys": [
+                  "up",
+                  "ctrl+b",
+                  "up"
+                ],
+                "description": "Alpha"
+              },
+              "beta": {
+                "defaultKeys": "down",
+                "description": "Beta"
+              },
+              "gamma": {
+                "defaultKeys": [],
+                "description": "Gamma"
+              }
+            },
+            "user": {
+              "alpha": "down",
+              "unknown": "down"
+            },
+            "sequences": [
+              "\u001b[A",
+              "\u001b[B",
+              "\u0002",
+              "x"
+            ]
+          },
+          "expected": {
+            "resolved": {
+              "alpha": "down",
+              "beta": "down",
+              "gamma": []
+            },
+            "conflicts": [],
+            "matches": {
+              "alpha": [
+                false,
+                true,
+                false,
+                false
+              ],
+              "beta": [
+                false,
+                true,
+                false,
+                false
+              ],
+              "gamma": [
+                false,
+                false,
+                false,
+                false
+              ]
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "replace-user-bindings",
+          "inputs": {
+            "definitions": {
+              "alpha": {
+                "defaultKeys": [
+                  "up",
+                  "ctrl+b",
+                  "up"
+                ],
+                "description": "Alpha"
+              },
+              "beta": {
+                "defaultKeys": "down",
+                "description": "Beta"
+              },
+              "gamma": {
+                "defaultKeys": [],
+                "description": "Gamma"
+              }
+            },
+            "initial": {
+              "alpha": "down",
+              "beta": "down"
+            },
+            "replacement": {
+              "alpha": "ctrl+b"
+            }
+          },
+          "expected": {
+            "before": {
+              "resolved": {
+                "alpha": "down",
+                "beta": "down",
+                "gamma": []
+              },
+              "conflicts": [
+                {
+                  "key": "down",
+                  "keybindings": [
+                    "alpha",
+                    "beta"
+                  ]
+                }
+              ]
+            },
+            "after": {
+              "resolved": {
+                "alpha": "ctrl+b",
+                "beta": "down",
+                "gamma": []
+              },
+              "conflicts": []
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "builtin-definitions",
+          "inputs": {
+            "table": "TUI_KEYBINDINGS"
+          },
+          "expected": {
+            "tui.editor.cursorUp": {
+              "defaultKeys": "up",
+              "description": "Move cursor up"
+            },
+            "tui.editor.cursorDown": {
+              "defaultKeys": "down",
+              "description": "Move cursor down"
+            },
+            "tui.editor.historyPrevious": {
+              "defaultKeys": [],
+              "description": "Select previous prompt history entry"
+            },
+            "tui.editor.historyNext": {
+              "defaultKeys": [],
+              "description": "Select next prompt history entry"
+            },
+            "tui.editor.cursorLeft": {
+              "defaultKeys": [
+                "left",
+                "ctrl+b"
+              ],
+              "description": "Move cursor left"
+            },
+            "tui.editor.cursorRight": {
+              "defaultKeys": [
+                "right",
+                "ctrl+f"
+              ],
+              "description": "Move cursor right"
+            },
+            "tui.editor.cursorWordLeft": {
+              "defaultKeys": [
+                "alt+left",
+                "ctrl+left",
+                "alt+b"
+              ],
+              "description": "Move cursor word left"
+            },
+            "tui.editor.cursorWordRight": {
+              "defaultKeys": [
+                "alt+right",
+                "ctrl+right",
+                "alt+f"
+              ],
+              "description": "Move cursor word right"
+            },
+            "tui.editor.cursorLineStart": {
+              "defaultKeys": [
+                "home",
+                "ctrl+a"
+              ],
+              "description": "Move to line start"
+            },
+            "tui.editor.cursorLineEnd": {
+              "defaultKeys": [
+                "end",
+                "ctrl+e"
+              ],
+              "description": "Move to line end"
+            },
+            "tui.editor.jumpForward": {
+              "defaultKeys": "ctrl+]",
+              "description": "Jump forward to character"
+            },
+            "tui.editor.jumpBackward": {
+              "defaultKeys": "ctrl+alt+]",
+              "description": "Jump backward to character"
+            },
+            "tui.editor.pageUp": {
+              "defaultKeys": [
+                "pageUp",
+                "ctrl+pageUp"
+              ],
+              "description": "Page up"
+            },
+            "tui.editor.pageDown": {
+              "defaultKeys": [
+                "pageDown",
+                "ctrl+pageDown"
+              ],
+              "description": "Page down"
+            },
+            "tui.editor.deleteCharBackward": {
+              "defaultKeys": "backspace",
+              "description": "Delete character backward"
+            },
+            "tui.editor.deleteCharForward": {
+              "defaultKeys": [
+                "delete",
+                "ctrl+d"
+              ],
+              "description": "Delete character forward"
+            },
+            "tui.editor.deleteWordBackward": {
+              "defaultKeys": [
+                "ctrl+w",
+                "alt+backspace"
+              ],
+              "description": "Delete word backward"
+            },
+            "tui.editor.deleteWordForward": {
+              "defaultKeys": [
+                "alt+d",
+                "alt+delete"
+              ],
+              "description": "Delete word forward"
+            },
+            "tui.editor.deleteToLineStart": {
+              "defaultKeys": "ctrl+u",
+              "description": "Delete to line start"
+            },
+            "tui.editor.deleteToLineEnd": {
+              "defaultKeys": "ctrl+k",
+              "description": "Delete to line end"
+            },
+            "tui.editor.yank": {
+              "defaultKeys": "ctrl+y",
+              "description": "Yank"
+            },
+            "tui.editor.yankPop": {
+              "defaultKeys": "alt+y",
+              "description": "Yank pop"
+            },
+            "tui.editor.undo": {
+              "defaultKeys": "ctrl+-",
+              "description": "Undo"
+            },
+            "tui.input.newLine": {
+              "defaultKeys": [
+                "shift+enter",
+                "ctrl+j"
+              ],
+              "description": "Insert newline"
+            },
+            "tui.input.submit": {
+              "defaultKeys": "enter",
+              "description": "Submit input"
+            },
+            "tui.input.tab": {
+              "defaultKeys": "tab",
+              "description": "Tab / autocomplete"
+            },
+            "tui.input.copy": {
+              "defaultKeys": "ctrl+c",
+              "description": "Copy selection"
+            },
+            "tui.select.up": {
+              "defaultKeys": "up",
+              "description": "Move selection up"
+            },
+            "tui.select.down": {
+              "defaultKeys": "down",
+              "description": "Move selection down"
+            },
+            "tui.select.pageUp": {
+              "defaultKeys": "pageUp",
+              "description": "Selection page up"
+            },
+            "tui.select.pageDown": {
+              "defaultKeys": "pageDown",
+              "description": "Selection page down"
+            },
+            "tui.select.confirm": {
+              "defaultKeys": "enter",
+              "description": "Confirm selection"
+            },
+            "tui.select.cancel": {
+              "defaultKeys": [
+                "escape",
+                "ctrl+c"
+              ],
+              "description": "Cancel selection"
+            },
+            "tui.altScreen.pageUp": {
+              "defaultKeys": "pageUp",
+              "description": "Scroll viewport up one page"
+            },
+            "tui.altScreen.pageDown": {
+              "defaultKeys": "pageDown",
+              "description": "Scroll viewport down one page"
+            },
+            "tui.altScreen.halfPageUp": {
+              "defaultKeys": [],
+              "description": "Scroll viewport up half a page"
+            },
+            "tui.altScreen.halfPageDown": {
+              "defaultKeys": [],
+              "description": "Scroll viewport down half a page"
+            },
+            "tui.altScreen.lineUp": {
+              "defaultKeys": [],
+              "description": "Scroll viewport up one line"
+            },
+            "tui.altScreen.lineDown": {
+              "defaultKeys": [],
+              "description": "Scroll viewport down one line"
+            },
+            "tui.altScreen.previousPrompt": {
+              "defaultKeys": [
+                "ctrl+shift+up",
+                "ctrl+up"
+              ],
+              "description": "Jump to previous semantic prompt"
+            },
+            "tui.altScreen.nextPrompt": {
+              "defaultKeys": [
+                "ctrl+shift+down",
+                "ctrl+down"
+              ],
+              "description": "Jump to next semantic prompt"
+            },
+            "tui.altScreen.search": {
+              "defaultKeys": "ctrl+shift+f",
+              "description": "Search the primary scroll view"
+            },
+            "tui.altScreen.searchNext": {
+              "defaultKeys": [
+                "enter",
+                "ctrl+g"
+              ],
+              "description": "Select the next search match"
+            },
+            "tui.altScreen.searchPrevious": {
+              "defaultKeys": [
+                "shift+enter",
+                "ctrl+shift+g"
+              ],
+              "description": "Select the previous search match"
+            },
+            "tui.altScreen.searchClose": {
+              "defaultKeys": "escape",
+              "description": "Close transcript search"
+            },
+            "tui.altScreen.top": {
+              "defaultKeys": "ctrl+home",
+              "description": "Scroll viewport to top"
+            },
+            "tui.altScreen.bottom": {
+              "defaultKeys": "ctrl+end",
+              "description": "Scroll viewport to bottom"
+            }
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}
