@@ -400,6 +400,35 @@ A local standards and specification review found no additional issue in the
 registration; independent sub-agent reviews were unavailable in this
 implementation sub-agent.
 
+## 2026-11-06 manager conflict and alias continuation
+
+The immutable resolver now returns structured conflict keys and claimant lists in
+first-claim order, alongside its existing diagnostics. The registered manager
+comparison checks every captured conflict field; a separate control checks two
+conflicts, duplicate keys and claimant order. This is a partial comparison: the
+resolver validates and canonicalizes keys, while the frozen manager deduplicates
+literal key strings without validation. It does not implement the manager's
+complete conflict semantics.
+
+The unregistered `audit-1221-manager-alias` candidate captures a nested array
+mutation through `getUserBindings`: the stored user array changes immediately,
+while resolved keys remain unchanged until `setUserBindings` rebuilds them. A
+mutation of a returned conflict's claimant array does not change manager state.
+Its capture and manifest integrity check passed. The current native immutable
+registry does not implement these aliasing semantics, scalar-versus-array
+representation, mutable definition access, or the global manager. The candidate
+is not replayed by C++ and is not registered; registering it also requires
+review and revalidation of receipts pinning the shared registry and plan. No
+whole-row receipt or status promotion follows from this partial slice.
+
+The incremental full build passed, as did the two focused conflict comparisons,
+the registered evidence verifier (80 bundles and 998 scenarios), candidate
+integrity, formatting and `git diff --check`. The unfiltered CTest run selected
+4,525 cases: 4,513 passed, 11 skipped and the Herdr PTY case failed its
+`TERM_PROGRAM=herdr` environment precondition. The warning gate passed. The
+standards and specification review was local; independent review agents were
+unavailable to this implementation sub-agent.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: the captured observations do not compare all 110

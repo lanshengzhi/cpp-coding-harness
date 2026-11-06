@@ -168,6 +168,7 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
     std::vector<KeybindingIssue> issues;
     std::set<std::string, std::less<>> overridden_actions;
     std::map<std::string, std::vector<std::string>, std::less<>> user_claims;
+    std::vector<std::string> claimed_keys;
     for (const auto& override : request.overrides) {
         const auto definition = definition_indices.find(override.id);
         if (definition == definition_indices.end()) {
@@ -207,13 +208,19 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
             overridden_actions.erase(override.id);
         } else {
             entry.keys = std::move(*keys);
-            for (const auto& key : entry.keys)
-                user_claims[key].push_back(entry.id);
+            for (const auto& key : entry.keys) {
+                auto [claim, inserted] = user_claims.try_emplace(key);
+                if (inserted) claimed_keys.push_back(key);
+                claim->second.push_back(entry.id);
+            }
         }
     }
 
-    for (const auto& [key, claimants] : user_claims) {
+    std::vector<KeybindingConflict> conflicts;
+    for (const auto& key : claimed_keys) {
+        const auto& claimants = user_claims.at(key);
         if (claimants.size() > 1) {
+            conflicts.push_back({.key = key, .keybindings = claimants});
             std::string actions;
             for (const auto& claimant : claimants) {
                 if (!actions.empty()) actions += ", ";
@@ -230,6 +237,7 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
     return KeybindingResolution{
             .registry = std::make_shared<const KeybindingRegistry>(std::move(entries), std::move(request.overrides)),
             .issues = std::move(issues),
+            .conflicts = std::move(conflicts),
     };
 }
 

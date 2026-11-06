@@ -52,6 +52,14 @@ TEST_CASE("Keybinding resolution compares frozen pi 1.3.0 manager cases", "[tui]
             }
         }
         const auto& conflicts = expected.at("conflicts").get_array();
+        REQUIRE(resolved->conflicts.size() == conflicts.size());
+        for (std::size_t i = 0; i < conflicts.size(); ++i) {
+            CHECK(resolved->conflicts[i].key == conflicts[i].at("key").get_string());
+            std::vector<std::string> claimants;
+            for (const auto& claimant : conflicts[i].at("keybindings").get_array())
+                claimants.push_back(claimant.get_string());
+            CHECK(resolved->conflicts[i].keybindings == claimants);
+        }
         const auto conflict_count = std::count_if(resolved->issues.begin(),
                 resolved->issues.end(),
                 [](const auto& issue) { return issue.code == "conflicting_user_key"; });
@@ -72,6 +80,19 @@ TEST_CASE("Keybinding resolution compares frozen pi 1.3.0 manager cases", "[tui]
                     "key '" + *conflict->key + "' is assigned to multiple user actions: " + claimants);
         }
     }
+}
+
+TEST_CASE("Keybinding conflicts retain first-claim order and distinct claimants", "[tui][keybindings][issue1221]") {
+    const auto result = tui::resolve_keybindings({.definitions = {{.id = "first", .default_keys = {}},
+                                                          {.id = "second", .default_keys = {}}},
+            .overrides = {{.id = "first", .keys = {"up", "down", "up"}}, {.id = "second", .keys = {"down", "up"}}}});
+    REQUIRE(result);
+    REQUIRE(result->conflicts.size() == 2);
+    CHECK(result->conflicts[0].key == "up");
+    CHECK(result->conflicts[1].key == "down");
+    const std::vector<std::string> expected_claimants = {"first", "second"};
+    CHECK(result->conflicts[0].keybindings == expected_claimants);
+    CHECK(result->conflicts[1].keybindings == expected_claimants);
 }
 
 TEST_CASE("Keybinding snapshots compare frozen user bindings and replacement", "[tui][keybindings][issue1221]") {

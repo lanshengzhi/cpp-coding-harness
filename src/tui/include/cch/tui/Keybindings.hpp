@@ -102,9 +102,15 @@ struct KeybindingResolutionRequest {
     std::vector<KeybindingOverride> overrides{};
 };
 
+struct KeybindingConflict {
+    std::string key{};
+    std::vector<std::string> keybindings{};
+};
+
 struct KeybindingResolution {
     std::shared_ptr<const KeybindingRegistry> registry{};
     std::vector<KeybindingIssue> issues{};
+    std::vector<KeybindingConflict> conflicts{};
 };
 
 /// Resolve one immutable registry. User entries replace only their action's
