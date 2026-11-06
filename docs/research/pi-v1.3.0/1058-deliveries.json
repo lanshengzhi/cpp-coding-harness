@@ -3515,14 +3515,14 @@
      "chord",
      "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
+     "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
     ],
-    "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
-    "recordedAt": "2026-11-06T19:10:26Z",
-    "selected": 90,
+    "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
+    "recordedAt": "2026-11-06T19:45:39Z",
+    "selected": 91,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
-     "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
+     "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
+     "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
     }
    },
    "rows": [
@@ -4249,7 +4249,7 @@
     },
     {
      "path": "tests/chord/StrictJsonTest.cpp",
-     "sha256": "e51ed9c5be113084c28dafbac3cc343d0e087d1578c9cf3e0f6bf3ad9c5ff150"
+     "sha256": "f4d7a26bde2f7e51d135c7d77e26865d903a49962e2e04491f4dd6d8e7e32ceb"
     },
     {
      "path": "tests/support/ChordEvidence.hpp",
@@ -4458,6 +4458,31 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1240NestedJson": {
+    "reason": "The frozen-input nested JSON regression strengthens the test; it checks a behavior already asserted by the comparison, so all claims remain bounded. The chord selection was rerun after the pinned source changed.",
+    "changedInputs": [
+     "tests/chord/StrictJsonTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
+     ],
+     "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+     "recordedAt": "2026-11-06T19:10:26Z",
+     "selected": 90,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
+      "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
+     }
+    }
    }
   },
   {
@@ -5877,14 +5902,14 @@
      "chord",
      "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
+     "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
     ],
-    "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
-    "recordedAt": "2026-11-06T19:10:26Z",
-    "selected": 90,
+    "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
+    "recordedAt": "2026-11-06T19:45:39Z",
+    "selected": 91,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
-     "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
+     "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
+     "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
     }
    },
    "rows": [
@@ -6112,7 +6137,7 @@
     },
     {
      "path": "tests/chord/StrictJsonTest.cpp",
-     "sha256": "e51ed9c5be113084c28dafbac3cc343d0e087d1578c9cf3e0f6bf3ad9c5ff150"
+     "sha256": "f4d7a26bde2f7e51d135c7d77e26865d903a49962e2e04491f4dd6d8e7e32ceb"
     },
     {
      "path": "tests/support/ChordEvidence.hpp",
@@ -6238,6 +6263,31 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1240NestedJson": {
+    "reason": "The frozen-input nested JSON regression strengthens the test; it checks a behavior already asserted by the comparison, so all claims remain bounded. The chord selection was rerun after the pinned source changed.",
+    "changedInputs": [
+     "tests/chord/StrictJsonTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
+     ],
+     "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+     "recordedAt": "2026-11-06T19:10:26Z",
+     "selected": 90,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
+      "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
+     }
+    }
    }
   },
   {
@@ -6708,14 +6758,14 @@
      "chord",
      "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
+     "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
     ],
-    "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
-    "recordedAt": "2026-11-06T19:10:26Z",
-    "selected": 90,
+    "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
+    "recordedAt": "2026-11-06T19:45:39Z",
+    "selected": 91,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
-     "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
+     "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
+     "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
     }
    },
    "rows": [
@@ -6877,7 +6927,7 @@
     },
     {
      "path": "tests/chord/StrictJsonTest.cpp",
-     "sha256": "e51ed9c5be113084c28dafbac3cc343d0e087d1578c9cf3e0f6bf3ad9c5ff150"
+     "sha256": "f4d7a26bde2f7e51d135c7d77e26865d903a49962e2e04491f4dd6d8e7e32ceb"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -7591,6 +7641,31 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1240NestedJson": {
+    "reason": "The frozen-input nested JSON regression strengthens the test; it checks a behavior already asserted by the comparison, so all claims remain bounded. The chord selection was rerun after the pinned source changed.",
+    "changedInputs": [
+     "tests/chord/StrictJsonTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
+     ],
+     "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+     "recordedAt": "2026-11-06T19:10:26Z",
+     "selected": 90,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
+      "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
+     }
+    }
    }
   },
   {
@@ -7630,14 +7705,14 @@
      "chord",
      "--output-on-failure",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
+     "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
     ],
-    "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
-    "recordedAt": "2026-11-06T19:10:26Z",
-    "selected": 90,
+    "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
+    "recordedAt": "2026-11-06T19:45:39Z",
+    "selected": 91,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
-     "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
+     "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
+     "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
     }
    },
    "rows": [
@@ -7848,7 +7923,7 @@
     },
     {
      "path": "tests/chord/StrictJsonTest.cpp",
-     "sha256": "e51ed9c5be113084c28dafbac3cc343d0e087d1578c9cf3e0f6bf3ad9c5ff150"
+     "sha256": "f4d7a26bde2f7e51d135c7d77e26865d903a49962e2e04491f4dd6d8e7e32ceb"
     },
     {
      "path": "tests/support/ChordEvidence.hpp",
@@ -8463,6 +8538,31 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1240NestedJson": {
+    "reason": "The frozen-input nested JSON regression strengthens the test; it checks a behavior already asserted by the comparison, so all claims remain bounded. The chord selection was rerun after the pinned source changed.",
+    "changedInputs": [
+     "tests/chord/StrictJsonTest.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-on-failure",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml"
+     ],
+     "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+     "recordedAt": "2026-11-06T19:10:26Z",
+     "selected": 90,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
+      "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
+     }
+    }
    }
   },
   {
