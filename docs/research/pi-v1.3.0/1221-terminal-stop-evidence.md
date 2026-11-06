@@ -118,13 +118,49 @@ so this run does not establish those environments' behavior. Formatting and
 `git diff --check` passed. Independent standards and specification reviews
 remain outstanding; this implementation sub-agent performed a local review.
 
+## 2026-11-06 startup, stop and ANSI candidate
+
+A separate `audit-1221-terminal-ansi` candidate executes the clean frozen
+checkout and pins its capture script and artifacts. It records startup, input
+negotiation and stop writes for no reply, a device-attributes reply and a Kitty
+flags reply. In the captured process-stream harness, all three starts write
+bracketed-paste enable followed by the combined keyboard/status/device query.
+Only device attributes cause modifyOtherKeys enable and a corresponding stop
+reset; Kitty flags and no reply do not. These are process-stream observations,
+not terminal-emulator evidence. A native PTY comparison checks the captured
+startup writes, negotiation writes and exact concatenated stop bytes for all
+three paths. It does not check the entire startup stream or all forwarded input;
+a complete mapped comparison remains outstanding.
+
+The candidate also records visible width, stripping, wrapping, truncation and
+strict column slicing for plain text, an SGR boundary and a wide hyperlink.
+`ANSI utilities compare the pi 1.3.0 candidate observations` reads the checked
+candidate and compares all 15 results, including exact ANSI bytes; it passes.
+Candidate manifest and artifact integrity pass `audit_evidence.py check`.
+The registered baseline verifier still passes 77 bundles, 170 artifacts and 986
+scenarios. The two new comparisons passed, as did the four-test focused
+selection including the existing fallback and Kitty controls. The incremental
+full build passed. The unfiltered CTest run selected 4,519 tests: 4,505 passed,
+three failed and 11 skipped. Two consolidation tests failed because the run
+omitted `CCH_LANE_NAME` while this lane held the lock; both passed on rerun with
+`CCH_LANE_NAME=issue-1221` (including 76 boundary cases). The remaining Herdr
+PTY case failed its `TERM_PROGRAM=herdr` host precondition, which was unset.
+Formatting and `git diff --check` passed. A local standards and specification
+review found the partial startup and input comparison described above; no
+independent reviews were performed.
+
+These observations are not registered and do not constitute a delivery receipt.
+Registration still requires review and revalidation of the existing receipt
+inputs affected by the registry and consolidation-plan changes, followed by
+consolidation and boundary checks. No row is promoted on this evidence.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: these five observations do not compare all 110 rows
 with normal and distinct discriminating cases, provide whole-row delivery
-receipts, or establish real-emulator behavior. The captured families do not
-cover `utils-ansi.json`, terminal startup or stop, or the complete keybinding
-surface; additional frozen observations and comparisons are needed. Each row
+receipts, or establish real-emulator behavior. The registered families do not cover `utils-ansi.json` or the new terminal
+startup and stop scenarios, and the candidate observations do not cover the
+complete keybinding surface; further registration and comparisons are needed. Each row
 still needs its complete audit and the #1229 distinct discriminating case.
 Terminal residuals on #831 and #1035 remain with those owners. No capability
 status is promoted by this continuation.

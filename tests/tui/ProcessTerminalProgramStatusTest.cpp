@@ -214,6 +214,46 @@ TEST_CASE("Process Terminal reports the latest status once the terminal answers 
     CHECK(probe.read() == expected_stop);
 }
 
+TEST_CASE(
+        "Process Terminal compares frozen startup and stop negotiation scenarios", "[tui][terminal][issue1221][spec]") {
+    const auto bundle =
+            cch::tests::read_pi_v130_audit_candidate("audit-1221-terminal-ansi", "terminal-start-stop.json");
+    REQUIRE(bundle);
+    const auto& scenarios = bundle->at("scenarios").get_array();
+    REQUIRE(scenarios.size() == 3);
+    cch::tests::EnvVarGuard override_guard{"PI_PROGRAM_STATUS"};
+    override_guard.unset();
+    for (const auto& scenario : scenarios) {
+        INFO(scenario.at("name").get_string());
+        TerminalProbe probe;
+        REQUIRE(probe.open());
+        REQUIRE(probe.start());
+        const auto& expected = scenario.at("expected");
+        const auto& startup_writes = expected.at("startup").get_array();
+        std::string startup;
+        for (const auto& write : startup_writes)
+            REQUIRE(probe.wait_for(write.get_string(), startup));
+        const auto reply = scenario.at("inputs").at("reply").get_string();
+        if (!reply.empty()) {
+            probe.write(reply);
+            const auto protocol = expected.at("kittyActive").get_boolean()
+                                          ? cch::tui::KeyboardProtocol::Kitty
+                                          : cch::tui::KeyboardProtocol::ModifyOtherKeys;
+            REQUIRE(cch::tests::wait_until(
+                    [&] { return probe.terminal->capabilities().keyboard_protocol == protocol; }));
+        }
+        std::string negotiation;
+        for (const auto& write : expected.at("negotiation").get_array())
+            negotiation += write.get_string();
+        CHECK(probe.read() == negotiation);
+        std::string stop;
+        for (const auto& write : expected.at("stop").get_array())
+            stop += write.get_string();
+        REQUIRE(probe.terminal->stop());
+        CHECK(probe.read() == stop);
+    }
+}
+
 TEST_CASE("Process Terminal does not disable an inactive keyboard fallback after Kitty negotiation",
         "[tui][terminal][issue1221][spec]") {
     cch::tests::EnvVarGuard override_guard{"PI_PROGRAM_STATUS"};

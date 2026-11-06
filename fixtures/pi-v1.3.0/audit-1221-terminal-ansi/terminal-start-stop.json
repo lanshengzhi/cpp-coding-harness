@@ -1,0 +1,86 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-06T01:52:42.071Z",
+  "environment": {
+    "terminalOverrides": {
+      "PI_PROGRAM_STATUS": null,
+      "PI_TUI_WRITE_LOG": null
+    },
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/terminal.ts:ProcessTerminal.start,ProcessTerminal.stop"
+  ],
+  "scenarios": [
+    {
+      "name": "no-reply",
+      "inputs": {
+        "reply": ""
+      },
+      "expected": {
+        "startup": [
+          "\u001b[?2004h",
+          "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c"
+        ],
+        "negotiation": [],
+        "kittyActive": false,
+        "stop": [
+          "\u001b[?2004l",
+          "\u001b[<u"
+        ],
+        "input": []
+      },
+      "normalizations": []
+    },
+    {
+      "name": "device-attributes",
+      "inputs": {
+        "reply": "\u001b[?62;4;52c"
+      },
+      "expected": {
+        "startup": [
+          "\u001b[?2004h",
+          "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c"
+        ],
+        "negotiation": [
+          "\u001b[>4;2m"
+        ],
+        "kittyActive": false,
+        "stop": [
+          "\u001b[?2004l",
+          "\u001b[<u",
+          "\u001b[>4;0m"
+        ],
+        "input": []
+      },
+      "normalizations": []
+    },
+    {
+      "name": "kitty-flags",
+      "inputs": {
+        "reply": "\u001b[?1u"
+      },
+      "expected": {
+        "startup": [
+          "\u001b[?2004h",
+          "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c"
+        ],
+        "negotiation": [],
+        "kittyActive": true,
+        "stop": [
+          "\u001b[?2004l",
+          "\u001b[<u"
+        ],
+        "input": []
+      },
+      "normalizations": []
+    }
+  ]
+}

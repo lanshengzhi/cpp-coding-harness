@@ -50,6 +50,37 @@ constexpr std::string_view kCosmeticReopenCase{"link-cjk-styled-span"};
 
 } // namespace
 
+TEST_CASE("ANSI utilities compare the pi 1.3.0 candidate observations", "[tui][issue1221][ansi][spec]") {
+    const auto bundle = tests::read_pi_v130_audit_candidate("audit-1221-terminal-ansi", "utils-ansi.json");
+    REQUIRE(bundle);
+    const auto& scenarios = bundle->at("scenarios").get_array();
+    REQUIRE(scenarios.size() == 3);
+    for (const auto& scenario : scenarios) {
+        INFO(scenario.at("name").get_string());
+        const auto& input = scenario.at("inputs");
+        const auto& expected = scenario.at("expected");
+        const auto text = input.at("text").get_string();
+        const auto width = static_cast<std::size_t>(input.at("width").get_number());
+        CHECK(tui::visible_width(text) == static_cast<std::size_t>(expected.at("visibleWidth").get_number()));
+        CHECK(tui::strip_terminal_sequences(text) == expected.at("strip").get_string());
+        const auto wrap = tui::wrap_text(text, width);
+        REQUIRE(wrap);
+        const auto& lines = expected.at("wrap").get_array();
+        REQUIRE(wrap->size() == lines.size());
+        for (std::size_t i = 0; i < lines.size(); ++i)
+            CHECK((*wrap)[i] == lines[i].get_string());
+        const auto truncated = tui::truncate_text(text, width);
+        REQUIRE(truncated);
+        CHECK(*truncated == expected.at("truncate").get_string());
+        const auto sliced = tui::slice_by_column(text,
+                static_cast<std::size_t>(input.at("start").get_number()),
+                static_cast<std::size_t>(input.at("length").get_number()),
+                true);
+        REQUIRE(sliced);
+        CHECK(*sliced == expected.at("slice").get_string());
+    }
+}
+
 TEST_CASE("style_text composes colors and attributes around ANSI and hyperlink content",
         "[tui][colors][issue988][spec]") {
     // Independently evaluated with pi-v1.0.4 at 7c10bd4337495ee613f2224843ecdf349b80d1df:

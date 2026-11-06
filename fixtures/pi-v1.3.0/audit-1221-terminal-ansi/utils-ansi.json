@@ -1,0 +1,83 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-06T01:52:42.071Z",
+  "environment": {
+    "terminalOverrides": {
+      "PI_PROGRAM_STATUS": null,
+      "PI_TUI_WRITE_LOG": null
+    },
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/utils.ts:visibleWidth,stripTerminalSequences,wrapTextWithAnsi,truncateToWidth,sliceByColumn"
+  ],
+  "scenarios": [
+    {
+      "name": "plain",
+      "inputs": {
+        "text": "hello world",
+        "width": 5,
+        "start": 1,
+        "length": 3
+      },
+      "expected": {
+        "visibleWidth": 11,
+        "strip": "hello world",
+        "wrap": [
+          "hello",
+          "world"
+        ],
+        "truncate": "he\u001b[0m...\u001b[0m",
+        "slice": "ell"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "sgr-boundary",
+      "inputs": {
+        "text": "\u001b[31mred\u001b[39m blue",
+        "width": 5,
+        "start": 2,
+        "length": 4
+      },
+      "expected": {
+        "visibleWidth": 8,
+        "strip": "red blue",
+        "wrap": [
+          "\u001b[31mred\u001b[39m",
+          "blue"
+        ],
+        "truncate": "\u001b[31mre\u001b[0m...\u001b[0m",
+        "slice": "\u001b[31md\u001b[39m bl"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "wide-hyperlink",
+      "inputs": {
+        "text": "\u001b]8;;u\u0007a你b\u001b]8;;\u0007",
+        "width": 3,
+        "start": 1,
+        "length": 2
+      },
+      "expected": {
+        "visibleWidth": 4,
+        "strip": "a你b",
+        "wrap": [
+          "\u001b]8;;u\u0007a你\u001b]8;;\u0007",
+          "\u001b]8;;u\u0007b\u001b]8;;\u0007"
+        ],
+        "truncate": "\u001b[0m...\u001b[0m",
+        "slice": "\u001b]8;;u\u0007你"
+      },
+      "normalizations": []
+    }
+  ]
+}

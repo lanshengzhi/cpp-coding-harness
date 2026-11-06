@@ -1,0 +1,178 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1221",
+  "family": "audit-1221-terminal-ansi",
+  "capturedAt": "2026-11-06T01:52:42.071Z",
+  "environment": {
+    "terminalOverrides": {
+      "PI_PROGRAM_STATUS": null,
+      "PI_TUI_WRITE_LOG": null
+    },
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1221-terminal-ansi/capture-1221-terminal-ansi.mts",
+    "sha256": "2755795f66c876f547b34f0781515718b033443f92076f0f4b45a60aca48d342",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1221-terminal-ansi/capture-1221-terminal-ansi.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1221-terminal-ansi/capture-1221-terminal-ansi.mts",
+        "sha256": "2755795f66c876f547b34f0781515718b033443f92076f0f4b45a60aca48d342"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "utils-ansi.json",
+      "family": "audit-1221-terminal-ansi",
+      "bytes": 2013,
+      "sha256": "a2eb14f35b96445c88fd9af610bdb1fe82ac1215316c56b3cf8bc975cb3f8bd8",
+      "sourceEndpoints": [
+        "packages/tui/src/utils.ts:visibleWidth,stripTerminalSequences,wrapTextWithAnsi,truncateToWidth,sliceByColumn"
+      ],
+      "scenarios": [
+        {
+          "name": "plain",
+          "inputs": {
+            "text": "hello world",
+            "width": 5,
+            "start": 1,
+            "length": 3
+          },
+          "expected": {
+            "visibleWidth": 11,
+            "strip": "hello world",
+            "wrap": [
+              "hello",
+              "world"
+            ],
+            "truncate": "he\u001b[0m...\u001b[0m",
+            "slice": "ell"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "sgr-boundary",
+          "inputs": {
+            "text": "\u001b[31mred\u001b[39m blue",
+            "width": 5,
+            "start": 2,
+            "length": 4
+          },
+          "expected": {
+            "visibleWidth": 8,
+            "strip": "red blue",
+            "wrap": [
+              "\u001b[31mred\u001b[39m",
+              "blue"
+            ],
+            "truncate": "\u001b[31mre\u001b[0m...\u001b[0m",
+            "slice": "\u001b[31md\u001b[39m bl"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "wide-hyperlink",
+          "inputs": {
+            "text": "\u001b]8;;u\u0007a你b\u001b]8;;\u0007",
+            "width": 3,
+            "start": 1,
+            "length": 2
+          },
+          "expected": {
+            "visibleWidth": 4,
+            "strip": "a你b",
+            "wrap": [
+              "\u001b]8;;u\u0007a你\u001b]8;;\u0007",
+              "\u001b]8;;u\u0007b\u001b]8;;\u0007"
+            ],
+            "truncate": "\u001b[0m...\u001b[0m",
+            "slice": "\u001b]8;;u\u0007你"
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "terminal-start-stop.json",
+      "family": "audit-1221-terminal-ansi",
+      "bytes": 1933,
+      "sha256": "1159d80997dd2ff9c381b3c64287f3fb6814fbcbd8f2802fc6c354accd52871c",
+      "sourceEndpoints": [
+        "packages/tui/src/terminal.ts:ProcessTerminal.start,ProcessTerminal.stop"
+      ],
+      "scenarios": [
+        {
+          "name": "no-reply",
+          "inputs": {
+            "reply": ""
+          },
+          "expected": {
+            "startup": [
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c"
+            ],
+            "negotiation": [],
+            "kittyActive": false,
+            "stop": [
+              "\u001b[?2004l",
+              "\u001b[<u"
+            ],
+            "input": []
+          },
+          "normalizations": []
+        },
+        {
+          "name": "device-attributes",
+          "inputs": {
+            "reply": "\u001b[?62;4;52c"
+          },
+          "expected": {
+            "startup": [
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c"
+            ],
+            "negotiation": [
+              "\u001b[>4;2m"
+            ],
+            "kittyActive": false,
+            "stop": [
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[>4;0m"
+            ],
+            "input": []
+          },
+          "normalizations": []
+        },
+        {
+          "name": "kitty-flags",
+          "inputs": {
+            "reply": "\u001b[?1u"
+          },
+          "expected": {
+            "startup": [
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c"
+            ],
+            "negotiation": [],
+            "kittyActive": true,
+            "stop": [
+              "\u001b[?2004l",
+              "\u001b[<u"
+            ],
+            "input": []
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}
