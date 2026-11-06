@@ -1,0 +1,119 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-06T05:35:47.271Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/keys.ts:decodeKittyPrintable"
+  ],
+  "scenarios": [
+    {
+      "name": "kitty-printable-text-decoding",
+      "inputs": {
+        "cases": [
+          {
+            "name": "plain",
+            "sequence": "\u001b[97u"
+          },
+          {
+            "name": "shifted-key",
+            "sequence": "\u001b[97:65;2u"
+          },
+          {
+            "name": "keypad-normalized",
+            "sequence": "\u001b[57413u"
+          },
+          {
+            "name": "astral",
+            "sequence": "\u001b[128512u"
+          },
+          {
+            "name": "ctrl",
+            "sequence": "\u001b[97;5u"
+          },
+          {
+            "name": "alt",
+            "sequence": "\u001b[97;3u"
+          },
+          {
+            "name": "super",
+            "sequence": "\u001b[97;9u"
+          },
+          {
+            "name": "release",
+            "sequence": "\u001b[97;1:3u"
+          },
+          {
+            "name": "control-codepoint",
+            "sequence": "\u001b[13u"
+          },
+          {
+            "name": "non-csi-u-text",
+            "sequence": "a"
+          },
+          {
+            "name": "non-csi-u-modify-other-keys",
+            "sequence": "\u001b[27;2;97~"
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "name": "plain",
+            "text": "a"
+          },
+          {
+            "name": "shifted-key",
+            "text": "A"
+          },
+          {
+            "name": "keypad-normalized",
+            "text": "+"
+          },
+          {
+            "name": "astral",
+            "text": "😀"
+          },
+          {
+            "name": "ctrl",
+            "text": null
+          },
+          {
+            "name": "alt",
+            "text": null
+          },
+          {
+            "name": "super",
+            "text": null
+          },
+          {
+            "name": "release",
+            "text": "a"
+          },
+          {
+            "name": "control-codepoint",
+            "text": null
+          },
+          {
+            "name": "non-csi-u-text",
+            "text": null
+          },
+          {
+            "name": "non-csi-u-modify-other-keys",
+            "text": null
+          }
+        ]
+      },
+      "normalizations": []
+    }
+  ]
+}

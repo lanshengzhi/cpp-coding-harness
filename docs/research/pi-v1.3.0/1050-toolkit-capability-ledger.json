@@ -26974,14 +26974,15 @@
    "consumer": "Input/Editor/TreeSelector typed dispatch",
    "boundary": "Keys parse/match/printable helpers with per-terminal state",
    "implementation_ticket": null,
-   "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
+   "scenario": [
+    "kitty-printable-text-decoding"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-key-surface/kitty-text.json",
+    "scenario": "kitty-printable-text-decoding",
+    "result": "frozen decodeKittyPrintable accepts plain, shifted, keypad and astral CSI-u text and rejects ctrl, alt, super, control-codepoint and non-CSI-u input",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -26999,7 +27000,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Keys parse/match/printable helpers with per-terminal state",
     "consumer": "Input/Editor/TreeSelector typed dispatch",
@@ -27009,7 +27010,14 @@
      "tests/tui/TerminalStreamDecoderTest.cpp"
     ]
    },
-   "comparisonCase": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup"
+   "comparisonCase": [
+    "kitty-printable-text-decoding"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "kitty-printable-text-decoding"
+    ]
+   }
   },
   {
    "id": "isKeyRelease",
@@ -27025,14 +27033,16 @@
    "consumer": "Input/Editor/TreeSelector typed dispatch",
    "boundary": "Keys parse/match/printable helpers with per-terminal state",
    "implementation_ticket": null,
-   "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
+   "scenario": [
+    "key-release-and-repeat-raw-predicates",
+    "legacy-key-identity"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-key-surface/release-repeat.json",
+    "scenario": "key-release-and-repeat-raw-predicates",
+    "result": "frozen isKeyRelease reports the release suffix matrix and excludes bracketed paste content",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -27050,13 +27060,22 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Keys parse/match/printable helpers with per-terminal state",
     "consumer": "Input/Editor/TreeSelector typed dispatch",
     "tests": []
    },
-   "comparisonCase": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup"
+   "comparisonCase": [
+    "key-release-and-repeat-raw-predicates",
+    "legacy-key-identity"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "key-release-and-repeat-raw-predicates",
+     "legacy-key-identity"
+    ]
+   }
   },
   {
    "id": "isKeyRepeat",
@@ -27072,14 +27091,16 @@
    "consumer": "Input/Editor/TreeSelector typed dispatch",
    "boundary": "Keys parse/match/printable helpers with per-terminal state",
    "implementation_ticket": null,
-   "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
+   "scenario": [
+    "key-release-and-repeat-raw-predicates",
+    "kitty-active-key-identity"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-key-surface/release-repeat.json",
+    "scenario": "key-release-and-repeat-raw-predicates",
+    "result": "frozen isKeyRepeat reports the repeat suffix matrix and excludes bracketed paste content",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -27097,13 +27118,22 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Keys parse/match/printable helpers with per-terminal state",
     "consumer": "Input/Editor/TreeSelector typed dispatch",
     "tests": []
    },
-   "comparisonCase": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup"
+   "comparisonCase": [
+    "key-release-and-repeat-raw-predicates",
+    "kitty-active-key-identity"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "key-release-and-repeat-raw-predicates",
+     "kitty-active-key-identity"
+    ]
+   }
   },
   {
    "id": "isKittyProtocolActive",
@@ -27166,14 +27196,17 @@
    "consumer": "Input/Editor/TreeSelector typed dispatch",
    "boundary": "Keys parse/match/printable helpers with per-terminal state",
    "implementation_ticket": null,
-   "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
+   "scenario": [
+    "key-constants-and-modifier-helpers",
+    "legacy-key-identity",
+    "kitty-active-key-identity"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-key-surface/key-constants.json",
+    "scenario": "key-constants-and-modifier-helpers",
+    "result": "frozen Key constant table and modifier helpers parse and match as the same shortcut vocabulary",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -27191,7 +27224,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Keys parse/match/printable helpers with per-terminal state",
     "consumer": "Input/Editor/TreeSelector typed dispatch",
@@ -27199,7 +27232,18 @@
      "tests/tui/OverlayCompositorTest.cpp"
     ]
    },
-   "comparisonCase": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup"
+   "comparisonCase": [
+    "key-constants-and-modifier-helpers",
+    "legacy-key-identity",
+    "kitty-active-key-identity"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "key-constants-and-modifier-helpers",
+     "legacy-key-identity",
+     "kitty-active-key-identity"
+    ]
+   }
   },
   {
    "id": "KeyEventType",
@@ -27215,14 +27259,16 @@
    "consumer": "Input/Editor/TreeSelector typed dispatch",
    "boundary": "Keys parse/match/printable helpers with per-terminal state",
    "implementation_ticket": null,
-   "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
+   "scenario": [
+    "legacy-key-identity",
+    "kitty-active-key-identity"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
-    "result": "historical pi-v1.0.4 evidence family; this row has no dedicated v1.3.0 observation",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1221/keys-kitty-text.json",
+    "scenario": "legacy-key-identity",
+    "result": "frozen legacy and kitty-active identity cases report the press/repeat/release event types",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -27240,7 +27286,7 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Keys parse/match/printable helpers with per-terminal state",
     "consumer": "Input/Editor/TreeSelector typed dispatch",
@@ -27250,7 +27296,16 @@
      "tests/tui/InputTest.cpp"
     ]
    },
-   "comparisonCase": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup"
+   "comparisonCase": [
+    "legacy-key-identity",
+    "kitty-active-key-identity"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "legacy-key-identity",
+     "kitty-active-key-identity"
+    ]
+   }
   },
   {
    "id": "KeyId",
@@ -27266,8 +27321,18 @@
    "consumer": "Input/Editor/TreeSelector typed dispatch",
    "boundary": "Keys parse/match/printable helpers with per-terminal state",
    "implementation_ticket": null,
-   "scenario": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
-   "evidence": null,
+   "scenario": [
+    "legacy-key-identity",
+    "kitty-active-key-identity",
+    "shifted-symbol-keys-match-produced-character"
+   ],
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1221/keys-kitty-text.json",
+    "scenario": "legacy-key-identity",
+    "result": "frozen key identities normalize aliases and modifiers to the same shortcut identity",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
     "export name appears in changed source hunks; not individually re-audited against v1.3.0"
@@ -27284,13 +27349,24 @@
    "publicOperations": [],
    "typeOnly": true,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "Keys parse/match/printable helpers with per-terminal state",
     "consumer": "Input/Editor/TreeSelector typed dispatch",
     "tests": []
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": [
+    "legacy-key-identity",
+    "kitty-active-key-identity",
+    "shifted-symbol-keys-match-produced-character"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "legacy-key-identity",
+     "kitty-active-key-identity",
+     "shifted-symbol-keys-match-produced-character"
+    ]
+   }
   },
   {
    "id": "matchesKey",
@@ -27306,11 +27382,15 @@
    "consumer": "Input/Editor/TreeSelector typed dispatch",
    "boundary": "Keys parse/match/printable helpers with per-terminal state",
    "implementation_ticket": "#1058-draft",
-   "scenario": "shifted-symbol-keys-match-produced-character",
+   "scenario": [
+    "legacy-key-identity",
+    "kitty-active-key-identity",
+    "shifted-symbol-keys-match-produced-character"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
-    "scenario": "shifted-symbol-keys-match-produced-character",
-    "result": "frozen matchesKey() matches '+' and 'shift+=' for a Kitty shifted '=' report and 'ctrl++' for ctrl+shift+= or modifyOtherKeys; C++ matches only the physical spelling",
+    "artifact": "fixtures/pi-v1.3.0/audit-1221/keys-kitty-text.json",
+    "scenario": "legacy-key-identity",
+    "result": "frozen matchesKey resolves produced shifted symbols and the physical spelling, and rejects invalid identifiers",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
@@ -27339,7 +27419,18 @@
      "tests/tui/KeysLegacyTest.cpp"
     ]
    },
-   "comparisonCase": "shifted-symbol-keys-match-produced-character"
+   "comparisonCase": [
+    "legacy-key-identity",
+    "kitty-active-key-identity",
+    "shifted-symbol-keys-match-produced-character"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "legacy-key-identity",
+     "kitty-active-key-identity",
+     "shifted-symbol-keys-match-produced-character"
+    ]
+   }
   },
   {
    "id": "parseKey",
@@ -27355,11 +27446,15 @@
    "consumer": "Input/Editor/TreeSelector typed dispatch",
    "boundary": "Keys parse/match/printable helpers with per-terminal state",
    "implementation_ticket": "#1058-draft",
-   "scenario": "shifted-symbol-keys-match-produced-character",
+   "scenario": [
+    "legacy-key-identity",
+    "kitty-active-key-identity",
+    "shifted-symbol-keys-match-produced-character"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
-    "scenario": "shifted-symbol-keys-match-produced-character",
-    "result": "frozen parseKey() returns the produced shifted symbol (e.g. '+' for Shift+=) and removes the implicit Shift; C++ keeps shift=true on the '+' identity",
+    "artifact": "fixtures/pi-v1.3.0/audit-1221/keys-kitty-text.json",
+    "scenario": "legacy-key-identity",
+    "result": "frozen parseKey reports the shifted-symbol identity, the kitty-active and legacy raw LF modes, and the kitty report text",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
@@ -27390,7 +27485,18 @@
      "tests/tui/KeysLegacyTest.cpp"
     ]
    },
-   "comparisonCase": "shifted-symbol-keys-match-produced-character"
+   "comparisonCase": [
+    "legacy-key-identity",
+    "kitty-active-key-identity",
+    "shifted-symbol-keys-match-produced-character"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "legacy-key-identity",
+     "kitty-active-key-identity",
+     "shifted-symbol-keys-match-produced-character"
+    ]
+   }
   },
   {
    "id": "setKittyProtocolActive",
@@ -48873,11 +48979,13 @@
    "consumer": "cch_coding_agent keybinding context",
    "boundary": null,
    "implementation_ticket": "#1058-draft",
-   "scenario": "shifted-symbol-keys-match-produced-character",
+   "scenario": [
+    "shifted-symbol-keys-match-produced-character"
+   ],
    "evidence": {
     "artifact": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
     "scenario": "shifted-symbol-keys-match-produced-character",
-    "result": "frozen matches the produced symbol and consumes the implicit Shift for Kitty/modifyOtherKeys reports",
+    "result": "frozen matchesKey matches the produced symbol and the physical spelling, and ctrl+shift+= or modifyOtherKeys is the ctrl++ identity",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
@@ -48903,7 +49011,14 @@
      "tests/tui/KeysLegacyTest.cpp"
     ]
    },
-   "comparisonCase": "shifted-symbol-keys-match-produced-character"
+   "comparisonCase": [
+    "shifted-symbol-keys-match-produced-character"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "shifted-symbol-keys-match-produced-character"
+    ]
+   }
   },
   {
    "id": "cch_tui:stdin-buffer:fragmented-terminal-replies",

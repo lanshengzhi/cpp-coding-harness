@@ -1161,22 +1161,6 @@
    "disposition": "#1221 compares this slice; whole-row coverage remains open."
   },
   {
-   "family": "audit-1221",
-   "artifact": "keys-kitty-text.json",
-   "scenario": "legacy-key-identity",
-   "reason": "Supplemental frozen key observation; no complete B13 row is routed to it.",
-   "rows": ["cch_tui:parseKey", "cch_tui:matchesKey"],
-   "disposition": "#1221 compares this slice; whole-row coverage remains open."
-  },
-  {
-   "family": "audit-1221",
-   "artifact": "keys-kitty-text.json",
-   "scenario": "kitty-active-key-identity",
-   "reason": "Supplemental frozen key observation; no complete B13 row is routed to it.",
-   "rows": ["cch_tui:parseKey", "cch_tui:matchesKey"],
-   "disposition": "#1221 compares this slice; whole-row coverage remains open."
-  },
-  {
    "family": "audit-1105",
    "artifact": "session-binding.json",
    "scenario": "real Session reads resources on demand and binds a late tool",
@@ -5750,14 +5734,11 @@
     "id": "TM-tui-b13",
     "ticket": "#1221",
     "history": false,
-    "note": "Proposal section 2 group 16 -> N5: #1182 route batch B13 filed as #1208 + 13 (Terminal IO: process terminal, stdin framing, keys and keybindings).",
+    "note": "Proposal section 2 group 16 -> N5: #1182 route batch B13 filed as #1208 + 13 (Terminal IO: process terminal, stdin framing, keys and keybindings). The key rows left this mapping when the 1221-terminal-io receipt backed their #1221 tickets; a mapped row may not also carry a delivery-backed ticket.",
     "rows": [
      "cch_tui:StdinBuffer",
      "cch_tui:StdinBuffer.flush",
      "cch_tui:StdinBuffer.process",
-     "cch_tui:keys:shifted-symbol-matching",
-     "cch_tui:matchesKey",
-     "cch_tui:parseKey",
      "cch_tui:stdin-buffer:fragmented-terminal-replies"
     ]
    },

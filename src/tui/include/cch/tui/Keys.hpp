@@ -84,6 +84,16 @@ using InputEventVariant = std::variant<KeyEvent, PasteEvent>;
 /// the shortcut identity is used only for events decoded without one.
 [[nodiscard]] std::optional<std::string> printable_text(const KeyEvent& event);
 
+/// Whether the raw input bytes report a Kitty key release (pi `isKeyRelease`).
+/// Bracketed paste content is never a release, even when it contains a
+/// release-shaped suffix such as a Bluetooth address's `:3F`.
+[[nodiscard]] bool is_key_release(std::string_view data);
+
+/// Whether the raw input bytes report a Kitty key repeat (pi `isKeyRepeat`).
+/// Bracketed paste content is never a repeat, even when it contains a
+/// repeat-shaped suffix.
+[[nodiscard]] bool is_key_repeat(std::string_view data);
+
 /// Whether the event carries key press behavior (press or repeat). Paste
 /// events (no key payload) and key releases do not; a handler that does not
 /// intentionally claim a release returns it unhandled (ADR 0050).

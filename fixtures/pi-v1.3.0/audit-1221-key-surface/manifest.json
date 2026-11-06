@@ -1,0 +1,502 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1221",
+  "family": "audit-1221-key-surface",
+  "capturedAt": "2026-11-06T05:35:47.271Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1221-key-surface/capture.mts",
+    "sha256": "f968370684587707fb483c6963b889a17b3df71e7170b1e74f212c643325a2c6",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1221-key-surface/capture.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1221-key-surface/capture.mts",
+        "sha256": "f968370684587707fb483c6963b889a17b3df71e7170b1e74f212c643325a2c6"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "key-constants.json",
+      "family": "audit-1221-key-surface",
+      "bytes": 3371,
+      "sha256": "e1e5f056179fd857843dc23c81e1ffcc7d41c4ef8d6f0af60f82f5e58e705885",
+      "sourceEndpoints": [
+        "packages/tui/src/keys.ts:Key"
+      ],
+      "scenarios": [
+        {
+          "name": "key-constants-and-modifier-helpers",
+          "inputs": {
+            "baseKey": "x",
+            "modifierHelpers": [
+              "ctrl",
+              "shift",
+              "alt",
+              "super",
+              "ctrlShift",
+              "shiftCtrl",
+              "ctrlAlt",
+              "altCtrl",
+              "shiftAlt",
+              "altShift",
+              "ctrlSuper",
+              "superCtrl",
+              "shiftSuper",
+              "superShift",
+              "altSuper",
+              "superAlt",
+              "ctrlShiftAlt",
+              "ctrlShiftSuper"
+            ]
+          },
+          "expected": {
+            "constants": {
+              "escape": "escape",
+              "esc": "esc",
+              "enter": "enter",
+              "return": "return",
+              "tab": "tab",
+              "space": "space",
+              "backspace": "backspace",
+              "delete": "delete",
+              "insert": "insert",
+              "clear": "clear",
+              "home": "home",
+              "end": "end",
+              "pageUp": "pageUp",
+              "pageDown": "pageDown",
+              "up": "up",
+              "down": "down",
+              "left": "left",
+              "right": "right",
+              "f1": "f1",
+              "f2": "f2",
+              "f3": "f3",
+              "f4": "f4",
+              "f5": "f5",
+              "f6": "f6",
+              "f7": "f7",
+              "f8": "f8",
+              "f9": "f9",
+              "f10": "f10",
+              "f11": "f11",
+              "f12": "f12",
+              "backtick": "`",
+              "hyphen": "-",
+              "equals": "=",
+              "leftbracket": "[",
+              "rightbracket": "]",
+              "backslash": "\\",
+              "semicolon": ";",
+              "quote": "'",
+              "comma": ",",
+              "period": ".",
+              "slash": "/",
+              "exclamation": "!",
+              "at": "@",
+              "hash": "#",
+              "dollar": "$",
+              "percent": "%",
+              "caret": "^",
+              "ampersand": "&",
+              "asterisk": "*",
+              "leftparen": "(",
+              "rightparen": ")",
+              "underscore": "_",
+              "plus": "+",
+              "pipe": "|",
+              "tilde": "~",
+              "leftbrace": "{",
+              "rightbrace": "}",
+              "colon": ":",
+              "lessthan": "<",
+              "greaterthan": ">",
+              "question": "?"
+            },
+            "helpers": {
+              "ctrl": "ctrl+x",
+              "shift": "shift+x",
+              "alt": "alt+x",
+              "super": "super+x",
+              "ctrlShift": "ctrl+shift+x",
+              "shiftCtrl": "shift+ctrl+x",
+              "ctrlAlt": "ctrl+alt+x",
+              "altCtrl": "alt+ctrl+x",
+              "shiftAlt": "shift+alt+x",
+              "altShift": "alt+shift+x",
+              "ctrlSuper": "ctrl+super+x",
+              "superCtrl": "super+ctrl+x",
+              "shiftSuper": "shift+super+x",
+              "superShift": "super+shift+x",
+              "altSuper": "alt+super+x",
+              "superAlt": "super+alt+x",
+              "ctrlShiftAlt": "ctrl+shift+alt+x",
+              "ctrlShiftSuper": "ctrl+shift+super+x"
+            }
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "kitty-text.json",
+      "family": "audit-1221-key-surface",
+      "bytes": 2668,
+      "sha256": "69c8cc9f9f0d115ed1db8ca0f1763b0a0f4655e2f5450b82f6cd659ccf78c678",
+      "sourceEndpoints": [
+        "packages/tui/src/keys.ts:decodeKittyPrintable"
+      ],
+      "scenarios": [
+        {
+          "name": "kitty-printable-text-decoding",
+          "inputs": {
+            "cases": [
+              {
+                "name": "plain",
+                "sequence": "\u001b[97u"
+              },
+              {
+                "name": "shifted-key",
+                "sequence": "\u001b[97:65;2u"
+              },
+              {
+                "name": "keypad-normalized",
+                "sequence": "\u001b[57413u"
+              },
+              {
+                "name": "astral",
+                "sequence": "\u001b[128512u"
+              },
+              {
+                "name": "ctrl",
+                "sequence": "\u001b[97;5u"
+              },
+              {
+                "name": "alt",
+                "sequence": "\u001b[97;3u"
+              },
+              {
+                "name": "super",
+                "sequence": "\u001b[97;9u"
+              },
+              {
+                "name": "release",
+                "sequence": "\u001b[97;1:3u"
+              },
+              {
+                "name": "control-codepoint",
+                "sequence": "\u001b[13u"
+              },
+              {
+                "name": "non-csi-u-text",
+                "sequence": "a"
+              },
+              {
+                "name": "non-csi-u-modify-other-keys",
+                "sequence": "\u001b[27;2;97~"
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "name": "plain",
+                "text": "a"
+              },
+              {
+                "name": "shifted-key",
+                "text": "A"
+              },
+              {
+                "name": "keypad-normalized",
+                "text": "+"
+              },
+              {
+                "name": "astral",
+                "text": "😀"
+              },
+              {
+                "name": "ctrl",
+                "text": null
+              },
+              {
+                "name": "alt",
+                "text": null
+              },
+              {
+                "name": "super",
+                "text": null
+              },
+              {
+                "name": "release",
+                "text": "a"
+              },
+              {
+                "name": "control-codepoint",
+                "text": null
+              },
+              {
+                "name": "non-csi-u-text",
+                "text": null
+              },
+              {
+                "name": "non-csi-u-modify-other-keys",
+                "text": null
+              }
+            ]
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "release-repeat.json",
+      "family": "audit-1221-key-surface",
+      "bytes": 5793,
+      "sha256": "8d54e24a60decc01fc774848c8ff441e748cfafb6d3b4e34141be0ac7a8a3ec2",
+      "sourceEndpoints": [
+        "packages/tui/src/keys.ts:isKeyRelease,isKeyRepeat"
+      ],
+      "scenarios": [
+        {
+          "name": "key-release-and-repeat-raw-predicates",
+          "inputs": {
+            "cases": [
+              {
+                "name": "release-u",
+                "data": "\u001b[97;1:3u"
+              },
+              {
+                "name": "release-~",
+                "data": "\u001b[3;1:3~"
+              },
+              {
+                "name": "release-A",
+                "data": "\u001b[1;1:3A"
+              },
+              {
+                "name": "release-B",
+                "data": "\u001b[1;1:3B"
+              },
+              {
+                "name": "release-C",
+                "data": "\u001b[1;1:3C"
+              },
+              {
+                "name": "release-D",
+                "data": "\u001b[1;1:3D"
+              },
+              {
+                "name": "release-E",
+                "data": "\u001b[1;1:3E"
+              },
+              {
+                "name": "release-H",
+                "data": "\u001b[1;1:3H"
+              },
+              {
+                "name": "release-F",
+                "data": "\u001b[1;1:3F"
+              },
+              {
+                "name": "repeat-u",
+                "data": "\u001b[97;1:2u"
+              },
+              {
+                "name": "repeat-~",
+                "data": "\u001b[3;1:2~"
+              },
+              {
+                "name": "repeat-A",
+                "data": "\u001b[1;1:2A"
+              },
+              {
+                "name": "repeat-B",
+                "data": "\u001b[1;1:2B"
+              },
+              {
+                "name": "repeat-C",
+                "data": "\u001b[1;1:2C"
+              },
+              {
+                "name": "repeat-D",
+                "data": "\u001b[1;1:2D"
+              },
+              {
+                "name": "repeat-E",
+                "data": "\u001b[1;1:2E"
+              },
+              {
+                "name": "repeat-H",
+                "data": "\u001b[1;1:2H"
+              },
+              {
+                "name": "repeat-F",
+                "data": "\u001b[1;1:2F"
+              },
+              {
+                "name": "plain-letter",
+                "data": "a"
+              },
+              {
+                "name": "kitty-press",
+                "data": "\u001b[97u"
+              },
+              {
+                "name": "kitty-ctrl-press",
+                "data": "\u001b[97;5u"
+              },
+              {
+                "name": "explicit-press",
+                "data": "\u001b[97;1:1u"
+              },
+              {
+                "name": "paste-with-release-suffix",
+                "data": "\u001b[200~90:62:3F:A5\u001b[201~"
+              },
+              {
+                "name": "paste-with-repeat-suffix",
+                "data": "\u001b[200~:2F\u001b[201~"
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "name": "release-u",
+                "release": true,
+                "repeat": false
+              },
+              {
+                "name": "release-~",
+                "release": true,
+                "repeat": false
+              },
+              {
+                "name": "release-A",
+                "release": true,
+                "repeat": false
+              },
+              {
+                "name": "release-B",
+                "release": true,
+                "repeat": false
+              },
+              {
+                "name": "release-C",
+                "release": true,
+                "repeat": false
+              },
+              {
+                "name": "release-D",
+                "release": true,
+                "repeat": false
+              },
+              {
+                "name": "release-E",
+                "release": false,
+                "repeat": false
+              },
+              {
+                "name": "release-H",
+                "release": true,
+                "repeat": false
+              },
+              {
+                "name": "release-F",
+                "release": true,
+                "repeat": false
+              },
+              {
+                "name": "repeat-u",
+                "release": false,
+                "repeat": true
+              },
+              {
+                "name": "repeat-~",
+                "release": false,
+                "repeat": true
+              },
+              {
+                "name": "repeat-A",
+                "release": false,
+                "repeat": true
+              },
+              {
+                "name": "repeat-B",
+                "release": false,
+                "repeat": true
+              },
+              {
+                "name": "repeat-C",
+                "release": false,
+                "repeat": true
+              },
+              {
+                "name": "repeat-D",
+                "release": false,
+                "repeat": true
+              },
+              {
+                "name": "repeat-E",
+                "release": false,
+                "repeat": false
+              },
+              {
+                "name": "repeat-H",
+                "release": false,
+                "repeat": true
+              },
+              {
+                "name": "repeat-F",
+                "release": false,
+                "repeat": true
+              },
+              {
+                "name": "plain-letter",
+                "release": false,
+                "repeat": false
+              },
+              {
+                "name": "kitty-press",
+                "release": false,
+                "repeat": false
+              },
+              {
+                "name": "kitty-ctrl-press",
+                "release": false,
+                "repeat": false
+              },
+              {
+                "name": "explicit-press",
+                "release": false,
+                "repeat": false
+              },
+              {
+                "name": "paste-with-release-suffix",
+                "release": false,
+                "repeat": false
+              },
+              {
+                "name": "paste-with-repeat-suffix",
+                "release": false,
+                "repeat": false
+              }
+            ]
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}

@@ -801,7 +801,9 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # receipted 49 color rows whole-row: 405. #1219 (route batch B11)
         # receipted 84 select-list/settings-list rows whole-row: 489. #1220 (route batch B12)
         # receipted 104 layout/scroll/small-text rows whole-row: 593.
-        self.assertEqual(len(delivered), 593)
+        # #1221 (route batch B13 slice A) receipted 9 key identity/parse-match
+        # rows whole-row: 602.
+        self.assertEqual(len(delivered), 602)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)

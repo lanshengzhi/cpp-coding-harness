@@ -230,4 +230,43 @@ std::optional<std::string> printable_text(const KeyEvent& event) {
     return event.key;
 }
 
+bool is_key_release(std::string_view data) {
+    // pi `isKeyRelease`: paste content carries terminal bytes verbatim, so a
+    // release-shaped suffix inside a paste is data, not an event type.
+    if (data.find("\x1b[200~") != std::string_view::npos) return false;
+    constexpr std::array<std::string_view, 8> kReleaseSuffixes{
+            ":3u",
+            ":3~",
+            ":3A",
+            ":3B",
+            ":3C",
+            ":3D",
+            ":3H",
+            ":3F",
+    };
+    for (const auto suffix : kReleaseSuffixes) {
+        if (data.find(suffix) != std::string_view::npos) return true;
+    }
+    return false;
+}
+
+bool is_key_repeat(std::string_view data) {
+    // pi `isKeyRepeat`: the same paste exclusion and the repeat suffix matrix.
+    if (data.find("\x1b[200~") != std::string_view::npos) return false;
+    constexpr std::array<std::string_view, 8> kRepeatSuffixes{
+            ":2u",
+            ":2~",
+            ":2A",
+            ":2B",
+            ":2C",
+            ":2D",
+            ":2H",
+            ":2F",
+    };
+    for (const auto suffix : kRepeatSuffixes) {
+        if (data.find(suffix) != std::string_view::npos) return true;
+    }
+    return false;
+}
+
 } // namespace cch::tui

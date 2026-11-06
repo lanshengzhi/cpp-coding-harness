@@ -52,6 +52,7 @@ include_guard(GLOBAL)
         tests/tui/KeysTest.cpp
         tests/tui/KeysLegacyTest.cpp
 tests/tui/KeysKittyTextTest.cpp
+        tests/tui/KeysSurfaceEvidenceTest.cpp
         tests/tui/LatexTest.cpp
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp

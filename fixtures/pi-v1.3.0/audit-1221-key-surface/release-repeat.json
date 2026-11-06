@@ -1,0 +1,247 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-11-06T05:35:47.271Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/keys.ts:isKeyRelease,isKeyRepeat"
+  ],
+  "scenarios": [
+    {
+      "name": "key-release-and-repeat-raw-predicates",
+      "inputs": {
+        "cases": [
+          {
+            "name": "release-u",
+            "data": "\u001b[97;1:3u"
+          },
+          {
+            "name": "release-~",
+            "data": "\u001b[3;1:3~"
+          },
+          {
+            "name": "release-A",
+            "data": "\u001b[1;1:3A"
+          },
+          {
+            "name": "release-B",
+            "data": "\u001b[1;1:3B"
+          },
+          {
+            "name": "release-C",
+            "data": "\u001b[1;1:3C"
+          },
+          {
+            "name": "release-D",
+            "data": "\u001b[1;1:3D"
+          },
+          {
+            "name": "release-E",
+            "data": "\u001b[1;1:3E"
+          },
+          {
+            "name": "release-H",
+            "data": "\u001b[1;1:3H"
+          },
+          {
+            "name": "release-F",
+            "data": "\u001b[1;1:3F"
+          },
+          {
+            "name": "repeat-u",
+            "data": "\u001b[97;1:2u"
+          },
+          {
+            "name": "repeat-~",
+            "data": "\u001b[3;1:2~"
+          },
+          {
+            "name": "repeat-A",
+            "data": "\u001b[1;1:2A"
+          },
+          {
+            "name": "repeat-B",
+            "data": "\u001b[1;1:2B"
+          },
+          {
+            "name": "repeat-C",
+            "data": "\u001b[1;1:2C"
+          },
+          {
+            "name": "repeat-D",
+            "data": "\u001b[1;1:2D"
+          },
+          {
+            "name": "repeat-E",
+            "data": "\u001b[1;1:2E"
+          },
+          {
+            "name": "repeat-H",
+            "data": "\u001b[1;1:2H"
+          },
+          {
+            "name": "repeat-F",
+            "data": "\u001b[1;1:2F"
+          },
+          {
+            "name": "plain-letter",
+            "data": "a"
+          },
+          {
+            "name": "kitty-press",
+            "data": "\u001b[97u"
+          },
+          {
+            "name": "kitty-ctrl-press",
+            "data": "\u001b[97;5u"
+          },
+          {
+            "name": "explicit-press",
+            "data": "\u001b[97;1:1u"
+          },
+          {
+            "name": "paste-with-release-suffix",
+            "data": "\u001b[200~90:62:3F:A5\u001b[201~"
+          },
+          {
+            "name": "paste-with-repeat-suffix",
+            "data": "\u001b[200~:2F\u001b[201~"
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "name": "release-u",
+            "release": true,
+            "repeat": false
+          },
+          {
+            "name": "release-~",
+            "release": true,
+            "repeat": false
+          },
+          {
+            "name": "release-A",
+            "release": true,
+            "repeat": false
+          },
+          {
+            "name": "release-B",
+            "release": true,
+            "repeat": false
+          },
+          {
+            "name": "release-C",
+            "release": true,
+            "repeat": false
+          },
+          {
+            "name": "release-D",
+            "release": true,
+            "repeat": false
+          },
+          {
+            "name": "release-E",
+            "release": false,
+            "repeat": false
+          },
+          {
+            "name": "release-H",
+            "release": true,
+            "repeat": false
+          },
+          {
+            "name": "release-F",
+            "release": true,
+            "repeat": false
+          },
+          {
+            "name": "repeat-u",
+            "release": false,
+            "repeat": true
+          },
+          {
+            "name": "repeat-~",
+            "release": false,
+            "repeat": true
+          },
+          {
+            "name": "repeat-A",
+            "release": false,
+            "repeat": true
+          },
+          {
+            "name": "repeat-B",
+            "release": false,
+            "repeat": true
+          },
+          {
+            "name": "repeat-C",
+            "release": false,
+            "repeat": true
+          },
+          {
+            "name": "repeat-D",
+            "release": false,
+            "repeat": true
+          },
+          {
+            "name": "repeat-E",
+            "release": false,
+            "repeat": false
+          },
+          {
+            "name": "repeat-H",
+            "release": false,
+            "repeat": true
+          },
+          {
+            "name": "repeat-F",
+            "release": false,
+            "repeat": true
+          },
+          {
+            "name": "plain-letter",
+            "release": false,
+            "repeat": false
+          },
+          {
+            "name": "kitty-press",
+            "release": false,
+            "repeat": false
+          },
+          {
+            "name": "kitty-ctrl-press",
+            "release": false,
+            "repeat": false
+          },
+          {
+            "name": "explicit-press",
+            "release": false,
+            "repeat": false
+          },
+          {
+            "name": "paste-with-release-suffix",
+            "release": false,
+            "repeat": false
+          },
+          {
+            "name": "paste-with-repeat-suffix",
+            "release": false,
+            "repeat": false
+          }
+        ]
+      },
+      "normalizations": []
+    }
+  ]
+}
