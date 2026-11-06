@@ -233,6 +233,7 @@ TEST_CASE("copy strict JSON rejects the frozen nested non-finite value", "[chord
     auto* values = inner->at("inner").get_if<JsonValue::array_t>();
     REQUIRE(values != nullptr);
     REQUIRE(values->size() == 2);
+    REQUIRE(values->at(1).holds<std::string>());
     REQUIRE(values->at(1).get_string() == "NaN");
     values->at(1) = JsonValue{std::nan("")};
 
