@@ -30833,20 +30833,19 @@
    "consumer": "TuiMainScreen/TuiAltScreen/ProcessTerminal consumers",
    "boundary": "Terminal interface + ProcessTerminal",
    "implementation_ticket": null,
-   "scenario": "E02/E09/E12 terminal IO",
+   "scenario": "process-clear-screen",
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E02/E09/E12 terminal IO",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
+    "artifact": "fixtures/pi-v1.3.0/audit-1244-terminal-writes/terminal-writes.json",
+    "scenario": "process-clear-screen",
+    "result": "2026-11-06 row-specific re-audit: frozen pi-v1.3.0 clearScreen emits clear and home; this named capture replaces the historical terminal IO family for this row only.",
     "historicalBaseline": "pi-v1.0.4",
     "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
     "route": "member-absent-from-diff"
    },
    "gaps": [
-    "no v1.3.0 C++ comparison recorded",
-    "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
+    "no v1.3.0 delivery receipt recorded"
    ],
-   "notes": "Frozen source file changed since v1.0.4, but the diff does not name this member; historical implementation carried with the diff as comparison route.",
+   "notes": "2026-11-06 #1245: re-audited this member against the named pi-v1.3.0 process-clear-screen capture; other historical terminal IO obligations are unchanged.",
    "kind": "method/field",
    "export": "ProcessTerminal",
    "member": "clearScreen",
@@ -30869,7 +30868,7 @@
      "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
     ]
    },
-   "comparisonCase": "E02/E09/E12 terminal IO"
+   "comparisonCase": "process-clear-screen"
   },
   {
    "id": "ProcessTerminal.setTitle",

@@ -2,6 +2,7 @@
 #include <cch/tui/ProcessTerminal.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/Utils.hpp>
+#include <cch/tui/VirtualTerminal.hpp>
 
 #include "support/ImageEnvironmentGuard.hpp"
 #include "support/IoContextRunner.hpp"
@@ -1161,6 +1162,35 @@ TEST_CASE("Process Terminal clear screen emits the pi-exact clear and home bytes
     REQUIRE(terminal.clear_screen());
     CHECK(cch::tests::read_available(pty->master.get()) == scenario->at("expected").at("bytes").get_string());
     REQUIRE(terminal.stop());
+}
+
+TEST_CASE("Direct clear preserves scrollback while main-screen redraw clears it", "[tui][terminal][issue1245]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal process(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(process.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+    REQUIRE(process.clear_screen());
+    const auto clear_output = cch::tests::read_available(pty->master.get());
+    REQUIRE(process.stop());
+
+    cch::tui::VirtualTerminal terminal({.columns = 5, .rows = 3});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<MinimalShell>()));
+    REQUIRE(tui.start());
+    REQUIRE(terminal.write(clear_output));
+    CHECK(terminal.check_clear_screen_called());
+    CHECK_FALSE(terminal.check_clear_scrollback_called());
+    REQUIRE(tui.render());
+    (void)terminal.check_clear_screen_called();
+    (void)terminal.check_clear_scrollback_called();
+    REQUIRE(terminal.inject_resize({.columns = 10, .rows = 3}));
+    REQUIRE(tui.render());
+    CHECK(terminal.check_clear_screen_called());
+    CHECK(terminal.check_clear_scrollback_called());
+    REQUIRE(tui.stop());
 }
 
 TEST_CASE("Process Terminal re-emits active progress on the one-second keepalive", "[tui][terminal][issue378][spec]") {
