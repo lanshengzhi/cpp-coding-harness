@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -1100,6 +1100,12 @@
               "sha256": "515530e11714aee4a51e077f06d30a56f54a5cd2fca053f1bf0c6522ca52804e"
             }
           }
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -1226,7 +1232,9 @@
         "rows": [
           {
             "id": "cch_durable:image-processor",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1090/images.json",
@@ -1249,7 +1257,9 @@
           },
           {
             "id": "cch_durable:read-image",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1090/images.json",
@@ -1284,7 +1294,9 @@
           },
           {
             "id": "cch_durable:image-capability-absent",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1090/images.json",
@@ -1331,7 +1343,9 @@
           },
           {
             "id": "cch_durable:image-orientation-conversion",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1090/images.json",
@@ -2391,7 +2405,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -2498,7 +2512,9 @@
           },
           {
             "id": "cch_coding_agent:codemode-models-description-gate",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/application-catalog.json",
@@ -3381,6 +3397,12 @@
               "sha256": "f4ce504ea1f732938b890e6a5584ee68184c6bc82a0ca801014609e5a72c2fc6"
             }
           }
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -3487,7 +3509,9 @@
           },
           {
             "id": "cch_chord:context:without-abort-signal",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/context-cancellation.json",
@@ -3504,7 +3528,9 @@
           },
           {
             "id": "cch_chord:delta:batch-application",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/delta-revisions.json",
@@ -3538,7 +3564,9 @@
           },
           {
             "id": "cch_chord:delta:immutable-application",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/delta-revisions.json",
@@ -3555,7 +3583,9 @@
           },
           {
             "id": "cch_chord:delta:mutable-application",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1061/validation-order.json",
@@ -3589,7 +3619,9 @@
           },
           {
             "id": "cch_chord:delta:overlap",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/delta-revisions.json",
@@ -3606,7 +3638,9 @@
           },
           {
             "id": "cch_chord:delta:prepare-replace",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1061/prepare-replace.json",
@@ -3737,7 +3771,9 @@
           },
           {
             "id": "cch_chord:state:attached-hydration",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/replicated-state.json",
@@ -3825,7 +3861,9 @@
           },
           {
             "id": "cch_chord:state:dispose",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/replicated-state.json",
@@ -3860,7 +3898,9 @@
           },
           {
             "id": "cch_chord:state:listener-error",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/replicated-state.json",
@@ -4101,7 +4141,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4276,6 +4316,12 @@
         },
         "revalidation1229": {
           "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
@@ -4630,7 +4676,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -5587,6 +5633,12 @@
               "sha256": "ac08a496b6047b9cf0add587a0793dfa2ae0d7b0b87b493186d79e90b25626b3"
             }
           }
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -5687,7 +5739,9 @@
           },
           {
             "id": "cch_chord:Chord:draft",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/delta-revisions.json",
@@ -5802,7 +5856,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -5918,6 +5972,12 @@
         },
         "revalidation1229": {
           "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
@@ -6136,7 +6196,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -6310,6 +6370,12 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -6340,7 +6406,9 @@
         "rows": [
           {
             "id": "cch_chord:json:copy-json",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/json-output-support.json",
@@ -6369,7 +6437,9 @@
           },
           {
             "id": "cch_chord:json:strict-validation",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/json-output-support.json",
@@ -6392,7 +6462,9 @@
           },
           {
             "id": "cch_chord:json:json-value",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057-typed-json/chord-typed-json.json",
@@ -6409,7 +6481,9 @@
           },
           {
             "id": "cch_chord:Chord:json",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057-typed-json/chord-typed-json.json",
@@ -6516,7 +6590,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -7131,6 +7205,12 @@
               "sha256": "2d24b6f071f9ce36741ce17f7d3f28099aa63dd1154c400c677e02f6de540617"
             }
           }
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -7162,7 +7242,9 @@
         "rows": [
           {
             "id": "cch_chord:state:delivery-order",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1057/replicated-state.json",
@@ -7328,7 +7410,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -7913,6 +7995,12 @@
               "sha256": "9ae8d6cdb92a71d0fc0365136eddbd5ea8e12b980fcc66f7cd78855273a605cd"
             }
           }
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -8013,7 +8101,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -8111,6 +8199,12 @@
         },
         "revalidation1229": {
           "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
@@ -8389,7 +8483,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -9064,6 +9158,12 @@
               "sha256": "a206c9ba48b41fc35ef70d44b2f4e552cf101c99c7efcc3fe5733eb4b654f7cb"
             }
           }
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -9276,7 +9376,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -9392,7 +9492,9 @@
           },
           {
             "id": "cch_codemode:codemode-declaration-identifier",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/declarations.json",
@@ -9514,7 +9616,9 @@
           },
           {
             "id": "cch_codemode:codemode-script-globals",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/script-execution.json",
@@ -9543,7 +9647,9 @@
           },
           {
             "id": "cch_codemode:codemode-script-store-load",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/script-execution.json",
@@ -9566,7 +9672,9 @@
           },
           {
             "id": "cch_codemode:codemode-script-output-text-image-console",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/script-execution.json",
@@ -9635,7 +9743,9 @@
           },
           {
             "id": "cch_codemode:codemode-script-error-taxonomy",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/script-execution.json",
@@ -9721,7 +9831,9 @@
           },
           {
             "id": "cch_codemode:codemode-script-abort-reason",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/script-execution.json",
@@ -9750,7 +9862,9 @@
           },
           {
             "id": "cch_codemode:codemode-deterministic-start",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/deterministic-replay.json",
@@ -9779,7 +9893,9 @@
           },
           {
             "id": "cch_codemode:codemode-deterministic-clock-seed",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/deterministic-replay.json",
@@ -9802,7 +9918,9 @@
           },
           {
             "id": "cch_codemode:codemode-deterministic-seq",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/deterministic-replay.json",
@@ -9831,7 +9949,9 @@
           },
           {
             "id": "cch_codemode:codemode-deterministic-during",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/deterministic-replay.json",
@@ -9871,7 +9991,9 @@
           },
           {
             "id": "cch_codemode:codemode-deterministic-validation",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/deterministic-replay.json",
@@ -9934,7 +10056,9 @@
           },
           {
             "id": "cch_codemode:codemode-inline-success",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/inline-interrupt.json",
@@ -10003,7 +10127,9 @@
           },
           {
             "id": "cch_codemode:codemode-remote-exchange",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/remote-exchange.json",
@@ -10043,7 +10169,9 @@
           },
           {
             "id": "cch_codemode:codemode-remote-caps",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/remote-exchange.json",
@@ -10077,7 +10205,9 @@
           },
           {
             "id": "cch_codemode:codemode-remote-failures",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/remote-exchange.json",
@@ -10128,7 +10258,9 @@
           },
           {
             "id": "cch_codemode:codemode-worker-admission",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/worker-lifetime.json",
@@ -10747,6 +10879,12 @@
               "sha256": "92d6a27f8c413c68f50e204c2aaaafa363782407526993552bf427d743e64314"
             }
           }
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -10823,7 +10961,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -10863,7 +11001,9 @@
         "rows": [
           {
             "id": "cch_agent_core:InputQueue:peek-clear",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1243 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1047/queue-admission.json",
@@ -10880,7 +11020,9 @@
           },
           {
             "id": "cch_agent_core:Agent:reset",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1243 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1047/lifecycle.json",
@@ -10897,7 +11039,9 @@
           },
           {
             "id": "cch_agent_core:Agent:prompt-busy",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1243 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1047/lifecycle.json",
@@ -11420,6 +11564,12 @@
               "sha256": "697ef1b10bb397c34a3c7567409a7d70adafda9ad4cc3ee332c85f9e06a25cc5"
             }
           }
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -11492,7 +11642,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+            "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -11628,7 +11778,9 @@
               "testSource": "tests/coding_agent/tui/ThemeTest.cpp",
               "reason": "No separate discriminating case exists: the comparison enumerates the whole inventory (56 names, 51 required, the complete optional fallback set), so an inventory that omits, duplicates or miscounts a token fails the same case. Recorded as a weaker discriminator than a dedicated case."
             },
-            "remainingBoundary": []
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1243 owns an independent discriminating case."
+            ]
           }
         ],
         "routingSha256": "09fd1c8767933bd90fc1b9514c9ccb99647ff639755deca9e717adb2850b7e64",
@@ -12144,6 +12296,12 @@
               "sha256": "c2c749a067881cc9ae2bf2051a66e829cd7536ac90191a1717fde0e9435af979"
             }
           }
+        },
+        "revalidation1239": {
+          "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ]
         }
       },
       {
@@ -12207,7 +12365,9 @@
         "rows": [
           {
             "id": "cch_codemode:codemode-execute-outcome",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/script-execution.json",
@@ -12329,7 +12489,9 @@
         "rows": [
           {
             "id": "cch_codemode:codemode-portable-entry",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1053/source-options.json",
@@ -12389,7 +12551,9 @@
         "rows": [
           {
             "id": "cch_durable:Storage:jsonl:sidecar",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1054/jsonl-store.json",
@@ -12412,7 +12576,9 @@
           },
           {
             "id": "cch_durable:Storage:jsonl:ordering",
-            "remainingBoundary": [],
+            "remainingBoundary": [
+              "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+            ],
             "comparisons": [
               {
                 "artifact": "audit-1054/jsonl-store.json",
@@ -30275,35 +30441,35 @@
     },
     "byOwnerImplementation": {
       "cch_agent_core": {
-        "implemented": 16,
-        "missing": 4,
-        "partial": 9
+        "implemented": 14,
+        "missing": 5,
+        "partial": 10
       },
       "cch_ai": {
         "missing": 2,
         "not-applicable": 2
       },
       "cch_chord": {
-        "implemented": 39,
-        "missing": 20,
+        "implemented": 30,
+        "missing": 25,
         "not-applicable": 5,
-        "partial": 1
+        "partial": 5
       },
       "cch_codemode": {
-        "implemented": 47,
-        "missing": 1,
+        "implemented": 45,
+        "missing": 2,
         "not-applicable": 2,
-        "partial": 1
+        "partial": 2
       },
       "cch_coding_agent": {
-        "implemented": 90,
+        "implemented": 88,
         "missing": 16,
         "not-applicable": 6,
-        "partial": 47
+        "partial": 49
       },
       "cch_durable": {
-        "implemented": 8,
-        "missing": 119,
+        "implemented": 6,
+        "missing": 121,
         "not-applicable": 2,
         "partial": 83
       },
@@ -30324,21 +30490,21 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1107,
-      "missing": 176,
+      "implemented": 1090,
+      "missing": 185,
       "not-applicable": 18,
-      "partial": 163
+      "partial": 171
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 529,
-      "upstream-captured": 298,
-      "verified": 609
+      "unverified": 537,
+      "upstream-captured": 334,
+      "verified": 565
     },
     "evidenceRoute": {
-      "captured": 907,
+      "captured": 899,
       "artifact-only": 0,
-      "related-captured": 224,
+      "related-captured": 232,
       "declared-comparison": 29,
       "cpp-regression-only": 10,
       "unobserved": 29,
@@ -30348,7 +30514,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 529,
+    "unobservedSupported": 537,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -30381,7 +30547,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 529,
+    "missingObservationRows": 537,
     "scenarioCoverage": {
       "scenarios": 1007,
       "scenarioNamed": 590,
@@ -37077,8 +37243,8 @@
         "Agent.prompt"
       ],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_agent_core",
       "consumer": "src/coding_agent/AgentSessionExecution.cpp AgentSession::prompt",
       "consumerOwners": [
@@ -37086,7 +37252,7 @@
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1176",
+      "implementation_ticket": null,
       "scenario": "a second prompt while a run is active is rejected without replacing the run",
       "comparisonScenarios": [
         "a second prompt while a run is active is rejected without replacing the run"
@@ -37098,12 +37264,12 @@
         "capturedScenarios": [
           "a second prompt while a run is active is rejected without replacing the run"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1176-agent-reconciliation.md"
+        "result": "upstream-captured"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1176; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1176-agent-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "C++ rejects a concurrent prompt/continue but the diagnostic text is \"agent is busy (prompt already in flight)\" rather than pi's exact message. The frozen run remains the active one. Consumer chain: AgentSession::prompt",
       "lane": "1047",
       "frozenSymbolsSource": "1047 piSymbols",
       "appliedCorrections": [],
@@ -37116,26 +37282,7 @@
           "verification": "upstream-captured",
           "owner": "cch_agent_core"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "a second prompt while a run is active is rejected without replacing the run"
-          ],
-          "result": "upstream-captured"
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "C++ rejects a concurrent prompt/continue but the diagnostic text is \"agent is busy (prompt already in flight)\" rather than pi's exact message. The frozen run remains the active one. Consumer chain: AgentSession::prompt"
-      },
-      "delivery": "1176-agent-comparisons"
+      ]
     },
     {
       "id": "cch_agent_core:Agent:provider-error",
@@ -37198,13 +37345,13 @@
         "Agent.reset"
       ],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "upstream-captured",
       "owner": "cch_agent_core",
       "consumer": "None currently: no C++ application caller invokes Agent::reset; proposed public caller: cch_agent_core Agent API.",
       "consumerOwners": [],
       "boundary": null,
-      "implementation_ticket": "#1176",
+      "implementation_ticket": null,
       "scenario": "reset restores the prompt baseline and clears both queues",
       "comparisonScenarios": [
         "reset restores the prompt baseline and clears both queues"
@@ -37216,12 +37363,12 @@
         "capturedScenarios": [
           "reset restores the prompt baseline and clears both queues"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1176-agent-reconciliation.md"
+        "result": "upstream-captured"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1176; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1176-agent-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "No Agent::reset in C++ and no equivalent system-prompt/message re-seed. Frozen reset re-applies the initial system prompt/tools/model/thinking and clears both queues plus transient streaming/error state.",
       "lane": "1047",
       "frozenSymbolsSource": "1047 piSymbols",
       "appliedCorrections": [],
@@ -37234,26 +37381,7 @@
           "verification": "upstream-captured",
           "owner": "cch_agent_core"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "missing",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "reset restores the prompt baseline and clears both queues"
-          ],
-          "result": "upstream-captured"
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "No Agent::reset in C++ and no equivalent system-prompt/message re-seed. Frozen reset re-applies the initial system prompt/tools/model/thinking and clears both queues plus transient streaming/error state."
-      },
-      "delivery": "1176-agent-comparisons"
+      ]
     },
     {
       "id": "cch_agent_core:Agent:stream-injection",
@@ -37478,14 +37606,14 @@
       ],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_agent_core",
       "consumer": "Current consumer: cch_coding_agent::AgentSession clear_steering_queue/clear_follow_up_queue/clear_input_queues (AgentSessionInteraction.cpp); peek_* has no application caller; proposed public caller: cch_agent_core Agent queue API.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1176",
+      "implementation_ticket": null,
       "scenario": "peek prefers steering and clearAllQueues removes both queues",
       "comparisonScenarios": [
         "peek prefers steering and clearAllQueues removes both queues"
@@ -37497,12 +37625,12 @@
         "capturedScenarios": [
           "peek prefers steering and clearAllQueues removes both queues"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1176-agent-reconciliation.md"
+        "result": "upstream-captured"
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1176; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1176-agent-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Frozen peek returns the oldest steering message when present and otherwise the oldest follow-up; clearAllQueues empties both. C++ has the same methods; no capacity interaction remains after the admission fix.",
       "lane": "1047",
       "frozenSymbolsSource": "1047 piSymbols",
       "appliedCorrections": [],
@@ -37515,26 +37643,7 @@
           "verification": "upstream-captured",
           "owner": "cch_agent_core"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "peek prefers steering and clearAllQueues removes both queues"
-          ],
-          "result": "upstream-captured"
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Frozen peek returns the oldest steering message when present and otherwise the oldest follow-up; clearAllQueues empties both. C++ has the same methods; no capacity interaction remains after the admission fix."
-      },
-      "delivery": "1176-agent-comparisons"
+      ]
     },
     {
       "id": "cch_agent_core:InputQueue:steering-all",
@@ -38563,32 +38672,36 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "unverified",
       "owner": "cch_chord",
       "consumer": "cch_durable document transactions (planned)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1185",
+      "implementation_ticket": "#1058-draft",
       "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
       "comparisonScenarios": [
         "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
           "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md"
+        "result": "An escaped draft write after abort throws 'Cannot use a settled overlay'; adopting the prepared change throws 'Prepared change has been aborted'; the committed value and revision stay unchanged."
       },
-      "missingObservation": null,
-      "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1185; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1185-chord-delta-ingestion.md",
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "gaps": [
+        "No C++ Draft/tracker exists; owned by #1057.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -38601,30 +38714,7 @@
           "verification": "unverified",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1058-draft",
-        "implementation": "missing",
-        "verification": "unverified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged"
-          ],
-          "result": "An escaped draft write after abort throws 'Cannot use a settled overlay'; adopting the prepared change throws 'Prepared change has been aborted'; the committed value and revision stay unchanged."
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [
-          "No C++ Draft/tracker exists; owned by #1057.",
-          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
-          "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
-        ],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": ""
-      },
-      "delivery": "1185-chord-delta-ingestion"
+      ]
     },
     {
       "id": "cch_chord:Chord:json",
@@ -38635,32 +38725,36 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "unverified",
       "owner": "cch_chord",
       "consumer": "cch_durable records and documents (planned)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1186",
+      "implementation_ticket": "#1058-draft",
       "scenario": "copyJson copies strict JSON without retaining aliases",
       "comparisonScenarios": [
         "copyJson copies strict JSON without retaining aliases"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
           "copyJson copies strict JSON without retaining aliases"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
+        "result": "The copied tree is detached: mutating the copy leaves the shared source and the sibling copy unchanged."
       },
-      "missingObservation": null,
-      "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "gaps": [
+        "Current Pike JSON support is pi-neutral support code; the durable-required copy/ownership contract is audited with #1057.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -38673,30 +38767,7 @@
           "verification": "unverified",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1058-draft",
-        "implementation": "missing",
-        "verification": "unverified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "copyJson copies strict JSON without retaining aliases"
-          ],
-          "result": "The copied tree is detached: mutating the copy leaves the shared source and the sibling copy unchanged."
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [
-          "Current Pike JSON support is pi-neutral support code; the durable-required copy/ownership contract is audited with #1057.",
-          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
-          "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
-        ],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": ""
-      },
-      "delivery": "1186-chord-typed-json"
+      ]
     },
     {
       "id": "cch_chord:Chord:state",
@@ -39472,15 +39543,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.close,SessionImpl.#runCommit; packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/harness/view.ts:235; packages/durable/src/harness/task-graph.ts:201",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1178",
+      "implementation_ticket": null,
       "scenario": "withoutAbortSignal removes cancellation while preserving typed values",
       "comparisonScenarios": [
         "withoutAbortSignal removes cancellation while preserving typed values"
@@ -39492,12 +39563,12 @@
         "capturedScenarios": [
           "withoutAbortSignal removes cancellation while preserving typed values"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
+        "result": "Masked context exposes no signal but retains value 'cleanup'."
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Provide a cleanup overlay that suppresses cancellation propagation only for the operation it wraps; keep values intact.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -39510,26 +39581,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "withoutAbortSignal removes cancellation while preserving typed values"
-          ],
-          "result": "Masked context exposes no signal but retains value 'cleanup'."
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Provide a cleanup overlay that suppresses cancellation propagation only for the operation it wraps; keep values intact."
-      },
-      "delivery": "1178-chord-comparisons"
+      ]
     },
     {
       "id": "cch_chord:delta:batch-application",
@@ -39539,15 +39591,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/memory.ts:applyImmutableBatches; packages/durable/src/storage/sqlite/storage.ts:apply",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1178",
+      "implementation_ticket": null,
       "scenario": "batched immutable application applies ordered batches and returns only the final revision",
       "comparisonScenarios": [
         "batched immutable application applies ordered batches and returns only the final revision"
@@ -39559,12 +39611,12 @@
         "capturedScenarios": [
           "batched immutable application applies ordered batches and returns only the final revision"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
+        "result": "Two batches yield {items:['b'],value:2}; the input {items:['a'],value:0} is unchanged; root creation works from undefined."
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Replay each stored delta batch in revision order; do not require a full snapshot between batches.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -39577,26 +39629,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "missing",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "batched immutable application applies ordered batches and returns only the final revision"
-          ],
-          "result": "Two batches yield {items:['b'],value:2}; the input {items:['a'],value:0} is unchanged; root creation works from undefined."
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Replay each stored delta batch in revision order; do not require a full snapshot between batches."
-      },
-      "delivery": "1178-chord-comparisons"
+      ]
     },
     {
       "id": "cch_chord:delta:draft-abort",
@@ -39673,15 +39706,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/task-graph.ts:200; packages/durable/src/harness/view.ts:237; packages/durable/src/storage/memory.ts:applyImmutableBatches",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1178",
+      "implementation_ticket": null,
       "scenario": "immutable application reproduces each revision without mutating the base and shares untouched subtrees",
       "comparisonScenarios": [
         "immutable application reproduces each revision without mutating the base and shares untouched subtrees"
@@ -39693,12 +39726,12 @@
         "capturedScenarios": [
           "immutable application reproduces each revision without mutating the base and shares untouched subtrees"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
+        "result": "Base unchanged; root and touched containers new; `retained` and nested `retained` subtrees shared across revisions."
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Implement value-identity-preserving copy-on-write; never mutate a committed value or its shared subtrees.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -39711,26 +39744,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "missing",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "immutable application reproduces each revision without mutating the base and shares untouched subtrees"
-          ],
-          "result": "Base unchanged; root and touched containers new; `retained` and nested `retained` subtrees shared across revisions."
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Implement value-identity-preserving copy-on-write; never mutate a committed value or its shared subtrees."
-      },
-      "delivery": "1178-chord-comparisons"
+      ]
     },
     {
       "id": "cch_chord:delta:mutable-application",
@@ -39741,14 +39755,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/sqlite/storage.ts:654 (revision materialization)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": "src/chord/Delta.cpp:apply; src/chord/include/cch/chord/Delta.hpp:apply",
-      "implementation_ticket": "#1178",
+      "implementation_ticket": "#1061",
       "scenario": "a later empty path keeps the preceding mutable write and reports the empty path",
       "comparisonScenarios": [
         "a later empty path keeps the preceding mutable write and reports the empty path"
@@ -39760,12 +39774,12 @@
         "capturedScenarios": [
           "a later empty path keeps the preceding mutable write and reports the empty path"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
+        "result": "Mutable operations execute sequentially and preserve prior writes when a later operation fails; a root replacement remains local until the batch succeeds."
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API. Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -39778,26 +39792,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1061",
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1061/validation-order.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "a later empty path keeps the preceding mutable write and reports the empty path"
-          ],
-          "result": "Mutable operations execute sequentially and preserve prior writes when a later operation fails; a root replacement remains local until the batch succeeds."
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API. Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision."
-      },
-      "delivery": "1178-chord-comparisons"
+      ]
     },
     {
       "id": "cch_chord:delta:op-validation",
@@ -39941,15 +39936,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/tool.ts:457",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1178",
+      "implementation_ticket": null,
       "scenario": "overlap returns the bounded common run used to merge tool output",
       "comparisonScenarios": [
         "overlap returns the bounded common run used to merge tool output"
@@ -39961,12 +39956,12 @@
         "capturedScenarios": [
           "overlap returns the bounded common run used to merge tool output"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
+        "result": "overlap('abcdefgh','defghxyz',65536)=5; scan 0 and empty input return 0."
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Retain a bounded overlap helper for tool progress diffing; do not use it to infer document revision identity.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -39979,26 +39974,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "missing",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "overlap returns the bounded common run used to merge tool output"
-          ],
-          "result": "overlap('abcdefgh','defghxyz',65536)=5; scan 0 and empty input return 0."
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Retain a bounded overlap helper for tool progress diffing; do not use it to infer document revision identity."
-      },
-      "delivery": "1178-chord-comparisons"
+      ]
     },
     {
       "id": "cch_chord:delta:path-validation",
@@ -40076,14 +40052,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:planDocument",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": "src/chord/include/cch/chord/Delta.hpp:Tracker::prepare_replace,Prepared::base,Prepared::value,Tracker::adopt",
-      "implementation_ticket": "#1178",
+      "implementation_ticket": "#1061",
       "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
       "comparisonScenarios": [
         "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
@@ -40095,16 +40071,16 @@
         "artifact": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
-          "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
-          "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
-          "an aborted whole-root preparation cannot be adopted"
+          "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
+        "result": "The captured base stays at revision 0 while the owned replacement becomes revision 1; a same-base competitor reports `Prepared change is stale`, and reuse reports `Prepared change has already been used`. The equal-root capture records an empty batch and still advances revision."
       },
       "missingObservation": null,
-      "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+      "gaps": [
+        "C++ comparison has not been run; upstream capture alone does not establish implementation parity."
+      ],
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -40117,28 +40093,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1061",
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
-          ],
-          "result": "The captured base stays at revision 0 while the owned replacement becomes revision 1; a same-base competitor reports `Prepared change is stale`, and reuse reports `Prepared change has already been used`. The equal-root capture records an empty batch and still advances revision."
-        },
-        "missingObservation": null,
-        "gaps": [
-          "C++ comparison has not been run; upstream capture alone does not establish implementation parity."
-        ],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta."
-      },
-      "delivery": "1178-chord-comparisons"
+      ]
     },
     {
       "id": "cch_chord:delta:root-replacement",
@@ -41296,15 +41251,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/harness/usage.ts:37; packages/durable/src/harness/inbox.ts; packages/durable/src/documents.ts:materializeDocument",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1186",
+      "implementation_ticket": null,
       "scenario": "copyJson returns a detached strict-JSON value and omits undefined object properties",
       "comparisonScenarios": [
         "copyJson returns a detached strict-JSON value and omits undefined object properties",
@@ -41318,12 +41273,14 @@
         "capturedScenarios": [
           "copyJson returns a detached strict-JSON value and omits undefined object properties"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
+        "result": "Nested copy is detached; default undefined rejects with 'Value contains a non-JSON undefined; expected strict JSON'; with omit, undefined properties disappear."
       },
       "missingObservation": null,
-      "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
+      "gaps": [
+        "C++ `JsonValue` cannot represent undefined; object key order is sorted by `std::map`, unlike JS insertion order."
+      ],
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Use value copying for detachment, but add a strict validator and an explicit omit-undefined policy; C++ `JsonValue` has no undefined.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41336,28 +41293,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "copyJson returns a detached strict-JSON value and omits undefined object properties"
-          ],
-          "result": "Nested copy is detached; default undefined rejects with 'Value contains a non-JSON undefined; expected strict JSON'; with omit, undefined properties disappear."
-        },
-        "missingObservation": null,
-        "gaps": [
-          "C++ `JsonValue` cannot represent undefined; object key order is sorted by `std::map`, unlike JS insertion order."
-        ],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Use value copying for detachment, but add a strict validator and an explicit omit-undefined policy; C++ `JsonValue` has no undefined."
-      },
-      "delivery": "1186-chord-typed-json"
+      ]
     },
     {
       "id": "cch_chord:json:json-representation",
@@ -41413,32 +41349,34 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "unverified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:Draft<JsonObject>; packages/durable/src/harness/live.ts:JsonValue",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1186",
+      "implementation_ticket": null,
       "scenario": "isJsonValue checks strict JSON without normalizing it",
       "comparisonScenarios": [
         "isJsonValue checks strict JSON without normalizing it"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "isJsonValue checks strict JSON without normalizing it"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
+        "result": null
       },
-      "missingObservation": null,
-      "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "gaps": [
+        "No captured scenario directly exercises a C++-comparable JsonValue model; the copyJson scenarios cover the JS value constraints."
+      ],
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Reuse `support::JsonValue` as the data carrier but keep strictness, finite-number and object-shape policy in the durable/chord layer.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41451,28 +41389,7 @@
           "verification": "unverified",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "unverified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057-typed-json/chord-typed-json.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "isJsonValue checks strict JSON without normalizing it"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [
-          "No captured scenario directly exercises a C++-comparable JsonValue model; the copyJson scenarios cover the JS value constraints."
-        ],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Reuse `support::JsonValue` as the data carrier but keep strictness, finite-number and object-shape policy in the durable/chord layer."
-      },
-      "delivery": "1186-chord-typed-json"
+      ]
     },
     {
       "id": "cch_chord:json:strict-validation",
@@ -41482,15 +41399,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/documents.ts:materializeDocument; packages/durable/src/session/transaction.ts:prepared.value",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1186",
+      "implementation_ticket": null,
       "scenario": "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
       "comparisonScenarios": [
         "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
@@ -41503,12 +41420,14 @@
         "capturedScenarios": [
           "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
+        "result": "Distinct TypeError messages for function, undefined, non-finite, class instance and sparse array."
       },
       "missingObservation": null,
-      "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
+      "gaps": [
+        "The current C++ parser is Glaze-compatible and tolerates trailing content; it is not a strict JSON-value validator."
+      ],
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Add a strict validation pass at durable boundaries; do not rely on the JSON text parser alone.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41521,28 +41440,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays"
-          ],
-          "result": "Distinct TypeError messages for function, undefined, non-finite, class instance and sparse array."
-        },
-        "missingObservation": null,
-        "gaps": [
-          "The current C++ parser is Glaze-compatible and tolerates trailing content; it is not a strict JSON-value validator."
-        ],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Add a strict validation pass at durable boundaries; do not rely on the JSON text parser alone."
-      },
-      "delivery": "1186-chord-typed-json"
+      ]
     },
     {
       "id": "cch_chord:output:bound-output",
@@ -41942,14 +41840,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/session/observation.ts:CommittedStateSource",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1178",
+      "implementation_ticket": "#1062",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "comparisonScenarios": [
         "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
@@ -41966,12 +41864,12 @@
         "capturedScenarios": [
           "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
+        "result": "Deliveries are hydrate/0/{value:1}, update/1/{value:2}; no error; dispose called once."
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: The C++ source attachment now hydrates from a snapshot cursor and publishes exact ordered frames; durable document history and retention remain in #1063.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -41984,26 +41882,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1062",
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
-          ],
-          "result": "Deliveries are hydrate/0/{value:1}, update/1/{value:2}; no error; dispose called once."
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: The C++ source attachment now hydrates from a snapshot cursor and publishes exact ordered frames; durable document history and retention remain in #1063."
-      },
-      "delivery": "1178-chord-comparisons"
+      ]
     },
     {
       "id": "cch_chord:state:cursor-gap",
@@ -42085,14 +41964,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/harness/view.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1188",
+      "implementation_ticket": "#1062",
       "scenario": "a watch acquired before start buffers frames and serializes callbacks",
       "comparisonScenarios": [
         "a watch acquired before start buffers frames and serializes callbacks",
@@ -42109,12 +41988,12 @@
         "capturedScenarios": [
           "a watch acquired before start buffers frames and serializes callbacks"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1188-chord-observer-serialization.md"
+        "result": "The two-frame watch delivery has one active callback at a time and values [1,2]."
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1188; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1188-chord-observer-serialization.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Give every observer an independent serialized queue; never invoke an async listener reentrantly.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -42127,26 +42006,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1062",
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "a watch acquired before start buffers frames and serializes callbacks"
-          ],
-          "result": "The two-frame watch delivery has one active callback at a time and values [1,2]."
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Give every observer an independent serialized queue; never invoke an async listener reentrantly."
-      },
-      "delivery": "1188-chord-observer-serialization"
+      ]
     },
     {
       "id": "cch_chord:state:dispose",
@@ -42157,14 +42017,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/view.ts",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1178",
+      "implementation_ticket": "#1062",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "comparisonScenarios": [
         "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
@@ -42179,12 +42039,12 @@
         "capturedScenarios": [
           "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
+        "result": "disposeCalls is 1 after hydration and an explicit dispose."
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Make observer disposal idempotent and release source resources exactly once; do not clear the last good value.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -42197,26 +42057,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1062",
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
-          ],
-          "result": "disposeCalls is 1 after hydration and an explicit dispose."
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Make observer disposal idempotent and release source resources exactly once; do not clear the last good value."
-      },
-      "delivery": "1178-chord-comparisons"
+      ]
     },
     {
       "id": "cch_chord:state:listener-error",
@@ -42227,14 +42068,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/task-graph.ts:replicatedState(observer,{onError})",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1178",
+      "implementation_ticket": "#1062",
       "scenario": "a failing state listener is reported through onError without stopping another subscription",
       "comparisonScenarios": [
         "a failing state listener is reported through onError without stopping another subscription",
@@ -42249,12 +42090,12 @@
         "capturedScenarios": [
           "a failing state listener is reported through onError without stopping another subscription"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1178-chord-reconciliation.md"
+        "result": "Two errors 'listener failed' (hydrate and update); the other subscriber receives hydrate 0 and update 1."
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1178; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1178-chord-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Catch per-subscriber failures, report them without rethrowing into the source, and keep independent delivery queues.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -42267,26 +42108,7 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1062",
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "a failing state listener is reported through onError without stopping another subscription"
-          ],
-          "result": "Two errors 'listener failed' (hydrate and update); the other subscriber receives hydrate 0 and update 1."
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Catch per-subscriber failures, report them without rethrowing into the source, and keep independent delivery queues."
-      },
-      "delivery": "1178-chord-comparisons"
+      ]
     },
     {
       "id": "cch_chord:state:pending-bound",
@@ -42416,14 +42238,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Codemode tool descriptors, `tools.*` bindings, discovery results, catalog headings and declaration rendering.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "tool identifiers replace invalid characters and preserve MCP names",
       "comparisonScenarios": [
         "tool identifiers replace invalid characters and preserve MCP names"
@@ -42431,16 +42253,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/declarations.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "tool identifiers replace invalid characters and preserve MCP names"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Add the captured identifier table to a focused unit test; keep the routing test for the two-name binding.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -42453,26 +42275,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/declarations.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "tool identifiers replace invalid characters and preserve MCP names"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Add the captured identifier table to a focused unit test; keep the routing test for the two-name binding."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-declaration-input-budget",
@@ -42551,14 +42354,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Replay, tests and durable execution.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef",
       "comparisonScenarios": [
         "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef",
@@ -42567,17 +42370,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef",
-          "a changed seed is a replay mismatch and changes randomness without changing the start time"
+          "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Implement the deterministic VM controls as part of the start seam; the UTC host offset is not sufficient and must not be mistaken for replay support.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -42590,26 +42392,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Implement the deterministic VM controls as part of the start seam; the UTC host offset is not sufficient and must not be mistaken for replay support."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-deterministic-during",
@@ -42621,14 +42404,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Replay/debug consumers and the deterministic result contract.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "during reports the result the VM was processing when the script ended",
       "comparisonScenarios": [
         "during reports the result the VM was processing when the script ended",
@@ -42637,17 +42420,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "during reports the result the VM was processing when the script ended",
-          "execute() is not deterministic while start() is"
+          "during reports the result the VM was processing when the script ended"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Track applied seq and issued calls in the deterministic run; expose `during` only for start runs.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -42660,26 +42442,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "during reports the result the VM was processing when the script ended"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Track applied seq and issued calls in the deterministic run; expose `during` only for start runs."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-deterministic-fingerprint",
@@ -42829,14 +42592,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Replay transport, durable result queues and tests.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "results are applied in seq order even when delivered in reverse order",
       "comparisonScenarios": [
         "results are applied in seq order even when delivered in reverse order",
@@ -42846,18 +42609,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "results are applied in seq order even when delivered in reverse order",
-          "deliver rejects a wrong call, a reused result number and a non-finite clock without settling the run",
-          "a nonserializable answer leaves the call waiting and a later valid answer settles it"
+          "results are applied in seq order even when delivered in reverse order"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Build this on the start seam with explicit `PendingCall`/`appliedSeq` state; test the captured rejection messages and out-of-order case.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -42870,26 +42631,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "results are applied in seq order even when delivered in reverse order"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Build this on the start seam with explicit `PendingCall`/`appliedSeq` state; test the captured rejection messages and out-of-order case."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-deterministic-start",
@@ -42901,14 +42643,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Replay consumers, durable sessions, deterministic tests and the public codemode library surface.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "the same script, start time, seed and answers make the same calls and output",
       "comparisonScenarios": [
         "the same script, start time, seed and answers make the same calls and output",
@@ -42918,18 +42660,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "the same script, start time, seed and answers make the same calls and output",
-          "results are applied in seq order even when delivered in reverse order",
-          "a run-supplied jsName overrides the derived script name"
+          "the same script, start time, seed and answers make the same calls and output"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Add the deterministic execution state machine as a separate library seam; do not try to emulate it by blocking `run`. Port the captured scenario family before application use.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -42942,26 +42682,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the same script, start time, seed and answers make the same calls and output"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Add the deterministic execution state machine as a separate library seam; do not try to emulate it by blocking `run`. Port the captured scenario family before application use."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-deterministic-validation",
@@ -42972,14 +42693,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Replay callers and tests.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "start rejects invalid start times, seeds and duplicate script names",
       "comparisonScenarios": [
         "start rejects invalid start times, seeds and duplicate script names",
@@ -42989,18 +42710,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "start rejects invalid start times, seeds and duplicate script names",
-          "a changed seed is a replay mismatch and changes randomness without changing the start time",
-          "abort in a deterministic run is an uncatchable aborted error and finished becomes true"
+          "start rejects invalid start times, seeds and duplicate script names"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Implement validation in the start seam and reuse the captured messages verbatim; keep `execute` seedless.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43013,26 +42732,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "start rejects invalid start times, seeds and duplicate script names"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Implement validation in the start seam and reuse the captured messages verbatim; keep `execute` seedless."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-deterministic-vs-execute",
@@ -43112,15 +42812,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "unverified",
       "owner": "cch_codemode",
       "consumer": "Application `executeCodemode`, direct callers and every TUI result consumer.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1192",
+      "implementation_ticket": null,
       "scenario": "a script returns a JSON value after top-level await and collects output in order",
       "comparisonScenarios": [
         "a script returns a JSON value after top-level await and collects output in order",
@@ -43128,20 +42828,18 @@
         "the public tool table can be registered, listed and unregistered; close rejects later runs"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "a script returns a JSON value after top-level await and collects output in order",
-          "a script failure keeps prior output and reports the script error with its line",
-          "the public tool table can be registered, listed and unregistered; close rejects later runs"
+          "a script returns a JSON value after top-level await and collects output in order"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1192-codemode-alignment.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1192; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1192-codemode-alignment.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Extend the public result struct with call/store/during fields as those seams land; keep `value_json` as storage but expose the captured JSON value semantics.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43154,26 +42852,7 @@
           "verification": "unverified",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "unverified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a script returns a JSON value after top-level await and collects output in order"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Extend the public result struct with call/store/during fields as those seams land; keep `value_json` as storage but expose the captured JSON value semantics."
-      },
-      "delivery": "1192-codemode-tool-table-close"
+      ]
     },
     {
       "id": "cch_codemode:codemode-inline-close",
@@ -43377,14 +43056,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Portable hosts and direct callers.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "a successful inline execution returns its value and text output",
       "comparisonScenarios": [
         "a successful inline execution returns its value and text output"
@@ -43392,16 +43071,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/inline-interrupt.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "a successful inline execution returns its value and text output"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Reuse the core result mapping when adding Inline; add one success scenario to prove the destination, not a duplicate result-shape test.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43414,26 +43093,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/inline-interrupt.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a successful inline execution returns its value and text output"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Reuse the core result mapping when adding Inline; add one success scenario to prove the destination, not a duplicate result-shape test."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-models-provider-execution",
@@ -43488,15 +43148,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Cloudflare/browser hosts and the library distribution.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1194",
+      "implementation_ticket": null,
       "scenario": "the public options prefix and grammar constants are fixed",
       "comparisonScenarios": [
         "the public options prefix and grammar constants are fixed"
@@ -43504,16 +43164,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/source-options.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "the public options prefix and grammar constants are fixed"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1192-codemode-alignment.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1194; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1192-codemode-alignment.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Extract the source/declaration/prelude and execution interfaces into a `cch_codemode` library target before adding Inline/Remote. Keep the Application bridge in coding_agent.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43526,26 +43186,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "missing",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/source-options.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the public options prefix and grammar constants are fixed"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Extract the source/declaration/prelude and execution interfaces into a `cch_codemode` library target before adding Inline/Remote. Keep the Application bridge in coding_agent."
-      },
-      "delivery": "1194-codemode-portable-entry"
+      ]
     },
     {
       "id": "cch_codemode:codemode-remote",
@@ -43671,14 +43312,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Durable Object/remote host policy and tests.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "the remote caps the requested interrupt budget and memory limit",
       "comparisonScenarios": [
         "the remote caps the requested interrupt budget and memory limit"
@@ -43686,16 +43327,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "the remote caps the requested interrupt budget and memory limit"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Implement caps in `serveCodemodeRemote` after the memory and interrupt-budget primitives exist; do not implement a remote-only cap that the local sandbox cannot honor.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43708,26 +43349,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the remote caps the requested interrupt budget and memory limit"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Implement caps in `serveCodemodeRemote` after the memory and interrupt-budget primitives exist; do not implement a remote-only cap that the local sandbox cannot honor."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-remote-deterministic",
@@ -43808,14 +43430,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Durable Objects, remote isolates, worker boundaries and tests.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "a generic remote runs the script and calls the caller's tools across the exchange",
       "comparisonScenarios": [
         "a generic remote runs the script and calls the caller's tools across the exchange",
@@ -43824,17 +43446,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "a generic remote runs the script and calls the caller's tools across the exchange",
-          "remote output is buffered instead of one exchange per output item"
+          "a generic remote runs the script and calls the caller's tools across the exchange"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Port the request/message/reply protocol and `serveCodemodeRemote` as a library interface; keep transport serialization JSON-safe and test the captured exchange trace before adding a Durable Object wrapper.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43847,26 +43468,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a generic remote runs the script and calls the caller's tools across the exchange"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Port the request/message/reply protocol and `serveCodemodeRemote` as a library interface; keep transport serialization JSON-safe and test the captured exchange trace before adding a Durable Object wrapper."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-remote-failures",
@@ -43878,14 +43480,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Remote callers, durable sessions and the TUI.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "a failing, silent or unreachable remote is a sandbox error with the transport reason",
       "comparisonScenarios": [
         "a failing, silent or unreachable remote is a sandbox error with the transport reason"
@@ -43893,16 +43495,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "a failing, silent or unreachable remote is a sandbox error with the transport reason"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Port the three branches with the captured messages; keep transport exceptions out of the VM/script error kind.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -43915,26 +43517,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a failing, silent or unreachable remote is a sandbox error with the transport reason"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Port the three branches with the captured messages; keep transport exceptions out of the VM/script error kind."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-remote-output-batching",
@@ -44282,14 +43865,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application signal handling, direct sandbox callers and the TUI status.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "a caller abort ends a waiting script, aborts its tool and keeps partial output",
       "comparisonScenarios": [
         "a caller abort ends a waiting script, aborts its tool and keeps partial output",
@@ -44299,17 +43882,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "a caller abort ends a waiting script, aborts its tool and keeps partial output",
-          "a pre-aborted execution never starts the guest and reports the caller reason"
+          "a caller abort ends a waiting script, aborts its tool and keeps partial output"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Pass an abort reason alongside the stop token (or a cancellation payload) and preserve partial output; add the captured mid-wait and pre-aborted cases.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -44322,26 +43904,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a caller abort ends a waiting script, aborts its tool and keeps partial output"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Pass an abort reason alongside the stop token (or a cancellation payload) and preserve partial output; add the captured mid-wait and pre-aborted cases."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-script-clock-timezone",
@@ -44454,14 +44017,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application error formatting, model-facing `Script error:` block and the TUI.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "a script failure keeps prior output and reports the script error with its line",
       "comparisonScenarios": [
         "a script failure keeps prior output and reports the script error with its line",
@@ -44472,19 +44035,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "a script failure keeps prior output and reports the script error with its line",
-          "non-Error throws, syntax errors and non-serializable returns are script errors",
-          "a memory-limited VM reports out of memory as a script error",
-          "unknown tools and thrown tool errors are catchable, with error call status"
+          "a script failure keeps prior output and reports the script error with its line"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Extend `CodemodeError` with optional name/stack and parse the prelude payload; test the captured taxonomy through the public result rather than only `message.find`.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -44497,26 +44057,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a script failure keeps prior output and reports the script error with its line"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Extend `CodemodeError` with optional name/stack and parse the prelude payload; test the captured taxonomy through the public result rather than only `message.find`."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-script-exit",
@@ -44597,14 +44138,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application execute path, discovery globals, model globals, and any host helper attached to a script.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "globals support top-level spread calls and dotted frozen namespaces",
       "comparisonScenarios": [
         "globals support top-level spread calls and dotted frozen namespaces",
@@ -44614,17 +44155,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "globals support top-level spread calls and dotted frozen namespaces",
-          "invalid global names, duplicates and namespace conflicts are rejected at construction"
+          "globals support top-level spread calls and dotted frozen namespaces"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Add a `CodemodeGlobalDescriptor`/globals argument to `CodemodeSandbox::run`, pass `CodemodeDiscovery::globals_json()` plus application globals, and test the captured spread/dotted/validation cases. Do not try to fix discovery without this seam.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -44637,26 +44177,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "globals support top-level spread calls and dotted frozen namespaces"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Add a `CodemodeGlobalDescriptor`/globals argument to `CodemodeSandbox::run`, pass `CodemodeDiscovery::globals_json()` plus application globals, and test the captured spread/dotted/validation cases. Do not try to fix discovery without this seam."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-script-image-format",
@@ -44875,14 +44396,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application result formatting, TUI/fallback rendering, image sidecars and output spill.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "a script returns a JSON value after top-level await and collects output in order",
       "comparisonScenarios": [
         "a script returns a JSON value after top-level await and collects output in order",
@@ -44892,18 +44413,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "a script returns a JSON value after top-level await and collects output in order",
-          "text values are stringified and image accepts data URLs and image blocks",
-          "invalid image arguments throw a catchable TypeError inside the script"
+          "a script returns a JSON value after top-level await and collects output in order"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Add a console discriminant to `CodemodeOutputItem` and update the prelude to emit `console`; then use it in the Application output block. Keep text/image ordering tests, but assert console separately.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -44916,26 +44435,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a script returns a JSON value after top-level await and collects output in order"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Add a console discriminant to `CodemodeOutputItem` and update the prelude to emit `console`; then use it in the Application output block. Keep text/image ordering tests, but assert console separately."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-script-store-load",
@@ -44948,14 +44448,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application session store (`codemode-store` entry), scripts that keep small state across calls, and the result details.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "store and load use a JSON snapshot and only successful executions report writes",
       "comparisonScenarios": [
         "store and load use a JSON snapshot and only successful executions report writes",
@@ -44964,17 +44464,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "store and load use a JSON snapshot and only successful executions report writes",
-          "exit() succeeds with prior output and store writes and stops later output"
+          "store and load use a JSON snapshot and only successful executions report writes"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Add store input/output to `CodemodeRunResult` and `CodemodeSandbox::run`, then port the Application branch read/append. Test a snapshot, a failed execution that loses writes, and the exit-with-writes case.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -44987,26 +44486,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "store and load use a JSON snapshot and only successful executions report writes"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Add store input/output to `CodemodeRunResult` and `CodemodeSandbox::run`, then port the Application branch read/append. Test a snapshot, a failed execution that loses writes, and the exit-with-writes case."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-script-unawaited-calls",
@@ -45414,14 +44894,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application `executeCodemode`; host concurrency policy; every `CodemodeSandbox.execute()`/`start()`.",
       "consumerOwners": [
         "cch_codemode"
       ],
       "boundary": null,
-      "implementation_ticket": "#1179",
+      "implementation_ticket": null,
       "scenario": "admission denial rejects before a worker starts and keeps the start hook uncalled",
       "comparisonScenarios": [
         "admission denial rejects before a worker starts and keeps the start hook uncalled",
@@ -45431,18 +44911,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "admission denial rejects before a worker starts and keeps the start hook uncalled",
-          "a wasm loading failure does not reserve admission",
-          "a worker construction failure returns its reserved admission exactly once"
+          "admission denial rejects before a worker starts and keeps the start hook uncalled"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1179-codemode-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1179; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1179-codemode-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Keep admission tied to actual worker exit, not result settlement; this is process-local thread accounting and makes no crash- or power-loss recovery claim.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -45455,26 +44933,7 @@
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "admission denial rejects before a worker starts and keeps the start hook uncalled"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Keep admission tied to actual worker exit, not result settlement; this is process-local thread accounting and makes no crash- or power-loss recovery claim."
-      },
-      "delivery": "1179-codemode-comparisons"
+      ]
     },
     {
       "id": "cch_codemode:codemode-worker-close",
@@ -49573,15 +49032,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "Model-facing codemode description and system prompt.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1118",
+      "implementation_ticket": null,
       "scenario": "the models declaration line is present only when models are enabled",
       "comparisonScenarios": [
         "the models declaration line is present only when models are enabled"
@@ -49589,16 +49048,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "the models declaration line is present only when models are enabled"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1118-codemode-catalog.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1118; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1118-codemode-catalog.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Keep the absent branch correct and add a differential assertion when the catalog is ported. Do not use this row as a demand to implement model providers.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -49611,26 +49070,7 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1053/application-catalog.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the models declaration line is present only when models are enabled"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Keep the absent branch correct and add a differential assertion when the catalog is ported. Do not use this row as a demand to implement model providers."
-      },
-      "delivery": "1118-codemode-catalog"
+      ]
     },
     {
       "id": "cch_coding_agent:codemode-settings",
@@ -53484,15 +52924,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "partial",
+      "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "`theme-tokens.ts:THEME_TOKENS`, the published theme schema, built-in dark/light themes and runtime resolution.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1177",
+      "implementation_ticket": null,
       "scenario": "theme schema accepts the 56-token built-in shape",
       "comparisonScenarios": [
         "theme schema accepts the 56-token built-in shape"
@@ -53500,16 +52940,16 @@
       "evidence": {
         "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1049/configuration-schema.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "theme schema accepts the 56-token built-in shape"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1177-application-reconciliation.md"
+        "result": null
       },
       "missingObservation": null,
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1177; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1177-application-reconciliation.md",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "Recommendation: Add the three v1.3.0 optional tokens with their documented fallbacks (`muted`, `selectedBg`, `text`) and retain the existing required-token validation. This is a schema-shape delta, not a new theme UI feature.",
       "lane": "1049",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -53522,26 +52962,7 @@
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "partial",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1049/configuration-schema.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "theme schema accepts the 56-token built-in shape"
-          ],
-          "result": null
-        },
-        "missingObservation": null,
-        "gaps": [],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": "Recommendation: Add the three v1.3.0 optional tokens with their documented fallbacks (`muted`, `selectedBg`, `text`) and retain the existing required-token validation. This is a schema-shape delta, not a new theme UI feature."
-      },
-      "delivery": "1177-application-comparisons"
+      ]
     },
     {
       "id": "cch_coding_agent:thinking-selector",
@@ -56779,15 +56200,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "upstream-captured",
       "owner": "cch_durable",
       "consumer": "none (cch_durable owner not introduced)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1180",
+      "implementation_ticket": "#1058-draft",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
         "a JSONL commit appends every sidecar before the main marker",
@@ -56801,12 +56222,15 @@
         "capturedScenarios": [
           "a JSONL commit appends every sidecar before the main marker"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1180-jsonl-sidecar-symlink-alignment.md"
+        "result": "Append order was doc-4.jsonl then main.jsonl; with fsync the sidecar was flushed before the marker append."
       },
       "missingObservation": null,
-      "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1180; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1180-jsonl-sidecar-symlink-alignment.md",
+      "gaps": [
+        "Current application journal append order is single-file only.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -56819,29 +56243,7 @@
           "verification": "upstream-captured",
           "owner": "cch_durable"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1058-draft",
-        "implementation": "missing",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "a JSONL commit appends every sidecar before the main marker"
-          ],
-          "result": "Append order was doc-4.jsonl then main.jsonl; with fsync the sidecar was flushed before the marker append."
-        },
-        "missingObservation": null,
-        "gaps": [
-          "Current application journal append order is single-file only.",
-          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
-        ],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": ""
-      },
-      "delivery": "1180-sidecar-symlink-parity"
+      ]
     },
     {
       "id": "cch_durable:Storage:jsonl:poison",
@@ -57057,15 +56459,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "implemented",
-      "verification": "verified",
+      "implementation": "missing",
+      "verification": "upstream-captured",
       "owner": "cch_durable",
       "consumer": "none (cch_durable owner not introduced)",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1180",
+      "implementation_ticket": "#1058-draft",
       "scenario": "a JSONL commit appends every sidecar before the main marker",
       "comparisonScenarios": [
         "a JSONL commit appends every sidecar before the main marker",
@@ -57078,12 +56480,15 @@
         "capturedScenarios": [
           "a JSONL commit appends every sidecar before the main marker"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1180-jsonl-sidecar-symlink-alignment.md"
+        "result": "doc-4.jsonl held one record {format:1,type:'record',seq:2,ordinal:0,payload:{type:'document',...}}."
       },
       "missingObservation": null,
-      "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1180; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1180-jsonl-sidecar-symlink-alignment.md",
+      "gaps": [
+        "Current Pike has no sidecars at all.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "",
       "lane": "1054",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -57096,29 +56501,7 @@
           "verification": "upstream-captured",
           "owner": "cch_durable"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": "#1058-draft",
-        "implementation": "missing",
-        "verification": "upstream-captured",
-        "evidence": {
-          "route": "captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
-          "scenarioMatch": "direct",
-          "capturedScenarios": [
-            "a JSONL commit appends every sidecar before the main marker"
-          ],
-          "result": "doc-4.jsonl held one record {format:1,type:'record',seq:2,ordinal:0,payload:{type:'document',...}}."
-        },
-        "missingObservation": null,
-        "gaps": [
-          "Current Pike has no sidecars at all.",
-          "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
-        ],
-        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-        "notes": ""
-      },
-      "delivery": "1180-sidecar-symlink-parity"
+      ]
     },
     {
       "id": "cch_durable:Storage:memory",
@@ -61499,14 +60882,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "unverified",
       "owner": "cch_durable",
       "consumer": "Durable read tool and capability-gated callers.",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1090",
+      "implementation_ticket": null,
       "scenario": "a model without image input gets the image and the frozen placeholder note",
       "comparisonScenarios": [
         "a model without image input gets the image and the frozen placeholder note",
@@ -61517,23 +60900,18 @@
         "reading a BMP without an image processor is an explicit unsupported-image result"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "a model without image input gets the image and the frozen placeholder note",
-          "an inline image larger than the limits cannot be shrunk",
-          "an inline image above the byte limit cannot be shrunk",
-          "an image whose header cannot be read is an explicit error",
-          "an image the processor cannot decode is an explicit error",
-          "reading a BMP without an image processor is an explicit unsupported-image result"
+          "a model without image input gets the image and the frozen placeholder note"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1090-durable-images.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1090; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1090-durable-images.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Model capability absence and processor absence as explicit typed outcomes in the durable read/image contract; never infer success from an unavailable provider.",
       "lane": "1056",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -61546,26 +60924,7 @@
           "verification": "verified",
           "owner": "cch_durable"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "verified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "a model without image input gets the image and the frozen placeholder note"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Model capability absence and processor absence as explicit typed outcomes in the durable read/image contract; never infer success from an unavailable provider."
-      },
-      "delivery": "1090-durable-images"
+      ]
     },
     {
       "id": "cch_durable:image-orientation-conversion",
@@ -61577,33 +60936,32 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "unverified",
       "owner": "cch_durable",
       "consumer": "Durable read tool and model image input.",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1090",
+      "implementation_ticket": null,
       "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
       "comparisonScenarios": [
         "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
         "frozen image sniffing rejects animated PNG and JPEG byte 3 0xf7"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
-          "frozen image sniffing rejects animated PNG and JPEG byte 3 0xf7"
+          "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1090-durable-images.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1090; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1090-durable-images.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Implement orientation/conversion in the durable ImageProcessor and capture one oriented image, one converted format and one animated-PNG rejection.",
       "lane": "1056",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -61616,26 +60974,7 @@
           "verification": "verified",
           "owner": "cch_durable"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "verified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Implement orientation/conversion in the durable ImageProcessor and capture one oriented image, one converted format and one animated-PNG rejection."
-      },
-      "delivery": "1090-durable-images"
+      ]
     },
     {
       "id": "cch_durable:image-processor",
@@ -61647,32 +60986,32 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "unverified",
       "owner": "cch_durable",
       "consumer": "Read tool, image input and durable callers.",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1090",
+      "implementation_ticket": null,
       "scenario": "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
       "comparisonScenarios": [
         "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata",
         "the Photon image processor passes an upright inline image through and resizes one over the limits"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
           "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1090-durable-images.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1090; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1090-durable-images.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Implement the durable ImageProcessor contract with local Linux decoding; keep model/provider image execution limited to the retained Magpie capabilities.",
       "lane": "1056",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -61685,26 +61024,7 @@
           "verification": "verified",
           "owner": "cch_durable"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "verified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "the Photon processor orients JPEG and WebP, converts BMP, and reports its metadata"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Implement the durable ImageProcessor contract with local Linux decoding; keep model/provider image execution limited to the retained Magpie capabilities."
-      },
-      "delivery": "1090-durable-images"
+      ]
     },
     {
       "id": "cch_durable:inspect-submissions",
@@ -62484,14 +61804,14 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "verified",
+      "verification": "unverified",
       "owner": "cch_durable",
       "consumer": "Durable read tool and vision-capable callers.",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": "#1090",
+      "implementation_ticket": null,
       "scenario": "an EXIF-oriented JPEG is made upright before its resized diagnostic",
       "comparisonScenarios": [
         "an EXIF-oriented JPEG is made upright before its resized diagnostic",
@@ -62500,20 +61820,18 @@
         "an inline image within the limits passes through unchanged without a processor"
       ],
       "evidence": {
-        "route": "captured",
+        "route": "related-captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-        "scenarioMatch": "direct",
+        "scenarioMatch": "direct-global",
         "capturedScenarios": [
-          "an EXIF-oriented JPEG is made upright before its resized diagnostic",
-          "a BMP read through the processor converts to PNG and says so",
-          "an inline image within the limits passes through unchanged without a processor"
+          "an EXIF-oriented JPEG is made upright before its resized diagnostic"
         ],
-        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1090-durable-images.md"
+        "result": null
       },
-      "missingObservation": null,
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [],
-      "remainingWork": null,
-      "notes": "Delivered by #1090; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1090-durable-images.md",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "notes": "Recommendation: Implement the durable read image branch over the durable filesystem/processor and prove the content/diagnostic pair.",
       "lane": "1056",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -62526,26 +61844,7 @@
           "verification": "verified",
           "owner": "cch_durable"
         }
-      ],
-      "auditStatus": {
-        "implementation_ticket": null,
-        "implementation": "implemented",
-        "verification": "verified",
-        "evidence": {
-          "route": "related-captured",
-          "artifact": "fixtures/pi-v1.3.0/audit-1090/images.json",
-          "scenarioMatch": "direct-global",
-          "capturedScenarios": [
-            "an EXIF-oriented JPEG is made upright before its resized diagnostic"
-          ],
-          "result": null
-        },
-        "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "gaps": [],
-        "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
-        "notes": "Recommendation: Implement the durable read image branch over the durable filesystem/processor and prove the content/diagnostic pair."
-      },
-      "delivery": "1090-durable-images"
+      ]
     },
     {
       "id": "cch_durable:recovery-abort-mark",

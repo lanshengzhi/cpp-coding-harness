@@ -960,6 +960,8 @@ def delivery_updates(
             require(set(row["comparisonScenarios"]) == obligations,
                     f"{row_id}: comparisons do not cover exactly the row's audit obligations")
             control = claim.get("discriminatingCase") or {}
+            require(bounded_claim or control.get("test") not in {item["test"] for item in comparisons},
+                    f"{row_id}: discriminatingCase reuses a comparison test without remainingBoundary")
             require(control.get("test") in passed and control.get("reason", "").strip(),
                     f"{row_id}: missing passing discriminating case")
             require(control.get("testSource") in paths and control["testSource"].startswith("tests/"),
@@ -994,6 +996,41 @@ def delivery_updates(
         require(record.get("routingSha256") == delivery_routing_digest(rows, claims, artifacts),
                 f"{identity}: delivery routing digest mismatch")
     return updates, bounded
+
+
+def stale_field_violations(rows: list[dict], root: Path, closed: set[str]) -> list[dict]:
+    """Derive contradictions from final row fields and an offline issue-state snapshot."""
+    violations = []
+    for row in rows:
+        owner = row["owner"]
+        directory = "agent" if owner == "cch_agent_core" else owner.removeprefix("cch_")
+        built = (root / "src" / directory).is_dir()
+        texts = {"consumer": row.get("consumer") or "", "gaps": " ".join(row.get("gaps") or [])}
+        def add(field: str, contradiction: str, value: object) -> None:
+            violations.append({"id": row["id"], "field": field, "contradiction": contradiction, "value": value})
+        if row["verification"] == "verified" and row["implementation"] == "missing":
+            add("implementation", "missing despite verified", row["implementation"])
+        for field, value in texts.items():
+            names_owner = owner in value or f"src/{directory}/" in value
+            if row["verification"] == "verified" and names_owner and re.search(
+                r"\b(?:not introduced|does not exist|doesn't exist|not exist|missing|absent|not implemented|no .{0,40}(?:owner|package|target))\b", value, re.I
+            ):
+                add(field, "verified but owner package is described as absent", row.get(field))
+            if row["implementation"] == "missing" and built and names_owner:
+                add(field, "names built owner while implementation is missing", row.get(field))
+        ticket = row.get("implementation_ticket")
+        if isinstance(ticket, str) and ticket.startswith("#") and ticket[1:] in closed:
+            add("implementation_ticket", f"{ticket} is closed", ticket)
+    return violations
+
+
+def check_stale_fields(rows: list[dict], root: Path, closed: set[str], baseline: list[dict]) -> None:
+    recorded = [{key: entry[key] for key in ("id", "field", "contradiction", "value")} for entry in baseline]
+    require(len({json.dumps(entry, sort_keys=True) for entry in recorded}) == len(recorded),
+            "duplicate stale-field baseline entry")
+    for violation in stale_field_violations(rows, root, closed):
+        require(violation in recorded,
+                f"{violation['id']}: {violation['field']}: {violation['contradiction']}")
 
 
 def build_ledger(
@@ -1913,6 +1950,21 @@ def main() -> int:
     bundles = build_bundle_index(registered_families())
     scenario_index = build_scenario_index(bundles)
     ledger = build_ledger(plan, bundles, scenario_index)
+    stale_input = load_json(ROOT / "fixtures/pi-v1.3.0/consolidation-1058/1239-stale-fields.json")
+    states = stale_input["ticketStates"]
+    require(isinstance(states, dict) and all(re.fullmatch(r"[0-9]+", number) and state in ("open", "closed")
+                                             for number, state in states.items()),
+            "invalid recorded implementation_ticket states")
+    for row in ledger["rows"]:
+        ticket = row.get("implementation_ticket")
+        if isinstance(ticket, str) and re.fullmatch(r"#[0-9]+", ticket):
+            require(ticket[1:] in states, f"{row['id']}: implementation_ticket {ticket} has no recorded issue state")
+    baseline = stale_input["baseline"]
+    for entry in baseline:
+        require(re.fullmatch(r"#[0-9]+", entry.get("ownerTicket", "")) is not None and
+                re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", entry.get("recordedAt", "")) is not None,
+                f"{entry.get('id')}: baseline entry needs an owner ticket and date")
+    check_stale_fields(ledger["rows"], ROOT, {ticket for ticket, state in states.items() if state == "closed"}, baseline)
     payload = json_bytes(ledger)
     if args.command == "build":
         report = render_status_counts(ledger, REPORT_PATH.read_text(encoding="utf-8"))

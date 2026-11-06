@@ -56,6 +56,65 @@ def orphan_keys(plan: dict) -> list[str]:
     ]
 
 
+class StaleLedgerFieldsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        (self.root / "src/durable").mkdir(parents=True)
+        self.row = {"id": "cch_durable:example", "owner": "cch_durable", "verification": "unverified",
+                    "implementation": "implemented", "consumer": "application", "gaps": [],
+                    "implementation_ticket": None}
+
+    def check(self):
+        consolidate.check_stale_fields([self.row], self.root, {"123"}, [])
+
+    def test_verified_missing_implementation(self):
+        self.row.update(verification="verified", implementation="missing")
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*implementation.*verified"):
+            self.check()
+
+    def test_verified_absent_owner_in_consumer_or_gaps(self):
+        for field in ("consumer", "gaps"):
+            with self.subTest(field=field):
+                self.row.update(verification="verified", consumer="application", gaps=[])
+                self.row[field] = "none (cch_durable owner not introduced)" if field == "consumer" else ["cch_durable owner not introduced"]
+                with self.assertRaisesRegex(consolidate.ConsolidationError, f"cch_durable:example.*{field}.*owner"):
+                    self.check()
+
+    def test_missing_implementation_names_built_owner(self):
+        self.row.update(implementation="missing", consumer="cch_durable")
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*consumer.*implementation.*missing"):
+            self.check()
+
+    def test_closed_implementation_ticket(self):
+        self.row["implementation_ticket"] = "#123"
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*implementation_ticket.*#123.*closed"):
+            self.check()
+
+    def test_build_and_check_both_reject_a_new_contradiction(self):
+        self.row.update(verification="verified", implementation="missing")
+        snapshot = {"ticketStates": {}, "baseline": []}
+        for command in ("build", "check"):
+            with self.subTest(command=command), patch.object(sys, "argv", ["consolidate", command]), \
+                    patch.object(consolidate, "load_json", side_effect=[{}, snapshot]), \
+                    patch.object(consolidate, "registered_families", return_value=set()), \
+                    patch.object(consolidate, "build_bundle_index", return_value={}), \
+                    patch.object(consolidate, "build_scenario_index", return_value={}), \
+                    patch.object(consolidate, "build_ledger", return_value={"rows": [self.row]}), \
+                    patch.object(consolidate, "ROOT", self.root):
+                with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*implementation.*verified"):
+                    consolidate.main()
+
+    def test_baseline_accepts_only_the_recorded_contradiction_and_value(self):
+        self.row.update(implementation="missing", consumer="cch_durable")
+        violation = consolidate.stale_field_violations([self.row], self.root, set())[0]
+        consolidate.check_stale_fields([self.row], self.root, set(), [violation])
+        self.row["consumer"] = "cch_durable new contradiction"
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*consumer"):
+            consolidate.check_stale_fields([self.row], self.root, set(), [violation])
+
+
 class DeliveryEvidenceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
@@ -135,6 +194,11 @@ class DeliveryEvidenceTest(unittest.TestCase):
         self.artifacts.clear()
         self.artifacts["audit-1101/other.json"] = b'{"scenarios":[{"name":"preserves null"}]}'
         self.assertNotEqual(digest, consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts))
+
+    def test_comparison_cannot_be_its_own_unbounded_discriminating_case(self) -> None:
+        self.claim["discriminatingCase"]["test"] = "compare"
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_mcp:example.*discriminatingCase.*remainingBoundary"):
+            self.check()
 
     def test_complete_delivery_promotes_only_its_row(self) -> None:
         self.rows.append({"id": "cch_mcp:unrelated", "membership": "supported", "comparisonScenarios": ["other"]})
@@ -716,7 +780,11 @@ class ReanchoredLedgerTest(unittest.TestCase):
             for entry in consolidate.load_ticket_mappings(plan)
             for row_id in entry["rows"]
         }
+        bounded = {"cch_codemode:codemode-worker-admission", "cch_durable:image-processor", "cch_durable:read-image"}
         for row_id, receipt in self.REANCHORED.items():
+            if row_id in bounded:
+                self.assertNotEqual(self.rows[row_id]["verification"], "verified")
+                continue
             with self.subTest(row=row_id):
                 row = self.rows[row_id]
                 self.assertEqual(row["implementation"], "implemented")
@@ -727,7 +795,12 @@ class ReanchoredLedgerTest(unittest.TestCase):
                 self.assertNotIn(row_id, mapped)
 
     def test_unaffected_siblings_stay_verified_by_their_receipts(self) -> None:
+        bounded = {"cch_coding_agent:codemode-models-description-gate", "cch_durable:image-capability-absent",
+                   "cch_durable:image-orientation-conversion"}
         for row_id, receipt in self.SIBLINGS.items():
+            if row_id in bounded:
+                self.assertNotEqual(self.rows[row_id]["verification"], "verified")
+                continue
             with self.subTest(row=row_id):
                 row = self.rows[row_id]
                 self.assertEqual(row["verification"], "verified")
@@ -805,7 +878,7 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # rows whole-row: 602. #1221 slice B promoted 7 StdinBuffer framing rows
         # whole-row and left StdinBuffer.flush validated but bounded on the
         # combined flush+callback seam: 609.
-        self.assertEqual(len(delivered), 609)
+        self.assertEqual(len(delivered), 565)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)
@@ -825,15 +898,10 @@ class ReanchoredLedgerTest(unittest.TestCase):
         self.assertEqual(len(image_processor["comparisons"]), 2)
 
     def test_no_identical_discriminating_case_without_a_boundary(self) -> None:
-        """The #1229 stop condition: across the seven 1201-1213 receipts no claim has
-        a discriminatingCase.test string-equal to one of its comparisons[].test unless
-        the claim records the limitation in its remainingBoundary."""
+        """Every receipt must bound a claim that reuses a comparison as its control."""
         full = load(ROOT / "docs" / "research" / "pi-v1.3.0" / "1058-deliveries.json")
-        tickets = ("1201", "1203", "1209", "1210", "1211", "1212", "1213")
         checked = 0
         for record in full["records"]:
-            if record["ticket"] not in tickets:
-                continue
             for claim in record["rows"]:
                 dc = claim.get("discriminatingCase")
                 if not dc:
@@ -845,7 +913,22 @@ class ReanchoredLedgerTest(unittest.TestCase):
                         f"{record['id']}:{claim['id']} cites its happy-path test as the "
                         "discriminating case without a remainingBoundary disposition",
                     )
-        self.assertEqual(checked, 278)
+        self.assertEqual(checked, sum(len(record["rows"]) for record in full["records"]))
+
+    def test_1239_bounded_claims_have_followups_and_reverted_rows(self) -> None:
+        report = (ROOT / "docs/research/pi-v1.3.0/1239-stale-field-gates.md").read_text(encoding="utf-8")
+        expected = dict(re.findall(r"- `([^`]+)` — #(124[0-3])", report))
+        self.assertEqual(len(expected), 44)
+        records = load(ROOT / "docs/research/pi-v1.3.0/1058-deliveries.json")["records"]
+        claims = {claim["id"]: claim for record in records for claim in record["rows"]}
+        rows = {row["id"]: row for row in self.ledger["rows"]}
+        for row_id, ticket in expected.items():
+            with self.subTest(row=row_id):
+                claim = claims[row_id]
+                self.assertTrue(claim["comparisons"])
+                self.assertTrue(any(f"#{ticket}" in boundary for boundary in claim["remainingBoundary"]))
+                self.assertNotEqual(rows[row_id]["verification"], "verified")
+                self.assertNotIn("delivery", rows[row_id])
 
     def test_committed_ledger_matches_a_fresh_build(self) -> None:
         plan = load(PLAN)
@@ -1094,12 +1177,29 @@ class TicketMappedLedgerTest(unittest.TestCase):
                 self.assertNotIn(row["id"], mapped)
 
     WITHDRAWN_UNREFERENCED = [
+        "cch_agent_core:Agent:prompt-busy",
+        "cch_agent_core:Agent:reset",
+        "cch_chord:context:without-abort-signal",
+        "cch_chord:delta:batch-application",
+        "cch_chord:delta:immutable-application",
+        "cch_chord:delta:overlap",
+        "cch_chord:json:copy-json",
+        "cch_chord:json:json-value",
+        "cch_chord:json:strict-validation",
+        "cch_codemode:codemode-execute-outcome",
+        "cch_codemode:codemode-portable-entry",
+        "cch_coding_agent:codemode-models-description-gate",
+        "cch_coding_agent:theme-token-set",
         "cch_durable:background-ownership-boundary",
         "cch_durable:harness-settings-defaults",
         "cch_durable:submission-queues",
         "cch_mcp:mcp-request-auth",
     ]
     UNREFERENCED_1058_DRAFT = [
+        "cch_chord:Chord:draft",
+        "cch_chord:Chord:json",
+        "cch_durable:Storage:jsonl:ordering",
+        "cch_durable:Storage:jsonl:sidecar",
         "cch_tui:CURSOR_MARKER",
         "cch_tui:StdinBuffer.flush",
         "cch_tui:TUI",

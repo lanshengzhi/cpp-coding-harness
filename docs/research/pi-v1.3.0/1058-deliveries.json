@@ -178,7 +178,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -1070,6 +1070,12 @@
       "sha256": "515530e11714aee4a51e077f06d30a56f54a5cd2fca053f1bf0c6522ca52804e"
      }
     }
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -1196,7 +1202,9 @@
    "rows": [
     {
      "id": "cch_durable:image-processor",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1090/images.json",
@@ -1219,7 +1227,9 @@
     },
     {
      "id": "cch_durable:read-image",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1090/images.json",
@@ -1254,7 +1264,9 @@
     },
     {
      "id": "cch_durable:image-capability-absent",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1090/images.json",
@@ -1301,7 +1313,9 @@
     },
     {
      "id": "cch_durable:image-orientation-conversion",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1090/images.json",
@@ -2361,7 +2375,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -2468,7 +2482,9 @@
     },
     {
      "id": "cch_coding_agent:codemode-models-description-gate",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/application-catalog.json",
@@ -3351,6 +3367,12 @@
       "sha256": "f4ce504ea1f732938b890e6a5584ee68184c6bc82a0ca801014609e5a72c2fc6"
      }
     }
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -3457,7 +3479,9 @@
     },
     {
      "id": "cch_chord:context:without-abort-signal",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/context-cancellation.json",
@@ -3474,7 +3498,9 @@
     },
     {
      "id": "cch_chord:delta:batch-application",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/delta-revisions.json",
@@ -3508,7 +3534,9 @@
     },
     {
      "id": "cch_chord:delta:immutable-application",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/delta-revisions.json",
@@ -3525,7 +3553,9 @@
     },
     {
      "id": "cch_chord:delta:mutable-application",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1061/validation-order.json",
@@ -3559,7 +3589,9 @@
     },
     {
      "id": "cch_chord:delta:overlap",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/delta-revisions.json",
@@ -3576,7 +3608,9 @@
     },
     {
      "id": "cch_chord:delta:prepare-replace",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1061/prepare-replace.json",
@@ -3707,7 +3741,9 @@
     },
     {
      "id": "cch_chord:state:attached-hydration",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/replicated-state.json",
@@ -3795,7 +3831,9 @@
     },
     {
      "id": "cch_chord:state:dispose",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/replicated-state.json",
@@ -3830,7 +3868,9 @@
     },
     {
      "id": "cch_chord:state:listener-error",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/replicated-state.json",
@@ -4071,7 +4111,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4246,6 +4286,12 @@
    },
    "revalidation1229": {
     "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
@@ -4600,7 +4646,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -5586,6 +5632,12 @@
       "sha256": "ac08a496b6047b9cf0add587a0793dfa2ae0d7b0b87b493186d79e90b25626b3"
      }
     }
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -5686,7 +5738,9 @@
     },
     {
      "id": "cch_chord:Chord:draft",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/delta-revisions.json",
@@ -5801,7 +5855,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -5917,6 +5971,12 @@
    },
    "revalidation1229": {
     "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
@@ -6135,7 +6195,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -6309,6 +6369,12 @@
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -6339,7 +6405,9 @@
    "rows": [
     {
      "id": "cch_chord:json:copy-json",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/json-output-support.json",
@@ -6368,7 +6436,9 @@
     },
     {
      "id": "cch_chord:json:strict-validation",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/json-output-support.json",
@@ -6391,7 +6461,9 @@
     },
     {
      "id": "cch_chord:json:json-value",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057-typed-json/chord-typed-json.json",
@@ -6408,7 +6480,9 @@
     },
     {
      "id": "cch_chord:Chord:json",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057-typed-json/chord-typed-json.json",
@@ -6515,7 +6589,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -7130,6 +7204,12 @@
       "sha256": "2d24b6f071f9ce36741ce17f7d3f28099aa63dd1154c400c677e02f6de540617"
      }
     }
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -7161,7 +7241,9 @@
    "rows": [
     {
      "id": "cch_chord:state:delivery-order",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1057/replicated-state.json",
@@ -7327,7 +7409,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -7912,6 +7994,12 @@
       "sha256": "9ae8d6cdb92a71d0fc0365136eddbd5ea8e12b980fcc66f7cd78855273a605cd"
      }
     }
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -8012,7 +8100,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -8110,6 +8198,12 @@
    },
    "revalidation1229": {
     "reason": "Issue #1229 extends the per-claim withdrawal channel and adds the bounded-claim rule: withdrawal records generalize to <issue>-withdrawn-<receipt>-claims.json keyed by (receipt, issue), and a delivery claim with a non-empty remainingBoundary is validated but does not promote its row (see the revalidation1229 entries on the 1201-1213 receipts and 1229-withdrawn-1209-root-tui-lifecycle-claims.json). Only consolidate_audits.py changed among this receipt's pinned inputs; the claimed rows, comparison scenarios and routing digest are unchanged, and this change makes no new verification claim about them.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
@@ -8388,7 +8482,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -9063,6 +9157,12 @@
       "sha256": "a206c9ba48b41fc35ef70d44b2f4e552cf101c99c7efcc3fe5733eb4b654f7cb"
      }
     }
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -9275,7 +9375,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -9391,7 +9491,9 @@
     },
     {
      "id": "cch_codemode:codemode-declaration-identifier",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/declarations.json",
@@ -9513,7 +9615,9 @@
     },
     {
      "id": "cch_codemode:codemode-script-globals",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/script-execution.json",
@@ -9542,7 +9646,9 @@
     },
     {
      "id": "cch_codemode:codemode-script-store-load",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/script-execution.json",
@@ -9565,7 +9671,9 @@
     },
     {
      "id": "cch_codemode:codemode-script-output-text-image-console",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/script-execution.json",
@@ -9634,7 +9742,9 @@
     },
     {
      "id": "cch_codemode:codemode-script-error-taxonomy",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/script-execution.json",
@@ -9720,7 +9830,9 @@
     },
     {
      "id": "cch_codemode:codemode-script-abort-reason",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/script-execution.json",
@@ -9749,7 +9861,9 @@
     },
     {
      "id": "cch_codemode:codemode-deterministic-start",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/deterministic-replay.json",
@@ -9778,7 +9892,9 @@
     },
     {
      "id": "cch_codemode:codemode-deterministic-clock-seed",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/deterministic-replay.json",
@@ -9801,7 +9917,9 @@
     },
     {
      "id": "cch_codemode:codemode-deterministic-seq",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/deterministic-replay.json",
@@ -9830,7 +9948,9 @@
     },
     {
      "id": "cch_codemode:codemode-deterministic-during",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/deterministic-replay.json",
@@ -9870,7 +9990,9 @@
     },
     {
      "id": "cch_codemode:codemode-deterministic-validation",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/deterministic-replay.json",
@@ -9933,7 +10055,9 @@
     },
     {
      "id": "cch_codemode:codemode-inline-success",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/inline-interrupt.json",
@@ -10002,7 +10126,9 @@
     },
     {
      "id": "cch_codemode:codemode-remote-exchange",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/remote-exchange.json",
@@ -10042,7 +10168,9 @@
     },
     {
      "id": "cch_codemode:codemode-remote-caps",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/remote-exchange.json",
@@ -10076,7 +10204,9 @@
     },
     {
      "id": "cch_codemode:codemode-remote-failures",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/remote-exchange.json",
@@ -10127,7 +10257,9 @@
     },
     {
      "id": "cch_codemode:codemode-worker-admission",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/worker-lifetime.json",
@@ -10746,6 +10878,12 @@
       "sha256": "92d6a27f8c413c68f50e204c2aaaafa363782407526993552bf427d743e64314"
      }
     }
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -10822,7 +10960,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -10862,7 +11000,9 @@
    "rows": [
     {
      "id": "cch_agent_core:InputQueue:peek-clear",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1243 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1047/queue-admission.json",
@@ -10879,7 +11019,9 @@
     },
     {
      "id": "cch_agent_core:Agent:reset",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1243 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1047/lifecycle.json",
@@ -10896,7 +11038,9 @@
     },
     {
      "id": "cch_agent_core:Agent:prompt-busy",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1243 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1047/lifecycle.json",
@@ -11419,6 +11563,12 @@
       "sha256": "697ef1b10bb397c34a3c7567409a7d70adafda9ad4cc3ee332c85f9e06a25cc5"
      }
     }
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -11491,7 +11641,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "704c288e2440b5528aa1ff2f5ea0c0fb66f1bde0554d2c61e3a25f4114141fda"
+     "sha256": "4ed2cbfe3dde17b48b0a6d61c854ef15a3e6821ee1a713266c2305f0653d1295"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -11627,7 +11777,9 @@
       "testSource": "tests/coding_agent/tui/ThemeTest.cpp",
       "reason": "No separate discriminating case exists: the comparison enumerates the whole inventory (56 names, 51 required, the complete optional fallback set), so an inventory that omits, duplicates or miscounts a token fails the same case. Recorded as a weaker discriminator than a dedicated case."
      },
-     "remainingBoundary": []
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1243 owns an independent discriminating case."
+     ]
     }
    ],
    "routingSha256": "09fd1c8767933bd90fc1b9514c9ccb99647ff639755deca9e717adb2850b7e64",
@@ -12143,6 +12295,12 @@
       "sha256": "c2c749a067881cc9ae2bf2051a66e829cd7536ac90191a1717fde0e9435af979"
      }
     }
+   },
+   "revalidation1239": {
+    "reason": "Issue #1239 adds fail-closed ledger-field and discriminating-case gates. The existing comparison evidence is unchanged; claims reusing a comparison as their discriminating case are explicitly bounded, and no new verification claim is made.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -12206,7 +12364,9 @@
    "rows": [
     {
      "id": "cch_codemode:codemode-execute-outcome",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/script-execution.json",
@@ -12328,7 +12488,9 @@
    "rows": [
     {
      "id": "cch_codemode:codemode-portable-entry",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1241 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1053/source-options.json",
@@ -12388,7 +12550,9 @@
    "rows": [
     {
      "id": "cch_durable:Storage:jsonl:sidecar",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1054/jsonl-store.json",
@@ -12411,7 +12575,9 @@
     },
     {
      "id": "cch_durable:Storage:jsonl:ordering",
-     "remainingBoundary": [],
+     "remainingBoundary": [
+      "The discriminating case reuses a comparison test; #1242 owns an independent discriminating case."
+     ],
      "comparisons": [
       {
        "artifact": "audit-1054/jsonl-store.json",
