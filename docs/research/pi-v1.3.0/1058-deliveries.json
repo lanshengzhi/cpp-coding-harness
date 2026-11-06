@@ -2189,7 +2189,7 @@
     },
     {
      "path": "src/coding_agent/AgentSessionInteraction.cpp",
-     "sha256": "f8f72c24d6c3c02f1cce8543ee58367434413312995a0bf39b8316bc47a76cd4"
+     "sha256": "3bb54a6f71d016116354acbfda9e5f0cdbf12fe3e2d0ba5b1bbb010d34255626"
     },
     {
      "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -2332,14 +2332,14 @@
      "-L",
      "issue1118",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1237.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "029f67482578511b7ee2870180ffd965a58a3fb4",
+    "recordedAt": "2026-11-06T06:55:15Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-keys.xml",
-     "sha256": "5a49790a621ba103d54b8d932a3c8f310bf4d93a9fcb7182c30606fb23a03548"
+     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1237.xml",
+     "sha256": "f4ce504ea1f732938b890e6a5584ee68184c6bc82a0ca801014609e5a72c2fc6"
     }
    },
    "rows": [
@@ -3252,6 +3252,30 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-alias.xml",
       "sha256": "7408a1ebe07d798b1ac22f2607ec916dc466df8c13a4a442132334e08381ca72"
+     }
+    }
+   },
+   "revalidation1237": {
+    "reason": "Issue #1237 removes the constant gateway provider and subscription presentation from the coding-agent TUI. The AgentSessionSnapshot no longer carries using_subscription or available_provider_count, so src/coding_agent/AgentSessionInteraction.cpp is a changed pinned input; the receipt rows, comparison scenarios and routing digest are unchanged. The exact issue1118 selection was rerun on the updated tree into a fresh JUnit artifact. The single-provider model selector intentionally omits pi's constant [provider] badge and footer (provider) prefix; the differential expectation and model-switch golden are updated deliberately.",
+    "changedInputs": [
+     "src/coding_agent/AgentSessionInteraction.cpp"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-keys.xml",
+      "sha256": "5a49790a621ba103d54b8d932a3c8f310bf4d93a9fcb7182c30606fb23a03548"
      }
     }
    }
