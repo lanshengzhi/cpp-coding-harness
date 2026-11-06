@@ -1198,15 +1198,15 @@ template <typename T> [[nodiscard]] support::ExpectedVoid restore_terminal_modes
         if (disabled) impl.modes.bracketed_paste = false;
         retain_error(first_error, std::move(disabled));
     }
-    if (impl.modify_other_keys_active) {
-        auto disabled = write_all(impl.options.output_fd, kModifyOtherKeysDisable);
-        if (disabled) impl.modify_other_keys_active = false;
-        retain_error(first_error, std::move(disabled));
-    }
     if (impl.keyboard_protocol_pushed) {
         auto popped = write_all(impl.options.output_fd, kKeyboardProtocolPop);
         if (popped) impl.keyboard_protocol_pushed = false;
         retain_error(first_error, std::move(popped));
+    }
+    if (impl.modify_other_keys_active) {
+        auto disabled = write_all(impl.options.output_fd, kModifyOtherKeysDisable);
+        if (disabled) impl.modify_other_keys_active = false;
+        retain_error(first_error, std::move(disabled));
     }
     if (!impl.modify_other_keys_active && !impl.keyboard_protocol_pushed) {
         impl.capabilities.keyboard_protocol = KeyboardProtocol::Legacy;

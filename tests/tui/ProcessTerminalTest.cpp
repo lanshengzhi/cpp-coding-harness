@@ -896,8 +896,11 @@ TEST_CASE("Process Terminal enables and restores the keyboard fallback", "[tui][
 
     REQUIRE(terminal.stop());
     const auto restoration = cch::tests::read_available(pty->master.get());
-    CHECK(restoration.find("\x1b[>4;0m") != std::string::npos);
-    CHECK(restoration.find("\x1b[<u") != std::string::npos);
+    const auto kitty_pop = restoration.find("\x1b[<u");
+    const auto fallback_disable = restoration.find("\x1b[>4;0m");
+    REQUIRE(kitty_pop != std::string::npos);
+    REQUIRE(fallback_disable != std::string::npos);
+    CHECK(kitty_pop < fallback_disable);
 }
 
 TEST_CASE("Process Terminal rolls back raw input after partial startup failure", "[tui][terminal][issue54][spec]") {
