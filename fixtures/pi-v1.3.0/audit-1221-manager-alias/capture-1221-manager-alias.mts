@@ -112,8 +112,19 @@ const afterRebuild = snapshot();
 const conflictCopy = manager.getConflicts();
 conflictCopy[0].keybindings.push("unknown");
 const afterConflictMutation = snapshot();
-const scenarios = [{name: "nested-user-array-and-conflict-copy", inputs: {definitions, initial: initialInput},
-  expected: {before, afterMutation, afterRebuild, afterConflictMutation}, normalizations: []}];
+const literalDefinitions = {
+  first: { defaultKeys: [] }, second: { defaultKeys: [] }, third: { defaultKeys: [] },
+};
+const literalBindings = {
+  first: ["ctrl+shift+up", "ctrl+shift+up"], second: "shift+ctrl+up", third: "ctrl+shift+up",
+};
+const literalManager = new KeybindingsManager(literalDefinitions, literalBindings);
+const scenarios = [
+  {name: "nested-user-array-and-conflict-copy", inputs: {definitions, initial: initialInput},
+    expected: {before, afterMutation, afterRebuild, afterConflictMutation}, normalizations: []},
+  {name: "literal-conflict-spellings", inputs: {definitions: literalDefinitions, bindings: literalBindings},
+    expected: {conflicts: literalManager.getConflicts(), resolved: literalManager.getResolvedBindings()}, normalizations: []},
+];
 const artifacts = [{path: "manager-alias.json", sourceEndpoints: ["packages/tui/src/keybindings.ts:KeybindingsManager"], scenarios}];
 const manifestArtifacts = [];
 const artifactBytes = new Map<string, Buffer>();

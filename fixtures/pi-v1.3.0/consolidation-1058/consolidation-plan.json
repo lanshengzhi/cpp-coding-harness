@@ -1025,6 +1025,22 @@
  ],
  "orphanScenarios": [
   {
+   "family": "audit-1221-manager-alias",
+   "artifact": "manager-alias.json",
+   "scenario": "nested-user-array-and-conflict-copy",
+   "reason": "Supplemental alias observation; native snapshots do not implement the frozen mutable manager alias.",
+   "rows": ["cch_tui:KeybindingsManager", "cch_tui:KeybindingsManager.getUserBindings", "cch_tui:KeybindingsManager.getConflicts"],
+   "disposition": "#1221 compares a bounded slice without promoting a row."
+  },
+  {
+   "family": "audit-1221-manager-alias",
+   "artifact": "manager-alias.json",
+   "scenario": "literal-conflict-spellings",
+   "reason": "Supplemental literal conflict observation; invalid keys and the complete manager surface remain unverified.",
+   "rows": ["cch_tui:KeybindingsManager", "cch_tui:KeybindingsManager.conflicts", "cch_tui:KeybindingsManager.getConflicts"],
+   "disposition": "#1221 compares a bounded slice without promoting a row."
+  },
+  {
    "family": "audit-1221-manager-state",
    "artifact": "manager-state.json",
    "scenario": "accessors-replacement-and-global-state",

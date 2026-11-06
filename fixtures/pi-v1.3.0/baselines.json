@@ -321,6 +321,10 @@
           "manifest": "audit-1221-keybindings/manifest.json",
           "manifestSha256": "5d88f51fe6120db29e2c50b1acb9221246399726969bbbda1813d6fd542b30c0"
         },
+        "audit-1221-manager-alias": {
+          "manifest": "audit-1221-manager-alias/manifest.json",
+          "manifestSha256": "4491daca15b4fb578cf2bd26da95dcf25a9e47cb68452acb8d96b0fec26d8eaf"
+        },
         "audit-1221-manager-state": {
           "manifest": "audit-1221-manager-state/manifest.json",
           "manifestSha256": "8c50a54e146baa848756f56b8fc0044636e584c9f2f016c478062598a8a09a18"

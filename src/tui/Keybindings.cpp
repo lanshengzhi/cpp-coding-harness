@@ -208,7 +208,9 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
             overridden_actions.erase(override.id);
         } else {
             entry.keys = std::move(*keys);
-            for (const auto& key : entry.keys) {
+            std::set<std::string, std::less<>> literal_keys;
+            for (const auto& key : override.keys) {
+                if (!literal_keys.insert(key).second) continue;
                 auto [claim, inserted] = user_claims.try_emplace(key);
                 if (inserted) claimed_keys.push_back(key);
                 claim->second.push_back(entry.id);

@@ -429,6 +429,46 @@ integrity, formatting and `git diff --check`. The unfiltered CTest run selected
 standards and specification review was local; independent review agents were
 unavailable to this implementation sub-agent.
 
+## 2026-11-06 literal conflicts and alias replay
+
+The resolver now reports conflicts using submitted literal key spellings, with
+literal duplicates removed per action and claimant order preserved. Matching and
+effective keys still use validated, canonicalized identifiers. A frozen manager
+capture compares two equivalent spellings: only the two actions submitting the
+same literal string conflict. An independent pre-fix run of that case failed
+because all three actions were reported as claimants. Unknown actions and
+invalid overrides still follow the native resolver's validation rules; this is
+not complete parity with the pi manager's treatment of arbitrary strings.
+
+The candidate alias replay compares selected resolved keys and conflict fields
+before mutation and after an explicit rebuild. The native submitted override is
+an owned value, so changing the caller's vector leaves its saved snapshot
+unchanged; pi's nested returned array aliases its manager. The replay also
+checks that a copied native conflict claimant list does not mutate the original.
+It does not implement pi's nested alias, scalar-versus-array user values, mutable
+definitions, or global-manager identity. The candidate was recaptured at the
+same pinned pi revision to add the literal conflict case. Both scenarios are
+registered as supplemental orphans; no whole-row delivery claim follows from
+these partial comparisons.
+
+The registry and plan changes were reviewed against the 23 receipts pinning
+either input: their row mappings and frozen artifact identities did not change.
+Their exact recorded selections were rerun, with 694 passing executions including
+overlaps. Prior JUnit artifacts and validation records are retained. The evidence
+verifier reports 81 bundles, 175 artifacts and 1,000 scenarios. Consolidation
+build and check passed with 335 explicit orphans and no uncovered scenarios;
+all 1,464 ledger row objects remain unchanged. The two consolidation CTest cases
+passed, including the boundary tests. The static receipt boundary check passed
+for 30 receipts, 790 claims and 905 comparisons. The owning TUI shard and the six
+focused manager cases passed; the incremental full build passed. Formatting and
+`git diff --check` passed.
+
+The final unfiltered CTest run selected 4,527 cases: 4,515 passed, 11 were skipped and
+the Herdr PTY evidence case failed because `TERM_PROGRAM=herdr` was unset. The
+skips include native TUI and cross-runtime evidence. This does not establish a
+full-suite pass or real terminal-emulator behavior. Independent standards and
+specification sub-agent reviews were unavailable to this implementation sub-agent.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: the captured observations do not compare all 110

@@ -95,6 +95,27 @@ TEST_CASE("Keybinding conflicts retain first-claim order and distinct claimants"
     CHECK(result->conflicts[1].keybindings == expected_claimants);
 }
 
+TEST_CASE("Keybinding conflicts distinguish literal spellings of the same key", "[tui][keybindings][issue1221]") {
+    const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-manager-alias", "manager-alias.json");
+    REQUIRE(bundle);
+    const auto& conflicts =
+            tests::find_scenario(*bundle, "literal-conflict-spellings").at("expected").at("conflicts").get_array();
+    const auto result = tui::resolve_keybindings({.definitions = {{.id = "first", .default_keys = {}},
+                                                          {.id = "second", .default_keys = {}},
+                                                          {.id = "third", .default_keys = {}}},
+            .overrides = {{.id = "first", .keys = {"ctrl+shift+up", "ctrl+shift+up"}},
+                    {.id = "second", .keys = {"shift+ctrl+up"}},
+                    {.id = "third", .keys = {"ctrl+shift+up"}}}});
+    REQUIRE(result);
+    REQUIRE(result->conflicts.size() == conflicts.size());
+    REQUIRE(conflicts.size() == 1);
+    CHECK(result->conflicts[0].key == conflicts[0].at("key").get_string());
+    std::vector<std::string> claimants;
+    for (const auto& id : conflicts[0].at("keybindings").get_array())
+        claimants.push_back(id.get_string());
+    CHECK(result->conflicts[0].keybindings == claimants);
+}
+
 TEST_CASE("Keybinding snapshots compare frozen user bindings and replacement", "[tui][keybindings][issue1221]") {
     const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-manager-state", "manager-state.json");
     REQUIRE(bundle);
@@ -138,6 +159,50 @@ TEST_CASE("Keybinding snapshots compare frozen user bindings and replacement", "
             std::vector<std::string>{expected.at("after").at("betaKeys").get_array().at(0).get_string()});
     CHECK(saved->keys("beta") ==
             std::vector<std::string>{expected.at("before").at("betaKeys").get_array().at(0).get_string()});
+}
+
+TEST_CASE("Keybinding snapshots compare frozen alias mutation and rebuild", "[tui][keybindings][issue1221]") {
+    const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-manager-alias", "manager-alias.json");
+    REQUIRE(bundle);
+    const auto& expected = tests::find_scenario(*bundle, "nested-user-array-and-conflict-copy").at("expected");
+    const std::vector<tui::KeybindingDefinition> definitions = {
+            {.id = "alpha", .default_keys = {"up", "ctrl+b", "up"}, .description = "Alpha"},
+            {.id = "beta", .default_keys = {"down"}, .description = "Beta"},
+            {.id = "gamma", .default_keys = {}, .description = "Gamma"}};
+    std::vector<tui::KeybindingOverride> overrides = {
+            {.id = "alpha", .keys = {"down", "down"}}, {.id = "beta", .keys = {"down"}}};
+    const auto initial = tui::resolve_keybindings({.definitions = definitions, .overrides = overrides});
+    REQUIRE(initial);
+    tui::KeybindingsContext context(initial->registry);
+    const auto saved = context.snapshot();
+    const auto& before = expected.at("before");
+    CHECK(saved->keys("alpha") == std::vector<std::string>{before.at("resolved").at("alpha").get_string()});
+    REQUIRE(initial->conflicts.size() == 1);
+    CHECK(initial->conflicts[0].key == before.at("conflicts").get_array()[0].at("key").get_string());
+
+    // Pi's returned array aliases its manager; the native request and snapshot own separate values.
+    overrides[0].keys.push_back("left");
+    const auto& mutated = expected.at("afterMutation");
+    CHECK(mutated.at("user").at("alpha").get_array().size() == overrides[0].keys.size());
+    CHECK(saved->user_bindings()[0].keys.size() == before.at("user").at("alpha").get_array().size());
+    CHECK(saved->keys("alpha") == std::vector<std::string>{mutated.at("resolved").at("alpha").get_string()});
+
+    const auto rebuilt = tui::resolve_keybindings({.definitions = definitions, .overrides = overrides});
+    REQUIRE(rebuilt);
+    context.replace(rebuilt->registry);
+    std::vector<std::string> frozen_keys;
+    for (const auto& key : expected.at("afterRebuild").at("resolved").at("alpha").get_array())
+        frozen_keys.push_back(key.get_string());
+    CHECK(context.keys("alpha") == frozen_keys);
+    CHECK(saved->keys("alpha") != context.keys("alpha"));
+    REQUIRE(rebuilt->conflicts.size() == 1);
+    auto copied_conflicts = rebuilt->conflicts;
+    copied_conflicts[0].keybindings.push_back("unknown");
+    std::vector<std::string> frozen_claimants;
+    for (const auto& id :
+            expected.at("afterConflictMutation").at("conflicts").get_array()[0].at("keybindings").get_array())
+        frozen_claimants.push_back(id.get_string());
+    CHECK(rebuilt->conflicts[0].keybindings == frozen_claimants);
 }
 
 TEST_CASE("Keybinding definitions compare the complete frozen pi 1.3.0 table", "[tui][keybindings][issue1221]") {

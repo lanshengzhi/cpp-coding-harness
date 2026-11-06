@@ -174,7 +174,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -229,14 +229,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:31:54Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:11:23Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-state.xml",
-     "sha256": "5fb8210998dfc4231874f1f29531b940bf4b6828a9618c719d26384ff43427e4"
+     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-alias.xml",
+     "sha256": "ae002f48bccea20932625ae286fbd5363589f4c00f6cc2ab7e3d68657e96e256"
     }
    },
    "rows": [
@@ -998,6 +998,30 @@
       "sha256": "3514077af9432cc0265057f8912a7790cffea0b13dc3c29aaefdd7cc225579a9"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:31:54Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-state.xml",
+      "sha256": "5fb8210998dfc4231874f1f29531b940bf4b6828a9618c719d26384ff43427e4"
+     }
+    }
    }
   },
   {
@@ -1017,14 +1041,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:31:54Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:11:24Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-state.xml",
-     "sha256": "f0edd0d60648f813359642c81be43a402fdd8ac98d3bc18d1c1a6dc91c277c51"
+     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-alias.xml",
+     "sha256": "4d009e7263b00bed07af76f8bdb9ca436f663a89867977d40f27f47fa01b5692"
     }
    },
    "inputs": [
@@ -1070,7 +1094,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "src/durable/CodingTools.cpp",
@@ -1950,6 +1974,30 @@
       "sha256": "fdc26ff6c8b32225328d6f5849ef9827dfcd242e4512d1809a08fd8c2c834e51"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:31:54Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-state.xml",
+      "sha256": "f0edd0d60648f813359642c81be43a402fdd8ac98d3bc18d1c1a6dc91c277c51"
+     }
+    }
    }
   },
   {
@@ -2209,11 +2257,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2236,14 +2284,14 @@
      "-L",
      "issue1118",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:31:58Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:11:28Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-state.xml",
-     "sha256": "49f279ace4ea2bbca437a4d248c5cd96fee403a662cefe9b860ec689fb94a93c"
+     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-alias.xml",
+     "sha256": "7408a1ebe07d798b1ac22f2607ec916dc466df8c13a4a442132334e08381ca72"
     }
    },
    "rows": [
@@ -3106,6 +3154,31 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-terminal-ansi-keybindings.xml",
       "sha256": "fc61685b15ff9d0f4d77997357b4b5f3b192fb0d8bfe282ed9f681c7b5a65183"
+     }
+    }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:31:58Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-state.xml",
+      "sha256": "49f279ace4ea2bbca437a4d248c5cd96fee403a662cefe9b860ec689fb94a93c"
      }
     }
    }
@@ -4361,7 +4434,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4369,7 +4442,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     }
    ],
    "validation": {
@@ -4380,14 +4453,14 @@
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:31:59Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:11:29Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-state.xml",
-     "sha256": "89f7e76fe077d7c1da786bd7e97fa9b762ebacb4b6f67708856980e33d037cd3"
+     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-alias.xml",
+     "sha256": "2b50768340c6166d073726d8bbd5ff3949cc0a40bae1db5b2778e4ed5a4517aa"
     }
    },
    "rows": [
@@ -5268,6 +5341,31 @@
       "sha256": "499664d5877fb14ae0a34f4233b35993d107d89f4d6cefa0eb27249ae156c489"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:31:59Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-state.xml",
+      "sha256": "89f7e76fe077d7c1da786bd7e97fa9b762ebacb4b6f67708856980e33d037cd3"
+     }
+    }
    }
   },
   {
@@ -6008,14 +6106,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:31:59Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:11:29Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-state.xml",
-     "sha256": "7347eef100033c8717522f32edcb3645d194ea3b1396a404d84b18d5e54b8acc"
+     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-alias.xml",
+     "sha256": "72dd9d32e4e7272835240329239af6ff1b9bbcd31536caf03bf502297f03132c"
     }
    },
    "rows": [
@@ -6189,11 +6287,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6737,6 +6835,31 @@
       "sha256": "bd89e232c2bb30230b680ca2aee57a349cca81873363bcca3130a90f3564ee34"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:31:59Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-state.xml",
+      "sha256": "7347eef100033c8717522f32edcb3645d194ea3b1396a404d84b18d5e54b8acc"
+     }
+    }
    }
   },
   {
@@ -6755,14 +6878,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:00Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:11:30Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-state.xml",
-     "sha256": "c609850020d0d4e3bf2262f26468bd9e8c22db923b4445cd75207a5108312bb8"
+     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-alias.xml",
+     "sha256": "917609791f05d0730dab5e9919fee41028dfbacca2f98b4d208e5fc76b2b7783"
     }
    },
    "rows": [
@@ -6930,7 +7053,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7447,6 +7570,30 @@
       "sha256": "638a5adb3428333a467268ec21ef02b78be34e2e4b62e70128f7e7bdfe2bfeac"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:00Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-state.xml",
+      "sha256": "c609850020d0d4e3bf2262f26468bd9e8c22db923b4445cd75207a5108312bb8"
+     }
+    }
    }
   },
   {
@@ -7665,14 +7812,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:02Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:11:32Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-state.xml",
-     "sha256": "04459f375e14c25d652982859bf887617f9a85e8d892ca3b6f0098942d729cec"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-alias.xml",
+     "sha256": "624de1861d1b2f9ebe51e5adf374e3e3019b9ed7c715ef03f772db5b3a03011a"
     }
    },
    "rows": [
@@ -7895,7 +8042,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -7919,7 +8066,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -8471,6 +8618,31 @@
       "sha256": "c5165123fc4020b9902dfa1da04315c41d0cb483cefa3020be2b36881f1e1b18"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:02Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-state.xml",
+      "sha256": "04459f375e14c25d652982859bf887617f9a85e8d892ca3b6f0098942d729cec"
+     }
+    }
    }
   },
   {
@@ -8675,11 +8847,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -9612,14 +9784,14 @@
      "-R",
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:34Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:03Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-state.xml",
-     "sha256": "14a29b02a27155a4ba8f51da0c74f14c958741fe890f3c0953d9b1382910b880"
+     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-alias.xml",
+     "sha256": "6700d372d4457ef4be92bb9b2950a071a20331440db601be5381380912a459fc"
     }
    },
    "revalidation1179m": {
@@ -10079,6 +10251,31 @@
       "sha256": "75fb72170e79f3d826d8c14da1de048fdc3cf8d522639522bfa88b3418902ef6"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:34Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-state.xml",
+      "sha256": "14a29b02a27155a4ba8f51da0c74f14c958741fe890f3c0953d9b1382910b880"
+     }
+    }
    }
   },
   {
@@ -10147,11 +10344,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -10182,14 +10379,14 @@
      "-R",
      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:34Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:03Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-state.xml",
-     "sha256": "00c15011ea0cd90ad3d29cb84c63e25e77219aa3c72383e3193b2d3bed9ef22d"
+     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-alias.xml",
+     "sha256": "030d1bbce7df539bc153b60df1a9b7cc0edaa230e1a193f8f459702c03f02d00"
     }
    },
    "rows": [
@@ -10677,6 +10874,31 @@
       "sha256": "505b1fd60632a329a5268b4390d2d1b655f931d19bc5d63d9bfa42d551d969af"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:34Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-state.xml",
+      "sha256": "00c15011ea0cd90ad3d29cb84c63e25e77219aa3c72383e3193b2d3bed9ef22d"
+     }
+    }
    }
   },
   {
@@ -10741,11 +10963,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -10796,14 +11018,14 @@
      "-R",
      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:37Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:06Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-state.xml",
-     "sha256": "2f9b5b804455fd0ada1a53d28b57f79d8512c38a77e318685daf9544d454589f"
+     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-alias.xml",
+     "sha256": "85c808c77b752d5158e5908192ccd2b1264737782dfcf00cc6f42e458890468b"
     }
    },
    "rows": [
@@ -11326,6 +11548,31 @@
       "sha256": "bdfe1fbe219db1f37f88d556ecaa6c8c83d3d4219f30f9e3b9b522a1810ae158"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:37Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-state.xml",
+      "sha256": "2f9b5b804455fd0ada1a53d28b57f79d8512c38a77e318685daf9544d454589f"
+     }
+    }
    }
   },
   {
@@ -11723,7 +11970,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
@@ -11731,7 +11978,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     }
    ],
    "validation": {
@@ -11744,14 +11991,14 @@
      "-L",
      "issue1201",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:38Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:07Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-state.xml",
-     "sha256": "8b468e13c14fe75aa46630b0b79c5b1f3b85149c7c8912bfbcc7c35d37901c2c"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-alias.xml",
+     "sha256": "4f4fc850f8aa521f6be80fe8a7fbf1868d56225a026cb300737eb3fb02dd90b2"
     }
    },
    "rows": [
@@ -12656,6 +12903,33 @@
       "sha256": "006cf0a259833dea4020e5de25e519f556f0578a00a977349480cab31b7ad381"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1201",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:38Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-state.xml",
+      "sha256": "8b468e13c14fe75aa46630b0b79c5b1f3b85149c7c8912bfbcc7c35d37901c2c"
+     }
+    }
    }
   },
   {
@@ -12694,11 +12968,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
+     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
     },
     {
      "path": "src/durable/Harness.cpp",
@@ -12731,14 +13005,14 @@
      "-L",
      "issue1203",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:38Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:07Z",
     "selected": 3,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-state.xml",
-     "sha256": "157fb0b65483381e11ad5faad951a38a48e7077645e2ba1932a644d609fddeb3"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-alias.xml",
+     "sha256": "4f5ea7c4224e2b52637229e98361904a3d5095723be7151473dc44a8e0ba9bde"
     }
    },
    "rows": [
@@ -13093,6 +13367,33 @@
       "sha256": "1a3f11863a2cfa4858813a2119e6bf15c784ea14b9e6890b5b73b2ef2b34e606"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1203",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:38Z",
+     "selected": 3,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-state.xml",
+      "sha256": "157fb0b65483381e11ad5faad951a38a48e7077645e2ba1932a644d609fddeb3"
+     }
+    }
    }
   },
   {
@@ -13135,7 +13436,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
@@ -13172,14 +13473,14 @@
      "-L",
      "issue1213",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:39Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:08Z",
     "selected": 15,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-state.xml",
-     "sha256": "897269f250bdaa47e2649ff0b17a77f8c87831fb65ee67f6e38d3337674e4cf2"
+     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-alias.xml",
+     "sha256": "85a1ed4b1f36d6363dfb349a6250fc0944f513e3928398ff7b2f6d8aea8ffa20"
     }
    },
    "rows": [
@@ -13810,6 +14111,32 @@
       "sha256": "1bdf0038efb74c6c76673fb58538dd3140077862359b732e4ea984ba11770c5a"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1213",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:39Z",
+     "selected": 15,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-state.xml",
+      "sha256": "897269f250bdaa47e2649ff0b17a77f8c87831fb65ee67f6e38d3337674e4cf2"
+     }
+    }
    }
   },
   {
@@ -13860,7 +14187,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -13905,14 +14232,14 @@
      "-L",
      "issue1212",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:40Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:09Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-state.xml",
-     "sha256": "4c7e7408bde768f02d9525413cd81a66f41eb5bfe40ccb4d18069c37ac5db34d"
+     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-alias.xml",
+     "sha256": "d01e86036ce88682feb4f5f25aafbdd0dd0115056d4086191dc4ad9fb857fb91"
     }
    },
    "rows": [
@@ -14889,6 +15216,32 @@
       "sha256": "abd8070f09084417026375898fab4e2a4871b6092622584c448f3c502538e27b"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1212",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:40Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-state.xml",
+      "sha256": "4c7e7408bde768f02d9525413cd81a66f41eb5bfe40ccb4d18069c37ac5db34d"
+     }
+    }
    }
   },
   {
@@ -14951,7 +15304,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -15008,14 +15361,14 @@
      "-L",
      "issue1211",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:43Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:12Z",
     "selected": 34,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-state.xml",
-     "sha256": "104a6d2a787e608f723a63609a08fd7b77ae7ebc0202e910d664294e232d35a1"
+     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-alias.xml",
+     "sha256": "36b75a76143cff9ab28500067d9c8e3eff73ab0faa727e254b981f187c0bdfe7"
     }
    },
    "rows": [
@@ -16350,6 +16703,32 @@
       "sha256": "b097af79593e0f5f2f1433eef3f5356430c475e8c6ef2e1b60040d63be927450"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1211",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:43Z",
+     "selected": 34,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-state.xml",
+      "sha256": "104a6d2a787e608f723a63609a08fd7b77ae7ebc0202e910d664294e232d35a1"
+     }
+    }
    }
   },
   {
@@ -16392,7 +16771,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -16429,14 +16808,14 @@
      "-L",
      "issue1210",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:45Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:17Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-state.xml",
-     "sha256": "97075d2e79e1bf30e5a4507d0901e87fe90512a72c382ab2d86ffda01b0762c3"
+     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-alias.xml",
+     "sha256": "0079cde08ee2b98edb91127aa199c127c46df04d22f9a52dafed5f4c2aed14ab"
     }
    },
    "rows": [
@@ -16977,6 +17356,32 @@
       "sha256": "bc307b61b0a5c2112ce8afcf145be07e31991a8e2e354f40921f5c614aeb196e"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1210",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:45Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-state.xml",
+      "sha256": "97075d2e79e1bf30e5a4507d0901e87fe90512a72c382ab2d86ffda01b0762c3"
+     }
+    }
    }
   },
   {
@@ -17043,7 +17448,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -17100,14 +17505,14 @@
      "-L",
      "issue1209",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:47Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:22Z",
     "selected": 30,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-state.xml",
-     "sha256": "9b847e97ae49ef73f16243ec0cc667e0969d19f461a8c08eaf5a9a7d91931220"
+     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-alias.xml",
+     "sha256": "7c4da17236bd54772689d71089206fe2943c3ac09689d757d3c4db737104f3f1"
     }
    },
    "rows": [
@@ -19436,6 +19841,32 @@
       "sha256": "fbc218107cd05ed0806b7547247d5f2db8c93d8a0967c170a48700d7beba8dd2"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1209",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:47Z",
+     "selected": 30,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-state.xml",
+      "sha256": "9b847e97ae49ef73f16243ec0cc667e0969d19f461a8c08eaf5a9a7d91931220"
+     }
+    }
    }
   },
   {
@@ -19476,7 +19907,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -19533,14 +19964,14 @@
      "-L",
      "issue1215",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:49Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:27Z",
     "selected": 25,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-state.xml",
-     "sha256": "8a7d6565891fb460e5dbfb26bebd09e41b07b3e6b4f83a334e9ec3bacdaf4657"
+     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-alias.xml",
+     "sha256": "7bf7b7ad557d94ffa38008aa8ff5400ab5a42ba79f1d404219064936e37d7986"
     }
    },
    "rows": [
@@ -21162,6 +21593,32 @@
       "sha256": "09c86685ffca2adcd14ba3fdf152c78184fc492a969b70e78504e1c0dffe1752"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1215",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:49Z",
+     "selected": 25,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-state.xml",
+      "sha256": "8a7d6565891fb460e5dbfb26bebd09e41b07b3e6b4f83a334e9ec3bacdaf4657"
+     }
+    }
    }
   },
   {
@@ -21190,7 +21647,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -21231,14 +21688,14 @@
      "-L",
      "issue1216",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:51Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:33Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-state.xml",
-     "sha256": "a675128dc3d6f7c13fb3435cf3106672bba5c1c3e4f61fe257394c81d5b60fc2"
+     "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-alias.xml",
+     "sha256": "06c19608a0ee8521c4293ea6445e51625770c18e2b0700e7b5a86b2f9b388e06"
     }
    },
    "rows": [
@@ -21965,6 +22422,32 @@
       "sha256": "8ac5a2fda2ef03b050070118944396194073311e6bbfb1c8f46a3b1b22d13018"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1216",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:51Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-state.xml",
+      "sha256": "a675128dc3d6f7c13fb3435cf3106672bba5c1c3e4f61fe257394c81d5b60fc2"
+     }
+    }
    }
   },
   {
@@ -21993,7 +22476,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1217/latex.json",
@@ -22018,14 +22501,14 @@
      "-L",
      "issue1217",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:51Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:35Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-state.xml",
-     "sha256": "4b1059edac6fdf92cd1bab0e02791c3169388aac7a5bd0981346e2dd03b8ef99"
+     "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-alias.xml",
+     "sha256": "0f663761f804ac5bb70b08b71f8eecdbb4bf0e995f4796409a7fc32255521573"
     }
    },
    "rows": [
@@ -23089,6 +23572,32 @@
       "sha256": "6b94365860ff6064587688645e62bdf93a31918a82996596ff81e6e181f4f92c"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1217",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:51Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-state.xml",
+      "sha256": "4b1059edac6fdf92cd1bab0e02791c3169388aac7a5bd0981346e2dd03b8ef99"
+     }
+    }
    }
   },
   {
@@ -23117,7 +23626,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1218/color.json",
@@ -23138,14 +23647,14 @@
      "-L",
      "issue1218",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:52Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:36Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-state.xml",
-     "sha256": "78c4a6a9ddf79f9f00c397f4d0839541f14209341bbd0f75699c893caaa7b627"
+     "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-alias.xml",
+     "sha256": "3808cc221e2ee51028c01a62379cf564045c7a4812588318ff86f5293fde1bc8"
     }
    },
    "rows": [
@@ -24137,6 +24646,32 @@
       "sha256": "9e668d836229fcadb1da895d48d88c4b2a5317dc9c57a748a27e3d548223052e"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1218",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:52Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-state.xml",
+      "sha256": "78c4a6a9ddf79f9f00c397f4d0839541f14209341bbd0f75699c893caaa7b627"
+     }
+    }
    }
   },
   {
@@ -24177,7 +24712,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
@@ -24206,14 +24741,14 @@
      "-L",
      "issue1219",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:53Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:39Z",
     "selected": 32,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-state.xml",
-     "sha256": "ded7db6d931b1104756f620e128a4401d03abd55e75df0b001bae6f7ba9bfd21"
+     "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-alias.xml",
+     "sha256": "5b7844da0976b816e2b600274bb23a01097688d7a8db3f6282fde324ccd553f5"
     }
    },
    "rows": [
@@ -25776,6 +26311,32 @@
       "sha256": "df3111c9f860f5474551fd63130eb2142bdb71460989d32476df83983394db0e"
      }
     }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1219",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:53Z",
+     "selected": 32,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-state.xml",
+      "sha256": "ded7db6d931b1104756f620e128a4401d03abd55e75df0b001bae6f7ba9bfd21"
+     }
+    }
    }
   },
   {
@@ -25852,7 +26413,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
+     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -25893,14 +26454,14 @@
      "-L",
      "issue1220",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-state.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-alias.xml"
     ],
-    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
-    "recordedAt": "2026-11-06T03:32:56Z",
+    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+    "recordedAt": "2026-11-06T04:12:44Z",
     "selected": 69,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-state.xml",
-     "sha256": "4358cf25316c51981c384d89658f0b4a223dbf882204fed04a68315408c86208"
+     "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-alias.xml",
+     "sha256": "1ecf8e5966fc8b063cdaf349e5d9a0721634ee634fdac602b338da712008f2c5"
     }
    },
    "rows": [
@@ -27775,6 +28336,32 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-terminal-ansi-keybindings.xml",
       "sha256": "c78fbbd679f92cb420f0f8ede03f7d5eca28e141ee4d2f82efdd040016ece8d9"
+     }
+    }
+   },
+   "revalidation1221ManagerAlias": {
+    "reason": "Registration adds two supplemental orphan manager observations. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1220",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-state.xml"
+     ],
+     "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+     "recordedAt": "2026-11-06T03:32:56Z",
+     "selected": 69,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-state.xml",
+      "sha256": "4358cf25316c51981c384d89658f0b4a223dbf882204fed04a68315408c86208"
      }
     }
    }
