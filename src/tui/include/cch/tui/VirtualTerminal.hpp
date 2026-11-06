@@ -109,9 +109,9 @@ public:
     /// Returns true if clear_screen() was called since the last check.
     /// Resets the flag on read.
     [[nodiscard]] bool check_clear_screen_called();
-    /// Returns true if the clear-scrollback (`\x1b[3J`) was emitted since the
-    /// last check (clear_screen() clears the terminal's scroll history too).
-    /// Resets the flag on read.
+    /// Returns true if clear-scrollback (`\x1b[3J`) was emitted since the last
+    /// check. pi-v1.3.0 `tui-main-screen.ts:282-286` emits it separately from
+    /// `clear_screen()` (`terminal.ts:567-569`). Resets the flag on read.
     [[nodiscard]] bool check_clear_scrollback_called();
 
 private:

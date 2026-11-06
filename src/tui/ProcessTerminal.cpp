@@ -1891,10 +1891,10 @@ TerminalModeState ProcessTerminal::modes() const {
 support::ExpectedVoid ProcessTerminal::clear_screen() {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_output_admission(*impl_); !started) return std::unexpected(started.error());
-    // pi's resize full-redraw clears scrollback too (`\x1b[3J`): the native
-    // scroll history, the mirrored scroll count, and the anchor all reset
-    // (the screen is cleared and homed, so buffer row 0 lands on screen row 0).
-    // A refused clear leaves all of that alone; the caller retries the frame.
+    // pi-v1.3.0 terminal.ts:567-569 clears and homes without clearing native
+    // scrollback; tui-main-screen.ts:282-286 clears scrollback separately.
+    // Reset the mirrored scroll count and anchor only after output is admitted;
+    // a refused clear leaves them alone so the caller can retry.
     auto result = enqueue_output(*impl_, kClearScreen);
     if (result) {
         impl_->viewport_top = 0;

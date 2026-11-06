@@ -177,9 +177,9 @@ public:
     [[nodiscard]] virtual TerminalDimensions dimensions() const = 0;
     [[nodiscard]] virtual TerminalCapabilities capabilities() const = 0;
     [[nodiscard]] virtual TerminalModeState modes() const = 0;
-    /// Clear the terminal's main screen, home the cursor, and clear its
-    /// scroll history (`\x1b[2J\x1b[H\x1b[3J`), exactly as pi's resize
-    /// full-redraw does (ADR 0037 main-screen scrollback flow).
+    /// Clear the screen and home the cursor (`\x1b[2J\x1b[H`), as in
+    /// pi-v1.3.0 `packages/tui/src/terminal.ts:567-569`. The resize full-redraw
+    /// clears scrollback separately (`tui-main-screen.ts:282-286`).
     [[nodiscard]] virtual support::ExpectedVoid clear_screen() = 0;
     [[nodiscard]] virtual support::ExpectedVoid write(std::string_view output) = 0;
     [[nodiscard]] virtual support::ExpectedVoid set_cursor(CursorPosition position) = 0;
