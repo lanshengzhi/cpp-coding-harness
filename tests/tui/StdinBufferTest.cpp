@@ -6,6 +6,7 @@
 
 #include "support/ImageEnvironmentGuard.hpp"
 #include "support/PseudoTerminal.hpp"
+#include "support/PiTuiEvidence.hpp"
 
 #include "tui/InputDecoder.hpp"
 
@@ -76,6 +77,37 @@ private:
 }
 
 } // namespace
+
+TEST_CASE("pi-v1.3.0 captured fragmented replies and ambiguous input replay", "[tui][issue1221][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1221", "input.json");
+    REQUIRE(bundle);
+    for (const auto name : {"fragmented-osc-reply", "fragmented-apc-reply", "ambiguous-alt-input"}) {
+        INFO(name);
+        const auto& scenario = cch::tests::find_scenario(*bundle, name);
+        const auto& input = scenario.at("inputs");
+        const auto& chunks = input.at("chunks").get_array();
+        const auto& expected = scenario.at("expected");
+        const auto timeout = std::chrono::milliseconds{static_cast<int>(input.at("timeoutMs").get_number())};
+        REQUIRE(input.at("waitMs").get_number() > input.at("timeoutMs").get_number());
+        tui::StdinBuffer buffer({.timeout = timeout, .escape_timeout = timeout});
+        std::vector<std::string> sequences;
+        buffer.set_data_handler([&](std::string sequence) { sequences.push_back(std::move(sequence)); });
+        REQUIRE_FALSE(chunks.empty());
+        buffer.process(chunks[0].get_string());
+        // ProcessTerminal only flushes when StdinBuffer arms a deadline.
+        if (buffer.deadline() != std::chrono::steady_clock::time_point::max()) (void)buffer.flush();
+        std::vector<std::string> after_wait;
+        for (const auto& value : expected.at("afterWait").get_array())
+            after_wait.push_back(value.get_string());
+        CHECK(sequences == after_wait);
+        for (std::size_t i = 1; i < chunks.size(); ++i)
+            buffer.process(chunks[i].get_string());
+        std::vector<std::string> after_completion;
+        for (const auto& value : expected.at("afterCompletion").get_array())
+            after_completion.push_back(value.get_string());
+        CHECK(sequences == after_completion);
+    }
+}
 
 TEST_CASE("stream decoder keeps ESC[M !! as one legacy mouse frame with no printable leak",
         "[tui][decoder][issue949][spec]") {

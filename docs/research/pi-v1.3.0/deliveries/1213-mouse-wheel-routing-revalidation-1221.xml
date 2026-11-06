@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="15"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="1"
+	timestamp="2026-11-06T10:42:38"
+	>
+	<testcase name="a primary scroll view without follow-end never shows the jump-to-end indicator" classname="a primary scroll view without follow-end never shows the jump-to-end indicator" time="0.186091" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1004;issue1213;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "a primary scroll view without follow-end never shows the jump-to-end indicator"
+Randomness seeded to: 1282627369
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a released gesture stops capturing before the next press" classname="a released gesture stops capturing before the next press" time="0.0194941" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue1212;issue1213;mouse;spec;tui"/>
+		</properties>
+		<system-out>Filters: "a released gesture stops capturing before the next press"
+Randomness seeded to: 2723401920
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an unconsumed wheel scrolls after handled pointer motion" classname="an unconsumed wheel scrolls after handled pointer motion" time="0.0192758" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue1213;mouse;spec;tui"/>
+		</properties>
+		<system-out>Filters: "an unconsumed wheel scrolls after handled pointer motion"
+Randomness seeded to: 641486666
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="fullscreen search ignores box drawing clicks as navigation controls" classname="fullscreen search ignores box drawing clicks as navigation controls" time="0.186853" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1010;issue1213;tui"/>
+		</properties>
+		<system-out>Filters: "fullscreen search ignores box drawing clicks as navigation controls"
+Randomness seeded to: 2786100819
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mouse reports parse from SGR, legacy X10, and wheel forms" classname="mouse reports parse from SGR, legacy X10, and wheel forms" time="0.0182596" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1002;issue1209;issue1213;mouse;spec;tui"/>
+		</properties>
+		<system-out>Filters: "mouse reports parse from SGR\, legacy X10\, and wheel forms"
+Randomness seeded to: 3409386582
+===============================================================================
+All tests passed (34 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 cached frame routes a press to the deepest nested region" classname="pi-v1.3.0 cached frame routes a press to the deepest nested region" time="0.457723" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1212;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 cached frame routes a press to the deepest nested region"
+Randomness seeded to: 822995352
+===============================================================================
+All tests passed (119 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus" classname="pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus" time="0.413964" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1212;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus"
+Randomness seeded to: 3196800702
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 consumed wheel report keeps the viewport and an unconsumed one scrolls it" classname="pi-v1.3.0 consumed wheel report keeps the viewport and an unconsumed one scrolls it" time="0.427175" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 consumed wheel report keeps the viewport and an unconsumed one scrolls it"
+Randomness seeded to: 774046777
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 fullscreen navigation, releases, and indicator clicks match frozen pi" classname="pi-v1.3.0 fullscreen navigation, releases, and indicator clicks match frozen pi" time="0.476027" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;issue1213;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 fullscreen navigation\, releases\, and indicator clicks match frozen pi"
+Randomness seeded to: 4288208447
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 handled motion writes nothing and consecutive clicks count up" classname="pi-v1.3.0 handled motion writes nothing and consecutive clicks count up" time="0.466632" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 handled motion writes nothing and consecutive clicks count up"
+Randomness seeded to: 2076298277
+===============================================================================
+All tests passed (58 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 regular screen leaves terminal-owned mouse behavior and typed input intact" classname="pi-v1.3.0 regular screen leaves terminal-owned mouse behavior and typed input intact" time="0.44184" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 regular screen leaves terminal-owned mouse behavior and typed input intact"
+Randomness seeded to: 3978334538
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 search opens and renders its frozen navigation controls" classname="pi-v1.3.0 search opens and renders its frozen navigation controls" time="0.485457" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen-search;compat-pi;issue1211;issue1213;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 search opens and renders its frozen navigation controls"
+Randomness seeded to: 2454617375
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 track clicks and drag phases drive the alternate-screen scrollbar" classname="pi-v1.3.0 track clicks and drag phases drive the alternate-screen scrollbar" time="0.444581" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;issue1213;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 track clicks and drag phases drive the alternate-screen scrollbar"
+Randomness seeded to: 356716915
+===============================================================================
+All tests passed (127 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 wheel policy drives fixed, accelerated, burst, reset, and fractional deltas" classname="pi-v1.3.0 wheel policy drives fixed, accelerated, burst, reset, and fractional deltas" time="0.566932" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1211;issue1213;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 wheel policy drives fixed\, accelerated\, burst\, reset\, and fractional deltas"
+Randomness seeded to: 60921407
+===============================================================================
+All tests passed (52 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the frozen drag phases capture layout routing in the alternate screen" classname="the frozen drag phases capture layout routing in the alternate screen" time="0.188414" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1005;issue1213;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "the frozen drag phases capture layout routing in the alternate screen"
+Randomness seeded to: 1653684864
+===============================================================================
+All tests passed (67 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

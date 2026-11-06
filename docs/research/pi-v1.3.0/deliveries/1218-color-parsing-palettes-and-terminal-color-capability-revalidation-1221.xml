@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="16"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-06T10:43:04"
+	>
+	<testcase name="color construction rejects negative or out-of-range channels and non-finite values" classname="color construction rejects negative or out-of-range channels and non-finite values" time="0.0109067" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;negative;tui"/>
+		</properties>
+		<system-out>Filters: "color construction rejects negative or out-of-range channels and non-finite values"
+Randomness seeded to: 1138692673
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="color conversion gamut maps out-of-gamut chroma without distorting hue" classname="color conversion gamut maps out-of-gamut chroma without distorting hue" time="0.011336" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "color conversion gamut maps out-of-gamut chroma without distorting hue"
+Randomness seeded to: 1407844552
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="color mixing enforces unit bounds and separates polar oklch from cartesian srgb interpolation" classname="color mixing enforces unit bounds and separates polar oklch from cartesian srgb interpolation" time="0.0124211" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "color mixing enforces unit bounds and separates polar oklch from cartesian srgb interpolation"
+Randomness seeded to: 999019215
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="color parsing rejects malformed formats and non-color strings without fallback" classname="color parsing rejects malformed formats and non-color strings without fallback" time="0.0116369" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;negative;tui"/>
+		</properties>
+		<system-out>Filters: "color parsing rejects malformed formats and non-color strings without fallback"
+Randomness seeded to: 487224323
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="color to hex formats exact two-digit lowercase hex with zero-padding" classname="color to hex formats exact two-digit lowercase hex with zero-padding" time="0.0124653" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;negative;tui"/>
+		</properties>
+		<system-out>Filters: "color to hex formats exact two-digit lowercase hex with zero-padding"
+Randomness seeded to: 981991479
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="foreground and background ANSI format distinct codes for 256color and truecolor modes" classname="foreground and background ANSI format distinct codes for 256color and truecolor modes" time="0.0115629" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "foreground and background ANSI format distinct codes for 256color and truecolor modes"
+Randomness seeded to: 2061329848
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="okhsl color construction and channel conversion reject out-of-range saturation and lightness" classname="okhsl color construction and channel conversion reject out-of-range saturation and lightness" time="0.0117381" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;negative;tui"/>
+		</properties>
+		<system-out>Filters: "okhsl color construction and channel conversion reject out-of-range saturation and lightness"
+Randomness seeded to: 3584434807
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="oklab to okhsl lightness diverges from linear and quadratic approximations" classname="oklab to okhsl lightness diverges from linear and quadratic approximations" time="0.0110818" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "oklab to okhsl lightness diverges from linear and quadratic approximations"
+Randomness seeded to: 1330231233
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 color mixing in oklch and srgb spaces matches frozen observation" classname="pi-v1.3.0 color mixing in oklch and srgb spaces matches frozen observation" time="0.222018" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 color mixing in oklch and srgb spaces matches frozen observation"
+Randomness seeded to: 3910333871
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 color parsing and hex formatting match frozen observation" classname="pi-v1.3.0 color parsing and hex formatting match frozen observation" time="0.221086" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 color parsing and hex formatting match frozen observation"
+Randomness seeded to: 687198038
+===============================================================================
+All tests passed (61 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 color to rgb and oklch conversions match frozen observation" classname="pi-v1.3.0 color to rgb and oklch conversions match frozen observation" time="0.225073" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 color to rgb and oklch conversions match frozen observation"
+Randomness seeded to: 2912810397
+===============================================================================
+All tests passed (51 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 color values construction and channels match frozen observation" classname="pi-v1.3.0 color values construction and channels match frozen observation" time="0.225294" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 color values construction and channels match frozen observation"
+Randomness seeded to: 1689889169
+===============================================================================
+All tests passed (117 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 okhsl colors and channels match frozen observation" classname="pi-v1.3.0 okhsl colors and channels match frozen observation" time="0.220749" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 okhsl colors and channels match frozen observation"
+Randomness seeded to: 2320334991
+===============================================================================
+All tests passed (69 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 oklab to okhsl lightness matches frozen observation" classname="pi-v1.3.0 oklab to okhsl lightness matches frozen observation" time="0.225993" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 oklab to okhsl lightness matches frozen observation"
+Randomness seeded to: 2427657376
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 text styling and foreground background ansi formatting match frozen observation" classname="pi-v1.3.0 text styling and foreground background ansi formatting match frozen observation" time="0.222011" status="run">
+		<properties>
+			<property name="cmake_labels" value="colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 text styling and foreground background ansi formatting match frozen observation"
+Randomness seeded to: 1703012815
+===============================================================================
+All tests passed (33 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="style_text and style_text_with_ansi preserve unstyled text and enforce SGR reset ordering" classname="style_text and style_text_with_ansi preserve unstyled text and enforce SGR reset ordering" time="0.0117419" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;colors;issue1218;tui"/>
+		</properties>
+		<system-out>Filters: "style_text and style_text_with_ansi preserve unstyled text and enforce SGR reset ordering"
+Randomness seeded to: 735407796
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

@@ -89,13 +89,42 @@ v1.3.0 verifier passed (76 bundles, 168 artifacts, 981 scenarios). No complete
 full-suite result was obtained in this continuation. Independent standards and
 specification reviews remain outstanding.
 
+## 2026-11-06 registration and comparison continuation
+
+The original `audit-1221` candidate bytes from commit `09fed85c1` are now
+registered without recapture. The verifier reports 77 bundles, 170 artifacts
+and 986 scenarios. Its five scenarios are explicitly classified as supplemental
+orphans; none promotes a row. `KeysTest.cpp` reads both key scenarios and
+compares every captured identity, repeat/release flag and positive and negative
+binding result. `StdinBufferTest.cpp` reads all three input scenarios, checks
+the captured output before and after completion, and models the terminal's
+deadline-driven flush. It does not claim a real timer or emulator observation.
+
+Registration changed inputs pinned by 23 existing receipts. Each receipt's
+recorded selection was rerun into a separate JUnit file, with the previous
+artifact retained: 694 test executions passed in total, counting selections
+that overlap. Only the changed registry and plan input digests were refreshed;
+each receipt records its prior validation and the reason. The ledger retains
+all 1,464 row memberships, implementation and verification states, comparison
+scenarios, evidence routes and source rows. Consolidation build and check pass
+with 321 explicit orphans and no uncovered scenarios. The 76 consolidation
+boundary tests and the 30-receipt artifact-boundary check pass. The two new
+focused comparisons pass after the full incremental build. The unfiltered CTest
+run selected 4,517 cases: one failed and 11 skipped (exit 8). The failure was
+`real PTY records Herdr markdown and OSC 52 terminal bytes`, which requires
+`TERM_PROGRAM=herdr`; it was unset. An isolated rerun failed at the same host
+precondition. The skipped cases include native TUI and cross-runtime evidence,
+so this run does not establish those environments' behavior. Formatting and
+`git diff --check` passed. Independent standards and specification reviews
+remain outstanding; this implementation sub-agent performed a local review.
+
 ## Remaining boundary
 
-Ticket #1221 remains open: this clarification and the focused tests do not
-compare all 110 rows with normal and distinct discriminating cases, register
-new frozen captures or delivery receipts, reconcile the ledger, or establish
-real-emulator behavior. Existing row status is unchanged. The shifted-symbol
-and fragmented-reply tests already present are not a substitute for auditing
-each row and its required discriminating case. Rows routed to other tickets
-still require their respective owners. Any promotions must use the delivery
-receipt contract and the #1229 discriminating-case requirement.
+Ticket #1221 remains open: these five observations do not compare all 110 rows
+with normal and distinct discriminating cases, provide whole-row delivery
+receipts, or establish real-emulator behavior. The captured families do not
+cover `utils-ansi.json`, terminal startup or stop, or the complete keybinding
+surface; additional frozen observations and comparisons are needed. Each row
+still needs its complete audit and the #1229 distinct discriminating case.
+Terminal residuals on #831 and #1035 remain with those owners. No capability
+status is promoted by this continuation.

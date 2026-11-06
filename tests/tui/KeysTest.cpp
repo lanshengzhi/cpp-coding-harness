@@ -1,11 +1,39 @@
 #include <cch/tui/Keys.hpp>
 
+#include "support/PiTuiEvidence.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <optional>
 #include <string>
 #include <string_view>
+
+TEST_CASE("pi-v1.3.0 captured key identities and binding results replay", "[tui][issue1221][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1221", "keys-kitty-text.json");
+    REQUIRE(bundle);
+    for (const auto name : {"legacy-key-identity", "kitty-active-key-identity"}) {
+        const auto& scenario = cch::tests::find_scenario(*bundle, name);
+        const auto& input = scenario.at("inputs");
+        const auto& cases = input.at("cases").get_array();
+        const auto& expected = scenario.at("expected").get_array();
+        REQUIRE(cases.size() == expected.size());
+        for (std::size_t i = 0; i < cases.size(); ++i) {
+            const auto& item = cases[i];
+            INFO(name << " case " << i);
+            const auto key = cch::tui::parse_key(item.at("sequence").get_string(), input.at("active").get_boolean());
+            REQUIRE(key);
+            CHECK(cch::tui::key_id(*key) == expected[i].at("parsed").get_string());
+            CHECK((key->type == cch::tui::KeyEventType::Repeat) == expected[i].at("repeat").get_boolean());
+            CHECK((key->type == cch::tui::KeyEventType::Release) == expected[i].at("release").get_boolean());
+            const auto& bindings = item.at("bindings").get_array();
+            const auto& matches = expected[i].at("matches").get_array();
+            REQUIRE(bindings.size() == matches.size());
+            for (std::size_t j = 0; j < bindings.size(); ++j)
+                CHECK(cch::tui::matches_key(*key, bindings[j].get_string()) == matches[j].get_boolean());
+        }
+    }
+}
 
 TEST_CASE("canonical baseline key identifiers parse with normalized modifiers", "[tui][input][issue47][spec]") {
     const auto parsed = cch::tui::parse_key_id("alt+ctrl+shift+enter");

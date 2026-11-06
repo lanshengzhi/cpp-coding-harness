@@ -1025,6 +1025,46 @@
  ],
  "orphanScenarios": [
   {
+   "family": "audit-1221",
+   "artifact": "input.json",
+   "scenario": "fragmented-osc-reply",
+   "reason": "Supplemental frozen input observation; no complete B13 row is routed to it.",
+   "rows": ["cch_tui:stdin-buffer:fragmented-terminal-replies"],
+   "disposition": "#1221 compares this slice; whole-row coverage remains open."
+  },
+  {
+   "family": "audit-1221",
+   "artifact": "input.json",
+   "scenario": "fragmented-apc-reply",
+   "reason": "Supplemental frozen input observation; no complete B13 row is routed to it.",
+   "rows": ["cch_tui:stdin-buffer:fragmented-terminal-replies"],
+   "disposition": "#1221 compares this slice; whole-row coverage remains open."
+  },
+  {
+   "family": "audit-1221",
+   "artifact": "input.json",
+   "scenario": "ambiguous-alt-input",
+   "reason": "Supplemental frozen input observation; no complete B13 row is routed to it.",
+   "rows": ["cch_tui:StdinBuffer"],
+   "disposition": "#1221 compares this slice; whole-row coverage remains open."
+  },
+  {
+   "family": "audit-1221",
+   "artifact": "keys-kitty-text.json",
+   "scenario": "legacy-key-identity",
+   "reason": "Supplemental frozen key observation; no complete B13 row is routed to it.",
+   "rows": ["cch_tui:parseKey", "cch_tui:matchesKey"],
+   "disposition": "#1221 compares this slice; whole-row coverage remains open."
+  },
+  {
+   "family": "audit-1221",
+   "artifact": "keys-kitty-text.json",
+   "scenario": "kitty-active-key-identity",
+   "reason": "Supplemental frozen key observation; no complete B13 row is routed to it.",
+   "rows": ["cch_tui:parseKey", "cch_tui:matchesKey"],
+   "disposition": "#1221 compares this slice; whole-row coverage remains open."
+  },
+  {
    "family": "audit-1105",
    "artifact": "session-binding.json",
    "scenario": "real Session reads resources on demand and binds a late tool",
