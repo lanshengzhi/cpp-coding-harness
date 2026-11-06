@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -259,14 +259,14 @@
             "-L",
             "^(issue1090|issue1101|issue1104)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:41:13Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:07:31Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221.xml",
-            "sha256": "14a4ac6fd9cd018873f629e4be4fca5af4d847d6e1c06e9317bd398a409b20fe"
+            "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-terminal-ansi.xml",
+            "sha256": "6d0585a814ae18e4e80a941cd73760438df48dc32972f9643f8e7072cf2b1845"
           }
         },
         "rows": [
@@ -956,6 +956,30 @@
               "sha256": "4ca108c0606b33abfcba6857f9f1a2901650fe478370628a6f0012942c1e2581"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:41:13Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221.xml",
+              "sha256": "14a4ac6fd9cd018873f629e4be4fca5af4d847d6e1c06e9317bd398a409b20fe"
+            }
+          }
         }
       },
       {
@@ -975,14 +999,14 @@
             "-L",
             "^(issue1090|issue1101|issue1104)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:41:28Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:07:32Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221.xml",
-            "sha256": "81a0ce0389c592f389d08ca647377dc838d43fd9aa3092d189f85c0077626e00"
+            "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-terminal-ansi.xml",
+            "sha256": "6f481e9585dd2f8617a142f670cc259eb737a997fabf15410dbcb948017cc8d7"
           }
         },
         "inputs": [
@@ -1028,7 +1052,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "src/durable/CodingTools.cpp",
@@ -1836,6 +1860,30 @@
               "sha256": "8561adcd69ddb9ac7c49bb1ae87ec307b564135cc41d86a9dffee9623703e124"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:41:28Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221.xml",
+              "sha256": "81a0ce0389c592f389d08ca647377dc838d43fd9aa3092d189f85c0077626e00"
+            }
+          }
         }
       },
       {
@@ -2095,11 +2143,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2122,14 +2170,14 @@
             "-L",
             "issue1118",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:41:32Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:07:36Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221.xml",
-            "sha256": "dfceb6a6933bf9e2bbcbf9863dbe14a13c50fdb0c257a3efecfd5f1f325a5f12"
+            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-terminal-ansi.xml",
+            "sha256": "0f628b8f82d76f2671b409f0bbf3939fda39f956ada2d1938f1476a6da45ca9f"
           }
         },
         "rows": [
@@ -2917,6 +2965,31 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1220.xml",
               "sha256": "b71a0ab6b6a431daf6ee2bb75576d6d08d7237fd9b2eb433c51aec7750e5d491"
+            }
+          }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:41:32Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221.xml",
+              "sha256": "dfceb6a6933bf9e2bbcbf9863dbe14a13c50fdb0c257a3efecfd5f1f325a5f12"
             }
           }
         }
@@ -4172,7 +4245,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4180,7 +4253,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           }
         ],
         "validation": {
@@ -4191,14 +4264,14 @@
             "-R",
             "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:41:34Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:07:38Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221.xml",
-            "sha256": "d37119decb989e488e7f9812b45a97847c8a3753203069379d62e9f1f9b64d55"
+            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-terminal-ansi.xml",
+            "sha256": "48293c511ef83f953ba7c8afca9353923070193db86a884ffd26a323c07f1b80"
           }
         },
         "rows": [
@@ -4975,6 +5048,31 @@
               "sha256": "0a79d7169cd4a311a5ea2bf668f461da72c59d67e29dacb19b9c8567805a7eec"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:41:34Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221.xml",
+              "sha256": "d37119decb989e488e7f9812b45a97847c8a3753203069379d62e9f1f9b64d55"
+            }
+          }
         }
       },
       {
@@ -5715,14 +5813,14 @@
             "-L",
             "chord",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:41:41Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:07:38Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221.xml",
-            "sha256": "61c8853fa16d37468289b61514082e8f606849d79adf3d75d43d9a491264cebe"
+            "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-terminal-ansi.xml",
+            "sha256": "1e31074b7b95d745c33e68b3b89021f6852418e0c958bbbf7d3696e35e667bae"
           }
         },
         "rows": [
@@ -5896,11 +5994,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6369,6 +6467,31 @@
               "sha256": "e71df2d9d655581a8d4323011b188ca8cb963719237aa7a7f6eede1560c83eab"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:41:41Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221.xml",
+              "sha256": "61c8853fa16d37468289b61514082e8f606849d79adf3d75d43d9a491264cebe"
+            }
+          }
         }
       },
       {
@@ -6387,14 +6510,14 @@
             "-L",
             "chord",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:41:41Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:07:38Z",
           "selected": 89,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221.xml",
-            "sha256": "580e38c554ba251e8e453782970b2b3563f00e07f8a49d1afd22a28a51e48da1"
+            "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-terminal-ansi.xml",
+            "sha256": "1a0489ebf127066d47a1d0fc946ea1b0067deed0b3e9323e2ed1b9085e3d6338"
           }
         },
         "rows": [
@@ -6562,7 +6685,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7007,6 +7130,30 @@
               "sha256": "1131193b8be8f8d5aea6cfcde8891bc7e97210dee42c069359910316ea9ca0a8"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:41:41Z",
+            "selected": 89,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221.xml",
+              "sha256": "580e38c554ba251e8e453782970b2b3563f00e07f8a49d1afd22a28a51e48da1"
+            }
+          }
         }
       },
       {
@@ -7225,14 +7372,14 @@
             "-L",
             "issue1182",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:41:44Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:07:41Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221.xml",
-            "sha256": "4272d479bd1e7a078c54d0439fdf3f826dfaa71200b5dd6e9528a1888fe4457e"
+            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-terminal-ansi.xml",
+            "sha256": "8e691776fa5a9e845fb2c5e841e1ddd9f69854fb1245472eba7d55d832068d83"
           }
         },
         "rows": [
@@ -7455,7 +7602,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -7479,7 +7626,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7956,6 +8103,31 @@
               "sha256": "0ff3e90977042e3a0937ccdf882044996cef9830467181dfb7cd91a61fc3f692"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:41:44Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221.xml",
+              "sha256": "4272d479bd1e7a078c54d0439fdf3f826dfaa71200b5dd6e9528a1888fe4457e"
+            }
+          }
         }
       },
       {
@@ -8160,11 +8332,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -9097,14 +9269,14 @@
             "-R",
             "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:26Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:16Z",
           "selected": 52,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221.xml",
-            "sha256": "56dea77fbd3aeb9ab6cec014c002fd08996405551374cbc896ad755a311b1233"
+            "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-terminal-ansi.xml",
+            "sha256": "4133bb039a45de2d85b6f8929d4f2a7692a3fbb3a33aa2463164791b2d4fcba2"
           }
         },
         "revalidation1179m": {
@@ -9489,6 +9661,31 @@
               "sha256": "1b31619034614a24fd32b78195feaef908018537fc6e51d750e409c46b48d907"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:26Z",
+            "selected": 52,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221.xml",
+              "sha256": "56dea77fbd3aeb9ab6cec014c002fd08996405551374cbc896ad755a311b1233"
+            }
+          }
         }
       },
       {
@@ -9557,11 +9754,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -9592,14 +9789,14 @@
             "-R",
             "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:27Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:16Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221.xml",
-            "sha256": "b4abe55dee08d036b4e49c87807bc37d82518b082b8743d25f71f59808dc8837"
+            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-terminal-ansi.xml",
+            "sha256": "60f9398aef9213b888103857fd4b8f86e7b0ae2ff36bc873519fea8e99466ea9"
           }
         },
         "rows": [
@@ -10012,6 +10209,31 @@
               "sha256": "34e53eaf2fbed829ec7f1d1f5749ff6bc9acfb2041172b19e8fc7f9e4ec21e70"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:27Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221.xml",
+              "sha256": "b4abe55dee08d036b4e49c87807bc37d82518b082b8743d25f71f59808dc8837"
+            }
+          }
         }
       },
       {
@@ -10076,11 +10298,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -10131,14 +10353,14 @@
             "-R",
             "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:32Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:19Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221.xml",
-            "sha256": "709c6c2e3874664fccbde571d20174f618af31948f9cabac7b0a7ca75ee15d46"
+            "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-terminal-ansi.xml",
+            "sha256": "cd1d0e34e89cfc5a8187fb4ba6c5c1737b52d48b6382d9d2a7735344e7d73b45"
           }
         },
         "rows": [
@@ -10586,6 +10808,31 @@
               "sha256": "466ab6d5d0459a480215d1faa72ad1ec2034bee5d4cb04af9fcdbcdf664be03d"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:32Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221.xml",
+              "sha256": "709c6c2e3874664fccbde571d20174f618af31948f9cabac7b0a7ca75ee15d46"
+            }
+          }
         }
       },
       {
@@ -10983,7 +11230,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
@@ -10991,7 +11238,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           }
         ],
         "validation": {
@@ -11004,14 +11251,14 @@
             "-L",
             "issue1201",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:37Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:20Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221.xml",
-            "sha256": "e82de03264d34c414bf53b1f05308cc6030ecfe6d9cbd7aa0bdb61fa143ac596"
+            "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-terminal-ansi.xml",
+            "sha256": "34860c953629d260f6da10cf38a6ba41bd7b39452b77796181e134f52b101d5e"
           }
         },
         "rows": [
@@ -11835,6 +12082,33 @@
               "sha256": "d280dfdf7b1b4ce7028f8a0d04925986116405f7db565e4d920b2a98ed39689e"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1201",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:37Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221.xml",
+              "sha256": "e82de03264d34c414bf53b1f05308cc6030ecfe6d9cbd7aa0bdb61fa143ac596"
+            }
+          }
         }
       },
       {
@@ -11873,11 +12147,11 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "6c67d2e1208d7501f0f248a197de37655b2e7fef9a836af886a9cec1e0a16968"
+            "sha256": "0ac4ccced979356ff30c2b6cf7a6ce876a106819eb6a9cc7e952d837aed416d6"
           },
           {
             "path": "src/durable/Harness.cpp",
@@ -11910,14 +12184,14 @@
             "-L",
             "issue1203",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:37Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:20Z",
           "selected": 3,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221.xml",
-            "sha256": "43ad27f0b8bdd7a723291ef690e70785516bf3f1e04a1ef99a309de684370ec2"
+            "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-terminal-ansi.xml",
+            "sha256": "7c2b3a2669febee2d96cf6787d72b9aefe8afb8e6dfe1787ab79905423a5fe20"
           }
         },
         "rows": [
@@ -12191,6 +12465,33 @@
               "sha256": "86949741d035dc3ce9832d06ddcb1947c45bda762ddc79a420374f772ccfc8b3"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1203",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:37Z",
+            "selected": 3,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221.xml",
+              "sha256": "43ad27f0b8bdd7a723291ef690e70785516bf3f1e04a1ef99a309de684370ec2"
+            }
+          }
         }
       },
       {
@@ -12233,7 +12534,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
@@ -12270,14 +12571,14 @@
             "-L",
             "issue1213",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:39Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:21Z",
           "selected": 15,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221.xml",
-            "sha256": "86d6d18480f33f1d8b0fdbf16ab917579bc837b9902967d5f5f9b54af1a9b2b6"
+            "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-terminal-ansi.xml",
+            "sha256": "6dc68f253a04c8ff131202f075411bb8edf3a9ffb87b004f65cbec2191a52980"
           }
         },
         "rows": [
@@ -12830,6 +13131,32 @@
               "sha256": "3884f1043a7290d666cbd5f551c5393fcf2b2b9c885dd51a555db9ae0abb4587"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1213",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:39Z",
+            "selected": 15,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221.xml",
+              "sha256": "86d6d18480f33f1d8b0fdbf16ab917579bc837b9902967d5f5f9b54af1a9b2b6"
+            }
+          }
         }
       },
       {
@@ -12880,7 +13207,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -12925,14 +13252,14 @@
             "-L",
             "issue1212",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:42Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:23Z",
           "selected": 29,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221.xml",
-            "sha256": "4ec4e3298769318a521bddd236e58aed29ebb85c7f76ff7d131ece226c37bfb0"
+            "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-terminal-ansi.xml",
+            "sha256": "1d91513fb05faa19bdb159fe72eeb8ac62d5b6654d26a53b143af16d68eeb7f0"
           }
         },
         "rows": [
@@ -13831,6 +14158,32 @@
               "sha256": "912b1350ae6ee56fb0e87a8ad64b61147babc7b69422ff7e94ac54493959f53e"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1212",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:42Z",
+            "selected": 29,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221.xml",
+              "sha256": "4ec4e3298769318a521bddd236e58aed29ebb85c7f76ff7d131ece226c37bfb0"
+            }
+          }
         }
       },
       {
@@ -13893,7 +14246,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -13950,14 +14303,14 @@
             "-L",
             "issue1211",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:46Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:26Z",
           "selected": 34,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221.xml",
-            "sha256": "9940ad59940a2b8f1175f63e1a921ae75f5690e52597fc80bc19b671fa96087f"
+            "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-terminal-ansi.xml",
+            "sha256": "4e801b34ec2a897bba61c4a6ef60dee12ac5aea73026711bf416c37e7067b22a"
           }
         },
         "rows": [
@@ -15214,6 +15567,32 @@
               "sha256": "752be5f457d1c059c43f4d806687f2853f30ce9c29623340f88999d46b6085f1"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1211",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:46Z",
+            "selected": 34,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221.xml",
+              "sha256": "9940ad59940a2b8f1175f63e1a921ae75f5690e52597fc80bc19b671fa96087f"
+            }
+          }
         }
       },
       {
@@ -15256,7 +15635,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -15293,14 +15672,14 @@
             "-L",
             "issue1210",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:53Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:29Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221.xml",
-            "sha256": "0a6c38d51981ab198318a16e431393d0204307ac4a62bb5aec4de9675884b12a"
+            "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-terminal-ansi.xml",
+            "sha256": "177f5c89f4a20ed303eb0f79f31babe62db2bc160509d26462cb266bed431afb"
           }
         },
         "rows": [
@@ -15763,6 +16142,32 @@
               "sha256": "f812fdfc085a0292e10a469714cc18c5a3d68f8c147ab0288de2b231ad9413a8"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1210",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:53Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221.xml",
+              "sha256": "0a6c38d51981ab198318a16e431393d0204307ac4a62bb5aec4de9675884b12a"
+            }
+          }
         }
       },
       {
@@ -15829,7 +16234,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -15886,14 +16291,14 @@
             "-L",
             "issue1209",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:55Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:30Z",
           "selected": 30,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221.xml",
-            "sha256": "1fc3804858addc4fed9105d77b993268f20487d8a5dff554ee1fba54d7bba9ba"
+            "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-terminal-ansi.xml",
+            "sha256": "2e16508c724d9da90736ee674694b6349331813ac6fede77e434a68c2d957e37"
           }
         },
         "rows": [
@@ -17906,6 +18311,32 @@
               "sha256": "ce314b18e52b58a60ea2361006111d967c13315e4b30d8febd510fdb797ed9c7"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1209",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:55Z",
+            "selected": 30,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221.xml",
+              "sha256": "1fc3804858addc4fed9105d77b993268f20487d8a5dff554ee1fba54d7bba9ba"
+            }
+          }
         }
       },
       {
@@ -17946,7 +18377,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -18003,14 +18434,14 @@
             "-L",
             "issue1215",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:57Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:32Z",
           "selected": 25,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221.xml",
-            "sha256": "3fcfd1362910a45b858370ad6d70cdd7c534f10adffd8408c81b99a949e91562"
+            "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-terminal-ansi.xml",
+            "sha256": "fcc178f72f9064ab785cfdc5c098a5315487ae20051aab92ca200ebb12877cc7"
           }
         },
         "rows": [
@@ -19554,6 +19985,32 @@
               "sha256": "c8ea7a617261fc11e51d7ed298376e730acea50a4d679a7034e5a40de68ad5d6"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1215",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:57Z",
+            "selected": 25,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221.xml",
+              "sha256": "3fcfd1362910a45b858370ad6d70cdd7c534f10adffd8408c81b99a949e91562"
+            }
+          }
         }
       },
       {
@@ -19582,7 +20039,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -19623,14 +20080,14 @@
             "-L",
             "issue1216",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:42:59Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:34Z",
           "selected": 29,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221.xml",
-            "sha256": "eaed5589f48c9950903cf2b84ef30f32dfd27b3f098d14c1205fc5c1ddaebf5f"
+            "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-terminal-ansi.xml",
+            "sha256": "a1ab23944acdb04bc25ff4069df1f343fc34e1771a6310bfe1d8af9111c0d687"
           }
         },
         "rows": [
@@ -20279,6 +20736,32 @@
               "sha256": "2a7b21a4a95ff8f1395dcf9639b2c1a486ef40684645c1efc5237d4765d17e4f"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1216",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:42:59Z",
+            "selected": 29,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221.xml",
+              "sha256": "eaed5589f48c9950903cf2b84ef30f32dfd27b3f098d14c1205fc5c1ddaebf5f"
+            }
+          }
         }
       },
       {
@@ -20307,7 +20790,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1217/latex.json",
@@ -20332,14 +20815,14 @@
             "-L",
             "issue1217",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:43:03Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:35Z",
           "selected": 29,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221.xml",
-            "sha256": "1444841e59052535c0a1f7fe093f45d10940515deab922e1082d10307ca622ee"
+            "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-terminal-ansi.xml",
+            "sha256": "9a5cd2a9396fbc3c0637efe8880316a994e4ea7704c6874b82ce89145324b177"
           }
         },
         "rows": [
@@ -21325,6 +21808,32 @@
               "sha256": "c76e347af0fabf411d3a19f81dbf973ccb1d84a6d8188d27cfcfc6be1b407252"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1217",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:43:03Z",
+            "selected": 29,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221.xml",
+              "sha256": "1444841e59052535c0a1f7fe093f45d10940515deab922e1082d10307ca622ee"
+            }
+          }
         }
       },
       {
@@ -21353,7 +21862,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1218/color.json",
@@ -21374,14 +21883,14 @@
             "-L",
             "issue1218",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:43:04Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:36Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221.xml",
-            "sha256": "b29ef51553adfec3bbe9482d73181a9d127644d89f42a5eec8a01aee32b31c39"
+            "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-terminal-ansi.xml",
+            "sha256": "f192ec8a232a9a8885628ef7b5a0208dc1e447ac5ebd53915f2378474882f17f"
           }
         },
         "rows": [
@@ -22295,6 +22804,32 @@
               "sha256": "5b11b8fe3ee4509ab33959d6d28f0f3a18b3ed510a23c4242c2851be6626130c"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1218",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:43:04Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221.xml",
+              "sha256": "b29ef51553adfec3bbe9482d73181a9d127644d89f42a5eec8a01aee32b31c39"
+            }
+          }
         }
       },
       {
@@ -22335,7 +22870,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
@@ -22364,14 +22899,14 @@
             "-L",
             "issue1219",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:43:05Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:37Z",
           "selected": 32,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221.xml",
-            "sha256": "ed5cdf7841fb84812674b16f39a1fe88dadc805e6c5c92051be7b1d655115994"
+            "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-terminal-ansi.xml",
+            "sha256": "cf46883af476f79c82ab025177db2622bf15d48725374cb7ca1030bc8f1bb6a1"
           }
         },
         "rows": [
@@ -23856,6 +24391,32 @@
               "sha256": "d1a77932476977f15933f09bdd078a0764c359fc610fb7ac5802656919963115"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1219",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:43:05Z",
+            "selected": 32,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221.xml",
+              "sha256": "ed5cdf7841fb84812674b16f39a1fe88dadc805e6c5c92051be7b1d655115994"
+            }
+          }
         }
       },
       {
@@ -23932,7 +24493,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/baselines.json",
-            "sha256": "d40c1e712ae5f88beb6d5f1f015d63eedaff9cf23fbaa3a734c82ccd7e9b7129"
+            "sha256": "833bbd0425dd43175ace85d56315792830962123511d3939369c8cebf1a6d5ac"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -23973,14 +24534,14 @@
             "-L",
             "issue1220",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221.xml"
+            "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-terminal-ansi.xml"
           ],
-          "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
-          "recordedAt": "2026-11-06T01:43:08Z",
+          "testedRevision": "60a13ad754680ba1921e3b99d2770e869ea90631",
+          "recordedAt": "2026-11-06T02:08:39Z",
           "selected": 69,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221.xml",
-            "sha256": "9ace46662de4ed8185fd8e9f8212900e23309bfdba478b3ab24d15d4ccd951f9"
+            "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-terminal-ansi.xml",
+            "sha256": "86b2bb59ea02c254e6008d3231c5010610d6f39ef205d405de3da3219bc08cf2"
           }
         },
         "rows": [
@@ -25779,6 +26340,32 @@
               "sha256": "53ecbe56381b8cb224ce12115b00955a48900f85d9b0e53c17f7550a5736839e"
             }
           }
+        },
+        "revalidation1221TerminalAnsi": {
+          "reason": "Registration adds six supplemental orphan scenarios. Reviewed existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/baselines.json"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-LE",
+              "architecture",
+              "-L",
+              "issue1220",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221.xml"
+            ],
+            "testedRevision": "09fed85c1925784044bbb68d308afb112ce72f6b",
+            "recordedAt": "2026-11-06T01:43:08Z",
+            "selected": 69,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221.xml",
+              "sha256": "9ace46662de4ed8185fd8e9f8212900e23309bfdba478b3ab24d15d4ccd951f9"
+            }
+          }
         }
       }
     ]
@@ -26121,10 +26708,16 @@
     ],
     "missingObservationRows": 539,
     "scenarioCoverage": {
-      "scenarios": 983,
+      "scenarios": 989,
       "scenarioNamed": 575,
       "artifactCovered": 87,
       "orphaned": [
+        "audit-1221-terminal-ansi/terminal-start-stop.json:no-reply",
+        "audit-1221-terminal-ansi/terminal-start-stop.json:device-attributes",
+        "audit-1221-terminal-ansi/terminal-start-stop.json:kitty-flags",
+        "audit-1221-terminal-ansi/utils-ansi.json:plain",
+        "audit-1221-terminal-ansi/utils-ansi.json:sgr-boundary",
+        "audit-1221-terminal-ansi/utils-ansi.json:wide-hyperlink",
         "audit-1221/input.json:fragmented-osc-reply",
         "audit-1221/input.json:fragmented-apc-reply",
         "audit-1221/input.json:ambiguous-alt-input",
@@ -28582,6 +29175,81 @@
     }
   ],
   "orphanScenarios": [
+    {
+      "family": "audit-1221-terminal-ansi",
+      "artifact": "terminal-start-stop.json",
+      "scenario": "no-reply",
+      "reason": "Supplemental process-stream observation; startup and forwarded input are not fully compared.",
+      "rows": [
+        "cch_tui:ProcessTerminal.start",
+        "cch_tui:ProcessTerminal.stop"
+      ],
+      "disposition": "#1221 compares a bounded slice; whole-row and emulator evidence remain open."
+    },
+    {
+      "family": "audit-1221-terminal-ansi",
+      "artifact": "terminal-start-stop.json",
+      "scenario": "device-attributes",
+      "reason": "Supplemental process-stream observation; startup and forwarded input are not fully compared.",
+      "rows": [
+        "cch_tui:ProcessTerminal.start",
+        "cch_tui:ProcessTerminal.stop"
+      ],
+      "disposition": "#1221 compares a bounded slice; whole-row and emulator evidence remain open."
+    },
+    {
+      "family": "audit-1221-terminal-ansi",
+      "artifact": "terminal-start-stop.json",
+      "scenario": "kitty-flags",
+      "reason": "Supplemental process-stream observation; startup and forwarded input are not fully compared.",
+      "rows": [
+        "cch_tui:ProcessTerminal.start",
+        "cch_tui:ProcessTerminal.stop"
+      ],
+      "disposition": "#1221 compares a bounded slice; whole-row and emulator evidence remain open."
+    },
+    {
+      "family": "audit-1221-terminal-ansi",
+      "artifact": "utils-ansi.json",
+      "scenario": "plain",
+      "reason": "Supplemental ANSI utility observation; no complete row is routed to it.",
+      "rows": [
+        "cch_tui:sliceByColumn",
+        "cch_tui:stripTerminalSequences",
+        "cch_tui:truncateToWidth",
+        "cch_tui:visibleWidth",
+        "cch_tui:wrapTextWithAnsi"
+      ],
+      "disposition": "#1221 compares this slice without promoting a row."
+    },
+    {
+      "family": "audit-1221-terminal-ansi",
+      "artifact": "utils-ansi.json",
+      "scenario": "sgr-boundary",
+      "reason": "Supplemental ANSI utility observation; no complete row is routed to it.",
+      "rows": [
+        "cch_tui:sliceByColumn",
+        "cch_tui:stripTerminalSequences",
+        "cch_tui:truncateToWidth",
+        "cch_tui:visibleWidth",
+        "cch_tui:wrapTextWithAnsi"
+      ],
+      "disposition": "#1221 compares this slice without promoting a row."
+    },
+    {
+      "family": "audit-1221-terminal-ansi",
+      "artifact": "utils-ansi.json",
+      "scenario": "wide-hyperlink",
+      "reason": "Supplemental ANSI utility observation; no complete row is routed to it.",
+      "rows": [
+        "cch_tui:sliceByColumn",
+        "cch_tui:stripTerminalSequences",
+        "cch_tui:truncateToWidth",
+        "cch_tui:visibleWidth",
+        "cch_tui:wrapTextWithAnsi"
+      ],
+      "disposition": "#1221 compares this slice without promoting a row."
+    },
     {
       "family": "audit-1221",
       "artifact": "input.json",

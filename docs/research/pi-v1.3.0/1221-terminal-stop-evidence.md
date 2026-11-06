@@ -154,13 +154,51 @@ Registration still requires review and revalidation of the existing receipt
 inputs affected by the registry and consolidation-plan changes, followed by
 consolidation and boundary checks. No row is promoted on this evidence.
 
+## 2026-11-06 terminal and ANSI registration continuation
+
+The unchanged `audit-1221-terminal-ansi` candidate is registered as six
+supplemental orphan scenarios: three process-stream startup/negotiation/stop
+paths and three ANSI inputs. Both C++ comparisons now load the artifacts through
+the registered evidence reader. The ANSI comparison checks all five captured
+results for each input; the terminal comparison checks selected startup writes,
+negotiation writes and the full concatenated stop stream, but not the complete
+startup stream or forwarded input. Neither comparison is a whole-row receipt.
+The evidence verifier reports 78 bundles, 172 artifacts and 992 scenarios.
+
+The registry addition and six orphan entries do not change any existing
+receipt's row mapping or frozen artifact identity. All 23 receipts pinning one
+or both changed inputs were revalidated with their recorded selections: 694
+passing executions including overlaps, with new JUnit files and prior results
+retained. Only the two changed input digests were refreshed in those receipts.
+Consolidation build and check passed: all 1,464 row objects remain identical,
+with 327 explicit orphans and no uncovered scenarios. The 76 consolidation
+boundary tests and the static artifact-boundary check of 30 receipts passed.
+The TUI shard and full incremental build passed; the two registered comparison
+cases and three candidate controls passed. The unfiltered CTest run selected
+4,519 tests: 4,507 passed, one failed and 11 skipped (exit 8). The failing
+Herdr PTY evidence test requires `TERM_PROGRAM=herdr`, which was unset. The
+skipped native TUI and cross-runtime cases do not supply those environments'
+evidence. The static boundary check does not prove semantic completeness.
+
+For a future whole-row review, existing distinct controls worth evaluating are
+`shifted-symbol reports consume the implicit shift and keep the physical spelling`
+against the key-identity replay, `StdinBuffer recovers ambiguous Alt-bracket
+input within the sequence timeout` against the fragmented-reply replay, and
+`Process Terminal does not disable an inactive keyboard fallback after Kitty
+negotiation` against the terminal negotiation replay. These are candidate
+controls, not accepted #1229 receipt mappings: each still needs a review against
+the exact row and its complete scenario set. The local keybinding conflict test
+checks candidate-order behavior for two contexts; its built-in default-table
+comparison names revision `83114817`, not the required v1.3.0 revision.
+
 ## Remaining boundary
 
-Ticket #1221 remains open: these five observations do not compare all 110 rows
-with normal and distinct discriminating cases, provide whole-row delivery
-receipts, or establish real-emulator behavior. The registered families do not cover `utils-ansi.json` or the new terminal
-startup and stop scenarios, and the candidate observations do not cover the
-complete keybinding surface; further registration and comparisons are needed. Each row
-still needs its complete audit and the #1229 distinct discriminating case.
-Terminal residuals on #831 and #1035 remain with those owners. No capability
-status is promoted by this continuation.
+Ticket #1221 remains open: the captured observations do not compare all 110
+rows with normal and distinct discriminating cases, provide whole-row delivery
+receipts, or establish real-emulator behavior. Keybinding tests include local
+resolution and conflict cases, but the available capture does not compare the
+complete keybinding surface against the named frozen baseline. Each row still
+needs its complete audit and the #1229 distinct discriminating case. PTY and
+process-stream bytes do not prove emulator behavior; terminal residuals on #831
+and #1035 remain with those owners. No capability status is promoted by this
+continuation.

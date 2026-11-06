@@ -50,8 +50,8 @@ constexpr std::string_view kCosmeticReopenCase{"link-cjk-styled-span"};
 
 } // namespace
 
-TEST_CASE("ANSI utilities compare the pi 1.3.0 candidate observations", "[tui][issue1221][ansi][spec]") {
-    const auto bundle = tests::read_pi_v130_audit_candidate("audit-1221-terminal-ansi", "utils-ansi.json");
+TEST_CASE("ANSI utilities compare the pi 1.3.0 registered observations", "[tui][issue1221][ansi][spec]") {
+    const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-terminal-ansi", "utils-ansi.json");
     REQUIRE(bundle);
     const auto& scenarios = bundle->at("scenarios").get_array();
     REQUIRE(scenarios.size() == 3);

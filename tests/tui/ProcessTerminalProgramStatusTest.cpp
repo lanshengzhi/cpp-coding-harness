@@ -216,8 +216,7 @@ TEST_CASE("Process Terminal reports the latest status once the terminal answers 
 
 TEST_CASE(
         "Process Terminal compares frozen startup and stop negotiation scenarios", "[tui][terminal][issue1221][spec]") {
-    const auto bundle =
-            cch::tests::read_pi_v130_audit_candidate("audit-1221-terminal-ansi", "terminal-start-stop.json");
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1221-terminal-ansi", "terminal-start-stop.json");
     REQUIRE(bundle);
     const auto& scenarios = bundle->at("scenarios").get_array();
     REQUIRE(scenarios.size() == 3);

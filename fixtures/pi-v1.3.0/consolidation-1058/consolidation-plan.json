@@ -1025,6 +1025,54 @@
  ],
  "orphanScenarios": [
   {
+   "family": "audit-1221-terminal-ansi",
+   "artifact": "terminal-start-stop.json",
+   "scenario": "no-reply",
+   "reason": "Supplemental process-stream observation; startup and forwarded input are not fully compared.",
+   "rows": ["cch_tui:ProcessTerminal.start", "cch_tui:ProcessTerminal.stop"],
+   "disposition": "#1221 compares a bounded slice; whole-row and emulator evidence remain open."
+  },
+  {
+   "family": "audit-1221-terminal-ansi",
+   "artifact": "terminal-start-stop.json",
+   "scenario": "device-attributes",
+   "reason": "Supplemental process-stream observation; startup and forwarded input are not fully compared.",
+   "rows": ["cch_tui:ProcessTerminal.start", "cch_tui:ProcessTerminal.stop"],
+   "disposition": "#1221 compares a bounded slice; whole-row and emulator evidence remain open."
+  },
+  {
+   "family": "audit-1221-terminal-ansi",
+   "artifact": "terminal-start-stop.json",
+   "scenario": "kitty-flags",
+   "reason": "Supplemental process-stream observation; startup and forwarded input are not fully compared.",
+   "rows": ["cch_tui:ProcessTerminal.start", "cch_tui:ProcessTerminal.stop"],
+   "disposition": "#1221 compares a bounded slice; whole-row and emulator evidence remain open."
+  },
+  {
+   "family": "audit-1221-terminal-ansi",
+   "artifact": "utils-ansi.json",
+   "scenario": "plain",
+   "reason": "Supplemental ANSI utility observation; no complete row is routed to it.",
+   "rows": ["cch_tui:sliceByColumn", "cch_tui:stripTerminalSequences", "cch_tui:truncateToWidth", "cch_tui:visibleWidth", "cch_tui:wrapTextWithAnsi"],
+   "disposition": "#1221 compares this slice without promoting a row."
+  },
+  {
+   "family": "audit-1221-terminal-ansi",
+   "artifact": "utils-ansi.json",
+   "scenario": "sgr-boundary",
+   "reason": "Supplemental ANSI utility observation; no complete row is routed to it.",
+   "rows": ["cch_tui:sliceByColumn", "cch_tui:stripTerminalSequences", "cch_tui:truncateToWidth", "cch_tui:visibleWidth", "cch_tui:wrapTextWithAnsi"],
+   "disposition": "#1221 compares this slice without promoting a row."
+  },
+  {
+   "family": "audit-1221-terminal-ansi",
+   "artifact": "utils-ansi.json",
+   "scenario": "wide-hyperlink",
+   "reason": "Supplemental ANSI utility observation; no complete row is routed to it.",
+   "rows": ["cch_tui:sliceByColumn", "cch_tui:stripTerminalSequences", "cch_tui:truncateToWidth", "cch_tui:visibleWidth", "cch_tui:wrapTextWithAnsi"],
+   "disposition": "#1221 compares this slice without promoting a row."
+  },
+  {
    "family": "audit-1221",
    "artifact": "input.json",
    "scenario": "fragmented-osc-reply",
