@@ -1025,6 +1025,14 @@
  ],
  "orphanScenarios": [
   {
+   "family": "audit-1221-manager-state",
+   "artifact": "manager-state.json",
+   "scenario": "accessors-replacement-and-global-state",
+   "reason": "Supplemental manager-state observation; global state and accessor representation are not fully compared.",
+   "rows": ["cch_tui:KeybindingsManager", "cch_tui:getKeybindings", "cch_tui:setKeybindings"],
+   "disposition": "#1221 compares a bounded slice without promoting a row."
+  },
+  {
    "family": "audit-1221-keybindings",
    "artifact": "keybindings.json",
    "scenario": "defaults-deduplicate",

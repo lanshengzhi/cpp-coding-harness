@@ -368,6 +368,38 @@ incremental full build passed. The unfiltered CTest run selected 4,524 cases:
 specification review checked the changed code and the stated comparison limits;
 independent sub-agent reviews were unavailable in this implementation sub-agent.
 
+## 2026-11-06 manager-state registration continuation
+
+The unchanged `audit-1221-manager-state` candidate is now registered as one
+supplemental orphan scenario. The snapshot replay loads it through the
+registered evidence reader and passes. It compares submitted user entries
+and selected resolved keys across replacement; it does not compare pi's
+scalar-versus-array representation, returned-object mutation, definition and
+conflict fields, or process-global manager identity. Native snapshots and
+pi's mutable global manager are different seams. The registered evidence
+verifier reports 80 bundles, 174 artifacts and 998 scenarios.
+
+The registry and consolidation-plan additions leave all prior row mappings and
+frozen artifact identities unchanged. The 23 receipts pinning either changed
+input were revalidated using their recorded selections: 694 test executions
+passed, including overlaps. Previous validation records and JUnit files remain
+available; only the changed shared input digests were refreshed. Consolidation
+build and check passed, with 333 explicit orphans and no uncovered scenarios;
+all 1,464 ledger row objects remain identical. The static artifact-boundary
+check passed for 30 receipts, 790 claims and 905 comparisons. These checks do
+not establish complete parity. No whole-row claim was added: the blockers for
+all 110 issue rows remain those listed above, including a distinct #1229
+control for each proposed claim.
+
+The TUI shard and incremental full build passed. The full CTest run selected
+4,524 cases: 4,512 passed, 11 skipped and one failed. The failing Herdr PTY
+evidence case required `TERM_PROGRAM=herdr`, which was unset; skipped cases
+include native TUI and cross-runtime evidence. The consolidation check and
+boundary tests passed in that run. Formatting and `git diff --check` passed.
+A local standards and specification review found no additional issue in the
+registration; independent sub-agent reviews were unavailable in this
+implementation sub-agent.
+
 ## Remaining boundary
 
 Ticket #1221 remains open: the captured observations do not compare all 110

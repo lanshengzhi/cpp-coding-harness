@@ -174,7 +174,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -229,14 +229,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:31:54Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "3514077af9432cc0265057f8912a7790cffea0b13dc3c29aaefdd7cc225579a9"
+     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-state.xml",
+     "sha256": "5fb8210998dfc4231874f1f29531b940bf4b6828a9618c719d26384ff43427e4"
     }
    },
    "rows": [
@@ -974,6 +974,30 @@
       "sha256": "6d0585a814ae18e4e80a941cd73760438df48dc32972f9643f8e7072cf2b1845"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "3514077af9432cc0265057f8912a7790cffea0b13dc3c29aaefdd7cc225579a9"
+     }
+    }
    }
   },
   {
@@ -993,14 +1017,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:31:54Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "fdc26ff6c8b32225328d6f5849ef9827dfcd242e4512d1809a08fd8c2c834e51"
+     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-state.xml",
+     "sha256": "f0edd0d60648f813359642c81be43a402fdd8ac98d3bc18d1c1a6dc91c277c51"
     }
    },
    "inputs": [
@@ -1046,7 +1070,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "src/durable/CodingTools.cpp",
@@ -1428,7 +1452,7 @@
     ]
    },
    "revalidation1158": {
-    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery\u2019s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
+    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery’s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
     "changedInputs": [
      "src/durable/include/cch/durable/Environment.hpp"
     ],
@@ -1509,7 +1533,7 @@
     ]
    },
    "revalidation1202": {
-    "reason": "#1202 re-anchoring: the two withdrawn audit-1056/environment.json comparisons now read the registered artifact \u2014 ImagesTest drives a generated 40x20 RGBA PNG against the frozen pass-through/shrink/limit observation and HarnessImagesTest compares the frozen resized-read diagnostic text \u2014 so the re-anchored claims promote again. The touched test and helper inputs are re-pinned, the audit-1056 family the re-anchored comparisons cite is now pinned alongside the audit-1090 pins (manifest + environment.json), and the recorded 36-case selection was rebuilt and rerun on the re-anchored tree into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
+    "reason": "#1202 re-anchoring: the two withdrawn audit-1056/environment.json comparisons now read the registered artifact — ImagesTest drives a generated 40x20 RGBA PNG against the frozen pass-through/shrink/limit observation and HarnessImagesTest compares the frozen resized-read diagnostic text — so the re-anchored claims promote again. The touched test and helper inputs are re-pinned, the audit-1056 family the re-anchored comparisons cite is now pinned alongside the audit-1090 pins (manifest + environment.json), and the recorded 36-case selection was rebuilt and rerun on the re-anchored tree into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/audit-1056/environment.json",
      "fixtures/pi-v1.3.0/audit-1056/manifest.json",
@@ -1902,6 +1926,30 @@
       "sha256": "6f481e9585dd2f8617a142f670cc259eb737a997fabf15410dbcb948017cc8d7"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "fdc26ff6c8b32225328d6f5849ef9827dfcd242e4512d1809a08fd8c2c834e51"
+     }
+    }
    }
   },
   {
@@ -2161,11 +2209,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2188,14 +2236,14 @@
      "-L",
      "issue1118",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:31:58Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "fc61685b15ff9d0f4d77997357b4b5f3b192fb0d8bfe282ed9f681c7b5a65183"
+     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-state.xml",
+     "sha256": "49f279ace4ea2bbca437a4d248c5cd96fee403a662cefe9b860ec689fb94a93c"
     }
    },
    "rows": [
@@ -3035,6 +3083,31 @@
       "sha256": "0f628b8f82d76f2671b409f0bbf3939fda39f956ada2d1938f1476a6da45ca9f"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "fc61685b15ff9d0f4d77997357b4b5f3b192fb0d8bfe282ed9f681c7b5a65183"
+     }
+    }
    }
   },
   {
@@ -3386,7 +3459,7 @@
      "discriminatingCase": {
       "test": "a multi-byte character is cut only on a character boundary",
       "testSource": "tests/chord/OutputTest.cpp",
-      "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"a\u00e9\ud83d\ude00\"; the boundary case separates the byte length from a code-point count."
+      "reason": "Counting characters instead of UTF-8 bytes reports 3 for \"aé😀\"; the boundary case separates the byte length from a code-point count."
      }
     },
     {
@@ -3775,7 +3848,7 @@
     }
    ],
    "revalidation1185": {
-    "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp \u2014 three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
+    "reason": "#1185 delivered the Chord decoded-operation ingestion seam and the adopted-root apply contract, which changed src/chord/Delta.cpp, its header and tests/chord/DeltaTest.cpp — three inputs the #1178 receipt pins. The named comparison cases are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1185.xml (76 cases, all passing, including the six new #1185 cases). No row, scenario or routing digest changes; the original deliveries/1178-chord.xml artifact is retained.",
     "changedInputs": [
      "src/chord/Delta.cpp",
      "src/chord/include/cch/chord/Delta.hpp",
@@ -3835,7 +3908,7 @@
     }
    },
    "revalidation1187": {
-    "reason": "#1187 added the frozen progress byte-rate constant and the timer-free progress pacing seam to the Chord output helpers, which changed src/chord/Output.cpp, its Owner header and tests/chord/OutputTest.cpp \u2014 three inputs the #1178 receipt pins. The claimed rows, scenarios and routing digest are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1187.xml (88 cases, all passing, including the four new #1187 cases). The original deliveries/1178-chord.xml and the earlier revalidation artifacts are retained.",
+    "reason": "#1187 added the frozen progress byte-rate constant and the timer-free progress pacing seam to the Chord output helpers, which changed src/chord/Output.cpp, its Owner header and tests/chord/OutputTest.cpp — three inputs the #1178 receipt pins. The claimed rows, scenarios and routing digest are unchanged; the shared `-L chord` selection was rerun on the merged tree into deliveries/1178-revalidation-1187.xml (88 cases, all passing, including the four new #1187 cases). The original deliveries/1178-chord.xml and the earlier revalidation artifacts are retained.",
     "changedInputs": [
      "src/chord/Output.cpp",
      "src/chord/include/cch/chord/Output.hpp",
@@ -4288,7 +4361,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4296,7 +4369,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     }
    ],
    "validation": {
@@ -4307,14 +4380,14 @@
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:31:59Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "499664d5877fb14ae0a34f4233b35993d107d89f4d6cefa0eb27249ae156c489"
+     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-state.xml",
+     "sha256": "89f7e76fe077d7c1da786bd7e97fa9b762ebacb4b6f67708856980e33d037cd3"
     }
    },
    "rows": [
@@ -4744,7 +4817,7 @@
     ]
    },
    "revalidation1202": {
-    "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts \u2014 the resource-listing comparisons compare audit-1052/application-initialization.json's frozen method order, resource and failure fields, and the OAuth cancellation/sign-in/issuer cases compare audit-1052/oauth-lifecycle.json's frozen stalled paths, authorization URL shape and request accounting; the transports.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. New comparisons carry the [issue1181] tag. The touched inputs are re-pinned and the recorded 16-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
+    "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts — the resource-listing comparisons compare audit-1052/application-initialization.json's frozen method order, resource and failure fields, and the OAuth cancellation/sign-in/issuer cases compare audit-1052/oauth-lifecycle.json's frozen stalled paths, authorization URL shape and request accounting; the transports.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. New comparisons carry the [issue1181] tag. The touched inputs are re-pinned and the recorded 16-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
      "tests/coding_agent/McpHttpSessionTest.cpp",
@@ -5168,6 +5241,31 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-terminal-ansi.xml",
       "sha256": "48293c511ef83f953ba7c8afca9353923070193db86a884ffd26a323c07f1b80"
+     }
+    }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "499664d5877fb14ae0a34f4233b35993d107d89f4d6cefa0eb27249ae156c489"
      }
     }
    }
@@ -5735,7 +5833,7 @@
     }
    ],
    "revalidation1158": {
-    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery\u2019s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
+    "reason": "#1158 adds paged directory and positioned byte reads; the pinned input changed, while this delivery’s claimed rows, scenarios and routing are unchanged. Its exact selection was rebuilt and rerun on the merged tree; no new claim is made.",
     "changedInputs": [
      "tests/durable/HarnessWorkflowTest.cpp"
     ],
@@ -5910,14 +6008,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:31:59Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "bd89e232c2bb30230b680ca2aee57a349cca81873363bcca3130a90f3564ee34"
+     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-state.xml",
+     "sha256": "7347eef100033c8717522f32edcb3645d194ea3b1396a404d84b18d5e54b8acc"
     }
    },
    "rows": [
@@ -6091,11 +6189,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6614,6 +6712,31 @@
       "sha256": "1e31074b7b95d745c33e68b3b89021f6852418e0c958bbbf7d3696e35e667bae"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "bd89e232c2bb30230b680ca2aee57a349cca81873363bcca3130a90f3564ee34"
+     }
+    }
    }
   },
   {
@@ -6632,14 +6755,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:00Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "638a5adb3428333a467268ec21ef02b78be34e2e4b62e70128f7e7bdfe2bfeac"
+     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-state.xml",
+     "sha256": "c609850020d0d4e3bf2262f26468bd9e8c22db923b4445cd75207a5108312bb8"
     }
    },
    "rows": [
@@ -6807,7 +6930,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7300,6 +7423,30 @@
       "sha256": "1a0489ebf127066d47a1d0fc946ea1b0067deed0b3e9323e2ed1b9085e3d6338"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "638a5adb3428333a467268ec21ef02b78be34e2e4b62e70128f7e7bdfe2bfeac"
+     }
+    }
    }
   },
   {
@@ -7518,14 +7665,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:02Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "c5165123fc4020b9902dfa1da04315c41d0cb483cefa3020be2b36881f1e1b18"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-state.xml",
+     "sha256": "04459f375e14c25d652982859bf887617f9a85e8d892ca3b6f0098942d729cec"
     }
    },
    "rows": [
@@ -7748,7 +7895,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -7772,7 +7919,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -8299,6 +8446,31 @@
       "sha256": "8e691776fa5a9e845fb2c5e841e1ddd9f69854fb1245472eba7d55d832068d83"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "c5165123fc4020b9902dfa1da04315c41d0cb483cefa3020be2b36881f1e1b18"
+     }
+    }
    }
   },
   {
@@ -8503,11 +8675,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -9440,14 +9612,14 @@
      "-R",
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:34Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "75fb72170e79f3d826d8c14da1de048fdc3cf8d522639522bfa88b3418902ef6"
+     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-state.xml",
+     "sha256": "14a29b02a27155a4ba8f51da0c74f14c958741fe890f3c0953d9b1382910b880"
     }
    },
    "revalidation1179m": {
@@ -9471,7 +9643,7 @@
     ]
    },
    "revalidation1202": {
-    "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts \u2014 the timeout comparison and deadline discriminating case drive audit-1053/script-execution.json's frozen deadline scenario, the script-error comparison compares its frozen name/message/stack/output, and the worker admission/settlement cases compare audit-1053/worker-lifetime.json's frozen counters and denial message; the remaining remote-exchange.json and inline-interrupt.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. The touched inputs are re-pinned and the recorded 52-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
+    "reason": "#1202 re-anchoring: the four withdrawn rows now read the registered artifacts — the timeout comparison and deadline discriminating case drive audit-1053/script-execution.json's frozen deadline scenario, the script-error comparison compares its frozen name/message/stack/output, and the worker admission/settlement cases compare audit-1053/worker-lifetime.json's frozen counters and denial message; the remaining remote-exchange.json and inline-interrupt.json rows' cited cases also gained their frozen comparisons so the whole receipt passes the #1202 boundary check. The touched inputs are re-pinned and the recorded 52-case selection was rebuilt and rerun into a fresh JUnit artifact. The delivery's claimed rows, comparison scenarios and routing digest are unchanged. The plan's withdrawn ticketMappings entries for the re-anchored rows were dropped in the same slice (TM-mcp-withdrawn kept only its still-withdrawn rows), so this record's plan digest moved and is refreshed here; the rows/scenarios/routing are unchanged.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
      "tests/codemode/CodemodeOwnerTest.cpp",
@@ -9882,6 +10054,31 @@
       "sha256": "4133bb039a45de2d85b6f8929d4f2a7692a3fbb3a33aa2463164791b2d4fcba2"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "75fb72170e79f3d826d8c14da1de048fdc3cf8d522639522bfa88b3418902ef6"
+     }
+    }
    }
   },
   {
@@ -9950,11 +10147,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -9985,14 +10182,14 @@
      "-R",
      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:34Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "505b1fd60632a329a5268b4390d2d1b655f931d19bc5d63d9bfa42d551d969af"
+     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-state.xml",
+     "sha256": "00c15011ea0cd90ad3d29cb84c63e25e77219aa3c72383e3193b2d3bed9ef22d"
     }
    },
    "rows": [
@@ -10455,6 +10652,31 @@
       "sha256": "60f9398aef9213b888103857fd4b8f86e7b0ae2ff36bc873519fea8e99466ea9"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "505b1fd60632a329a5268b4390d2d1b655f931d19bc5d63d9bfa42d551d969af"
+     }
+    }
    }
   },
   {
@@ -10519,11 +10741,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -10574,14 +10796,14 @@
      "-R",
      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:37Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "bdfe1fbe219db1f37f88d556ecaa6c8c83d3d4219f30f9e3b9b522a1810ae158"
+     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-state.xml",
+     "sha256": "2f9b5b804455fd0ada1a53d28b57f79d8512c38a77e318685daf9544d454589f"
     }
    },
    "rows": [
@@ -11079,6 +11301,31 @@
       "sha256": "cd1d0e34e89cfc5a8187fb4ba6c5c1737b52d48b6382d9d2a7735344e7d73b45"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "bdfe1fbe219db1f37f88d556ecaa6c8c83d3d4219f30f9e3b9b522a1810ae158"
+     }
+    }
    }
   },
   {
@@ -11476,7 +11723,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
@@ -11484,7 +11731,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     }
    ],
    "validation": {
@@ -11497,14 +11744,14 @@
      "-L",
      "issue1201",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:38Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "006cf0a259833dea4020e5de25e519f556f0578a00a977349480cab31b7ad381"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-state.xml",
+     "sha256": "8b468e13c14fe75aa46630b0b79c5b1f3b85149c7c8912bfbcc7c35d37901c2c"
     }
    },
    "rows": [
@@ -12382,6 +12629,33 @@
       "sha256": "34860c953629d260f6da10cf38a6ba41bd7b39452b77796181e134f52b101d5e"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1201",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "006cf0a259833dea4020e5de25e519f556f0578a00a977349480cab31b7ad381"
+     }
+    }
    }
   },
   {
@@ -12420,11 +12694,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "04b46496aa06fe02a4a0fb20ba4c9b777a83f9f0b51f3100ee9d9e3afb3b8c78"
+     "sha256": "2f665f44e711f0a1e481012f1b7b9016e7d0d49ddc5c8336d0f12a7dd17b30bf"
     },
     {
      "path": "src/durable/Harness.cpp",
@@ -12457,14 +12731,14 @@
      "-L",
      "issue1203",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:38Z",
     "selected": 3,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "1a3f11863a2cfa4858813a2119e6bf15c784ea14b9e6890b5b73b2ef2b34e606"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-state.xml",
+     "sha256": "157fb0b65483381e11ad5faad951a38a48e7077645e2ba1932a644d609fddeb3"
     }
    },
    "rows": [
@@ -12792,6 +13066,33 @@
       "sha256": "7c2b3a2669febee2d96cf6787d72b9aefe8afb8e6dfe1787ab79905423a5fe20"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1203",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 3,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "1a3f11863a2cfa4858813a2119e6bf15c784ea14b9e6890b5b73b2ef2b34e606"
+     }
+    }
    }
   },
   {
@@ -12834,7 +13135,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
@@ -12871,14 +13172,14 @@
      "-L",
      "issue1213",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:39Z",
     "selected": 15,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "1bdf0038efb74c6c76673fb58538dd3140077862359b732e4ea984ba11770c5a"
+     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-state.xml",
+     "sha256": "897269f250bdaa47e2649ff0b17a77f8c87831fb65ee67f6e38d3337674e4cf2"
     }
    },
    "rows": [
@@ -13483,6 +13784,32 @@
       "sha256": "6dc68f253a04c8ff131202f075411bb8edf3a9ffb87b004f65cbec2191a52980"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1213",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 15,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "1bdf0038efb74c6c76673fb58538dd3140077862359b732e4ea984ba11770c5a"
+     }
+    }
    }
   },
   {
@@ -13533,7 +13860,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -13578,14 +13905,14 @@
      "-L",
      "issue1212",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:40Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "abd8070f09084417026375898fab4e2a4871b6092622584c448f3c502538e27b"
+     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-state.xml",
+     "sha256": "4c7e7408bde768f02d9525413cd81a66f41eb5bfe40ccb4d18069c37ac5db34d"
     }
    },
    "rows": [
@@ -14536,6 +14863,32 @@
       "sha256": "1d91513fb05faa19bdb159fe72eeb8ac62d5b6654d26a53b143af16d68eeb7f0"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1212",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "abd8070f09084417026375898fab4e2a4871b6092622584c448f3c502538e27b"
+     }
+    }
    }
   },
   {
@@ -14598,7 +14951,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -14655,14 +15008,14 @@
      "-L",
      "issue1211",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:43Z",
     "selected": 34,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "b097af79593e0f5f2f1433eef3f5356430c475e8c6ef2e1b60040d63be927450"
+     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-state.xml",
+     "sha256": "104a6d2a787e608f723a63609a08fd7b77ae7ebc0202e910d664294e232d35a1"
     }
    },
    "rows": [
@@ -15971,6 +16324,32 @@
       "sha256": "4e801b34ec2a897bba61c4a6ef60dee12ac5aea73026711bf416c37e7067b22a"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1211",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 34,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "b097af79593e0f5f2f1433eef3f5356430c475e8c6ef2e1b60040d63be927450"
+     }
+    }
    }
   },
   {
@@ -16013,7 +16392,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -16050,14 +16429,14 @@
      "-L",
      "issue1210",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:45Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "bc307b61b0a5c2112ce8afcf145be07e31991a8e2e354f40921f5c614aeb196e"
+     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-state.xml",
+     "sha256": "97075d2e79e1bf30e5a4507d0901e87fe90512a72c382ab2d86ffda01b0762c3"
     }
    },
    "rows": [
@@ -16572,6 +16951,32 @@
       "sha256": "177f5c89f4a20ed303eb0f79f31babe62db2bc160509d26462cb266bed431afb"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1210",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "bc307b61b0a5c2112ce8afcf145be07e31991a8e2e354f40921f5c614aeb196e"
+     }
+    }
    }
   },
   {
@@ -16638,7 +17043,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -16695,14 +17100,14 @@
      "-L",
      "issue1209",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:47Z",
     "selected": 30,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "fbc218107cd05ed0806b7547247d5f2db8c93d8a0967c170a48700d7beba8dd2"
+     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-state.xml",
+     "sha256": "9b847e97ae49ef73f16243ec0cc667e0969d19f461a8c08eaf5a9a7d91931220"
     }
    },
    "rows": [
@@ -19005,6 +19410,32 @@
       "sha256": "2e16508c724d9da90736ee674694b6349331813ac6fede77e434a68c2d957e37"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1209",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 30,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "fbc218107cd05ed0806b7547247d5f2db8c93d8a0967c170a48700d7beba8dd2"
+     }
+    }
    }
   },
   {
@@ -19045,7 +19476,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -19102,14 +19533,14 @@
      "-L",
      "issue1215",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:49Z",
     "selected": 25,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "09c86685ffca2adcd14ba3fdf152c78184fc492a969b70e78504e1c0dffe1752"
+     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-state.xml",
+     "sha256": "8a7d6565891fb460e5dbfb26bebd09e41b07b3e6b4f83a334e9ec3bacdaf4657"
     }
    },
    "rows": [
@@ -20705,6 +21136,32 @@
       "sha256": "fcc178f72f9064ab785cfdc5c098a5315487ae20051aab92ca200ebb12877cc7"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1215",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 25,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "09c86685ffca2adcd14ba3fdf152c78184fc492a969b70e78504e1c0dffe1752"
+     }
+    }
    }
   },
   {
@@ -20733,7 +21190,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -20774,14 +21231,14 @@
      "-L",
      "issue1216",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:51Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "8ac5a2fda2ef03b050070118944396194073311e6bbfb1c8f46a3b1b22d13018"
+     "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-state.xml",
+     "sha256": "a675128dc3d6f7c13fb3435cf3106672bba5c1c3e4f61fe257394c81d5b60fc2"
     }
    },
    "rows": [
@@ -21482,6 +21939,32 @@
       "sha256": "a1ab23944acdb04bc25ff4069df1f343fc34e1771a6310bfe1d8af9111c0d687"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1216",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "8ac5a2fda2ef03b050070118944396194073311e6bbfb1c8f46a3b1b22d13018"
+     }
+    }
    }
   },
   {
@@ -21510,7 +21993,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1217/latex.json",
@@ -21535,14 +22018,14 @@
      "-L",
      "issue1217",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:51Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "6b94365860ff6064587688645e62bdf93a31918a82996596ff81e6e181f4f92c"
+     "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-state.xml",
+     "sha256": "4b1059edac6fdf92cd1bab0e02791c3169388aac7a5bd0981346e2dd03b8ef99"
     }
    },
    "rows": [
@@ -22580,6 +23063,32 @@
       "sha256": "9a5cd2a9396fbc3c0637efe8880316a994e4ea7704c6874b82ce89145324b177"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1217",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "6b94365860ff6064587688645e62bdf93a31918a82996596ff81e6e181f4f92c"
+     }
+    }
    }
   },
   {
@@ -22608,7 +23117,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1218/color.json",
@@ -22629,14 +23138,14 @@
      "-L",
      "issue1218",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:52Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "9e668d836229fcadb1da895d48d88c4b2a5317dc9c57a748a27e3d548223052e"
+     "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-state.xml",
+     "sha256": "78c4a6a9ddf79f9f00c397f4d0839541f14209341bbd0f75699c893caaa7b627"
     }
    },
    "rows": [
@@ -23602,6 +24111,32 @@
       "sha256": "f192ec8a232a9a8885628ef7b5a0208dc1e447ac5ebd53915f2378474882f17f"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1218",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "9e668d836229fcadb1da895d48d88c4b2a5317dc9c57a748a27e3d548223052e"
+     }
+    }
    }
   },
   {
@@ -23642,7 +24177,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
@@ -23671,14 +24206,14 @@
      "-L",
      "issue1219",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:23Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:53Z",
     "selected": 32,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "df3111c9f860f5474551fd63130eb2142bdb71460989d32476df83983394db0e"
+     "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-state.xml",
+     "sha256": "ded7db6d931b1104756f620e128a4401d03abd55e75df0b001bae6f7ba9bfd21"
     }
    },
    "rows": [
@@ -25215,6 +25750,32 @@
       "sha256": "cf46883af476f79c82ab025177db2622bf15d48725374cb7ca1030bc8f1bb6a1"
      }
     }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1219",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:23Z",
+     "selected": 32,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "df3111c9f860f5474551fd63130eb2142bdb71460989d32476df83983394db0e"
+     }
+    }
    }
   },
   {
@@ -25291,7 +25852,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "3075ec89d9320517f5ec09e63908d69e3a50413b72755e2e5c365dbd87a993b1"
+     "sha256": "20adad9e77f4ba1e177b2f83c1501299ee1b610458279dc1a31005689c99d3f7"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -25332,14 +25893,14 @@
      "-L",
      "issue1220",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-terminal-ansi-keybindings.xml"
+     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-state.xml"
     ],
-    "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
-    "recordedAt": "2026-11-06T02:34:26Z",
+    "testedRevision": "f2cd08dd90cc2c009240ab13c1e1599827481046",
+    "recordedAt": "2026-11-06T03:32:56Z",
     "selected": 69,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-terminal-ansi-keybindings.xml",
-     "sha256": "c78fbbd679f92cb420f0f8ede03f7d5eca28e141ee4d2f82efdd040016ece8d9"
+     "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-state.xml",
+     "sha256": "4358cf25316c51981c384d89658f0b4a223dbf882204fed04a68315408c86208"
     }
    },
    "rows": [
@@ -27188,6 +27749,32 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-terminal-ansi.xml",
       "sha256": "86b2bb59ea02c254e6008d3231c5010610d6f39ef205d405de3da3219bc08cf2"
+     }
+    }
+   },
+   "revalidation1221ManagerState": {
+    "reason": "Registration adds one supplemental orphan manager-state scenario. Existing receipt row mappings and frozen artifact identities remain unchanged; the exact recorded selection was rerun.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1220",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-terminal-ansi-keybindings.xml"
+     ],
+     "testedRevision": "96e73cf43435252b1ec34b3990e0e6ae0efee257",
+     "recordedAt": "2026-11-06T02:34:26Z",
+     "selected": 69,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-terminal-ansi-keybindings.xml",
+      "sha256": "c78fbbd679f92cb420f0f8ede03f7d5eca28e141ee4d2f82efdd040016ece8d9"
      }
     }
    }

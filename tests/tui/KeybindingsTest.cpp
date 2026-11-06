@@ -75,7 +75,7 @@ TEST_CASE("Keybinding resolution compares frozen pi 1.3.0 manager cases", "[tui]
 }
 
 TEST_CASE("Keybinding snapshots compare frozen user bindings and replacement", "[tui][keybindings][issue1221]") {
-    const auto bundle = tests::read_pi_v130_audit_candidate("audit-1221-manager-state", "manager-state.json");
+    const auto bundle = tests::read_pi_v130_audit_evidence("audit-1221-manager-state", "manager-state.json");
     REQUIRE(bundle);
     const auto& scenario = tests::find_scenario(*bundle, "accessors-replacement-and-global-state");
     const auto& expected = scenario.at("expected");
