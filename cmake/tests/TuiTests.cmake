@@ -84,6 +84,7 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/TerminalCursorPtyEvidenceTest.cpp
         tests/tui/TerminalStreamDecoderTest.cpp
         tests/tui/StdinBufferTest.cpp
+        tests/tui/StdinFramingEvidenceTest.cpp
         tests/tui/TextBufferTest.cpp
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiRenderSchedulingTest.cpp

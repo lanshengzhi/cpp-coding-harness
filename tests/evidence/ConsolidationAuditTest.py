@@ -802,8 +802,10 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # receipted 84 select-list/settings-list rows whole-row: 489. #1220 (route batch B12)
         # receipted 104 layout/scroll/small-text rows whole-row: 593.
         # #1221 (route batch B13 slice A) receipted 9 key identity/parse-match
-        # rows whole-row: 602.
-        self.assertEqual(len(delivered), 602)
+        # rows whole-row: 602. #1221 slice B promoted 7 StdinBuffer framing rows
+        # whole-row and left StdinBuffer.flush validated but bounded on the
+        # combined flush+callback seam: 609.
+        self.assertEqual(len(delivered), 609)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)
@@ -1099,6 +1101,7 @@ class TicketMappedLedgerTest(unittest.TestCase):
     ]
     UNREFERENCED_1058_DRAFT = [
         "cch_tui:CURSOR_MARKER",
+        "cch_tui:StdinBuffer.flush",
         "cch_tui:TUI",
         "cch_tui:TUI.showOverlay",
         "cch_tui:TuiAltScreen",
@@ -1117,7 +1120,7 @@ class TicketMappedLedgerTest(unittest.TestCase):
         # Reverted rows carry no delivery ticket until a genuine re-delivery: the
         # #1229 bounded durable-captures rows and the #1226 mcp-request-auth
         # withdrawal stay unreferenced; the #1058-draft TUI rows remain as the
-        # check reports them.
+        # check reports them, including the #1221 bounded StdinBuffer.flush row.
         self.assertEqual(null_refs, self.WITHDRAWN_UNREFERENCED)
         self.assertEqual(draft_refs, self.UNREFERENCED_1058_DRAFT)
         for row_id in self.RULED_ABORT_ADMISSION_1148:

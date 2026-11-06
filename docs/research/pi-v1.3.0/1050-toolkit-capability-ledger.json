@@ -28146,20 +28146,29 @@
    "consumer": "ProcessTerminal decoder callers",
    "boundary": "StdinBuffer-equivalent reusable buffering",
    "implementation_ticket": "#1058-draft",
-   "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
+   "scenario": [
+    "stdin-framing-options-and-events",
+    "stdin-framing-paste-lifecycle",
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-emit-and-kitty-dedup",
+    "stdin-framing-timeout-selection",
+    "stdin-framing-flush",
+    "fragmented-color-reply-header-survives-deadline",
+    "fragmented-osc-reply",
+    "fragmented-apc-reply",
+    "ambiguous-alt-input",
+    "fragmented-color-reply-never-leaks-or-opens-editor"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
-    "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
-    "result": "frozen keeps a recognized terminal-reply header buffered past the sequence timeout and re-parses ambiguous Alt input; C++ flushes the fragment as input",
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/stdin-framing.json",
+    "scenario": "stdin-framing-options-and-events",
+    "result": "frozen StdinBuffer frames complete sequences and paste, suppresses a bare kitty printable duplicate, selects the escape window for a lone ESC, and keeps recognized reply headers buffered until their terminator",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
     "export name appears in changed source hunks; not individually re-audited against v1.3.0",
-    "C++ StdinBuffer flushes a partial OSC/APC/kitty reply at the timeout, leaking its tail as text",
-    "C++ flush emits the partial reply as one data sequence",
-    "C++ has no v1.3.0 comparison for fragmented terminal replies or the ambiguous Alt recovery",
     "member name appears in changed source hunks; not individually re-audited against v1.3.0",
     "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
    ],
@@ -28202,7 +28211,34 @@
      "tests/tui/TerminalStreamDecoderTest.cpp"
     ]
    },
-   "comparisonCase": "fragmented-color-reply-never-leaks-or-opens-editor"
+   "comparisonCase": [
+    "stdin-framing-options-and-events",
+    "stdin-framing-paste-lifecycle",
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-emit-and-kitty-dedup",
+    "stdin-framing-timeout-selection",
+    "stdin-framing-flush",
+    "fragmented-color-reply-header-survives-deadline",
+    "fragmented-osc-reply",
+    "fragmented-apc-reply",
+    "ambiguous-alt-input",
+    "fragmented-color-reply-never-leaks-or-opens-editor"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "stdin-framing-options-and-events",
+     "stdin-framing-paste-lifecycle",
+     "stdin-framing-buffer-lifecycle",
+     "stdin-framing-emit-and-kitty-dedup",
+     "stdin-framing-timeout-selection",
+     "stdin-framing-flush",
+     "fragmented-color-reply-header-survives-deadline",
+     "fragmented-osc-reply",
+     "fragmented-apc-reply",
+     "ambiguous-alt-input",
+     "fragmented-color-reply-never-leaks-or-opens-editor"
+    ]
+   }
   },
   {
    "id": "StdinBuffer.buffer",
@@ -28218,8 +28254,18 @@
    "consumer": "ProcessTerminal decoder callers",
    "boundary": "StdinBuffer-equivalent reusable buffering",
    "implementation_ticket": null,
-   "scenario": "E02 framing/listener/paste buffering",
-   "evidence": null,
+   "scenario": [
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-paste-lifecycle",
+    "fragmented-color-reply-header-survives-deadline"
+   ],
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/stdin-framing.json",
+    "scenario": "stdin-framing-buffer-lifecycle",
+    "result": "frozen getBuffer exposes the held fragment and returns empty after clear/destroy or a completed sequence",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
     "member name appears in changed source hunks; not individually re-audited against v1.3.0"
@@ -28238,7 +28284,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "StdinBuffer-equivalent reusable buffering",
     "consumer": "ProcessTerminal decoder callers",
@@ -28248,7 +28294,18 @@
      "tests/tui/TerminalStreamDecoderTest.cpp"
     ]
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": [
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-paste-lifecycle",
+    "fragmented-color-reply-header-survives-deadline"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "stdin-framing-buffer-lifecycle",
+     "stdin-framing-paste-lifecycle",
+     "fragmented-color-reply-header-survives-deadline"
+    ]
+   }
   },
   {
    "id": "StdinBuffer.timeout",
@@ -28264,8 +28321,18 @@
    "consumer": "ProcessTerminal decoder callers",
    "boundary": "StdinBuffer-equivalent reusable buffering",
    "implementation_ticket": null,
-   "scenario": "E02 framing/listener/paste buffering",
-   "evidence": null,
+   "scenario": [
+    "stdin-framing-timeout-selection",
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-flush"
+   ],
+   "evidence": {
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/stdin-framing.json",
+    "scenario": "stdin-framing-timeout-selection",
+    "result": "frozen arms a live timeout only for a held fragment, clears it on flush/clear, and arms none for a recognized reply header",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
+   },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
     "member name appears in changed source hunks; not individually re-audited against v1.3.0"
@@ -28284,7 +28351,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "not-audited",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "StdinBuffer-equivalent reusable buffering",
     "consumer": "ProcessTerminal decoder callers",
@@ -28294,7 +28361,18 @@
      "tests/tui/TerminalStreamDecoderTest.cpp"
     ]
    },
-   "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
+   "comparisonCase": [
+    "stdin-framing-timeout-selection",
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-flush"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "stdin-framing-timeout-selection",
+     "stdin-framing-buffer-lifecycle",
+     "stdin-framing-flush"
+    ]
+   }
   },
   {
    "id": "StdinBuffer.timeoutMs",
@@ -28310,14 +28388,16 @@
    "consumer": "ProcessTerminal decoder callers",
    "boundary": "StdinBuffer-equivalent reusable buffering",
    "implementation_ticket": null,
-   "scenario": "E02 framing/listener/paste buffering",
+   "scenario": [
+    "stdin-framing-options-and-events",
+    "stdin-framing-timeout-selection"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E02 framing/listener/paste buffering",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/stdin-framing.json",
+    "scenario": "stdin-framing-options-and-events",
+    "result": "frozen default timeout is 50 ms and an explicit timeout is retained; a held non-ESC fragment resolves at that window",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -28337,7 +28417,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "StdinBuffer-equivalent reusable buffering",
     "consumer": "ProcessTerminal decoder callers",
@@ -28347,7 +28427,16 @@
      "tests/tui/TerminalStreamDecoderTest.cpp"
     ]
    },
-   "comparisonCase": "E02 framing/listener/paste buffering"
+   "comparisonCase": [
+    "stdin-framing-options-and-events",
+    "stdin-framing-timeout-selection"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "stdin-framing-options-and-events",
+     "stdin-framing-timeout-selection"
+    ]
+   }
   },
   {
    "id": "StdinBuffer.escapeTimeoutMs",
@@ -28363,14 +28452,16 @@
    "consumer": "ProcessTerminal decoder callers",
    "boundary": "StdinBuffer-equivalent reusable buffering",
    "implementation_ticket": null,
-   "scenario": "E02 framing/listener/paste buffering",
+   "scenario": [
+    "stdin-framing-options-and-events",
+    "stdin-framing-timeout-selection"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-    "scenario": "E02 framing/listener/paste buffering",
-    "result": "historical pi-v1.0.4 evidence family; the v1.0.4..v1.3.0 diff does not name this member",
-    "historicalBaseline": "pi-v1.0.4",
-    "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-    "route": "member-absent-from-diff"
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/stdin-framing.json",
+    "scenario": "stdin-framing-options-and-events",
+    "result": "frozen default escape timeout is 10 ms and an explicit value is retained; a lone ESC resolves at that window",
+    "baseline": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
     "no v1.3.0 C++ comparison recorded",
@@ -28390,7 +28481,7 @@
    "publicOperations": [],
    "typeOnly": false,
    "sourceChangedSinceV1.0.4": true,
-   "comparisonRoute": "member-absent-from-diff",
+   "comparisonRoute": "v1.3.0-observation",
    "cpp": {
     "interface": "StdinBuffer-equivalent reusable buffering",
     "consumer": "ProcessTerminal decoder callers",
@@ -28400,7 +28491,16 @@
      "tests/tui/TerminalStreamDecoderTest.cpp"
     ]
    },
-   "comparisonCase": "E02 framing/listener/paste buffering"
+   "comparisonCase": [
+    "stdin-framing-options-and-events",
+    "stdin-framing-timeout-selection"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "stdin-framing-options-and-events",
+     "stdin-framing-timeout-selection"
+    ]
+   }
   },
   {
    "id": "StdinBuffer.pasteMode",
@@ -28628,18 +28728,27 @@
    "consumer": "cch_tui ProcessTerminal input edge",
    "boundary": "StdinBuffer-equivalent reusable buffering",
    "implementation_ticket": "#1058-draft",
-   "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
+   "scenario": [
+    "stdin-framing-options-and-events",
+    "stdin-framing-paste-lifecycle",
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-emit-and-kitty-dedup",
+    "stdin-framing-timeout-selection",
+    "stdin-framing-flush",
+    "fragmented-color-reply-header-survives-deadline",
+    "fragmented-osc-reply",
+    "fragmented-apc-reply",
+    "ambiguous-alt-input",
+    "fragmented-color-reply-never-leaks-or-opens-editor"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
-    "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
-    "result": "frozen keeps a recognized terminal-reply header buffered past the sequence timeout and re-parses ambiguous Alt input; C++ flushes the fragment as input",
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/stdin-framing.json",
+    "scenario": "stdin-framing-options-and-events",
+    "result": "frozen process frames complete sequences, paste, kitty duplicate suppression, deadline selection, and recognized reply headers; C++ replays the same observations including a real deadline",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "C++ StdinBuffer flushes a partial OSC/APC/kitty reply at the timeout, leaking its tail as text",
-    "C++ has no v1.3.0 comparison for fragmented terminal replies or the ambiguous Alt recovery"
-   ],
+   "gaps": [],
    "notes": "v1.3.0 behavior change applied from the curated change map.",
    "kind": "method/field",
    "export": "StdinBuffer",
@@ -28664,7 +28773,34 @@
     ]
    },
    "defaults": "timeout=50ms, escapeTimeout=10ms",
-   "comparisonCase": "fragmented-color-reply-never-leaks-or-opens-editor"
+   "comparisonCase": [
+    "stdin-framing-options-and-events",
+    "stdin-framing-paste-lifecycle",
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-emit-and-kitty-dedup",
+    "stdin-framing-timeout-selection",
+    "stdin-framing-flush",
+    "fragmented-color-reply-header-survives-deadline",
+    "fragmented-osc-reply",
+    "fragmented-apc-reply",
+    "ambiguous-alt-input",
+    "fragmented-color-reply-never-leaks-or-opens-editor"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "stdin-framing-options-and-events",
+     "stdin-framing-paste-lifecycle",
+     "stdin-framing-buffer-lifecycle",
+     "stdin-framing-emit-and-kitty-dedup",
+     "stdin-framing-timeout-selection",
+     "stdin-framing-flush",
+     "fragmented-color-reply-header-survives-deadline",
+     "fragmented-osc-reply",
+     "fragmented-apc-reply",
+     "ambiguous-alt-input",
+     "fragmented-color-reply-never-leaks-or-opens-editor"
+    ]
+   }
   },
   {
    "id": "StdinBuffer.emitDataSequence",
@@ -28726,18 +28862,22 @@
    "consumer": "cch_tui ProcessTerminal input edge",
    "boundary": "StdinBuffer-equivalent reusable buffering",
    "implementation_ticket": "#1058-draft",
-   "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
+   "scenario": [
+    "stdin-framing-flush",
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-paste-lifecycle"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
-    "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
-    "result": "frozen does not flush a recognized reply header; it recovers only ambiguous Alt-key input by re-emitting the ESC pair and reparsing the tail",
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/stdin-framing.json",
+    "scenario": "stdin-framing-flush",
+    "result": "frozen flush returns the held fragment without emitting and its timer callback reparses an ambiguous control-string prefix; recognized reply headers arm no deadline",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
    "gaps": [
-    "C++ flush emits the partial reply as one data sequence"
+    "pi's flush() returns the held fragment without emitting; its timer callback emits and reparses an ambiguous control-string prefix. cch::tui::StdinBuffer::flush combines both seams in one call (src/tui/StdinBuffer.cpp:292-310), so the returned vector and the delivered data history are compared but the C++ operation cannot be observed returning the fragment without delivering it; no C++ equivalent of the separate flush-return contract exists."
    ],
-   "notes": "v1.3.0 behavior change applied from the curated change map.",
+   "notes": "v1.3.0 behavior change applied from the curated change map. The C++ seam combines pi's flush return with its timer-callback delivery, so the row is bounded by that combined seam.",
    "kind": "method/field",
    "export": "StdinBuffer",
    "member": "flush",
@@ -28761,7 +28901,18 @@
      "tests/tui/TerminalStreamDecoderTest.cpp"
     ]
    },
-   "comparisonCase": "fragmented-color-reply-never-leaks-or-opens-editor"
+   "comparisonCase": [
+    "stdin-framing-flush",
+    "stdin-framing-buffer-lifecycle",
+    "stdin-framing-paste-lifecycle"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "stdin-framing-flush",
+     "stdin-framing-buffer-lifecycle",
+     "stdin-framing-paste-lifecycle"
+    ]
+   }
   },
   {
    "id": "StdinBuffer.clear",
@@ -30232,8 +30383,11 @@
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [],
-   "notes": "v1.3.0 behavior change applied from the curated change map.",
+   "gaps": [
+    "C++ ProcessTerminal.stop() gates the ESC[>4;0m modifyOtherKeys restore on modify_other_keys_active, so a Kitty-negotiated session omits the frozen stop sequence's final write (docs/research/pi-v1.3.0/1182-tui-reconciliation.md:101-119); closing it needs the unconditional restore or a registered normalization.",
+    "The remaining terminal families have no v1.3.0 whole-row comparison."
+   ],
+   "notes": "v1.3.0 behavior change applied from the curated change map. The stop-sequence divergence and the remaining terminal families are recorded as row-level gaps instead of a batch obligation.",
    "kind": "method/field",
    "export": "ProcessTerminal",
    "member": "stop",
@@ -49034,18 +49188,21 @@
    "consumer": "cch_tui ProcessTerminal input edge; cch_coding_agent prompt/editor",
    "boundary": null,
    "implementation_ticket": "#1058-draft",
-   "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
+   "scenario": [
+    "fragmented-color-reply-header-survives-deadline",
+    "fragmented-color-reply-never-leaks-or-opens-editor",
+    "fragmented-osc-reply",
+    "fragmented-apc-reply",
+    "ambiguous-alt-input"
+   ],
    "evidence": {
-    "artifact": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
-    "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
-    "result": "frozen buffers OS C 4/10/11/7501, XTVersion and Kitty graphics replies until their terminator",
+    "artifact": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/stdin-framing.json",
+    "scenario": "fragmented-color-reply-header-survives-deadline",
+    "result": "frozen keeps complete OSC/APC/DCS reply headers buffered past the sequence timeout, completes the reply out of band, and recovers ambiguous Alt-bracket input",
     "baseline": "pi-v1.3.0",
     "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
    },
-   "gaps": [
-    "C++ flushes recognized reply headers at the timeout",
-    "C++ delivers the reply tail and BEL as prompt text/Ctrl+G"
-   ],
+   "gaps": [],
    "notes": "v1.3.0 change row without a v1.0.4 export/member identity.",
    "kind": "capability",
    "export": null,
@@ -49063,7 +49220,22 @@
      "tests/tui/StdinBufferTest.cpp"
     ]
    },
-   "comparisonCase": "fragmented-color-reply-never-leaks-or-opens-editor"
+   "comparisonCase": [
+    "fragmented-color-reply-header-survives-deadline",
+    "fragmented-color-reply-never-leaks-or-opens-editor",
+    "fragmented-osc-reply",
+    "fragmented-apc-reply",
+    "ambiguous-alt-input"
+   ],
+   "upstreamEvidence": {
+    "scenarios": [
+     "fragmented-color-reply-header-survives-deadline",
+     "fragmented-color-reply-never-leaks-or-opens-editor",
+     "fragmented-osc-reply",
+     "fragmented-apc-reply",
+     "ambiguous-alt-input"
+    ]
+   }
   },
   {
    "id": "cch_tui:program-status:detection-override",

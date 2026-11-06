@@ -1,0 +1,1717 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1221",
+  "family": "audit-1221-stdin-framing",
+  "capturedAt": "2026-11-06T07:10:04.567Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.13.0",
+    "tsx": "tsx v4.22.1\nnode v26.13.0"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/capture.mts",
+    "sha256": "15f3c069a23a76536383b2908832950e3919c635a86995b579fcba8a30eeca40",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1221-stdin-framing/capture.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/capture.mts",
+        "sha256": "15f3c069a23a76536383b2908832950e3919c635a86995b579fcba8a30eeca40"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "stdin-framing.json",
+      "family": "audit-1221-stdin-framing",
+      "bytes": 43614,
+      "sha256": "a966e8190eba18e817452141a162b87ffe004d2aeca6a6dd556f21782a7fa54e",
+      "sourceEndpoints": [
+        "packages/tui/src/stdin-buffer.ts:StdinBufferOptions,StdinBufferEventMap,StdinBuffer.constructor,StdinBuffer.process,StdinBuffer.emitDataSequence,StdinBuffer.flush,StdinBuffer.clear,StdinBuffer.getBuffer,StdinBuffer.destroy",
+        "packages/tui/src/keys.ts:matchesKey"
+      ],
+      "scenarios": [
+        {
+          "name": "stdin-framing-options-and-events",
+          "inputs": {
+            "defaultOptions": {},
+            "explicitOptions": {
+              "timeout": 37,
+              "escapeTimeout": 13
+            },
+            "stream": "a\u001b[200~hi\u001b[201~b"
+          },
+          "expected": {
+            "defaultTimeoutMs": 50,
+            "defaultEscapeTimeoutMs": 10,
+            "explicitTimeoutMs": 37,
+            "explicitEscapeTimeoutMs": 13,
+            "eventNames": [
+              "data",
+              "paste"
+            ],
+            "data": [
+              "a",
+              "b"
+            ],
+            "paste": [
+              "hi"
+            ],
+            "events": [
+              {
+                "type": "data",
+                "value": "a"
+              },
+              {
+                "type": "paste",
+                "value": "hi"
+              },
+              {
+                "type": "data",
+                "value": "b"
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "stdin-framing-paste-lifecycle",
+          "inputs": {
+            "cases": [
+              {
+                "name": "complete-paste",
+                "steps": [
+                  {
+                    "process": "\u001b[200~hello\u001b[201~"
+                  }
+                ]
+              },
+              {
+                "name": "collapsed-paste",
+                "steps": [
+                  {
+                    "process": "\u001b[200~hello\u001b[201~x"
+                  }
+                ]
+              },
+              {
+                "name": "chunked-paste",
+                "steps": [
+                  {
+                    "process": "\u001b[200~hel"
+                  },
+                  {
+                    "process": "lo"
+                  },
+                  {
+                    "process": "\u001b[201~"
+                  },
+                  {
+                    "process": "x"
+                  }
+                ]
+              },
+              {
+                "name": "paste-after-data",
+                "steps": [
+                  {
+                    "process": "a\u001b[200~hello\u001b[201~"
+                  }
+                ]
+              },
+              {
+                "name": "partial-paste-survives-flush",
+                "steps": [
+                  {
+                    "process": "\u001b[200~hel"
+                  },
+                  {
+                    "flush": true
+                  },
+                  {
+                    "process": "lo\u001b[201~"
+                  }
+                ]
+              },
+              {
+                "name": "empty-paste",
+                "steps": [
+                  {
+                    "process": "\u001b[200~\u001b[201~"
+                  }
+                ]
+              },
+              {
+                "name": "paste-then-tail-csi",
+                "steps": [
+                  {
+                    "process": "\u001b[200~x\u001b[201~\u001b[A"
+                  }
+                ]
+              },
+              {
+                "name": "paste-start-inside-batch",
+                "steps": [
+                  {
+                    "process": "\u001b[A\u001b[200~x\u001b[201~"
+                  }
+                ]
+              },
+              {
+                "name": "clear-cancels-paste",
+                "steps": [
+                  {
+                    "process": "\u001b[200~hel"
+                  },
+                  {
+                    "clear": true
+                  },
+                  {
+                    "process": "lo\u001b[201~"
+                  }
+                ]
+              },
+              {
+                "name": "destroy-cancels-paste",
+                "steps": [
+                  {
+                    "process": "\u001b[200~hel"
+                  },
+                  {
+                    "destroy": true
+                  },
+                  {
+                    "process": "lo\u001b[201~"
+                  }
+                ]
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "name": "complete-paste",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [
+                      "hello"
+                    ],
+                    "events": [
+                      {
+                        "type": "paste",
+                        "value": "hello"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "collapsed-paste",
+                "observations": [
+                  {
+                    "data": [
+                      "x"
+                    ],
+                    "paste": [
+                      "hello"
+                    ],
+                    "events": [
+                      {
+                        "type": "paste",
+                        "value": "hello"
+                      },
+                      {
+                        "type": "data",
+                        "value": "x"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "chunked-paste",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": true,
+                    "pasteBuffer": "hel",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": true,
+                    "pasteBuffer": "hello",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [
+                      "hello"
+                    ],
+                    "events": [
+                      {
+                        "type": "paste",
+                        "value": "hello"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "x"
+                    ],
+                    "paste": [
+                      "hello"
+                    ],
+                    "events": [
+                      {
+                        "type": "paste",
+                        "value": "hello"
+                      },
+                      {
+                        "type": "data",
+                        "value": "x"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "paste-after-data",
+                "observations": [
+                  {
+                    "data": [
+                      "a"
+                    ],
+                    "paste": [
+                      "hello"
+                    ],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "a"
+                      },
+                      {
+                        "type": "paste",
+                        "value": "hello"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "partial-paste-survives-flush",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": true,
+                    "pasteBuffer": "hel",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": true,
+                    "pasteBuffer": "hel",
+                    "timeout": false,
+                    "pending": null,
+                    "flushReturn": []
+                  },
+                  {
+                    "data": [],
+                    "paste": [
+                      "hello"
+                    ],
+                    "events": [
+                      {
+                        "type": "paste",
+                        "value": "hello"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "empty-paste",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [
+                      ""
+                    ],
+                    "events": [
+                      {
+                        "type": "paste",
+                        "value": ""
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "paste-then-tail-csi",
+                "observations": [
+                  {
+                    "data": [
+                      "\u001b[A"
+                    ],
+                    "paste": [
+                      "x"
+                    ],
+                    "events": [
+                      {
+                        "type": "paste",
+                        "value": "x"
+                      },
+                      {
+                        "type": "data",
+                        "value": "\u001b[A"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "paste-start-inside-batch",
+                "observations": [
+                  {
+                    "data": [
+                      "\u001b[A"
+                    ],
+                    "paste": [
+                      "x"
+                    ],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[A"
+                      },
+                      {
+                        "type": "paste",
+                        "value": "x"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "clear-cancels-paste",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": true,
+                    "pasteBuffer": "hel",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "l",
+                      "o",
+                      "\u001b[201~"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "l"
+                      },
+                      {
+                        "type": "data",
+                        "value": "o"
+                      },
+                      {
+                        "type": "data",
+                        "value": "\u001b[201~"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "destroy-cancels-paste",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": true,
+                    "pasteBuffer": "hel",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "l",
+                      "o",
+                      "\u001b[201~"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "l"
+                      },
+                      {
+                        "type": "data",
+                        "value": "o"
+                      },
+                      {
+                        "type": "data",
+                        "value": "\u001b[201~"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "stdin-framing-buffer-lifecycle",
+          "inputs": {
+            "cases": [
+              {
+                "name": "partial-csi-buffer",
+                "steps": [
+                  {
+                    "process": "\u001b[<35"
+                  }
+                ]
+              },
+              {
+                "name": "clear-buffer",
+                "steps": [
+                  {
+                    "process": "\u001b[<35"
+                  },
+                  {
+                    "clear": true
+                  }
+                ]
+              },
+              {
+                "name": "destroy-buffer",
+                "steps": [
+                  {
+                    "process": "\u001b]4;1;rgb:eaea/6c"
+                  },
+                  {
+                    "destroy": true
+                  }
+                ]
+              },
+              {
+                "name": "flush-empty",
+                "steps": [
+                  {
+                    "flush": true
+                  }
+                ]
+              },
+              {
+                "name": "clear-after-complete",
+                "steps": [
+                  {
+                    "process": "a"
+                  },
+                  {
+                    "clear": true
+                  }
+                ]
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "name": "partial-csi-buffer",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b[<35",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "clear-buffer",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b[<35",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "destroy-buffer",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b]4;1;rgb:eaea/6c",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "flush-empty",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null,
+                    "flushReturn": []
+                  }
+                ]
+              },
+              {
+                "name": "clear-after-complete",
+                "observations": [
+                  {
+                    "data": [
+                      "a"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "a"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "a"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "a"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "stdin-framing-emit-and-kitty-dedup",
+          "inputs": {
+            "cases": [
+              {
+                "name": "bare-kitty-then-raw",
+                "steps": [
+                  {
+                    "process": "\u001b[97u"
+                  },
+                  {
+                    "process": "a"
+                  },
+                  {
+                    "process": "a"
+                  }
+                ]
+              },
+              {
+                "name": "explicit-kitty-then-raw",
+                "steps": [
+                  {
+                    "process": "\u001b[97;1u"
+                  },
+                  {
+                    "process": "a"
+                  }
+                ]
+              },
+              {
+                "name": "control-codepoint",
+                "steps": [
+                  {
+                    "process": "\u001b[13u"
+                  },
+                  {
+                    "process": "\r"
+                  }
+                ]
+              },
+              {
+                "name": "direct-emit-sequence",
+                "steps": [
+                  {
+                    "emitDataSequence": "\u001b[97u"
+                  },
+                  {
+                    "emitDataSequence": "a"
+                  },
+                  {
+                    "emitDataSequence": "a"
+                  }
+                ]
+              },
+              {
+                "name": "pending-cleared-by-paste",
+                "steps": [
+                  {
+                    "process": "\u001b[97u"
+                  },
+                  {
+                    "process": "\u001b[200~x\u001b[201~"
+                  },
+                  {
+                    "process": "a"
+                  }
+                ]
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "name": "bare-kitty-then-raw",
+                "observations": [
+                  {
+                    "data": [
+                      "\u001b[97u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": 97
+                  },
+                  {
+                    "data": [
+                      "\u001b[97u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b[97u",
+                      "a"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      },
+                      {
+                        "type": "data",
+                        "value": "a"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "explicit-kitty-then-raw",
+                "observations": [
+                  {
+                    "data": [
+                      "\u001b[97;1u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97;1u"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b[97;1u",
+                      "a"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97;1u"
+                      },
+                      {
+                        "type": "data",
+                        "value": "a"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "control-codepoint",
+                "observations": [
+                  {
+                    "data": [
+                      "\u001b[13u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[13u"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b[13u",
+                      "\r"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[13u"
+                      },
+                      {
+                        "type": "data",
+                        "value": "\r"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "direct-emit-sequence",
+                "observations": [
+                  {
+                    "data": [
+                      "\u001b[97u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": 97
+                  },
+                  {
+                    "data": [
+                      "\u001b[97u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b[97u",
+                      "a"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      },
+                      {
+                        "type": "data",
+                        "value": "a"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "pending-cleared-by-paste",
+                "observations": [
+                  {
+                    "data": [
+                      "\u001b[97u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": 97
+                  },
+                  {
+                    "data": [
+                      "\u001b[97u"
+                    ],
+                    "paste": [
+                      "x"
+                    ],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      },
+                      {
+                        "type": "paste",
+                        "value": "x"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b[97u",
+                      "a"
+                    ],
+                    "paste": [
+                      "x"
+                    ],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      },
+                      {
+                        "type": "paste",
+                        "value": "x"
+                      },
+                      {
+                        "type": "data",
+                        "value": "a"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "stdin-framing-timeout-selection",
+          "inputs": {
+            "options": {
+              "timeout": 300,
+              "escapeTimeout": 50
+            },
+            "cases": [
+              {
+                "name": "lone-escape",
+                "steps": [
+                  {
+                    "process": "\u001b"
+                  },
+                  {
+                    "waitMs": 150
+                  }
+                ]
+              },
+              {
+                "name": "incomplete-csi",
+                "steps": [
+                  {
+                    "process": "\u001b["
+                  },
+                  {
+                    "waitMs": 150
+                  },
+                  {
+                    "waitMs": 200
+                  }
+                ]
+              },
+              {
+                "name": "ambiguous-osc",
+                "steps": [
+                  {
+                    "process": "\u001b]hello"
+                  },
+                  {
+                    "waitMs": 150
+                  },
+                  {
+                    "waitMs": 200
+                  }
+                ]
+              },
+              {
+                "name": "recognized-osc-header",
+                "steps": [
+                  {
+                    "process": "\u001b]4;1;rgb:eaea/6c"
+                  },
+                  {
+                    "waitMs": 150
+                  },
+                  {
+                    "process": "6c/6d6d\u0007"
+                  }
+                ]
+              },
+              {
+                "name": "recognized-apc-header",
+                "steps": [
+                  {
+                    "process": "\u001b_Gi=1;"
+                  },
+                  {
+                    "waitMs": 150
+                  },
+                  {
+                    "process": "OK\u001b\\"
+                  }
+                ]
+              },
+              {
+                "name": "recognized-dcs-header",
+                "steps": [
+                  {
+                    "process": "\u001bP>|"
+                  },
+                  {
+                    "waitMs": 150
+                  },
+                  {
+                    "process": "x\u001b\\"
+                  }
+                ]
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "name": "lone-escape",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "incomplete-csi",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b[",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b[",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b["
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b["
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "ambiguous-osc",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b]hello",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b]hello",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b]",
+                      "h",
+                      "e",
+                      "l",
+                      "l",
+                      "o"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b]"
+                      },
+                      {
+                        "type": "data",
+                        "value": "h"
+                      },
+                      {
+                        "type": "data",
+                        "value": "e"
+                      },
+                      {
+                        "type": "data",
+                        "value": "l"
+                      },
+                      {
+                        "type": "data",
+                        "value": "l"
+                      },
+                      {
+                        "type": "data",
+                        "value": "o"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "recognized-osc-header",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b]4;1;rgb:eaea/6c",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b]4;1;rgb:eaea/6c",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "recognized-apc-header",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b_Gi=1;",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b_Gi=1;",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001b_Gi=1;OK\u001b\\"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b_Gi=1;OK\u001b\\"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              },
+              {
+                "name": "recognized-dcs-header",
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001bP>|",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001bP>|",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  },
+                  {
+                    "data": [
+                      "\u001bP>|x\u001b\\"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001bP>|x\u001b\\"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null
+                  }
+                ]
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "stdin-framing-flush",
+          "inputs": {
+            "cases": [
+              {
+                "name": "flush-returns-held-fragment",
+                "steps": [
+                  {
+                    "process": "\u001b[<35"
+                  },
+                  {
+                    "flush": true
+                  }
+                ]
+              },
+              {
+                "name": "flush-control-string",
+                "steps": [
+                  {
+                    "process": "\u001b]a"
+                  },
+                  {
+                    "flush": true
+                  }
+                ]
+              },
+              {
+                "name": "flush-empty",
+                "steps": [
+                  {
+                    "flush": true
+                  }
+                ]
+              },
+              {
+                "name": "flush-clears-pending",
+                "steps": [
+                  {
+                    "process": "\u001b[97u"
+                  },
+                  {
+                    "process": "\u001b["
+                  },
+                  {
+                    "flush": true
+                  }
+                ]
+              }
+            ]
+          },
+          "expected": {
+            "cases": [
+              {
+                "name": "flush-returns-held-fragment",
+                "flushReturn": [
+                  "\u001b[<35"
+                ],
+                "flushData": [],
+                "timerCallbackData": [
+                  "\u001b[<35"
+                ],
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b[<35",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null,
+                    "flushReturn": [
+                      "\u001b[<35"
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "flush-control-string",
+                "flushReturn": [
+                  "\u001b]a"
+                ],
+                "flushData": [],
+                "timerCallbackData": [
+                  "\u001b]",
+                  "a"
+                ],
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "\u001b]a",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": null
+                  },
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null,
+                    "flushReturn": [
+                      "\u001b]a"
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "flush-empty",
+                "flushReturn": [],
+                "flushData": [],
+                "timerCallbackData": [],
+                "observations": [
+                  {
+                    "data": [],
+                    "paste": [],
+                    "events": [],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null,
+                    "flushReturn": []
+                  }
+                ]
+              },
+              {
+                "name": "flush-clears-pending",
+                "flushReturn": [
+                  "\u001b["
+                ],
+                "flushData": [
+                  "\u001b[97u"
+                ],
+                "timerCallbackData": [
+                  "\u001b[97u",
+                  "\u001b["
+                ],
+                "observations": [
+                  {
+                    "data": [
+                      "\u001b[97u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": 97
+                  },
+                  {
+                    "data": [
+                      "\u001b[97u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      }
+                    ],
+                    "buffer": "\u001b[",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": true,
+                    "pending": 97
+                  },
+                  {
+                    "data": [
+                      "\u001b[97u"
+                    ],
+                    "paste": [],
+                    "events": [
+                      {
+                        "type": "data",
+                        "value": "\u001b[97u"
+                      }
+                    ],
+                    "buffer": "",
+                    "pasteMode": false,
+                    "pasteBuffer": "",
+                    "timeout": false,
+                    "pending": null,
+                    "flushReturn": [
+                      "\u001b["
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "fragmented-color-reply-header-survives-deadline",
+          "inputs": {
+            "reply": "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007",
+            "header": "\u001b]4;1;rgb:eaea/6c",
+            "split": [
+              17,
+              8
+            ],
+            "timeoutMs": 20,
+            "tailWaitMs": 80
+          },
+          "expected": {
+            "afterHeaderTimeout": [],
+            "bufferedAfterHeaderTimeout": "\u001b]4;1;rgb:eaea/6c",
+            "afterTail": [
+              "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007"
+            ],
+            "afterTailCtlGMatch": false,
+            "afterRealCtrlG": [
+              "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007",
+              "\u0007"
+            ],
+            "realCtrlGDelivered": true
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}

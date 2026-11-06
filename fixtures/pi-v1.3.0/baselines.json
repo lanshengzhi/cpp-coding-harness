@@ -333,6 +333,10 @@
           "manifest": "audit-1221-manager-state/manifest.json",
           "manifestSha256": "8c50a54e146baa848756f56b8fc0044636e584c9f2f016c478062598a8a09a18"
         },
+        "audit-1221-stdin-framing": {
+          "manifest": "audit-1221-stdin-framing/manifest.json",
+          "manifestSha256": "06f8454bb3895a13c31918454e440dba197be21d3586cd6a008a11c2b6b6ca1c"
+        },
         "audit-1221-terminal-ansi": {
           "manifest": "audit-1221-terminal-ansi/manifest.json",
           "manifestSha256": "4fdb8b39668d43c7452b87889fe0dfc9e29998b5946a07d0ee8a1ae860430d17"
