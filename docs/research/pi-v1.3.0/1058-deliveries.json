@@ -174,7 +174,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -229,14 +229,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-keys.xml",
-     "sha256": "515530e11714aee4a51e077f06d30a56f54a5cd2fca053f1bf0c6522ca52804e"
+     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-stdin.xml",
+     "sha256": "c7950b2bc8f4f1623e441484251dd962478c1681075c7e9243373b7cb51b4501"
     }
    },
    "rows": [
@@ -1046,6 +1046,30 @@
       "sha256": "ae002f48bccea20932625ae286fbd5363589f4c00f6cc2ab7e3d68657e96e256"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-keys.xml",
+      "sha256": "515530e11714aee4a51e077f06d30a56f54a5cd2fca053f1bf0c6522ca52804e"
+     }
+    }
    }
   },
   {
@@ -1065,14 +1089,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-keys.xml",
-     "sha256": "9f48d46748a6527af8b2db50f21c3030f42ebbd049330f9ad016dce90fab58f6"
+     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-stdin.xml",
+     "sha256": "fbaa1c71878c417bc0f55f4d28b5565c2bf89a7093bf56333e0fd66420222776"
     }
    },
    "inputs": [
@@ -1118,7 +1142,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "src/durable/CodingTools.cpp",
@@ -2046,6 +2070,30 @@
       "sha256": "4d009e7263b00bed07af76f8bdb9ca436f663a89867977d40f27f47fa01b5692"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-keys.xml",
+      "sha256": "9f48d46748a6527af8b2db50f21c3030f42ebbd049330f9ad016dce90fab58f6"
+     }
+    }
    }
   },
   {
@@ -2305,11 +2353,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2332,14 +2380,14 @@
      "-L",
      "issue1118",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1237.xml"
+     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "029f67482578511b7ee2870180ffd965a58a3fb4",
-    "recordedAt": "2026-11-06T06:55:15Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1237.xml",
-     "sha256": "f4ce504ea1f732938b890e6a5584ee68184c6bc82a0ca801014609e5a72c2fc6"
+     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-stdin.xml",
+     "sha256": "69dc3ff240ebaa1525adf8853a4b58398c00b4f2b1ef589dbada7404f544b945"
     }
    },
    "rows": [
@@ -3276,6 +3324,31 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-keys.xml",
       "sha256": "5a49790a621ba103d54b8d932a3c8f310bf4d93a9fcb7182c30606fb23a03548"
+     }
+    }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1237.xml"
+     ],
+     "testedRevision": "029f67482578511b7ee2870180ffd965a58a3fb4",
+     "recordedAt": "2026-11-06T06:55:15Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1237.xml",
+      "sha256": "f4ce504ea1f732938b890e6a5584ee68184c6bc82a0ca801014609e5a72c2fc6"
      }
     }
    }
@@ -4531,7 +4604,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4539,7 +4612,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     }
    ],
    "validation": {
@@ -4550,14 +4623,14 @@
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-keys.xml",
-     "sha256": "ac08a496b6047b9cf0add587a0793dfa2ae0d7b0b87b493186d79e90b25626b3"
+     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-stdin.xml",
+     "sha256": "034cba895a1cbd4b1213843f0574f0c2606a9b5e298e2d4d883794dc8808879c"
     }
    },
    "rows": [
@@ -5488,6 +5561,31 @@
       "sha256": "2b50768340c6166d073726d8bbd5ff3949cc0a40bae1db5b2778e4ed5a4517aa"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-keys.xml",
+      "sha256": "ac08a496b6047b9cf0add587a0793dfa2ae0d7b0b87b493186d79e90b25626b3"
+     }
+    }
    }
   },
   {
@@ -6228,14 +6326,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-keys.xml",
-     "sha256": "2d24b6f071f9ce36741ce17f7d3f28099aa63dd1154c400c677e02f6de540617"
+     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-stdin.xml",
+     "sha256": "72e93d6ce9f7ef612d86aaecf966938597e79708e50c410660251950599b28d9"
     }
    },
    "rows": [
@@ -6409,11 +6507,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7007,6 +7105,31 @@
       "sha256": "72dd9d32e4e7272835240329239af6ff1b9bbcd31536caf03bf502297f03132c"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-keys.xml",
+      "sha256": "2d24b6f071f9ce36741ce17f7d3f28099aa63dd1154c400c677e02f6de540617"
+     }
+    }
    }
   },
   {
@@ -7025,14 +7148,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-keys.xml",
-     "sha256": "9ae8d6cdb92a71d0fc0365136eddbd5ea8e12b980fcc66f7cd78855273a605cd"
+     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-stdin.xml",
+     "sha256": "4c7c5b4857f2017453d2aab69046591671ede573d79af001a220e9d253a5298c"
     }
    },
    "rows": [
@@ -7200,7 +7323,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7765,6 +7888,30 @@
       "sha256": "917609791f05d0730dab5e9919fee41028dfbacca2f98b4d208e5fc76b2b7783"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-keys.xml",
+      "sha256": "9ae8d6cdb92a71d0fc0365136eddbd5ea8e12b980fcc66f7cd78855273a605cd"
+     }
+    }
    }
   },
   {
@@ -7983,14 +8130,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1221-stdin-index.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:24Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:22:56Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-keys.xml",
-     "sha256": "2505502d16786c7700b63e336e6b4a3e1af1c02df667fafc53b9f5af01ad5f90"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-revalidation-1221-stdin-index.xml",
+     "sha256": "0d4d9b048c699588829fe80dc227ef9d6d8b3daeb46655a7f3a27a70af8eae45"
     }
    },
    "rows": [
@@ -8129,7 +8276,7 @@
     },
     {
      "path": "cmake/tests/TuiTests.cmake",
-     "sha256": "55c0bd6deef5c5ee773e4df699d34aaaf406513929ed4531da66b9c3b16d61e4"
+     "sha256": "b33f9d2abb59f1a9326649aedef3d133d83626f47608c0c32797d2ca5d80752b"
     },
     {
      "path": "cmake/tests/EvidenceTests.cmake",
@@ -8213,7 +8360,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -8237,7 +8384,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -8253,7 +8400,7 @@
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
-     "sha256": "68633f8be2b96093723544effdfd354a940a901daff2f73cfcf800349915b150"
+     "sha256": "3dd313e34c6e3ce1cbd880876978db270ac67f0cf364cfeff5d9bb2d08891020"
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
@@ -8841,6 +8988,56 @@
       "sha256": "624de1861d1b2f9ebe51e5adf374e3e3019b9ed7c715ef03f772db5b3a03011a"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "cmake/tests/TuiTests.cmake",
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:24Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-keys.xml",
+      "sha256": "2505502d16786c7700b63e336e6b4a3e1af1c02df667fafc53b9f5af01ad5f90"
+     }
+    }
+   },
+   "revalidation1221StdinIndex": {
+    "reason": "The #1221 B13 stdin-framing delivery moved eight StdinBuffer rows from the B13 batch to delivery-backed rows, so the #1182 route-batch index was rebuilt from the final consolidated ledger. This receipt pins that index; its exact recorded selection was rerun after the rebuild and only the index digest was refreshed. No row, comparison scenario or routing digest of this receipt changes.",
+    "changedInputs": [
+     "docs/research/pi-v1.3.0/1182-tui-route-batches.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-stdin.xml"
+     ],
+     "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+     "recordedAt": "2026-11-06T07:20:17Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-stdin.xml",
+      "sha256": "e24557567df24c7f17272392ff0777f49cb4fa16c51e9dfd8518139cf2ef27b8"
+     }
+    }
    }
   },
   {
@@ -9045,11 +9242,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -9982,14 +10179,14 @@
      "-R",
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-keys.xml",
-     "sha256": "92d6a27f8c413c68f50e204c2aaaafa363782407526993552bf427d743e64314"
+     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-stdin.xml",
+     "sha256": "7749b0bdace72cb85a9f568538e5e204e42a41e4045f35cddbdd546550366abb"
     }
    },
    "revalidation1179m": {
@@ -10499,6 +10696,31 @@
       "sha256": "6700d372d4457ef4be92bb9b2950a071a20331440db601be5381380912a459fc"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-keys.xml",
+      "sha256": "92d6a27f8c413c68f50e204c2aaaafa363782407526993552bf427d743e64314"
+     }
+    }
    }
   },
   {
@@ -10567,11 +10789,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -10602,14 +10824,14 @@
      "-R",
      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-keys.xml",
-     "sha256": "697ef1b10bb397c34a3c7567409a7d70adafda9ad4cc3ee332c85f9e06a25cc5"
+     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-stdin.xml",
+     "sha256": "b350b53627fc70de07a102d8d80808ca2b2f679ea33bd9798fad9103322003de"
     }
    },
    "rows": [
@@ -11147,6 +11369,31 @@
       "sha256": "030d1bbce7df539bc153b60df1a9b7cc0edaa230e1a193f8f459702c03f02d00"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-keys.xml",
+      "sha256": "697ef1b10bb397c34a3c7567409a7d70adafda9ad4cc3ee332c85f9e06a25cc5"
+     }
+    }
    }
   },
   {
@@ -11211,11 +11458,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -11266,14 +11513,14 @@
      "-R",
      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-keys.xml",
-     "sha256": "c2c749a067881cc9ae2bf2051a66e829cd7536ac90191a1717fde0e9435af979"
+     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-stdin.xml",
+     "sha256": "57c60b1f7c8538f54b52b29718ae950070681efca7ad8c8581dfa49a19d0b32f"
     }
    },
    "rows": [
@@ -11846,6 +12093,31 @@
       "sha256": "85c808c77b752d5158e5908192ccd2b1264737782dfcf00cc6f42e458890468b"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-keys.xml",
+      "sha256": "c2c749a067881cc9ae2bf2051a66e829cd7536ac90191a1717fde0e9435af979"
+     }
+    }
    }
   },
   {
@@ -12243,15 +12515,15 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
-     "sha256": "5b7c404e56f6f4805315253ae08a2c2b8c5f43d821a9c025ae70aec1bc9a4e7e"
+     "sha256": "857fa8bba35d23ec9fc0d22875c6772fa3000bba87b36a511bd00ac3a411b3cf"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     }
    ],
    "validation": {
@@ -12264,14 +12536,14 @@
      "-L",
      "issue1201",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "a4d33beaf82694ea1ed9df5b0d69c9ab3218f870",
+    "recordedAt": "2026-11-06T08:56:04Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-keys.xml",
-     "sha256": "b2a49ec3e42c5660727c1203bc1ae182c89813d4b1b61a7c752a59f2c97f7e71"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml",
+     "sha256": "42c532918c73db675398213e582ff291bb92734141e23eee63336c81f6930d48"
     }
    },
    "rows": [
@@ -13231,6 +13503,30 @@
       "sha256": "4f4fc850f8aa521f6be80fe8a7fbf1868d56225a026cb300737eb3fb02dd90b2"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing review fix bounded the StdinBuffer.flush claim on the combined flush+callback seam, removed the two fragmented-color comparisons that never call flush, and recorded the ProcessTerminal.stop stop-sequence divergence and the remaining terminal families as a row-level gap; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1201",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml"
+     ],
+     "testedRevision": "1a61eedabaa869c7b749abfe2afb09f687f36976",
+     "recordedAt": "2026-11-06T08:46:37Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-stdin.xml",
+      "sha256": "bbf57c58d7a627ca8b7825185b0a3835c59aeac8f4c87c6a61774e244af73e52"
+     }
+    }
    }
   },
   {
@@ -13269,11 +13565,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
+     "sha256": "21dcf1bd5131af99a77e1813fa6d254882e9dfd960b0fa2649d1e76ea84de371"
     },
     {
      "path": "src/durable/Harness.cpp",
@@ -13306,14 +13602,14 @@
      "-L",
      "issue1203",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 3,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-keys.xml",
-     "sha256": "c8db02790ee4b9633b5056187361a0c1d0ddcc2f439018fd9a209b43e303b9c2"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-stdin.xml",
+     "sha256": "ed407d0715f213cc463fb112389db4e0d2963f7a59bf7dd6576ee657a7d6a239"
     }
    },
    "rows": [
@@ -13722,6 +14018,33 @@
       "sha256": "4f5ea7c4224e2b52637229e98361904a3d5095723be7151473dc44a8e0ba9bde"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1203",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 3,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-keys.xml",
+      "sha256": "c8db02790ee4b9633b5056187361a0c1d0ddcc2f439018fd9a209b43e303b9c2"
+     }
+    }
    }
   },
   {
@@ -13764,7 +14087,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
@@ -13801,14 +14124,14 @@
      "-L",
      "issue1213",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 15,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-keys.xml",
-     "sha256": "a9dc5c28afb0ef3bc1824d10eb503150ad7223f13e0d3cbf6a4ec774d73d527d"
+     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-stdin.xml",
+     "sha256": "8fa233e64cbda421ea3df52397458ac3922a20b6c2582af20def253b82bf3ed7"
     }
    },
    "rows": [
@@ -14491,6 +14814,32 @@
       "sha256": "85a1ed4b1f36d6363dfb349a6250fc0944f513e3928398ff7b2f6d8aea8ffa20"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1213",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 15,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-keys.xml",
+      "sha256": "a9dc5c28afb0ef3bc1824d10eb503150ad7223f13e0d3cbf6a4ec774d73d527d"
+     }
+    }
    }
   },
   {
@@ -14541,7 +14890,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -14586,14 +14935,14 @@
      "-L",
      "issue1212",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-keys.xml",
-     "sha256": "175273aa2a36c3631cd61e2e471daf02405d294c64485a98ce497a26268f9143"
+     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-stdin.xml",
+     "sha256": "fbef7a658488eea7fae40a741d3fe5c519ee17a685bfa0bf1927e2dea4972833"
     }
    },
    "rows": [
@@ -15622,6 +15971,32 @@
       "sha256": "d01e86036ce88682feb4f5f25aafbdd0dd0115056d4086191dc4ad9fb857fb91"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1212",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-keys.xml",
+      "sha256": "175273aa2a36c3631cd61e2e471daf02405d294c64485a98ce497a26268f9143"
+     }
+    }
    }
   },
   {
@@ -15684,7 +16059,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -15741,14 +16116,14 @@
      "-L",
      "issue1211",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 34,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-keys.xml",
-     "sha256": "1f11c41c984001c3e133088fd0b54913b5dcc5c52ee17f342bcd1da0f5456763"
+     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-stdin.xml",
+     "sha256": "62a851bf8d0c8aae6cbd430796a0f808560fb5570962b7b7b2caf7142c66f929"
     }
    },
    "rows": [
@@ -17135,6 +17510,32 @@
       "sha256": "36b75a76143cff9ab28500067d9c8e3eff73ab0faa727e254b981f187c0bdfe7"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1211",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 34,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-keys.xml",
+      "sha256": "1f11c41c984001c3e133088fd0b54913b5dcc5c52ee17f342bcd1da0f5456763"
+     }
+    }
    }
   },
   {
@@ -17177,7 +17578,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -17214,14 +17615,14 @@
      "-L",
      "issue1210",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-keys.xml",
-     "sha256": "c8d73a6bd0a902cefad16bfb61846c1785d18bd8cfa2c25d2ff3a7a2cec1d887"
+     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-stdin.xml",
+     "sha256": "891d0128e8e15b12053d312f2b2c7c3a074a2e6ef4388cfca90217678622db27"
     }
    },
    "rows": [
@@ -17814,6 +18215,32 @@
       "sha256": "0079cde08ee2b98edb91127aa199c127c46df04d22f9a52dafed5f4c2aed14ab"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1210",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-keys.xml",
+      "sha256": "c8d73a6bd0a902cefad16bfb61846c1785d18bd8cfa2c25d2ff3a7a2cec1d887"
+     }
+    }
    }
   },
   {
@@ -17880,7 +18307,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -17937,14 +18364,14 @@
      "-L",
      "issue1209",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 30,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-keys.xml",
-     "sha256": "a3ea11e53d6f943908143fac00e80b2378159fa8a3a74b540ecce1225b568fbc"
+     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-stdin.xml",
+     "sha256": "0016661350415b91028b0c55b448d7a275918478857aef3f688cd31a12e78820"
     }
    },
    "rows": [
@@ -20325,6 +20752,32 @@
       "sha256": "7c4da17236bd54772689d71089206fe2943c3ac09689d757d3c4db737104f3f1"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1209",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 30,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-keys.xml",
+      "sha256": "a3ea11e53d6f943908143fac00e80b2378159fa8a3a74b540ecce1225b568fbc"
+     }
+    }
    }
   },
   {
@@ -20365,7 +20818,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -20422,14 +20875,14 @@
      "-L",
      "issue1215",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 25,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-keys.xml",
-     "sha256": "85537c951d1283caf324abe8253df610371e281abbab2e9f327b14dd8375bceb"
+     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-stdin.xml",
+     "sha256": "c644a98868afab5d03d1cfc5e607d68381112dc7d0eb8b4cd6a6b2b27c4c6700"
     }
    },
    "rows": [
@@ -22103,6 +22556,32 @@
       "sha256": "7bf7b7ad557d94ffa38008aa8ff5400ab5a42ba79f1d404219064936e37d7986"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1215",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 25,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-keys.xml",
+      "sha256": "85537c951d1283caf324abe8253df610371e281abbab2e9f327b14dd8375bceb"
+     }
+    }
    }
   },
   {
@@ -22131,7 +22610,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -22172,14 +22651,14 @@
      "-L",
      "issue1216",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-keys.xml",
-     "sha256": "5a958ce7068af16791f92ac49ec23054827552fe2349888c0560fe078f75f094"
+     "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-stdin.xml",
+     "sha256": "dbfb56ec42716abb2fe39a2d7926f53130c2061a30147a33f7afa09b6542b275"
     }
    },
    "rows": [
@@ -22958,6 +23437,32 @@
       "sha256": "06c19608a0ee8521c4293ea6445e51625770c18e2b0700e7b5a86b2f9b388e06"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1216",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-keys.xml",
+      "sha256": "5a958ce7068af16791f92ac49ec23054827552fe2349888c0560fe078f75f094"
+     }
+    }
    }
   },
   {
@@ -22986,7 +23491,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1217/latex.json",
@@ -23011,14 +23516,14 @@
      "-L",
      "issue1217",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-keys.xml",
-     "sha256": "24c26a0d1bd96223517ee28d82bfe4921a6044c43ce22c09f4bd38c1aae96a8e"
+     "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-stdin.xml",
+     "sha256": "12aa5aec95a3de997fd0672e0735ee6ac643a4128512e0b6647e2ff5f3bd5bdf"
     }
    },
    "rows": [
@@ -24134,6 +24639,32 @@
       "sha256": "0f663761f804ac5bb70b08b71f8eecdbb4bf0e995f4796409a7fc32255521573"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1217",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-keys.xml",
+      "sha256": "24c26a0d1bd96223517ee28d82bfe4921a6044c43ce22c09f4bd38c1aae96a8e"
+     }
+    }
    }
   },
   {
@@ -24162,7 +24693,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1218/color.json",
@@ -24183,14 +24714,14 @@
      "-L",
      "issue1218",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-keys.xml",
-     "sha256": "9d9f4e0e151204139755e9554263e3837ec3dc874a608a89555895bd594262db"
+     "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-stdin.xml",
+     "sha256": "e164c195c63507ef516c7af423c6a2a6d7b92168959cf32672a49f9b112dbdb0"
     }
    },
    "rows": [
@@ -25234,6 +25765,32 @@
       "sha256": "3808cc221e2ee51028c01a62379cf564045c7a4812588318ff86f5293fde1bc8"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1218",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-keys.xml",
+      "sha256": "9d9f4e0e151204139755e9554263e3837ec3dc874a608a89555895bd594262db"
+     }
+    }
    }
   },
   {
@@ -25274,7 +25831,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
@@ -25303,14 +25860,14 @@
      "-L",
      "issue1219",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 32,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-keys.xml",
-     "sha256": "147b1c04efbb1854074ebe43ea606cd12250a3d6cd8f45110536195571ce0377"
+     "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-stdin.xml",
+     "sha256": "a883ec9b48c7fe707edbb297510421a240379d51fa6afb5e15a45290b12c22c2"
     }
    },
    "rows": [
@@ -26925,6 +27482,32 @@
       "sha256": "5b7844da0976b816e2b600274bb23a01097688d7a8db3f6282fde324ccd553f5"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1219",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 32,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-keys.xml",
+      "sha256": "147b1c04efbb1854074ebe43ea606cd12250a3d6cd8f45110536195571ce0377"
+     }
+    }
    }
   },
   {
@@ -27001,7 +27584,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -27042,14 +27625,14 @@
      "-L",
      "issue1220",
      "--output-junit",
-     "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-keys.xml"
+     "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-stdin.xml"
     ],
-    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
-    "recordedAt": "2026-11-06T05:56:00Z",
+    "testedRevision": "7b932ba067da207323d698373e3ea5e40d5b22e8",
+    "recordedAt": "2026-11-06T07:20:17Z",
     "selected": 69,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-keys.xml",
-     "sha256": "de0c33ce5032fe0b10bdcaf48414c01d8700288e9a1542a101646aef8b174482"
+     "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-stdin.xml",
+     "sha256": "1b5229d8b4f4b019efd9130733ebed1c35ae2b810993f75df8941fc25d2bb454"
     }
    },
    "rows": [
@@ -28978,13 +29561,39 @@
       "sha256": "1ecf8e5966fc8b063cdaf349e5d9a0721634ee634fdac602b338da712008f2c5"
      }
     }
+   },
+   "revalidation1221stdin": {
+    "reason": "The #1221 B13 stdin-framing lane registered the audit-1221-stdin-framing family, routed the StdinBuffer framing scenarios to the delivered rows and removed the three audit-1221 input scenarios from the consolidation plan's orphan list; the route-batch index was rebuilt from the final ledger. This receipt pins the registry, the plan, the 1050 toolkit ledger or the route-batch index, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1220",
+      "--output-junit",
+      "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-keys.xml"
+     ],
+     "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+     "recordedAt": "2026-11-06T05:56:00Z",
+     "selected": 69,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-keys.xml",
+      "sha256": "de0c33ce5032fe0b10bdcaf48414c01d8700288e9a1542a101646aef8b174482"
+     }
+    }
    }
   },
   {
    "id": "1221-terminal-io",
    "ticket": "1221",
    "implementationCommits": [
-    "ae3f90422d7490f705d22d94efaf701e036324d5"
+    "a4d33beaf82694ea1ed9df5b0d69c9ab3218f870"
    ],
    "report": "docs/research/pi-v1.3.0/1221-terminal-io-delivery.md",
    "inputs": [
@@ -28997,12 +29606,20 @@
      "sha256": "7ef2ad45a5401a5bdcab5700abc288977c01424a00f72b0fc4d02d11f21123b9"
     },
     {
+     "path": "src/tui/StdinBuffer.cpp",
+     "sha256": "f2b0a7642281ef1f7d3c7fd4779ef1da42b674c59340d867adad5dca1ed441d8"
+    },
+    {
      "path": "src/tui/include/cch/tui/Keys.hpp",
      "sha256": "6bac11fce026d57cc1ae40fdba4cb6ddc094cd48e5a8e5ea7cafc58ce39fa072"
     },
     {
      "path": "src/tui/InputDecoder.hpp",
      "sha256": "cec613a3d616d593c77de348dbddf314d6219c3b22c13a2bf533a7d33b2a0f55"
+    },
+    {
+     "path": "src/tui/include/cch/tui/StdinBuffer.hpp",
+     "sha256": "98cba4470d710384762055f1479ca8428f66203f9c5ec73e2ef1a8f9b37ec779"
     },
     {
      "path": "tests/tui/KeysSurfaceEvidenceTest.cpp",
@@ -29013,8 +29630,12 @@
      "sha256": "895efb66e13d6343369add6e8715eeba1e6a5babd5d7d5b76758cfaf716db436"
     },
     {
+     "path": "tests/tui/StdinFramingEvidenceTest.cpp",
+     "sha256": "5afafad740d8c20de909d50cb53f8c0f660f6245589582ea5ad85d7125ba7ad0"
+    },
+    {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+     "sha256": "d3f87f726f54fcccfd9ef737ff0c463fbb3fe2a7ebacc64ce9fb33419f736c7a"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
@@ -29041,6 +29662,18 @@
      "sha256": "8d54e24a60decc01fc774848c8ff441e748cfafb6d3b4e34141be0ac7a8a3ec2"
     },
     {
+     "path": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/manifest.json",
+     "sha256": "06f8454bb3895a13c31918454e440dba197be21d3586cd6a008a11c2b6b6ca1c"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1221-stdin-framing/stdin-framing.json",
+     "sha256": "a966e8190eba18e817452141a162b87ffe004d2aeca6a6dd556f21782a7fa54e"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1221/input.json",
+     "sha256": "ffd2ea2172c028e8f733b370212bbdf1b928d6ad2b6248759b51a0b896415ae0"
+    },
+    {
      "path": "fixtures/pi-v1.3.0/audit-1221/keys-kitty-text.json",
      "sha256": "5cc78a9fd39d3b4a3fd02975f948b2f7de5d9292bffe952e90706532585e77b2"
     },
@@ -29061,12 +29694,12 @@
      "--output-junit",
      "docs/research/pi-v1.3.0/deliveries/1221-issue1221.xml"
     ],
-    "testedRevision": "ae3f90422d7490f705d22d94efaf701e036324d5",
-    "recordedAt": "2026-11-06T06:06:29Z",
-    "selected": 25,
+    "testedRevision": "a4d33beaf82694ea1ed9df5b0d69c9ab3218f870",
+    "recordedAt": "2026-11-06T08:56:04Z",
+    "selected": 40,
     "junit": {
      "path": "docs/research/pi-v1.3.0/deliveries/1221-issue1221.xml",
-     "sha256": "935ab53d5cd3709af94846e8a20944dbfcb9115f503c4166646a4e49593b0487"
+     "sha256": "982947b0365fb754fdc0fc5aa4a5e988a71d509f76ce17cb57f6b022d8bd038d"
     }
    },
    "rows": [
@@ -29288,9 +29921,339 @@
       "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
       "reason": "The frozen legacy and kitty identity cases bind the raw LF to enter and shift+enter; the raw-LF case checks the diagnostic byte survives without a ctrl identity, separating a mode-aware legacy decode from one that maps the control byte to ctrl+j."
      }
+    },
+    {
+     "id": "cch_tui:StdinBuffer",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-options-and-events",
+       "test": "pi-v1.3.0 stdin framing options and events replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-paste-lifecycle",
+       "test": "pi-v1.3.0 stdin framing paste lifecycle replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-buffer-lifecycle",
+       "test": "pi-v1.3.0 stdin framing buffer lifecycle replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-emit-and-kitty-dedup",
+       "test": "pi-v1.3.0 stdin framing emitDataSequence and kitty dedup replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-timeout-selection",
+       "test": "pi-v1.3.0 stdin framing real deadline selection replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-flush",
+       "test": "pi-v1.3.0 stdin framing flush returns and timer callback replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "fragmented-color-reply-header-survives-deadline",
+       "test": "pi-v1.3.0 fragmented color reply header survives the real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/input.json",
+       "scenario": "fragmented-osc-reply",
+       "test": "pi-v1.3.0 fragmented stdin replies replay with a real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/input.json",
+       "scenario": "fragmented-apc-reply",
+       "test": "pi-v1.3.0 fragmented stdin replies replay with a real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/input.json",
+       "scenario": "ambiguous-alt-input",
+       "test": "pi-v1.3.0 fragmented stdin replies replay with a real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1050/keys-and-terminal-replies.json",
+       "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
+       "test": "pi-v1.3.0 fragmented color reply never leaks or opens the editor",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a partial OSC tail is not typed while the reply header waits",
+      "testSource": "tests/tui/StdinFramingEvidenceTest.cpp",
+      "reason": "The frozen class binds paste splitting, the buffer lifecycle, kitty duplicate suppression, deadline selection and recognized-header buffering; the partial-OSC-tail case feeds a complete OSC 4 header, waits past the sequence window and then completes the reply, separating a header-stays-buffered implementation from one that flushes the tail as typed input and turns the BEL into Ctrl+G."
+     }
+    },
+    {
+     "id": "cch_tui:StdinBuffer.process",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-options-and-events",
+       "test": "pi-v1.3.0 stdin framing options and events replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-paste-lifecycle",
+       "test": "pi-v1.3.0 stdin framing paste lifecycle replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-buffer-lifecycle",
+       "test": "pi-v1.3.0 stdin framing buffer lifecycle replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-emit-and-kitty-dedup",
+       "test": "pi-v1.3.0 stdin framing emitDataSequence and kitty dedup replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-timeout-selection",
+       "test": "pi-v1.3.0 stdin framing real deadline selection replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-flush",
+       "test": "pi-v1.3.0 stdin framing flush returns and timer callback replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "fragmented-color-reply-header-survives-deadline",
+       "test": "pi-v1.3.0 fragmented color reply header survives the real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/input.json",
+       "scenario": "fragmented-osc-reply",
+       "test": "pi-v1.3.0 fragmented stdin replies replay with a real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/input.json",
+       "scenario": "fragmented-apc-reply",
+       "test": "pi-v1.3.0 fragmented stdin replies replay with a real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/input.json",
+       "scenario": "ambiguous-alt-input",
+       "test": "pi-v1.3.0 fragmented stdin replies replay with a real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1050/keys-and-terminal-replies.json",
+       "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
+       "test": "pi-v1.3.0 fragmented color reply never leaks or opens the editor",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a partial OSC tail is not typed while the reply header waits",
+      "testSource": "tests/tui/StdinFramingEvidenceTest.cpp",
+      "reason": "The frozen process seam frames complete sequences, paste and kitty duplicates and keeps a recognized reply header buffered; the partial-OSC-tail case separates that framing from a process that delivers the held header at the sequence deadline."
+     }
+    },
+    {
+     "id": "cch_tui:StdinBuffer.flush",
+     "remainingBoundary": [
+      "pi's flush() returns the held fragment without emitting; its timer callback emits and reparses an ambiguous control-string prefix. cch::tui::StdinBuffer::flush combines both seams in one call (src/tui/StdinBuffer.cpp:292-310), so the returned vector and the delivered data history are compared but the C++ operation cannot be observed returning the fragment without delivering it; no C++ equivalent of the separate flush-return contract exists."
+     ],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-flush",
+       "test": "pi-v1.3.0 stdin framing flush returns and timer callback replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-buffer-lifecycle",
+       "test": "pi-v1.3.0 stdin framing buffer lifecycle replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-paste-lifecycle",
+       "test": "pi-v1.3.0 stdin framing paste lifecycle replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an empty flush returns no sequences and arms no deadline",
+      "testSource": "tests/tui/StdinFramingEvidenceTest.cpp",
+      "reason": "The frozen flush returns the held fragment without emitting and its timer callback reparses an ambiguous control-string prefix; the empty-flush case separates a flush that returns no sequences and leaves no deadline from one that emits an empty sequence or re-arms the fragment window."
+     }
+    },
+    {
+     "id": "cch_tui:StdinBuffer.buffer",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-buffer-lifecycle",
+       "test": "pi-v1.3.0 stdin framing buffer lifecycle replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-paste-lifecycle",
+       "test": "pi-v1.3.0 stdin framing paste lifecycle replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "fragmented-color-reply-header-survives-deadline",
+       "test": "pi-v1.3.0 fragmented color reply header survives the real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 clear drops the buffered fragment instead of flushing it",
+      "testSource": "tests/tui/StdinFramingEvidenceTest.cpp",
+      "reason": "The frozen getBuffer exposes only the held fragment and clear/destroy empty it; the clear case separates a clear that drops the held bytes from one that flushes them into the data stream."
+     }
+    },
+    {
+     "id": "cch_tui:StdinBuffer.timeout",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-timeout-selection",
+       "test": "pi-v1.3.0 stdin framing real deadline selection replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-buffer-lifecycle",
+       "test": "pi-v1.3.0 stdin framing buffer lifecycle replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-flush",
+       "test": "pi-v1.3.0 stdin framing flush returns and timer callback replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a lone ESC uses the escape deadline not the sequence deadline",
+      "testSource": "tests/tui/StdinFramingEvidenceTest.cpp",
+      "reason": "The frozen timeout is a live fragment-window handle that is cleared by flush and never armed for a recognized reply header; the lone-ESC case separates the escape window from the sequence window and from a timer that stays armed after delivery."
+     }
+    },
+    {
+     "id": "cch_tui:StdinBuffer.timeoutMs",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-options-and-events",
+       "test": "pi-v1.3.0 stdin framing options and events replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-timeout-selection",
+       "test": "pi-v1.3.0 stdin framing real deadline selection replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a lone ESC uses the escape deadline not the sequence deadline",
+      "testSource": "tests/tui/StdinFramingEvidenceTest.cpp",
+      "reason": "The frozen default sequence window is 50 ms and an explicit value is retained; the lone-ESC and incomplete-CSI pair separates a fixed default from the configured sequence window."
+     }
+    },
+    {
+     "id": "cch_tui:StdinBuffer.escapeTimeoutMs",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-options-and-events",
+       "test": "pi-v1.3.0 stdin framing options and events replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "stdin-framing-timeout-selection",
+       "test": "pi-v1.3.0 stdin framing real deadline selection replay",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a lone ESC uses the escape deadline not the sequence deadline",
+      "testSource": "tests/tui/StdinFramingEvidenceTest.cpp",
+      "reason": "The frozen default escape window is 10 ms and an explicit value is retained; the lone-ESC case separates the escape window from the sequence window."
+     }
+    },
+    {
+     "id": "cch_tui:stdin-buffer:fragmented-terminal-replies",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-stdin-framing/stdin-framing.json",
+       "scenario": "fragmented-color-reply-header-survives-deadline",
+       "test": "pi-v1.3.0 fragmented color reply header survives the real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1050/keys-and-terminal-replies.json",
+       "scenario": "fragmented-color-reply-never-leaks-or-opens-editor",
+       "test": "pi-v1.3.0 fragmented color reply never leaks or opens the editor",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/input.json",
+       "scenario": "fragmented-osc-reply",
+       "test": "pi-v1.3.0 fragmented stdin replies replay with a real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/input.json",
+       "scenario": "fragmented-apc-reply",
+       "test": "pi-v1.3.0 fragmented stdin replies replay with a real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/input.json",
+       "scenario": "ambiguous-alt-input",
+       "test": "pi-v1.3.0 fragmented stdin replies replay with a real deadline",
+       "testSource": "tests/tui/StdinFramingEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a partial OSC tail is not typed while the reply header waits",
+      "testSource": "tests/tui/StdinFramingEvidenceTest.cpp",
+      "reason": "The frozen capability keeps complete OSC/APC/DCS reply headers buffered past the sequence timeout; the partial-OSC case separates that from a timeout flush that types the tail and opens the editor when the BEL arrives."
+     }
     }
    ],
-   "routingSha256": "b8fe95a4a8a2f6d4324b51a1f8a2b10a3c16be6ccee7632979ead18d022dc7ad"
+   "routingSha256": "1a988d4d2013e927ac53558a99d9e1a0c82c190b4e340d6d951e04471eae9429"
   }
  ]
 }

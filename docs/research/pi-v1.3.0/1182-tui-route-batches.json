@@ -401,6 +401,13 @@
   "cch_tui:StackEntry",
   "cch_tui:StackEntryOptions",
   "cch_tui:StackOptions",
+  "cch_tui:StdinBuffer",
+  "cch_tui:StdinBuffer.buffer",
+  "cch_tui:StdinBuffer.escapeTimeoutMs",
+  "cch_tui:StdinBuffer.flush",
+  "cch_tui:StdinBuffer.process",
+  "cch_tui:StdinBuffer.timeout",
+  "cch_tui:StdinBuffer.timeoutMs",
   "cch_tui:TUI",
   "cch_tui:TUI.addChild",
   "cch_tui:TUI.addInputListener",
@@ -655,6 +662,7 @@
   "cch_tui:renderLatex",
   "cch_tui:rgbColor",
   "cch_tui:sliceByColumn",
+  "cch_tui:stdin-buffer:fragmented-terminal-replies",
   "cch_tui:stripTerminalSequences",
   "cch_tui:styleText",
   "cch_tui:styleTextWithAnsi",
@@ -797,7 +805,7 @@
    "discriminatingCase": "a fragmented terminal reply that leaks into typed input, a Shift-modified symbol key that misses its produced character, or a keybinding context that converges on the wrong binding, fails",
    "dependency": "frozen pi-v1.3.0 checkout with tsx to re-capture input.json and keys-kitty-text.json",
    "obligationOwner": "batch B13",
-   "implementationObligation": "C++ ProcessTerminal.stop() omits the frozen `ESC[>4;0m` modifyOtherKeys restore whenever modifyOtherKeys was never active, so the registered audit-1050 program-status-detection stop sequence is not reproduced byte for byte (#1182 finding); C++ parse_key/matches_key keep the explicit Shift flag on a produced symbol; StdinBuffer flushes a partial OSC/APC/kitty reply tail as typed input at the timeout; the remaining terminal families have no v1.3.0 comparison",
+   "implementationObligation": null,
    "rows": [
     "cch_tui:Keybinding",
     "cch_tui:KeybindingConflict",
@@ -862,21 +870,14 @@
     "cch_tui:ProcessTerminal.write",
     "cch_tui:ProcessTerminal.writeLogPath",
     "cch_tui:ProcessTerminal.writeProgramStatus",
-    "cch_tui:StdinBuffer",
-    "cch_tui:StdinBuffer.buffer",
     "cch_tui:StdinBuffer.clear",
     "cch_tui:StdinBuffer.constructor",
     "cch_tui:StdinBuffer.destroy",
     "cch_tui:StdinBuffer.emitDataSequence",
-    "cch_tui:StdinBuffer.escapeTimeoutMs",
-    "cch_tui:StdinBuffer.flush",
     "cch_tui:StdinBuffer.getBuffer",
     "cch_tui:StdinBuffer.pasteBuffer",
     "cch_tui:StdinBuffer.pasteMode",
     "cch_tui:StdinBuffer.pendingKittyPrintableCodepoint",
-    "cch_tui:StdinBuffer.process",
-    "cch_tui:StdinBuffer.timeout",
-    "cch_tui:StdinBuffer.timeoutMs",
     "cch_tui:StdinBufferEventMap",
     "cch_tui:StdinBufferOptions",
     "cch_tui:TUI_KEYBINDINGS",
@@ -898,8 +899,7 @@
     "cch_tui:getKeybindings",
     "cch_tui:isKittyProtocolActive",
     "cch_tui:setKeybindings",
-    "cch_tui:setKittyProtocolActive",
-    "cch_tui:stdin-buffer:fragmented-terminal-replies"
+    "cch_tui:setKittyProtocolActive"
    ],
    "scenarioLabels": [
     "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup",
@@ -909,15 +909,9 @@
     "E22 write-log diagnostic",
     "default-device-attributes-before-reply",
     "default-reply-before-device-attributes",
-    "fragmented-color-reply-never-leaks-or-opens-editor",
     "override-enabled"
    ],
-   "implementationRows": [
-    "cch_tui:StdinBuffer",
-    "cch_tui:StdinBuffer.flush",
-    "cch_tui:StdinBuffer.process",
-    "cch_tui:stdin-buffer:fragmented-terminal-replies"
-   ]
+   "implementationRows": []
   },
   {
    "id": "B14",

@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="30"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="1"
+	timestamp="2026-11-06T16:18:49"
+	>
+	<testcase name="Box padding change invalidates the render cache" classname="Box padding change invalidates the render cache" time="0.0107201" status="run">
+		<properties>
+			<property name="cmake_labels" value="box;issue1121;issue1182;issue1209;issue1220;padding;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Box padding change invalidates the render cache"
+Randomness seeded to: 3528926632
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Hide and restore overlay with focus fallback" classname="Hide and restore overlay with focus fallback" time="0.0104861" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue50;overlay;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Hide and restore overlay with focus fallback"
+Randomness seeded to: 827502586
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Non-capturing overlay passes input through to base content" classname="Non-capturing overlay passes input through to base content" time="0.0110669" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue50;overlay;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Non-capturing overlay passes input through to base content"
+Randomness seeded to: 2920435267
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Overlay anchors cover each viewport edge and center" classname="Overlay anchors cover each viewport edge and center" time="0.0105453" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue981;overlay;tui"/>
+		</properties>
+		<system-out>Filters: "Overlay anchors cover each viewport edge and center"
+Randomness seeded to: 2868485733
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Overlay explicit unfocus routes inserted text only to its target" classname="Overlay explicit unfocus routes inserted text only to its target" time="0.0134874" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue982;overlay;tui"/>
+		</properties>
+		<system-out>Filters: "Overlay explicit unfocus routes inserted text only to its target"
+Randomness seeded to: 771151799
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Overlay resolves percentage sizing independent coordinates margins and signed offsets" classname="Overlay resolves percentage sizing independent coordinates margins and signed offsets" time="0.0104692" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue981;overlay;tui"/>
+		</properties>
+		<system-out>Filters: "Overlay resolves percentage sizing independent coordinates margins and signed offsets"
+Randomness seeded to: 213559406
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a released gesture stops capturing before the next press" classname="a released gesture stops capturing before the next press" time="0.0113076" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue1212;issue1213;mouse;spec;tui"/>
+		</properties>
+		<system-out>Filters: "a released gesture stops capturing before the next press"
+Randomness seeded to: 4251566802
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a truncated line drops the unterminated fake cursor marker" classname="a truncated line drops the unterminated fake cursor marker" time="0.220644" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1209;issue1220;spec;tui"/>
+		</properties>
+		<system-out>Filters: "a truncated line drops the unterminated fake cursor marker"
+Randomness seeded to: 4218209740
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an overlay&apos;s focused fake cursor resolves before it is spliced" classname="an overlay&apos;s focused fake cursor resolves before it is spliced" time="0.431177" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1209;issue1210;issue1211;issue1220;spec;tui"/>
+		</properties>
+		<system-out>Filters: "an overlay's focused fake cursor resolves before it is spliced"
+Randomness seeded to: 2033280264
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an unconsumed wheel scrolls after handled pointer motion" classname="an unconsumed wheel scrolls after handled pointer motion" time="0.0113791" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue1213;mouse;spec;tui"/>
+		</properties>
+		<system-out>Filters: "an unconsumed wheel scrolls after handled pointer motion"
+Randomness seeded to: 1609420302
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen audit-1201 OSC color replies replay through the C++ parser" classname="frozen audit-1201 OSC color replies replay through the C++ parser" time="0.228333" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1201;issue1209;theme;tui"/>
+		</properties>
+		<system-out>Filters: "frozen audit-1201 OSC color replies replay through the C++ parser"
+Randomness seeded to: 704641153
+===============================================================================
+All tests passed (39 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="frozen audit-1201 palette assembly binds at sixteen replies through the C++ query" classname="frozen audit-1201 palette assembly binds at sixteen replies through the C++ query" time="0.228476" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1201;issue1209;theme;tui"/>
+		</properties>
+		<system-out>Filters: "frozen audit-1201 palette assembly binds at sixteen replies through the C++ query"
+Randomness seeded to: 2195214023
+===============================================================================
+All tests passed (106 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="mouse reports parse from SGR, legacy X10, and wheel forms" classname="mouse reports parse from SGR, legacy X10, and wheel forms" time="0.0111969" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1002;issue1209;issue1213;mouse;spec;tui"/>
+		</properties>
+		<system-out>Filters: "mouse reports parse from SGR\, legacy X10\, and wheel forms"
+Randomness seeded to: 3105523586
+===============================================================================
+All tests passed (34 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 cached frame routes a press to the deepest nested region" classname="pi-v1.3.0 cached frame routes a press to the deepest nested region" time="0.228863" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1212;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 cached frame routes a press to the deepest nested region"
+Randomness seeded to: 4112049055
+===============================================================================
+All tests passed (119 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 capability predicates and overlay line composition replay frozen pi" classname="pi-v1.3.0 capability predicates and overlay line composition replay frozen pi" time="0.252186" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;overlay;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 capability predicates and overlay line composition replay frozen pi"
+Randomness seeded to: 100543871
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus" classname="pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus" time="0.227434" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1212;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus"
+Randomness seeded to: 3343220568
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 common lifecycle replays component removal focus input and stop" classname="pi-v1.3.0 common lifecycle replays component removal focus input and stop" time="0.249906" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;differential;issue1209;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 common lifecycle replays component removal focus input and stop"
+Randomness seeded to: 1171946616
+===============================================================================
+All tests passed (442 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 consumed wheel report keeps the viewport and an unconsumed one scrolls it" classname="pi-v1.3.0 consumed wheel report keeps the viewport and an unconsumed one scrolls it" time="0.226509" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 consumed wheel report keeps the viewport and an unconsumed one scrolls it"
+Randomness seeded to: 3343027480
+===============================================================================
+All tests passed (29 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 handled motion writes nothing and consecutive clicks count up" classname="pi-v1.3.0 handled motion writes nothing and consecutive clicks count up" time="0.232401" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 handled motion writes nothing and consecutive clicks count up"
+Randomness seeded to: 3868614831
+===============================================================================
+All tests passed (58 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 regular screen leaves terminal-owned mouse behavior and typed input intact" classname="pi-v1.3.0 regular screen leaves terminal-owned mouse behavior and typed input intact" time="0.225704" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 regular screen leaves terminal-owned mouse behavior and typed input intact"
+Randomness seeded to: 2234536157
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 root debug and color-scheme callbacks replay the frozen write log" classname="pi-v1.3.0 root debug and color-scheme callbacks replay the frozen write log" time="0.253255" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;diagnostics;issue1209;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 root debug and color-scheme callbacks replay the frozen write log"
+Randomness seeded to: 455637349
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 root input listeners replay the frozen consume and transform chain" classname="pi-v1.3.0 root input listeners replay the frozen consume and transform chain" time="0.246552" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 root input listeners replay the frozen consume and transform chain"
+Randomness seeded to: 2301673875
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 root key release filtering replays the frozen observation" classname="pi-v1.3.0 root key release filtering replays the frozen observation" time="0.2448" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 root key release filtering replays the frozen observation"
+Randomness seeded to: 617814458
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 root overlay lifecycle replays the frozen bounds and focus transitions" classname="pi-v1.3.0 root overlay lifecycle replays the frozen bounds and focus transitions" time="0.259848" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;overlay;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 root overlay lifecycle replays the frozen bounds and focus transitions"
+Randomness seeded to: 2736217700
+===============================================================================
+All tests passed (30 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 root render controls replay the frozen coalescing and shrink frames" classname="pi-v1.3.0 root render controls replay the frozen coalescing and shrink frames" time="0.251882" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;render;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 root render controls replay the frozen coalescing and shrink frames"
+Randomness seeded to: 1917047637
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 screen evidence replays all styled cells and focused cursor" classname="pi-v1.3.0 screen evidence replays all styled cells and focused cursor" time="0.25456" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;differential;issue1209;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 screen evidence replays all styled cells and focused cursor"
+Randomness seeded to: 34056796
+===============================================================================
+All tests passed (222 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 terminal color query replays the frozen late-reply delivery" classname="pi-v1.3.0 terminal color query replays the frozen late-reply delivery" time="0.286024" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;theme;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 terminal color query replays the frozen late-reply delivery"
+Randomness seeded to: 1763973503
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="the standalone editor fake cursor marker pair is strippable and ordered" classname="the standalone editor fake cursor marker pair is strippable and ordered" time="0.0106572" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1209;spec;tui"/>
+		</properties>
+		<system-out>Filters: "the standalone editor fake cursor marker pair is strippable and ordered"
+Randomness seeded to: 1742407095
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 renderer-switch frames replay through the Pike roots" classname="pi-v1.3.0 renderer-switch frames replay through the Pike roots" time="0.26054" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1210;renderer-switch;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 renderer-switch frames replay through the Pike roots"
+Randomness seeded to: 2268889170
+===============================================================================
+All tests passed (565 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 renderer-switch observations record the state and callback contract" classname="pi-v1.3.0 renderer-switch observations record the state and callback contract" time="0.24552" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1210;renderer-switch;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 renderer-switch observations record the state and callback contract"
+Randomness seeded to: 1777306415
+===============================================================================
+All tests passed (105 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>
