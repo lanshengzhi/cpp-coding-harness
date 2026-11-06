@@ -1,0 +1,770 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="69"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="2"
+	timestamp="2026-11-06T09:09:06"
+	>
+	<testcase name="Box cache keeps full padding and clamps narrow content to one column like frozen pi" classname="Box cache keeps full padding and clamps narrow content to one column like frozen pi" time="0.0103562" status="run">
+		<properties>
+			<property name="cmake_labels" value="container;issue1220;issue966;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Box cache keeps full padding and clamps narrow content to one column like frozen pi"
+Randomness seeded to: 3922087250
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Box mouse routing rejects coordinates outside content bounds and padding" classname="Box mouse routing rejects coordinates outside content bounds and padding" time="0.0105455" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;box;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "Box mouse routing rejects coordinates outside content bounds and padding"
+Randomness seeded to: 3165007037
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Box padding change invalidates the render cache" classname="Box padding change invalidates the render cache" time="0.00983002" status="run">
+		<properties>
+			<property name="cmake_labels" value="box;issue1121;issue1182;issue1209;issue1220;padding;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Box padding change invalidates the render cache"
+Randomness seeded to: 1247489188
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Container removes and reattaches a nonterminal child" classname="Container removes and reattaches a nonterminal child" time="0.0102056" status="run">
+		<properties>
+			<property name="cmake_labels" value="container;issue1220;issue966;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Container removes and reattaches a nonterminal child"
+Randomness seeded to: 657625694
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Nested viewports propagate a scroll delta deepest first and stop at overscroll contain" classname="Nested viewports propagate a scroll delta deepest first and stop at overscroll contain" time="0.0105707" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1000;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "Nested viewports propagate a scroll delta deepest first and stop at overscroll contain"
+Randomness seeded to: 890547510
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="ScrollView clamps programmatic scrolls and follows the content end" classname="ScrollView clamps programmatic scrolls and follows the content end" time="0.0102538" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1000;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "ScrollView clamps programmatic scrolls and follows the content end"
+Randomness seeded to: 408899428
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="ScrollView discriminating boundary: clamps programmatic scrolls and follows the content end" classname="ScrollView discriminating boundary: clamps programmatic scrolls and follows the content end" time="0.0100558" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "ScrollView discriminating boundary: clamps programmatic scrolls and follows the content end"
+Randomness seeded to: 652861812
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="ScrollView discriminating column reservation: reserves column only when scrollbar is always and width exceeds one" classname="ScrollView discriminating column reservation: reserves column only when scrollbar is always and width exceeds one" time="0.010222" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "ScrollView discriminating column reservation: reserves column only when scrollbar is always and width exceeds one"
+Randomness seeded to: 4157598080
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="ScrollView discriminating control: follows appended rows at the end and keeps a manual position away" classname="ScrollView discriminating control: follows appended rows at the end and keeps a manual position away" time="0.0106137" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "ScrollView discriminating control: follows appended rows at the end and keeps a manual position away"
+Randomness seeded to: 302889207
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="ScrollView discriminating overscroll: nested viewports propagate delta deepest first and stop at contain" classname="ScrollView discriminating overscroll: nested viewports propagate delta deepest first and stop at contain" time="0.010281" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "ScrollView discriminating overscroll: nested viewports propagate delta deepest first and stop at contain"
+Randomness seeded to: 3179672304
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="ScrollView follows appended rows at the end and keeps a manual position away from it" classname="ScrollView follows appended rows at the end and keeps a manual position away from it" time="0.0105173" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1000;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "ScrollView follows appended rows at the end and keeps a manual position away from it"
+Randomness seeded to: 1923280207
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="ScrollView reserves column only when scrollbar is always and width exceeds one" classname="ScrollView reserves column only when scrollbar is always and width exceeds one" time="0.0110672" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "ScrollView reserves column only when scrollbar is always and width exceeds one"
+Randomness seeded to: 1307842435
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Spacer zero lines renders empty vector" classname="Spacer zero lines renders empty vector" time="0.0103689" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;spacer;tui"/>
+		</properties>
+		<system-out>Filters: "Spacer zero lines renders empty vector"
+Randomness seeded to: 4123906101
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Text omits whitespace-only content and clamps narrow padding like frozen pi" classname="Text omits whitespace-only content and clamps narrow padding like frozen pi" time="0.0103242" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1220;issue966;spec;text;tui"/>
+		</properties>
+		<system-out>Filters: "Text omits whitespace-only content and clamps narrow padding like frozen pi"
+Randomness seeded to: 1121461778
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Text re-wraps at a new horizontal padding like frozen pi" classname="Text re-wraps at a new horizontal padding like frozen pi" time="0.211185" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1121;issue1182;issue1220;padding;spec;text;tui"/>
+		</properties>
+		<system-out>Filters: "Text re-wraps at a new horizontal padding like frozen pi"
+Randomness seeded to: 3943284943
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="TruncatedText clamps padding to a one-column content width like frozen pi" classname="TruncatedText clamps padding to a one-column content width like frozen pi" time="0.0103252" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1220;issue966;spec;truncated;tui"/>
+		</properties>
+		<system-out>Filters: "TruncatedText clamps padding to a one-column content width like frozen pi"
+Randomness seeded to: 3816976977
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="TruncatedText discriminating boundary: clamps padding to one column content width" classname="TruncatedText discriminating boundary: clamps padding to one column content width" time="0.0102677" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;truncated;tui"/>
+		</properties>
+		<system-out>Filters: "TruncatedText discriminating boundary: clamps padding to one column content width"
+Randomness seeded to: 3290412409
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a constrained frame measures an auto basis at the frame width" classname="a constrained frame measures an auto basis at the frame width" time="0.0102332" status="run">
+		<properties>
+			<property name="cmake_labels" value="hstack;issue1220;issue999;tui"/>
+		</properties>
+		<system-out>Filters: "a constrained frame measures an auto basis at the frame width"
+Randomness seeded to: 2781646554
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="a truncated line drops the unterminated fake cursor marker" classname="a truncated line drops the unterminated fake cursor marker" time="0.212612" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1209;issue1220;spec;tui"/>
+		</properties>
+		<system-out>Filters: "a truncated line drops the unterminated fake cursor marker"
+Randomness seeded to: 1894032260
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="an overlay&apos;s focused fake cursor resolves before it is spliced" classname="an overlay&apos;s focused fake cursor resolves before it is spliced" time="0.421488" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;cursor-marker;issue1120;issue1209;issue1210;issue1211;issue1220;spec;tui"/>
+		</properties>
+		<system-out>Filters: "an overlay's focused fake cursor resolves before it is spliced"
+Randomness seeded to: 2434936863
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="constrained HStack discriminating auto basis: measures auto basis at frame width" classname="constrained HStack discriminating auto basis: measures auto basis at frame width" time="0.0101845" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;hstack;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "constrained HStack discriminating auto basis: measures auto basis at frame width"
+Randomness seeded to: 1883208670
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="constrained VStack discriminating leaf crop: keeps cursor row visible inside cropped leaf" classname="constrained VStack discriminating leaf crop: keeps cursor row visible inside cropped leaf" time="0.0101883" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;layout;tui"/>
+		</properties>
+		<system-out>Filters: "constrained VStack discriminating leaf crop: keeps cursor row visible inside cropped leaf"
+Randomness seeded to: 438271214
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="constrained VStack discriminating minimums: includes nested minimum sizes in intrinsic stack measurement" classname="constrained VStack discriminating minimums: includes nested minimum sizes in intrinsic stack measurement" time="0.0100822" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;layout;tui"/>
+		</properties>
+		<system-out>Filters: "constrained VStack discriminating minimums: includes nested minimum sizes in intrinsic stack measurement"
+Randomness seeded to: 530650794
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="constrained VStack discriminating visibility: honors responsive visibility predicate" classname="constrained VStack discriminating visibility: honors responsive visibility predicate" time="0.010295" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;layout;tui"/>
+		</properties>
+		<system-out>Filters: "constrained VStack discriminating visibility: honors responsive visibility predicate"
+Randomness seeded to: 1052338262
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="constrained VStack honors the responsive visibility predicate" classname="constrained VStack honors the responsive visibility predicate" time="0.010486" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1220;issue998;layout;tui"/>
+		</properties>
+		<system-out>Filters: "constrained VStack honors the responsive visibility predicate"
+Randomness seeded to: 2770759991
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="constrained VStack includes nested minimum sizes in intrinsic stack measurement" classname="constrained VStack includes nested minimum sizes in intrinsic stack measurement" time="0.0105081" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1220;issue998;layout;spec;tui"/>
+		</properties>
+		<system-out>Filters: "constrained VStack includes nested minimum sizes in intrinsic stack measurement"
+Randomness seeded to: 3012055645
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="constrained VStack keeps the cursor row visible inside a cropped leaf" classname="constrained VStack keeps the cursor row visible inside a cropped leaf" time="0.0101985" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1220;issue998;layout;tui"/>
+		</properties>
+		<system-out>Filters: "constrained VStack keeps the cursor row visible inside a cropped leaf"
+Randomness seeded to: 1710321498
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="osc8_link_at_column discriminating boundary: exposes frozen link for every cell it covers" classname="osc8_link_at_column discriminating boundary: exposes frozen link for every cell it covers" time="0.0103465" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;tui;utils"/>
+		</properties>
+		<system-out>Filters: "osc8_link_at_column discriminating boundary: exposes frozen link for every cell it covers"
+Randomness seeded to: 405349709
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="osc8_link_at_column exposes the frozen link for every cell it covers" classname="osc8_link_at_column exposes the frozen link for every cell it covers" time="0.089034" status="run">
+		<properties>
+			<property name="cmake_labels" value="hyperlink;issue1220;issue957;spec;tui"/>
+		</properties>
+		<system-out>Filters: "osc8_link_at_column exposes the frozen link for every cell it covers"
+Randomness seeded to: 1005459990
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 ANSI boundary order and hyperlinks match frozen observation" classname="pi-v1.3.0 ANSI boundary order and hyperlinks match frozen observation" time="0.215837" status="run">
+		<properties>
+			<property name="cmake_labels" value="ansi;compat-pi;issue1220;tui;utils"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 ANSI boundary order and hyperlinks match frozen observation"
+Randomness seeded to: 911195816
+===============================================================================
+All tests passed (42 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 a primary scroll view without follow-end never shows the jump-to-end indicator" classname="pi-v1.3.0 B12 a primary scroll view without follow-end never shows the jump-to-end indicator" time="0.21926" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 a primary scroll view without follow-end never shows the jump-to-end indicator"
+Randomness seeded to: 972240257
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 an absolute scroll with disableFollow holds the last row until follow is restored" classname="pi-v1.3.0 B12 an absolute scroll with disableFollow holds the last row until follow is restored" time="0.215055" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 an absolute scroll with disableFollow holds the last row until follow is restored"
+Randomness seeded to: 2990034696
+===============================================================================
+All tests passed (42 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 appended rows move a followed viewport as the pi frame does" classname="pi-v1.3.0 B12 appended rows move a followed viewport as the pi frame does" time="0.218728" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 appended rows move a followed viewport as the pi frame does"
+Randomness seeded to: 1298407529
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 fullscreen navigation, releases, and indicator clicks match frozen pi" classname="pi-v1.3.0 B12 fullscreen navigation, releases, and indicator clicks match frozen pi" time="0.218205" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 fullscreen navigation\, releases\, and indicator clicks match frozen pi"
+Randomness seeded to: 4030179985
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 nested viewport measurement, delta ownership and depth order match the pi frame" classname="pi-v1.3.0 B12 nested viewport measurement, delta ownership and depth order match the pi frame" time="0.214438" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 nested viewport measurement\, delta ownership and depth order match the pi frame"
+Randomness seeded to: 1810632781
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 nested wheel routing consumes the child then chains only to its enclosing viewport" classname="pi-v1.3.0 B12 nested wheel routing consumes the child then chains only to its enclosing viewport" time="0.221576" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 nested wheel routing consumes the child then chains only to its enclosing viewport"
+Randomness seeded to: 1573066757
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 scroll viewports follow the content end and report unused deltas as the pi frame does" classname="pi-v1.3.0 B12 scroll viewports follow the content end and report unused deltas as the pi frame does" time="0.21287" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 scroll viewports follow the content end and report unused deltas as the pi frame does"
+Randomness seeded to: 2692075409
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 scrollbar presentation modes and reservation match frozen observation" classname="pi-v1.3.0 B12 scrollbar presentation modes and reservation match frozen observation" time="0.213701" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 scrollbar presentation modes and reservation match frozen observation"
+Randomness seeded to: 1756200459
+===============================================================================
+All tests passed (37 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 scrollbar transient timeline and style hooks match frozen observation" classname="pi-v1.3.0 B12 scrollbar transient timeline and style hooks match frozen observation" time="0.216354" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;scrollbar;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 scrollbar transient timeline and style hooks match frozen observation"
+Randomness seeded to: 1718997135
+===============================================================================
+All tests passed (133 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 scrolled image placements match the pi crop geometry" classname="pi-v1.3.0 B12 scrolled image placements match the pi crop geometry" time="0.213365" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 scrolled image placements match the pi crop geometry"
+Randomness seeded to: 716705321
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 the implicit alternate-screen viewport matches the pi phases" classname="pi-v1.3.0 B12 the implicit alternate-screen viewport matches the pi phases" time="0.221656" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 the implicit alternate-screen viewport matches the pi phases"
+Randomness seeded to: 2424690449
+===============================================================================
+All tests passed (35 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 B12 wheel policy drives fixed, accelerated, burst, reset, and fractional deltas" classname="pi-v1.3.0 B12 wheel policy drives fixed, accelerated, burst, reset, and fractional deltas" time="0.219342" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;scroll-view;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 B12 wheel policy drives fixed\, accelerated\, burst\, reset\, and fractional deltas"
+Randomness seeded to: 1931482502
+===============================================================================
+All tests passed (52 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 Box mouse event routing through padding matches frozen observation" classname="pi-v1.3.0 Box mouse event routing through padding matches frozen observation" time="0.209915" status="run">
+		<properties>
+			<property name="cmake_labels" value="box;compat-pi;component;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 Box mouse event routing through padding matches frozen observation"
+Randomness seeded to: 1221341156
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 Box rendering padding background and cache match frozen observation" classname="pi-v1.3.0 Box rendering padding background and cache match frozen observation" time="0.213175" status="run">
+		<properties>
+			<property name="cmake_labels" value="box;compat-pi;component;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 Box rendering padding background and cache match frozen observation"
+Randomness seeded to: 1873745306
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 Spacer rendering and line update match frozen observation" classname="pi-v1.3.0 Spacer rendering and line update match frozen observation" time="0.21261" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;component;issue1220;spacer;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 Spacer rendering and line update match frozen observation"
+Randomness seeded to: 4186844312
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 Text render cache and background hook match frozen observation" classname="pi-v1.3.0 Text render cache and background hook match frozen observation" time="0.21362" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;component;issue1220;text;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 Text render cache and background hook match frozen observation"
+Randomness seeded to: 359467212
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 Text styled mutation matches frozen observation" classname="pi-v1.3.0 Text styled mutation matches frozen observation" time="0.2113" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;component;issue1220;text;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 Text styled mutation matches frozen observation"
+Randomness seeded to: 3520074776
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 TruncatedText single-line truncation and padding match frozen observation" classname="pi-v1.3.0 TruncatedText single-line truncation and padding match frozen observation" time="0.213482" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;component;issue1220;truncated;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 TruncatedText single-line truncation and padding match frozen observation"
+Randomness seeded to: 998073897
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a constrained HStack frame aligns children inside their allocation as pi does" classname="pi-v1.3.0 a constrained HStack frame aligns children inside their allocation as pi does" time="0.215177" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;hstack;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a constrained HStack frame aligns children inside their allocation as pi does"
+Randomness seeded to: 2613316524
+===============================================================================
+All tests passed (26 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a constrained HStack frame allocates unequal columns as the frozen frames do" classname="pi-v1.3.0 a constrained HStack frame allocates unequal columns as the frozen frames do" time="0.216986" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;hstack;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a constrained HStack frame allocates unequal columns as the frozen frames do"
+Randomness seeded to: 3700985526
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a constrained HStack frame measures an auto basis at the frame width as pi does" classname="pi-v1.3.0 a constrained HStack frame measures an auto basis at the frame width as pi does" time="0.290374" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;hstack;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a constrained HStack frame measures an auto basis at the frame width as pi does"
+Randomness seeded to: 3790430355
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a constrained VStack crops a leaf and translates its cursor as the frozen pi frame does" classname="pi-v1.3.0 a constrained VStack crops a leaf and translates its cursor as the frozen pi frame does" time="0.253091" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;layout;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a constrained VStack crops a leaf and translates its cursor as the frozen pi frame does"
+Randomness seeded to: 3956845078
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a constrained VStack evaluates visible entries against the frozen pi viewport" classname="pi-v1.3.0 a constrained VStack evaluates visible entries against the frozen pi viewport" time="0.217625" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;layout;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a constrained VStack evaluates visible entries against the frozen pi viewport"
+Randomness seeded to: 249449643
+===============================================================================
+All tests passed (31 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a nested HStack frame replays the frozen pi geometry through mutations" classname="pi-v1.3.0 a nested HStack frame replays the frozen pi geometry through mutations" time="0.213437" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;hstack;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a nested HStack frame replays the frozen pi geometry through mutations"
+Randomness seeded to: 517168356
+===============================================================================
+All tests passed (37 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a nested auto-basis dock is measured against minimum sizes as the frozen pi frame does" classname="pi-v1.3.0 a nested auto-basis dock is measured against minimum sizes as the frozen pi frame does" time="0.222692" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;layout;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a nested auto-basis dock is measured against minimum sizes as the frozen pi frame does"
+Randomness seeded to: 2643262074
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a standalone HStack allocates and aligns exactly as the frozen pi stack does" classname="pi-v1.3.0 a standalone HStack allocates and aligns exactly as the frozen pi stack does" time="0.215745" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;hstack;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a standalone HStack allocates and aligns exactly as the frozen pi stack does"
+Randomness seeded to: 871866719
+===============================================================================
+All tests passed (45 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an HStack inside a constrained VStack allocates the width it was given" classname="pi-v1.3.0 an HStack inside a constrained VStack allocates the width it was given" time="0.249081" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;hstack;issue1220;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an HStack inside a constrained VStack allocates the width it was given"
+Randomness seeded to: 403543357
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 constrained VStack grows and shrinks exactly as the frozen pi frames do" classname="pi-v1.3.0 constrained VStack grows and shrinks exactly as the frozen pi frames do" time="0.218268" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;layout;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 constrained VStack grows and shrinks exactly as the frozen pi frames do"
+Randomness seeded to: 1170373798
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the composed dock keeps the editor and footer rows exactly as the frozen pi frames do" classname="pi-v1.3.0 the composed dock keeps the editor and footer rows exactly as the frozen pi frames do" time="0.217601" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;layout;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the composed dock keeps the editor and footer rows exactly as the frozen pi frames do"
+Randomness seeded to: 3448314929
+===============================================================================
+All tests passed (61 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 unbounded VStack composition clamps and gaps exactly as the frozen pi stack does" classname="pi-v1.3.0 unbounded VStack composition clamps and gaps exactly as the frozen pi stack does" time="0.25447" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;layout;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 unbounded VStack composition clamps and gaps exactly as the frozen pi stack does"
+Randomness seeded to: 4196545359
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 visible width and narrow text placement match frozen observation" classname="pi-v1.3.0 visible width and narrow text placement match frozen observation" time="0.211988" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1220;tui;utils;width"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 visible width and narrow text placement match frozen observation"
+Randomness seeded to: 3675762297
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="slice_by_column discriminating control: keeps slice-start ordering fix" classname="slice_by_column discriminating control: keeps slice-start ordering fix" time="0.0102505" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;tui;utils"/>
+		</properties>
+		<system-out>Filters: "slice_by_column discriminating control: keeps slice-start ordering fix"
+Randomness seeded to: 4124267641
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="slice_by_column keeps the v1.0.0 slice-start ordering fix" classname="slice_by_column keeps the v1.0.0 slice-start ordering fix" time="0.010296" status="run">
+		<properties>
+			<property name="cmake_labels" value="ansi;issue1220;issue957;slice;spec;tui"/>
+		</properties>
+		<system-out>Filters: "slice_by_column keeps the v1.0.0 slice-start ordering fix"
+Randomness seeded to: 4151682665
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="strip_terminal_sequences discriminating control: removes OSC 8 and OSC title bytes pi removes" classname="strip_terminal_sequences discriminating control: removes OSC 8 and OSC title bytes pi removes" time="0.00991597" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;tui;utils"/>
+		</properties>
+		<system-out>Filters: "strip_terminal_sequences discriminating control: removes OSC 8 and OSC title bytes pi removes"
+Randomness seeded to: 746003363
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="strip_terminal_sequences removes the OSC 8 and OSC title bytes pi removes" classname="strip_terminal_sequences removes the OSC 8 and OSC title bytes pi removes" time="0.0102629" status="run">
+		<properties>
+			<property name="cmake_labels" value="ansi;issue1220;issue957;spec;tui"/>
+		</properties>
+		<system-out>Filters: "strip_terminal_sequences removes the OSC 8 and OSC title bytes pi removes"
+Randomness seeded to: 2623655497
+===============================================================================
+All tests passed (3 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="truncate_text discriminating boundary: emits only the part of the ellipsis that fits" classname="truncate_text discriminating boundary: emits only the part of the ellipsis that fits" time="0.0103835" status="run">
+		<properties>
+			<property name="cmake_labels" value="boundary;issue1220;tui;utils"/>
+		</properties>
+		<system-out>Filters: "truncate_text discriminating boundary: emits only the part of the ellipsis that fits"
+Randomness seeded to: 69365484
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="truncate_text emits only the part of the ellipsis that fits" classname="truncate_text emits only the part of the ellipsis that fits" time="0.0102885" status="run">
+		<properties>
+			<property name="cmake_labels" value="ansi;issue1220;issue957;spec;truncate;tui"/>
+		</properties>
+		<system-out>Filters: "truncate_text emits only the part of the ellipsis that fits"
+Randomness seeded to: 12591335
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="visible_width handles combining marks as width 0" classname="visible_width handles combining marks as width 0" time="0.0102045" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1220;issue46;spec;tui;unicode"/>
+		</properties>
+		<system-out>Filters: "visible_width handles combining marks as width 0"
+Randomness seeded to: 647060769
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="wrap_text closes and reopens hyperlinks across physical lines" classname="wrap_text closes and reopens hyperlinks across physical lines" time="0.010326" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1220;issue46;spec;tui;unicode"/>
+		</properties>
+		<system-out>Filters: "wrap_text closes and reopens hyperlinks across physical lines"
+Randomness seeded to: 1974786794
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

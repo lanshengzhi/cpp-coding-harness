@@ -5595,17 +5595,6 @@
     ]
    },
    {
-    "id": "TM-tui-b12",
-    "ticket": "#1220",
-    "history": false,
-    "note": "Proposal section 2 group 16 -> N5: #1182 route batch B12 filed as #1208 + 12 (Layout algebra, scroll containers and the small text components).",
-    "rows": [
-     "cch_tui:Box",
-     "cch_tui:Box.setPaddingX",
-     "cch_tui:utils:extractSegments"
-    ]
-   },
-   {
     "id": "TM-tui-b13",
     "ticket": "#1221",
     "history": false,

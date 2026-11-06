@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="29"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="1"
+	timestamp="2026-11-06T09:00:18"
+	>
+	<testcase name="a released gesture stops capturing before the next press" classname="a released gesture stops capturing before the next press" time="0.0122572" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1209;issue1212;issue1213;mouse;spec;tui"/>
+		</properties>
+		<system-out>Filters: "a released gesture stops capturing before the next press"
+Randomness seeded to: 468228071
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout" classname="pi-v1.3.0 AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout" time="0.23306" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen auto-scroll ticks follow the selection anchor viewport in a nested layout"
+Randomness seeded to: 167874811
+===============================================================================
+All tests passed (61 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen discards a queued auto-scroll tick after a new selection is armed" classname="pi-v1.3.0 AltScreen discards a queued auto-scroll tick after a new selection is armed" time="0.229263" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen discards a queued auto-scroll tick after a new selection is armed"
+Randomness seeded to: 2232624674
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen keeps selection coordinates valid as auto-scrolled content grows" classname="pi-v1.3.0 AltScreen keeps selection coordinates valid as auto-scrolled content grows" time="0.266189" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen keeps selection coordinates valid as auto-scrolled content grows"
+Randomness seeded to: 714851179
+===============================================================================
+All tests passed (60 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen replays auto-scroll top and bottom limits" classname="pi-v1.3.0 AltScreen replays auto-scroll top and bottom limits" time="0.228722" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen replays auto-scroll top and bottom limits"
+Randomness seeded to: 1981977446
+===============================================================================
+All tests passed (73 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen replays edge auto-scroll ticks and OSC 52 copy bytes" classname="pi-v1.3.0 AltScreen replays edge auto-scroll ticks and OSC 52 copy bytes" time="0.267716" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen replays edge auto-scroll ticks and OSC 52 copy bytes"
+Randomness seeded to: 4006980273
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 AltScreen replays release and direction cancellation traces" classname="pi-v1.3.0 AltScreen replays release and direction cancellation traces" time="0.233917" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 AltScreen replays release and direction cancellation traces"
+Randomness seeded to: 1568855735
+===============================================================================
+All tests passed (59 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a delegating host keeps the focus when its nested input is clicked" classname="pi-v1.3.0 a delegating host keeps the focus when its nested input is clicked" time="0.23041" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a delegating host keeps the focus when its nested input is clicked"
+Randomness seeded to: 1433279918
+===============================================================================
+All tests passed (12 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a select-list press selects the rendered row and a click activates it" classname="pi-v1.3.0 a select-list press selects the rendered row and a click activates it" time="0.230715" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a select-list press selects the rendered row and a click activates it"
+Randomness seeded to: 2632397653
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a select-list wheel moves one row per notch and hover never moves the selection" classname="pi-v1.3.0 a select-list wheel moves one row per notch and hover never moves the selection" time="0.221444" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a select-list wheel moves one row per notch and hover never moves the selection"
+Randomness seeded to: 666664955
+===============================================================================
+All tests passed (77 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a settings submenu click closes it and keys still reach the visible list" classname="pi-v1.3.0 a settings submenu click closes it and keys still reach the visible list" time="0.236445" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a settings submenu click closes it and keys still reach the visible list"
+Randomness seeded to: 2937561081
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a settings-list press selects the rendered row and a click activates it" classname="pi-v1.3.0 a settings-list press selects the rendered row and a click activates it" time="0.232608" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a settings-list press selects the rendered row and a click activates it"
+Randomness seeded to: 3979759612
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a settings-list wheel moves one row per notch and hover never moves the selection" classname="pi-v1.3.0 a settings-list wheel moves one row per notch and hover never moves the selection" time="0.2263" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a settings-list wheel moves one row per notch and hover never moves the selection"
+Randomness seeded to: 1142110956
+===============================================================================
+All tests passed (101 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an alternate-screen click in an overlay keeps its delegating host focused" classname="pi-v1.3.0 an alternate-screen click in an overlay keeps its delegating host focused" time="0.231293" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an alternate-screen click in an overlay keeps its delegating host focused"
+Randomness seeded to: 1652799797
+===============================================================================
+All tests passed (31 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor" classname="pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor" time="0.233384" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1215;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an alternate-screen click positions and focuses the editor cursor"
+Randomness seeded to: 2471014151
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes" classname="pi-v1.3.0 an editor click respects the borders, the wrapped segments and the wide graphemes" time="0.232164" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1215;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an editor click respects the borders\, the wrapped segments and the wide graphemes"
+Randomness seeded to: 1630317816
+===============================================================================
+All tests passed (100 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an editor drag selects and copies instead of moving the cursor" classname="pi-v1.3.0 an editor drag selects and copies instead of moving the cursor" time="0.242885" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1215;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an editor drag selects and copies instead of moving the cursor"
+Randomness seeded to: 1959790591
+===============================================================================
+All tests passed (18 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an input press maps grapheme widths and the scrolled window&apos;s start column" classname="pi-v1.3.0 an input press maps grapheme widths and the scrolled window&apos;s start column" time="0.231929" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1216;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an input press maps grapheme widths and the scrolled window's start column"
+Randomness seeded to: 502059044
+===============================================================================
+All tests passed (129 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an input press past the last grapheme clamps to the value length" classname="pi-v1.3.0 an input press past the last grapheme clamps to the value length" time="0.22193" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1216;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an input press past the last grapheme clamps to the value length"
+Randomness seeded to: 2598697638
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an input press positions the cursor and later gestures stay unhandled" classname="pi-v1.3.0 an input press positions the cursor and later gestures stay unhandled" time="0.24719" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1216;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an input press positions the cursor and later gestures stay unhandled"
+Randomness seeded to: 3768694961
+===============================================================================
+All tests passed (82 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 cached frame routes a press to the deepest nested region" classname="pi-v1.3.0 cached frame routes a press to the deepest nested region" time="0.228011" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1212;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 cached frame routes a press to the deepest nested region"
+Randomness seeded to: 370190112
+===============================================================================
+All tests passed (119 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus" classname="pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus" time="0.226369" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1209;issue1212;issue1213;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 captured gesture follows the pointer outside its component and keeps host focus"
+Randomness seeded to: 2172161029
+===============================================================================
+All tests passed (41 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 copy-on-select uses the frozen default and ignores an empty click" classname="pi-v1.3.0 copy-on-select uses the frozen default and ignores an empty click" time="0.270169" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 copy-on-select uses the frozen default and ignores an empty click"
+Randomness seeded to: 2383717987
+===============================================================================
+All tests passed (14 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 selection copy returns the frozen specific clipboard failure" classname="pi-v1.3.0 selection copy returns the frozen specific clipboard failure" time="0.228923" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 selection copy returns the frozen specific clipboard failure"
+Randomness seeded to: 4099210178
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 selection preserves the cell range through content and focus changes" classname="pi-v1.3.0 selection preserves the cell range through content and focus changes" time="0.2314" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 selection preserves the cell range through content and focus changes"
+Randomness seeded to: 372965599
+===============================================================================
+All tests passed (25 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 selection reset drops the multi-click history like frozen pi" classname="pi-v1.3.0 selection reset drops the multi-click history like frozen pi" time="0.227368" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 selection reset drops the multi-click history like frozen pi"
+Randomness seeded to: 211238264
+===============================================================================
+All tests passed (67 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 selection routing and multi-click scenarios replay against frozen pi" classname="pi-v1.3.0 selection routing and multi-click scenarios replay against frozen pi" time="0.280718" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1211;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 selection routing and multi-click scenarios replay against frozen pi"
+Randomness seeded to: 601846357
+===============================================================================
+All tests passed (510 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 styled CJK selection replays across wrapped rows and copies frozen text" classname="pi-v1.3.0 styled CJK selection replays across wrapped rows and copies frozen text" time="0.271842" status="run">
+		<properties>
+			<property name="cmake_labels" value="alt-screen;compat-pi;issue1212;selection;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 styled CJK selection replays across wrapped rows and copies frozen text"
+Randomness seeded to: 731758347
+===============================================================================
+All tests passed (64 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 the settings search row forwards clicks and the separator row stays inert" classname="pi-v1.3.0 the settings search row forwards clicks and the separator row stays inert" time="0.222119" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;components;issue1212;issue1219;mouse;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 the settings search row forwards clicks and the separator row stays inert"
+Randomness seeded to: 1261509278
+===============================================================================
+All tests passed (34 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>
