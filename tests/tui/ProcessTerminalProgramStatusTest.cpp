@@ -191,6 +191,9 @@ TEST_CASE("Process Terminal reports the latest status once the terminal answers 
 
     // Later reports are written immediately, including the opened blocked kind.
     probe.write("\x1b[?62;4;52c");
+    REQUIRE(cch::tests::wait_until([&] {
+        return probe.terminal->capabilities().keyboard_protocol == cch::tui::KeyboardProtocol::ModifyOtherKeys;
+    }));
     const auto blocked = cch::tui::ProgramStatus{
             .state = cch::tui::ProgramStatus::State::Blocked,
             .app = "pi",
@@ -202,15 +205,32 @@ TEST_CASE("Process Terminal reports the latest status once the terminal answers 
     REQUIRE(probe.wait_for("msg=QWxsb3c/", output));
     CHECK(output.find("\x1b]7501;state=blocked:app=pi:kind=permission:msg=QWxsb3c/\x1b\\") != std::string::npos);
 
-    // stop() removes the reported status before the ordinary mode restores, so
-    // an exited TUI leaves no stale dashboard state. (#1182 records the one
-    // frozen stop-write divergence: C++ omits `ESC[>4;0m` when modifyOtherKeys
-    // was never active, so the full frozen stop sequence is not yet claimed.)
+    // The captured DA reply enables modifyOtherKeys before stop. Compare the
+    // complete byte stream, independent of the number of output writes.
+    std::string expected_stop;
+    for (const auto& write : detection_scenario("default-reply-before-device-attributes").stop_writes)
+        expected_stop += write;
     REQUIRE(probe.terminal->stop());
-    const auto stop_output = probe.read();
-    const auto clear_position = stop_output.find(clear_status_write());
-    REQUIRE(clear_position != std::string::npos);
-    CHECK(stop_output.find("\x1b[?2004l") > clear_position);
+    CHECK(probe.read() == expected_stop);
+}
+
+TEST_CASE("Process Terminal does not disable an inactive keyboard fallback after Kitty negotiation",
+        "[tui][terminal][issue1221][spec]") {
+    cch::tests::EnvVarGuard override_guard{"PI_PROGRAM_STATUS"};
+    override_guard.unset();
+    TerminalProbe probe;
+    REQUIRE(probe.open());
+    REQUIRE(probe.start());
+    std::string startup;
+    REQUIRE(probe.wait_for(startup_query(), startup));
+    probe.write("\x1b[?1u");
+    REQUIRE(cch::tests::wait_until(
+            [&] { return probe.terminal->capabilities().keyboard_protocol == cch::tui::KeyboardProtocol::Kitty; }));
+    (void)probe.read();
+    REQUIRE(probe.terminal->stop());
+    const auto output = probe.read();
+    CHECK(output.find("\x1b[<u") != std::string::npos);
+    CHECK(output.find("\x1b[>4;0m") == std::string::npos);
 }
 
 TEST_CASE("Process Terminal leaves the status unsupported when DA answers before the reply",
