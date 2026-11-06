@@ -941,7 +941,8 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # rows whole-row: 602. #1221 slice B promoted 7 StdinBuffer framing rows
         # whole-row and left StdinBuffer.flush validated but bounded on the
         # combined flush+callback seam: 609.
-        self.assertEqual(len(delivered), 565)
+        # #1245 promotes ProcessTerminal.clearScreen: 566.
+        self.assertEqual(len(delivered), 566)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)

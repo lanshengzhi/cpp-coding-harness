@@ -221,6 +221,7 @@
   "cch_tui:OverlayOptions.nonCapturing",
   "cch_tui:OverlayUnfocusOptions",
   "cch_tui:OverlayUnfocusOptions.target",
+  "cch_tui:ProcessTerminal.clearScreen",
   "cch_tui:ProgramStatus",
   "cch_tui:RenderLatexOptions",
   "cch_tui:RenderLatexOptions.display",
@@ -977,7 +978,6 @@
     "cch_tui:ProcessTerminal.clearKeyboardProtocolNegotiationBufferFlushTimer",
     "cch_tui:ProcessTerminal.clearLine",
     "cch_tui:ProcessTerminal.clearProgressInterval",
-    "cch_tui:ProcessTerminal.clearScreen",
     "cch_tui:ProcessTerminal.columns",
     "cch_tui:ProcessTerminal.disableModifyOtherKeys",
     "cch_tui:ProcessTerminal.drainInput",
@@ -1051,7 +1051,6 @@
     "default-device-attributes-before-reply",
     "default-reply-before-device-attributes",
     "override-enabled",
-    "process-clear-screen",
     "stdin-framing-buffer-lifecycle",
     "stdin-framing-flush",
     "stdin-framing-paste-lifecycle"
