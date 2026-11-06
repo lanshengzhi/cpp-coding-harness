@@ -56,6 +56,11 @@ cmake --build --preset vcpkg
 ctest --preset vcpkg
 ```
 
+Two environment preconditions cause otherwise-green full runs to fail:
+
+- **Lane lock.** While a code lane holds the checkout, the consolidation CTest cases refuse to run unless the caller proves its lane. Prefix the test command with `CCH_LANE_NAME=<lane>` (for example `CCH_LANE_NAME=lane-1221 ctest --preset vcpkg`); acquire and release the lock with `scripts/dev/lane-lock.sh` as described in [ops-lanes](../wiki/pi-alignment/ops-lanes.md).
+- **Herdr PTY case.** `real PTY records Herdr markdown and OSC 52 terminal bytes` is selected by `TERM_PROGRAM=herdr`. Full-suite runs on this host set it; without it the case fails its host precondition, not a code assertion.
+
 ### Formatting gate
 
 Added or modified lines must conform to `.clang-format`. `scripts/format-check.sh [base-ref]` checks them through `git clang-format` (no argument: working tree vs HEAD; a ref such as `origin/main`: the branch's merge-base). CI runs the same check as a blocking formatting job. To fix findings, stage the files and run `git clang-format --extensions hpp,cpp [base-ref]`, then re-stage. Untouched lines stay outside the gate (`CODING_STANDARDS.md` §14).
