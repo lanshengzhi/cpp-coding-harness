@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="29"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-11-06T14:55:49"
+	>
+	<testcase name="Markdown applies configured padding and background to every cell" classname="Markdown applies configured padding and background to every cell" time="0.0110426" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown applies configured padding and background to every cell"
+Randomness seeded to: 3234561474
+===============================================================================
+All tests passed (34 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown can disable LaTeX rendering while preserving source" classname="Markdown can disable LaTeX rendering while preserving source" time="0.0112066" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue976;latex;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown can disable LaTeX rendering while preserving source"
+Randomness seeded to: 3574310170
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown default text hooks respect empty narrow and padded rendering" classname="Markdown default text hooks respect empty narrow and padded rendering" time="0.0111422" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;issue971;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown default text hooks respect empty narrow and padded rendering"
+Randomness seeded to: 1714267614
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown degrades semantic prefixes at extremely narrow widths" classname="Markdown degrades semantic prefixes at extremely narrow widths" time="0.0106778" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown degrades semantic prefixes at extremely narrow widths"
+Randomness seeded to: 4015524439
+===============================================================================
+All tests passed (50 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown follows strict strikethrough delimiter semantics" classname="Markdown follows strict strikethrough delimiter semantics" time="0.0113642" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown follows strict strikethrough delimiter semantics"
+Randomness seeded to: 3976286416
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown heading roles match frozen pi styling" classname="Markdown heading roles match frozen pi styling" time="0.0114202" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;issue971;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown heading roles match frozen pi styling"
+Randomness seeded to: 2852838628
+===============================================================================
+All tests passed (30 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown invalidates content style and highlighter caches" classname="Markdown invalidates content style and highlighter caches" time="0.011494" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown invalidates content style and highlighter caches"
+Randomness seeded to: 3972274729
+===============================================================================
+All tests passed (42 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown keeps partial and invalid input readable" classname="Markdown keeps partial and invalid input readable" time="0.0111617" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown keeps partial and invalid input readable"
+Randomness seeded to: 2878016795
+===============================================================================
+All tests passed (31 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown measures CJK GFM table cells by terminal columns" classname="Markdown measures CJK GFM table cells by terminal columns" time="0.0111638" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue972;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown measures CJK GFM table cells by terminal columns"
+Randomness seeded to: 629187234
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown nested quote styles and OSC links preserve frozen cell attributes" classname="Markdown nested quote styles and OSC links preserve frozen cell attributes" time="0.0116763" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;issue971;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown nested quote styles and OSC links preserve frozen cell attributes"
+Randomness seeded to: 2206632567
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown preserves loose list paragraph structure" classname="Markdown preserves loose list paragraph structure" time="0.0105192" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown preserves loose list paragraph structure"
+Randomness seeded to: 2323525714
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown preserves nested styles Unicode and link termination at narrow widths" classname="Markdown preserves nested styles Unicode and link termination at narrow widths" time="0.0115924" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown preserves nested styles Unicode and link termination at narrow widths"
+Randomness seeded to: 773631008
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown renders common response constructs in semantic order" classname="Markdown renders common response constructs in semantic order" time="0.0145439" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown renders common response constructs in semantic order"
+Randomness seeded to: 3106482840
+===============================================================================
+All tests passed (93 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown stabilizes streamed partial closing fences" classname="Markdown stabilizes streamed partial closing fences" time="0.0120545" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown stabilizes streamed partial closing fences"
+Randomness seeded to: 1811525978
+===============================================================================
+All tests passed (54 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown streamed code fences match frozen pi at each chunk" classname="Markdown streamed code fences match frozen pi at each chunk" time="0.012021" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;issue971;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown streamed code fences match frozen pi at each chunk"
+Randomness seeded to: 1557726596
+===============================================================================
+All tests passed (40 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown styles link labels and visible URL fallbacks independently" classname="Markdown styles link labels and visible URL fallbacks independently" time="0.0102521" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue55;markdown;spec;theme;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown styles link labels and visible URL fallbacks independently"
+Randomness seeded to: 2894221619
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Markdown wraps plain text within terminal width" classname="Markdown wraps plain text within terminal width" time="0.0116198" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue51;markdown;spec;tui"/>
+		</properties>
+		<system-out>Filters: "Markdown wraps plain text within terminal width"
+Randomness seeded to: 906559005
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 markdown code blocks and blockquotes match frozen observation" classname="pi-v1.3.0 markdown code blocks and blockquotes match frozen observation" time="0.215962" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 markdown code blocks and blockquotes match frozen observation"
+Randomness seeded to: 2813493128
+===============================================================================
+All tests passed (22 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 markdown latex math integration matches frozen observation" classname="pi-v1.3.0 markdown latex math integration matches frozen observation" time="0.222225" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 markdown latex math integration matches frozen observation"
+Randomness seeded to: 3265890320
+===============================================================================
+All tests passed (23 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation" classname="pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation" time="0.221195" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 markdown lifecycle default styles and cache invalidation match frozen observation"
+Randomness seeded to: 2102146589
+===============================================================================
+All tests passed (15 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 markdown links hr and options transform match frozen observation" classname="pi-v1.3.0 markdown links hr and options transform match frozen observation" time="0.219747" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 markdown links hr and options transform match frozen observation"
+Randomness seeded to: 3300807897
+===============================================================================
+All tests passed (8 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 markdown list markers and normalization match frozen observation" classname="pi-v1.3.0 markdown list markers and normalization match frozen observation" time="0.221" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 markdown list markers and normalization match frozen observation"
+Randomness seeded to: 138292757
+===============================================================================
+All tests passed (20 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 markdown renders headings and inline styles matching frozen observation" classname="pi-v1.3.0 markdown renders headings and inline styles matching frozen observation" time="0.221977" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 markdown renders headings and inline styles matching frozen observation"
+Randomness seeded to: 1862211308
+===============================================================================
+All tests passed (21 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 markdown tables and CJK width measurement match frozen observation" classname="pi-v1.3.0 markdown tables and CJK width measurement match frozen observation" time="0.221075" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;markdown;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 markdown tables and CJK width measurement match frozen observation"
+Randomness seeded to: 2503840630
+===============================================================================
+All tests passed (27 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="render_latex aligns matrix columns and renders frozen delimiters" classname="render_latex aligns matrix columns and renders frozen delimiters" time="0.0122787" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1217;issue975;latex;spec;tui"/>
+		</properties>
+		<system-out>Filters: "render_latex aligns matrix columns and renders frozen delimiters"
+Randomness seeded to: 1979188991
+===============================================================================
+All tests passed (19 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="render_latex does not invent a rendering for a failure by keeping the source" classname="render_latex does not invent a rendering for a failure by keeping the source" time="0.0103151" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;issue973;latex;tui"/>
+		</properties>
+		<system-out>Filters: "render_latex does not invent a rendering for a failure by keeping the source"
+Randomness seeded to: 3824258474
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="render_latex matches every frozen pi-v1.3.0 inline grammar observation" classname="render_latex matches every frozen pi-v1.3.0 inline grammar observation" time="0.221668" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;latex;tui"/>
+		</properties>
+		<system-out>Filters: "render_latex matches every frozen pi-v1.3.0 inline grammar observation"
+Randomness seeded to: 622812021
+===============================================================================
+All tests passed (128 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="render_latex matches frozen pi-v1.3.0 display rows and baseline alignment" classname="render_latex matches frozen pi-v1.3.0 display rows and baseline alignment" time="0.219495" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;latex;tui"/>
+		</properties>
+		<system-out>Filters: "render_latex matches frozen pi-v1.3.0 display rows and baseline alignment"
+Randomness seeded to: 2968545279
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="render_latex reproduces the frozen frac one-half rendering" classname="render_latex reproduces the frozen frac one-half rendering" time="0.0896877" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1217;issue973;latex;tui"/>
+		</properties>
+		<system-out>Filters: "render_latex reproduces the frozen frac one-half rendering"
+Randomness seeded to: 3672453851
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

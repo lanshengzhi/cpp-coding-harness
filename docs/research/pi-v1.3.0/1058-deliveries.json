@@ -174,7 +174,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -229,14 +229,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:11:23Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-alias.xml",
-     "sha256": "ae002f48bccea20932625ae286fbd5363589f4c00f6cc2ab7e3d68657e96e256"
+     "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-keys.xml",
+     "sha256": "515530e11714aee4a51e077f06d30a56f54a5cd2fca053f1bf0c6522ca52804e"
     }
    },
    "rows": [
@@ -1022,6 +1022,30 @@
       "sha256": "5fb8210998dfc4231874f1f29531b940bf4b6828a9618c719d26384ff43427e4"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:11:23Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1221-manager-alias.xml",
+      "sha256": "ae002f48bccea20932625ae286fbd5363589f4c00f6cc2ab7e3d68657e96e256"
+     }
+    }
    }
   },
   {
@@ -1041,14 +1065,14 @@
      "-L",
      "^(issue1090|issue1101|issue1104)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:11:24Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 36,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-alias.xml",
-     "sha256": "4d009e7263b00bed07af76f8bdb9ca436f663a89867977d40f27f47fa01b5692"
+     "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-keys.xml",
+     "sha256": "9f48d46748a6527af8b2db50f21c3030f42ebbd049330f9ad016dce90fab58f6"
     }
    },
    "inputs": [
@@ -1094,7 +1118,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "src/durable/CodingTools.cpp",
@@ -1998,6 +2022,30 @@
       "sha256": "f0edd0d60648f813359642c81be43a402fdd8ac98d3bc18d1c1a6dc91c277c51"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "^(issue1090|issue1101|issue1104)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:11:24Z",
+     "selected": 36,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1090-durable-images-revalidation-1221-manager-alias.xml",
+      "sha256": "4d009e7263b00bed07af76f8bdb9ca436f663a89867977d40f27f47fa01b5692"
+     }
+    }
    }
   },
   {
@@ -2257,11 +2305,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -2284,14 +2332,14 @@
      "-L",
      "issue1118",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:11:28Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 19,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-alias.xml",
-     "sha256": "7408a1ebe07d798b1ac22f2607ec916dc466df8c13a4a442132334e08381ca72"
+     "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-keys.xml",
+     "sha256": "5a49790a621ba103d54b8d932a3c8f310bf4d93a9fcb7182c30606fb23a03548"
     }
    },
    "rows": [
@@ -3179,6 +3227,31 @@
      "junit": {
       "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-state.xml",
       "sha256": "49f279ace4ea2bbca437a4d248c5cd96fee403a662cefe9b860ec689fb94a93c"
+     }
+    }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1118",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:11:28Z",
+     "selected": 19,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1221-manager-alias.xml",
+      "sha256": "7408a1ebe07d798b1ac22f2607ec916dc466df8c13a4a442132334e08381ca72"
      }
     }
    }
@@ -4434,7 +4507,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4442,7 +4515,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     }
    ],
    "validation": {
@@ -4453,14 +4526,14 @@
      "-R",
      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:11:29Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-alias.xml",
-     "sha256": "2b50768340c6166d073726d8bbd5ff3949cc0a40bae1db5b2778e4ed5a4517aa"
+     "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-keys.xml",
+     "sha256": "ac08a496b6047b9cf0add587a0793dfa2ae0d7b0b87b493186d79e90b25626b3"
     }
    },
    "rows": [
@@ -5366,6 +5439,31 @@
       "sha256": "89f7e76fe077d7c1da786bd7e97fa9b762ebacb4b6f67708856980e33d037cd3"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:11:29Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1221-manager-alias.xml",
+      "sha256": "2b50768340c6166d073726d8bbd5ff3949cc0a40bae1db5b2778e4ed5a4517aa"
+     }
+    }
    }
   },
   {
@@ -6106,14 +6204,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:11:29Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-alias.xml",
-     "sha256": "72dd9d32e4e7272835240329239af6ff1b9bbcd31536caf03bf502297f03132c"
+     "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-keys.xml",
+     "sha256": "2d24b6f071f9ce36741ce17f7d3f28099aa63dd1154c400c677e02f6de540617"
     }
    },
    "rows": [
@@ -6287,11 +6385,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -6860,6 +6958,31 @@
       "sha256": "7347eef100033c8717522f32edcb3645d194ea3b1396a404d84b18d5e54b8acc"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:11:29Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1186-chord-typed-json-revalidation-1221-manager-alias.xml",
+      "sha256": "72dd9d32e4e7272835240329239af6ff1b9bbcd31536caf03bf502297f03132c"
+     }
+    }
    }
   },
   {
@@ -6878,14 +7001,14 @@
      "-L",
      "chord",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:11:30Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 89,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-alias.xml",
-     "sha256": "917609791f05d0730dab5e9919fee41028dfbacca2f98b4d208e5fc76b2b7783"
+     "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-keys.xml",
+     "sha256": "9ae8d6cdb92a71d0fc0365136eddbd5ea8e12b980fcc66f7cd78855273a605cd"
     }
    },
    "rows": [
@@ -7053,7 +7176,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -7594,6 +7717,30 @@
       "sha256": "c609850020d0d4e3bf2262f26468bd9e8c22db923b4445cd75207a5108312bb8"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "chord",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:11:30Z",
+     "selected": 89,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1188-chord-observer-serialization-revalidation-1221-manager-alias.xml",
+      "sha256": "917609791f05d0730dab5e9919fee41028dfbacca2f98b4d208e5fc76b2b7783"
+     }
+    }
    }
   },
   {
@@ -7812,14 +7959,14 @@
      "-L",
      "issue1182",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:11:32Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:24Z",
     "selected": 13,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-alias.xml",
-     "sha256": "624de1861d1b2f9ebe51e5adf374e3e3019b9ed7c715ef03f772db5b3a03011a"
+     "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-keys.xml",
+     "sha256": "2505502d16786c7700b63e336e6b4a3e1af1c02df667fafc53b9f5af01ad5f90"
     }
    },
    "rows": [
@@ -7958,7 +8105,7 @@
     },
     {
      "path": "cmake/tests/TuiTests.cmake",
-     "sha256": "7811fa385713a39c130ba289e854649bb5d20e3c7c6adfd9aa516cf412a887ec"
+     "sha256": "55c0bd6deef5c5ee773e4df699d34aaaf406513929ed4531da66b9c3b16d61e4"
     },
     {
      "path": "cmake/tests/EvidenceTests.cmake",
@@ -8042,7 +8189,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -8066,7 +8213,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -8082,7 +8229,7 @@
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-route-batches.json",
-     "sha256": "e12da21af2fd842349681fde432c77f7e36a021e7b2b0d9eacd09ec7fad8e34c"
+     "sha256": "68633f8be2b96093723544effdfd354a940a901daff2f73cfcf800349915b150"
     },
     {
      "path": "docs/research/pi-v1.3.0/1182-tui-reconciliation.md",
@@ -8643,6 +8790,33 @@
       "sha256": "04459f375e14c25d652982859bf887617f9a85e8d892ca3b6f0098942d729cec"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "cmake/tests/TuiTests.cmake",
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
+     "docs/research/pi-v1.3.0/1182-tui-route-batches.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-L",
+      "issue1182",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:11:32Z",
+     "selected": 13,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-comparisons-revalidation-1221-manager-alias.xml",
+      "sha256": "624de1861d1b2f9ebe51e5adf374e3e3019b9ed7c715ef03f772db5b3a03011a"
+     }
+    }
    }
   },
   {
@@ -8847,11 +9021,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -9784,14 +9958,14 @@
      "-R",
      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:03Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 52,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-alias.xml",
-     "sha256": "6700d372d4457ef4be92bb9b2950a071a20331440db601be5381380912a459fc"
+     "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-keys.xml",
+     "sha256": "92d6a27f8c413c68f50e204c2aaaafa363782407526993552bf427d743e64314"
     }
    },
    "revalidation1179m": {
@@ -10276,6 +10450,31 @@
       "sha256": "14a29b02a27155a4ba8f51da0c74f14c958741fe890f3c0953d9b1382910b880"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:03Z",
+     "selected": 52,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1221-manager-alias.xml",
+      "sha256": "6700d372d4457ef4be92bb9b2950a071a20331440db601be5381380912a459fc"
+     }
+    }
    }
   },
   {
@@ -10344,11 +10543,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -10379,14 +10578,14 @@
      "-R",
      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:03Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 5,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-alias.xml",
-     "sha256": "030d1bbce7df539bc153b60df1a9b7cc0edaa230e1a193f8f459702c03f02d00"
+     "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-keys.xml",
+     "sha256": "697ef1b10bb397c34a3c7567409a7d70adafda9ad4cc3ee332c85f9e06a25cc5"
     }
    },
    "rows": [
@@ -10899,6 +11098,31 @@
       "sha256": "00c15011ea0cd90ad3d29cb84c63e25e77219aa3c72383e3193b2d3bed9ef22d"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:03Z",
+     "selected": 5,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1221-manager-alias.xml",
+      "sha256": "030d1bbce7df539bc153b60df1a9b7cc0edaa230e1a193f8f459702c03f02d00"
+     }
+    }
    }
   },
   {
@@ -10963,11 +11187,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -11018,14 +11242,14 @@
      "-R",
      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:06Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-alias.xml",
-     "sha256": "85c808c77b752d5158e5908192ccd2b1264737782dfcf00cc6f42e458890468b"
+     "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-keys.xml",
+     "sha256": "c2c749a067881cc9ae2bf2051a66e829cd7536ac90191a1717fde0e9435af979"
     }
    },
    "rows": [
@@ -11573,6 +11797,31 @@
       "sha256": "2f9b5b804455fd0ada1a53d28b57f79d8512c38a77e318685daf9544d454589f"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-R",
+      "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:06Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1221-manager-alias.xml",
+      "sha256": "85c808c77b752d5158e5908192ccd2b1264737782dfcf00cc6f42e458890468b"
+     }
+    }
    }
   },
   {
@@ -11970,15 +12219,15 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
-     "sha256": "2e746a1e6855a7049f4230b0f921ff82fd204344681c63652738d5ad039a34d9"
+     "sha256": "5b7c404e56f6f4805315253ae08a2c2b8c5f43d821a9c025ae70aec1bc9a4e7e"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     }
    ],
    "validation": {
@@ -11991,14 +12240,14 @@
      "-L",
      "issue1201",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:07Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 9,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-alias.xml",
-     "sha256": "4f4fc850f8aa521f6be80fe8a7fbf1868d56225a026cb300737eb3fb02dd90b2"
+     "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-keys.xml",
+     "sha256": "b2a49ec3e42c5660727c1203bc1ae182c89813d4b1b61a7c752a59f2c97f7e71"
     }
    },
    "rows": [
@@ -12930,6 +13179,34 @@
       "sha256": "8b468e13c14fe75aa46630b0b79c5b1f3b85149c7c8912bfbcc7c35d37901c2c"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1201",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:07Z",
+     "selected": 9,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1201-terminal-primitives-revalidation-1221-manager-alias.xml",
+      "sha256": "4f4fc850f8aa521f6be80fe8a7fbf1868d56225a026cb300737eb3fb02dd90b2"
+     }
+    }
    }
   },
   {
@@ -12968,11 +13245,11 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-     "sha256": "f8ac43fdbf86a94ed7ededa69f84526cc51fe2b339a67b6345054dc51d2455af"
+     "sha256": "a9fb16edf46fdd0b9c433d745666eb2baded52a32bf8cc715c3498384a28b4bb"
     },
     {
      "path": "src/durable/Harness.cpp",
@@ -13005,14 +13282,14 @@
      "-L",
      "issue1203",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:07Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 3,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-alias.xml",
-     "sha256": "4f5ea7c4224e2b52637229e98361904a3d5095723be7151473dc44a8e0ba9bde"
+     "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-keys.xml",
+     "sha256": "c8db02790ee4b9633b5056187361a0c1d0ddcc2f439018fd9a209b43e303b9c2"
     }
    },
    "rows": [
@@ -13394,6 +13671,33 @@
       "sha256": "157fb0b65483381e11ad5faad951a38a48e7077645e2ba1932a644d609fddeb3"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json",
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1203",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:07Z",
+     "selected": 3,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1203-durable-captures-revalidation-1221-manager-alias.xml",
+      "sha256": "4f5ea7c4224e2b52637229e98361904a3d5095723be7151473dc44a8e0ba9bde"
+     }
+    }
    }
   },
   {
@@ -13436,7 +13740,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1211/alt-screen-search.json",
@@ -13473,14 +13777,14 @@
      "-L",
      "issue1213",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:08Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 15,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-alias.xml",
-     "sha256": "85a1ed4b1f36d6363dfb349a6250fc0944f513e3928398ff7b2f6d8aea8ffa20"
+     "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-keys.xml",
+     "sha256": "a9dc5c28afb0ef3bc1824d10eb503150ad7223f13e0d3cbf6a4ec774d73d527d"
     }
    },
    "rows": [
@@ -14137,6 +14441,32 @@
       "sha256": "897269f250bdaa47e2649ff0b17a77f8c87831fb65ee67f6e38d3337674e4cf2"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1213",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:08Z",
+     "selected": 15,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1213-mouse-wheel-routing-revalidation-1221-manager-alias.xml",
+      "sha256": "85a1ed4b1f36d6363dfb349a6250fc0944f513e3928398ff7b2f6d8aea8ffa20"
+     }
+    }
    }
   },
   {
@@ -14187,7 +14517,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
@@ -14232,14 +14562,14 @@
      "-L",
      "issue1212",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:09Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-alias.xml",
-     "sha256": "d01e86036ce88682feb4f5f25aafbdd0dd0115056d4086191dc4ad9fb857fb91"
+     "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-keys.xml",
+     "sha256": "175273aa2a36c3631cd61e2e471daf02405d294c64485a98ce497a26268f9143"
     }
    },
    "rows": [
@@ -15242,6 +15572,32 @@
       "sha256": "4c7e7408bde768f02d9525413cd81a66f41eb5bfe40ccb4d18069c37ac5db34d"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1212",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:09Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1212-transcript-selection-revalidation-1221-manager-alias.xml",
+      "sha256": "d01e86036ce88682feb4f5f25aafbdd0dd0115056d4086191dc4ad9fb857fb91"
+     }
+    }
    }
   },
   {
@@ -15304,7 +15660,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -15361,14 +15717,14 @@
      "-L",
      "issue1211",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:12Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 34,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-alias.xml",
-     "sha256": "36b75a76143cff9ab28500067d9c8e3eff73ab0faa727e254b981f187c0bdfe7"
+     "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-keys.xml",
+     "sha256": "1f11c41c984001c3e133088fd0b54913b5dcc5c52ee17f342bcd1da0f5456763"
     }
    },
    "rows": [
@@ -16729,6 +17085,32 @@
       "sha256": "104a6d2a787e608f723a63609a08fd7b77ae7ebc0202e910d664294e232d35a1"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1211",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:12Z",
+     "selected": 34,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1211-alt-screen-viewport-revalidation-1221-manager-alias.xml",
+      "sha256": "36b75a76143cff9ab28500067d9c8e3eff73ab0faa727e254b981f187c0bdfe7"
+     }
+    }
    }
   },
   {
@@ -16771,7 +17153,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -16808,14 +17190,14 @@
      "-L",
      "issue1210",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:17Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 10,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-alias.xml",
-     "sha256": "0079cde08ee2b98edb91127aa199c127c46df04d22f9a52dafed5f4c2aed14ab"
+     "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-keys.xml",
+     "sha256": "c8d73a6bd0a902cefad16bfb61846c1785d18bd8cfa2c25d2ff3a7a2cec1d887"
     }
    },
    "rows": [
@@ -17382,6 +17764,32 @@
       "sha256": "97075d2e79e1bf30e5a4507d0901e87fe90512a72c382ab2d86ffda01b0762c3"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1210",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:17Z",
+     "selected": 10,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1210-regular-renderer-revalidation-1221-manager-alias.xml",
+      "sha256": "0079cde08ee2b98edb91127aa199c127c46df04d22f9a52dafed5f4c2aed14ab"
+     }
+    }
    }
   },
   {
@@ -17448,7 +17856,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -17505,14 +17913,14 @@
      "-L",
      "issue1209",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:22Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 30,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-alias.xml",
-     "sha256": "7c4da17236bd54772689d71089206fe2943c3ac09689d757d3c4db737104f3f1"
+     "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-keys.xml",
+     "sha256": "a3ea11e53d6f943908143fac00e80b2378159fa8a3a74b540ecce1225b568fbc"
     }
    },
    "rows": [
@@ -19867,6 +20275,32 @@
       "sha256": "9b847e97ae49ef73f16243ec0cc667e0969d19f461a8c08eaf5a9a7d91931220"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1209",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:22Z",
+     "selected": 30,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1209-root-tui-lifecycle-revalidation-1221-manager-alias.xml",
+      "sha256": "7c4da17236bd54772689d71089206fe2943c3ac09689d757d3c4db737104f3f1"
+     }
+    }
    }
   },
   {
@@ -19907,7 +20341,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -19964,14 +20398,14 @@
      "-L",
      "issue1215",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:27Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 25,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-alias.xml",
-     "sha256": "7bf7b7ad557d94ffa38008aa8ff5400ab5a42ba79f1d404219064936e37d7986"
+     "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-keys.xml",
+     "sha256": "85537c951d1283caf324abe8253df610371e281abbab2e9f327b14dd8375bceb"
     }
    },
    "rows": [
@@ -21619,6 +22053,32 @@
       "sha256": "8a7d6565891fb460e5dbfb26bebd09e41b07b3e6b4f83a334e9ec3bacdaf4657"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1215",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:27Z",
+     "selected": 25,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1215-editor-layout-history-undo-kill-yank-revalidation-1221-manager-alias.xml",
+      "sha256": "7bf7b7ad557d94ffa38008aa8ff5400ab5a42ba79f1d404219064936e37d7986"
+     }
+    }
    }
   },
   {
@@ -21647,7 +22107,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -21688,14 +22148,14 @@
      "-L",
      "issue1216",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:33Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-alias.xml",
-     "sha256": "06c19608a0ee8521c4293ea6445e51625770c18e2b0700e7b5a86b2f9b388e06"
+     "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-keys.xml",
+     "sha256": "5a958ce7068af16791f92ac49ec23054827552fe2349888c0560fe078f75f094"
     }
    },
    "rows": [
@@ -22448,6 +22908,32 @@
       "sha256": "a675128dc3d6f7c13fb3435cf3106672bba5c1c3e4f61fe257394c81d5b60fc2"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1216",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:33Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1216-input-editing-paste-and-submit-revalidation-1221-manager-alias.xml",
+      "sha256": "06c19608a0ee8521c4293ea6445e51625770c18e2b0700e7b5a86b2f9b388e06"
+     }
+    }
    }
   },
   {
@@ -22476,7 +22962,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1217/latex.json",
@@ -22501,14 +22987,14 @@
      "-L",
      "issue1217",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:35Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 29,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-alias.xml",
-     "sha256": "0f663761f804ac5bb70b08b71f8eecdbb4bf0e995f4796409a7fc32255521573"
+     "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-keys.xml",
+     "sha256": "24c26a0d1bd96223517ee28d82bfe4921a6044c43ce22c09f4bd38c1aae96a8e"
     }
    },
    "rows": [
@@ -23598,6 +24084,32 @@
       "sha256": "4b1059edac6fdf92cd1bab0e02791c3169388aac7a5bd0981346e2dd03b8ef99"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1217",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:35Z",
+     "selected": 29,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1217-markdown-tables-and-math-rendering-revalidation-1221-manager-alias.xml",
+      "sha256": "0f663761f804ac5bb70b08b71f8eecdbb4bf0e995f4796409a7fc32255521573"
+     }
+    }
    }
   },
   {
@@ -23626,7 +24138,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1218/color.json",
@@ -23647,14 +24159,14 @@
      "-L",
      "issue1218",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:36Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 16,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-alias.xml",
-     "sha256": "3808cc221e2ee51028c01a62379cf564045c7a4812588318ff86f5293fde1bc8"
+     "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-keys.xml",
+     "sha256": "9d9f4e0e151204139755e9554263e3837ec3dc874a608a89555895bd594262db"
     }
    },
    "rows": [
@@ -24672,6 +25184,32 @@
       "sha256": "78c4a6a9ddf79f9f00c397f4d0839541f14209341bbd0f75699c893caaa7b627"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1218",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:36Z",
+     "selected": 16,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1218-color-parsing-palettes-and-terminal-color-capability-revalidation-1221-manager-alias.xml",
+      "sha256": "3808cc221e2ee51028c01a62379cf564045c7a4812588318ff86f5293fde1bc8"
+     }
+    }
    }
   },
   {
@@ -24712,7 +25250,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1219/select-list.json",
@@ -24741,14 +25279,14 @@
      "-L",
      "issue1219",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:39Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 32,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-alias.xml",
-     "sha256": "5b7844da0976b816e2b600274bb23a01097688d7a8db3f6282fde324ccd553f5"
+     "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-keys.xml",
+     "sha256": "147b1c04efbb1854074ebe43ea606cd12250a3d6cd8f45110536195571ce0377"
     }
    },
    "rows": [
@@ -26337,6 +26875,32 @@
       "sha256": "ded7db6d931b1104756f620e128a4401d03abd55e75df0b001bae6f7ba9bfd21"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1219",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:39Z",
+     "selected": 32,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1219-select-list-and-settings-list-revalidation-1221-manager-alias.xml",
+      "sha256": "5b7844da0976b816e2b600274bb23a01097688d7a8db3f6282fde324ccd553f5"
+     }
+    }
    }
   },
   {
@@ -26413,7 +26977,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/baselines.json",
-     "sha256": "899020f06fa72ae4bf53ead197d74dd57ec1a19bbe2235feda0d8bf9b8eb2df2"
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
     },
     {
      "path": "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json",
@@ -26454,14 +27018,14 @@
      "-L",
      "issue1220",
      "--output-junit",
-     "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-alias.xml"
+     "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-keys.xml"
     ],
-    "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
-    "recordedAt": "2026-11-06T04:12:44Z",
+    "testedRevision": "543cec87edc68536216f3fe8e0dce90fc3029c46",
+    "recordedAt": "2026-11-06T05:56:00Z",
     "selected": 69,
     "junit": {
-     "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-alias.xml",
-     "sha256": "1ecf8e5966fc8b063cdaf349e5d9a0721634ee634fdac602b338da712008f2c5"
+     "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-keys.xml",
+     "sha256": "de0c33ce5032fe0b10bdcaf48414c01d8700288e9a1542a101646aef8b174482"
     }
    },
    "rows": [
@@ -28364,7 +28928,345 @@
       "sha256": "4358cf25316c51981c384d89658f0b4a223dbf882204fed04a68315408c86208"
      }
     }
+   },
+   "revalidation1221Keys": {
+    "reason": "The #1221 B13 key-surface lane registered the audit-1221-key-surface family, routed the legacy/kitty key-identity scenarios to the key rows and removed them from the consolidation plan's orphan list. This receipt pins the registry, the plan or the 1050 toolkit ledger, so its exact recorded selection was rerun on the updated tree. No row, comparison scenario or routing digest of this receipt changes. Pinned input digests that drifted on the updated tree (paths unchanged, bytes current) are rebound alongside and listed in changedInputs.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/baselines.json"
+    ],
+    "previousValidation": {
+     "command": [
+      "ctest",
+      "--preset",
+      "vcpkg",
+      "-LE",
+      "architecture",
+      "-L",
+      "issue1220",
+      "--output-junit",
+      "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-alias.xml"
+     ],
+     "testedRevision": "a3ed0d61a83a4f440daae195eadc009459ff4d3e",
+     "recordedAt": "2026-11-06T04:12:44Z",
+     "selected": 69,
+     "junit": {
+      "path": "docs/research/pi-v1.3.0/deliveries/1220-layout-algebra-scroll-containers-and-small-text-components-revalidation-1221-manager-alias.xml",
+      "sha256": "1ecf8e5966fc8b063cdaf349e5d9a0721634ee634fdac602b338da712008f2c5"
+     }
+    }
    }
+  },
+  {
+   "id": "1221-terminal-io",
+   "ticket": "1221",
+   "implementationCommits": [
+    "ae3f90422d7490f705d22d94efaf701e036324d5"
+   ],
+   "report": "docs/research/pi-v1.3.0/1221-terminal-io-delivery.md",
+   "inputs": [
+    {
+     "path": "src/tui/Keys.cpp",
+     "sha256": "741e726ce51d2452f35d6e278133bf38bb40e0e2909b382083d3be2f72d9c667"
+    },
+    {
+     "path": "src/tui/InputDecoder.cpp",
+     "sha256": "7ef2ad45a5401a5bdcab5700abc288977c01424a00f72b0fc4d02d11f21123b9"
+    },
+    {
+     "path": "src/tui/include/cch/tui/Keys.hpp",
+     "sha256": "6bac11fce026d57cc1ae40fdba4cb6ddc094cd48e5a8e5ea7cafc58ce39fa072"
+    },
+    {
+     "path": "src/tui/InputDecoder.hpp",
+     "sha256": "cec613a3d616d593c77de348dbddf314d6219c3b22c13a2bf533a7d33b2a0f55"
+    },
+    {
+     "path": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+     "sha256": "b4960d157d2bb4f722c59069ee68779958c50a88aa110938fb88fcc325e05e81"
+    },
+    {
+     "path": "tests/tui/KeysTest.cpp",
+     "sha256": "895efb66e13d6343369add6e8715eeba1e6a5babd5d7d5b76758cfaf716db436"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/baselines.json",
+     "sha256": "026ba3b12c54182e96fa580c3b693312d8236c71dad64247bf3ccdb7e2ea407c"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json",
+     "sha256": "f13fa48a1874202288b644c3309b08d9620634e6ac70fe1799a890140df3fbad"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1050/manifest.json",
+     "sha256": "3f479083b10886287684afe88a068769ea3989a4020e0559b949c0f937746999"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1221-key-surface/key-constants.json",
+     "sha256": "e1e5f056179fd857843dc23c81e1ffcc7d41c4ef8d6f0af60f82f5e58e705885"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1221-key-surface/kitty-text.json",
+     "sha256": "69c8cc9f9f0d115ed1db8ca0f1763b0a0f4655e2f5450b82f6cd659ccf78c678"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1221-key-surface/manifest.json",
+     "sha256": "a12bc1f3dc8cb0ce89fbfed1937e325e65e09099876143fc03836a3d867c0ad8"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1221-key-surface/release-repeat.json",
+     "sha256": "8d54e24a60decc01fc774848c8ff441e748cfafb6d3b4e34141be0ac7a8a3ec2"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1221/keys-kitty-text.json",
+     "sha256": "5cc78a9fd39d3b4a3fd02975f948b2f7de5d9292bffe952e90706532585e77b2"
+    },
+    {
+     "path": "fixtures/pi-v1.3.0/audit-1221/manifest.json",
+     "sha256": "cb7f6b42094ff7d824e7537a534ae08961a5343bfdd091fd2b208ae65014dbb1"
+    }
+   ],
+   "validation": {
+    "command": [
+     "ctest",
+     "--preset",
+     "vcpkg",
+     "-LE",
+     "architecture",
+     "-L",
+     "issue1221",
+     "--output-junit",
+     "docs/research/pi-v1.3.0/deliveries/1221-issue1221.xml"
+    ],
+    "testedRevision": "ae3f90422d7490f705d22d94efaf701e036324d5",
+    "recordedAt": "2026-11-06T06:06:29Z",
+    "selected": 25,
+    "junit": {
+     "path": "docs/research/pi-v1.3.0/deliveries/1221-issue1221.xml",
+     "sha256": "935ab53d5cd3709af94846e8a20944dbfcb9115f503c4166646a4e49593b0487"
+    }
+   },
+   "rows": [
+    {
+     "id": "cch_tui:Key",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-key-surface/key-constants.json",
+       "scenario": "key-constants-and-modifier-helpers",
+       "test": "pi-v1.3.0 key constants and modifier helpers replay",
+       "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "legacy-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "kitty-active-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an invalid identifier cannot match a produced symbol",
+      "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+      "reason": "The frozen key table binds every constant and helper spelling; the invalid-identifier case feeds names the table never contains, separating a table that is genuinely complete from a parser that accepts any unknown name or suffix as a key."
+     }
+    },
+    {
+     "id": "cch_tui:KeyEventType",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "legacy-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "kitty-active-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a bracketed paste containing a release suffix is not a key release",
+      "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+      "reason": "The frozen identity cases bind press/repeat/release through the parsed event; the paste case contains a release-shaped suffix inside paste content, separating an event-type decision that consults the paste exclusion from one that classifies raw bytes by substring alone."
+     }
+    },
+    {
+     "id": "cch_tui:KeyId",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "legacy-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "kitty-active-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      },
+      {
+       "artifact": "audit-1050/keys-and-terminal-replies.json",
+       "scenario": "shifted-symbol-keys-match-produced-character",
+       "test": "pi-v1.3.0 shifted-symbol key matching replays the registered observation",
+       "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an invalid identifier cannot match a produced symbol",
+      "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+      "reason": "The frozen identities bind the canonical shortcut spelling for aliases and modifier orders; the invalid-identifier case requires that unknown keys produce no identity at all, separating normalization from a fallback that echoes the unparsed identifier."
+     }
+    },
+    {
+     "id": "cch_tui:decodeKittyPrintable",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-key-surface/kitty-text.json",
+       "scenario": "kitty-printable-text-decoding",
+       "test": "pi-v1.3.0 kitty printable text decoding replays",
+       "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a ctrl kitty report produces no printable text",
+      "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+      "reason": "The frozen decoder binds a ctrl report to no text; the ctrl case feeds the same CSI-u shape with the ctrl modifier, separating a decoder that consults modifiers from one that extracts the codepoint unconditionally."
+     }
+    },
+    {
+     "id": "cch_tui:isKeyRelease",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-key-surface/release-repeat.json",
+       "scenario": "key-release-and-repeat-raw-predicates",
+       "test": "pi-v1.3.0 key release and repeat raw predicates replay",
+       "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "legacy-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a bracketed paste containing a release suffix is not a key release",
+      "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+      "reason": "The frozen matrix binds a release suffix inside and outside paste content; the paste case contains ':3F' inside a bracketed paste, separating the paste exclusion from a substring-only release test."
+     }
+    },
+    {
+     "id": "cch_tui:isKeyRepeat",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221-key-surface/release-repeat.json",
+       "scenario": "key-release-and-repeat-raw-predicates",
+       "test": "pi-v1.3.0 key release and repeat raw predicates replay",
+       "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "kitty-active-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a bracketed paste containing a repeat suffix is not a key repeat",
+      "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+      "reason": "The frozen matrix binds a repeat suffix inside and outside paste content; the paste case contains ':2F' inside a bracketed paste, separating the paste exclusion from a substring-only repeat test."
+     }
+    },
+    {
+     "id": "cch_tui:keys:shifted-symbol-matching",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1050/keys-and-terminal-replies.json",
+       "scenario": "shifted-symbol-keys-match-produced-character",
+       "test": "pi-v1.3.0 shifted-symbol key matching replays the registered observation",
+       "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a plain produced symbol does not satisfy the physical shift binding",
+      "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+      "reason": "The frozen scenario binds the shifted '=' report to the produced '+'; the plain-symbol case feeds a legacy '+' with no shift report, separating the physical shift+= match that requires a reported shifted symbol from one that always accepts the physical spelling."
+     }
+    },
+    {
+     "id": "cch_tui:matchesKey",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "legacy-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "kitty-active-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      },
+      {
+       "artifact": "audit-1050/keys-and-terminal-replies.json",
+       "scenario": "shifted-symbol-keys-match-produced-character",
+       "test": "pi-v1.3.0 shifted-symbol key matching replays the registered observation",
+       "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 an invalid identifier cannot match a produced symbol",
+      "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+      "reason": "The frozen identities and shifted-symbol observations bind the accepted spellings; the invalid-identifier case feeds a produced '+' report against an unknown binding, separating a matcher that rejects unparsable identifiers from one that compares only the key tail."
+     }
+    },
+    {
+     "id": "cch_tui:parseKey",
+     "remainingBoundary": [],
+     "comparisons": [
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "legacy-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      },
+      {
+       "artifact": "audit-1221/keys-kitty-text.json",
+       "scenario": "kitty-active-key-identity",
+       "test": "pi-v1.3.0 captured key identities and binding results replay",
+       "testSource": "tests/tui/KeysTest.cpp"
+      },
+      {
+       "artifact": "audit-1050/keys-and-terminal-replies.json",
+       "scenario": "shifted-symbol-keys-match-produced-character",
+       "test": "pi-v1.3.0 shifted-symbol key matching replays the registered observation",
+       "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp"
+      }
+     ],
+     "discriminatingCase": {
+      "test": "pi-v1.3.0 a raw LF keeps its diagnostic sequence but not a modifier identity",
+      "testSource": "tests/tui/KeysSurfaceEvidenceTest.cpp",
+      "reason": "The frozen legacy and kitty identity cases bind the raw LF to enter and shift+enter; the raw-LF case checks the diagnostic byte survives without a ctrl identity, separating a mode-aware legacy decode from one that maps the control byte to ctrl+j."
+     }
+    }
+   ],
+   "routingSha256": "b8fe95a4a8a2f6d4324b51a1f8a2b10a3c16be6ccee7632979ead18d022dc7ad"
   }
  ]
 }

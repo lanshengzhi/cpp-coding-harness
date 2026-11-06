@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="25"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="1"
+	timestamp="2026-11-06T14:55:59"
+	>
+	<testcase name="ANSI utilities compare the pi 1.3.0 registered observations" classname="ANSI utilities compare the pi 1.3.0 registered observations" time="0.224268" status="run">
+		<properties>
+			<property name="cmake_labels" value="ansi;issue1221;spec;tui"/>
+		</properties>
+		<system-out>Filters: "ANSI utilities compare the pi 1.3.0 registered observations"
+Randomness seeded to: 1227195118
+===============================================================================
+All tests passed (32 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Keybinding conflicts distinguish literal spellings of the same key" classname="Keybinding conflicts distinguish literal spellings of the same key" time="0.21394" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;keybindings;tui"/>
+		</properties>
+		<system-out>Filters: "Keybinding conflicts distinguish literal spellings of the same key"
+Randomness seeded to: 2268738347
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Keybinding conflicts require two user claims, not an overlapping default" classname="Keybinding conflicts require two user claims, not an overlapping default" time="0.0104191" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;keybindings;tui"/>
+		</properties>
+		<system-out>Filters: "Keybinding conflicts require two user claims\, not an overlapping default"
+Randomness seeded to: 1820175647
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Keybinding conflicts retain first-claim order and distinct claimants" classname="Keybinding conflicts retain first-claim order and distinct claimants" time="0.01043" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;keybindings;tui"/>
+		</properties>
+		<system-out>Filters: "Keybinding conflicts retain first-claim order and distinct claimants"
+Randomness seeded to: 2898097258
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Keybinding context replacement compares frozen manager rebuild" classname="Keybinding context replacement compares frozen manager rebuild" time="0.218006" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;keybindings;tui"/>
+		</properties>
+		<system-out>Filters: "Keybinding context replacement compares frozen manager rebuild"
+Randomness seeded to: 1685657553
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Keybinding definitions compare the complete frozen pi 1.3.0 table" classname="Keybinding definitions compare the complete frozen pi 1.3.0 table" time="0.211858" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;keybindings;tui"/>
+		</properties>
+		<system-out>Filters: "Keybinding definitions compare the complete frozen pi 1.3.0 table"
+Randomness seeded to: 3773798446
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Keybinding resolution compares frozen pi 1.3.0 manager cases" classname="Keybinding resolution compares frozen pi 1.3.0 manager cases" time="0.216429" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;keybindings;tui"/>
+		</properties>
+		<system-out>Filters: "Keybinding resolution compares frozen pi 1.3.0 manager cases"
+Randomness seeded to: 2075385811
+===============================================================================
+All tests passed (106 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Keybinding resolution reports conflicting_user_key diagnostics for different literal spellings that canonicalize to the same key" classname="Keybinding resolution reports conflicting_user_key diagnostics for different literal spellings that canonicalize to the same key" time="0.0101905" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;keybindings;tui"/>
+		</properties>
+		<system-out>Filters: "Keybinding resolution reports conflicting_user_key diagnostics for different literal spellings that canonicalize to the same key"
+Randomness seeded to: 152021266
+===============================================================================
+All tests passed (11 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Keybinding snapshots compare frozen alias mutation and rebuild" classname="Keybinding snapshots compare frozen alias mutation and rebuild" time="0.212039" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;keybindings;tui"/>
+		</properties>
+		<system-out>Filters: "Keybinding snapshots compare frozen alias mutation and rebuild"
+Randomness seeded to: 4037094593
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Keybinding snapshots compare frozen user bindings and replacement" classname="Keybinding snapshots compare frozen user bindings and replacement" time="0.217231" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;keybindings;tui"/>
+		</properties>
+		<system-out>Filters: "Keybinding snapshots compare frozen user bindings and replacement"
+Randomness seeded to: 1237290063
+===============================================================================
+All tests passed (16 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Process Terminal compares frozen startup and stop negotiation scenarios" classname="Process Terminal compares frozen startup and stop negotiation scenarios" time="0.885288" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;spec;terminal;tui"/>
+		</properties>
+		<system-out>Filters: "Process Terminal compares frozen startup and stop negotiation scenarios"
+Randomness seeded to: 4125036134
+===============================================================================
+All tests passed (27 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Process Terminal does not disable an inactive keyboard fallback after Kitty negotiation" classname="Process Terminal does not disable an inactive keyboard fallback after Kitty negotiation" time="0.436364" status="run">
+		<properties>
+			<property name="cmake_labels" value="issue1221;spec;terminal;tui"/>
+		</properties>
+		<system-out>Filters: "Process Terminal does not disable an inactive keyboard fallback after Kitty negotiation"
+Randomness seeded to: 2684260910
+===============================================================================
+All tests passed (10 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a bracketed paste containing a release suffix is not a key release" classname="pi-v1.3.0 a bracketed paste containing a release suffix is not a key release" time="0.0102962" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a bracketed paste containing a release suffix is not a key release"
+Randomness seeded to: 44480951
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a bracketed paste containing a repeat suffix is not a key repeat" classname="pi-v1.3.0 a bracketed paste containing a repeat suffix is not a key repeat" time="0.0100767" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a bracketed paste containing a repeat suffix is not a key repeat"
+Randomness seeded to: 2324067253
+===============================================================================
+All tests passed (2 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a ctrl kitty report produces no printable text" classname="pi-v1.3.0 a ctrl kitty report produces no printable text" time="0.0102737" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a ctrl kitty report produces no printable text"
+Randomness seeded to: 2100536115
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a plain produced symbol does not satisfy the physical shift binding" classname="pi-v1.3.0 a plain produced symbol does not satisfy the physical shift binding" time="0.236537" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a plain produced symbol does not satisfy the physical shift binding"
+Randomness seeded to: 1303595545
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 a raw LF keeps its diagnostic sequence but not a modifier identity" classname="pi-v1.3.0 a raw LF keeps its diagnostic sequence but not a modifier identity" time="0.0104742" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 a raw LF keeps its diagnostic sequence but not a modifier identity"
+Randomness seeded to: 3421936547
+===============================================================================
+All tests passed (9 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 an invalid identifier cannot match a produced symbol" classname="pi-v1.3.0 an invalid identifier cannot match a produced symbol" time="0.0115248" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 an invalid identifier cannot match a produced symbol"
+Randomness seeded to: 2252152786
+===============================================================================
+All tests passed (5 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 captured fragmented replies and ambiguous input replay" classname="pi-v1.3.0 captured fragmented replies and ambiguous input replay" time="0.209588" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 captured fragmented replies and ambiguous input replay"
+Randomness seeded to: 4201872978
+===============================================================================
+All tests passed (13 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 captured key identities and binding results replay" classname="pi-v1.3.0 captured key identities and binding results replay" time="0.222688" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 captured key identities and binding results replay"
+Randomness seeded to: 931074035
+===============================================================================
+All tests passed (75 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 key constants and modifier helpers replay" classname="pi-v1.3.0 key constants and modifier helpers replay" time="0.217393" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 key constants and modifier helpers replay"
+Randomness seeded to: 2557729630
+===============================================================================
+All tests passed (159 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 key event types replay the registered identity observation" classname="pi-v1.3.0 key event types replay the registered identity observation" time="0.233355" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 key event types replay the registered identity observation"
+Randomness seeded to: 173514589
+===============================================================================
+All tests passed (33 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 key release and repeat raw predicates replay" classname="pi-v1.3.0 key release and repeat raw predicates replay" time="0.234243" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 key release and repeat raw predicates replay"
+Randomness seeded to: 2980882414
+===============================================================================
+All tests passed (74 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 kitty printable text decoding replays" classname="pi-v1.3.0 kitty printable text decoding replays" time="0.225135" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 kitty printable text decoding replays"
+Randomness seeded to: 3447144362
+===============================================================================
+All tests passed (37 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="pi-v1.3.0 shifted-symbol key matching replays the registered observation" classname="pi-v1.3.0 shifted-symbol key matching replays the registered observation" time="0.217258" status="run">
+		<properties>
+			<property name="cmake_labels" value="compat-pi;issue1221;tui"/>
+		</properties>
+		<system-out>Filters: "pi-v1.3.0 shifted-symbol key matching replays the registered observation"
+Randomness seeded to: 1378755394
+===============================================================================
+All tests passed (28 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>
