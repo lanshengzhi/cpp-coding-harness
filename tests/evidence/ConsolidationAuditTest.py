@@ -89,10 +89,19 @@ class StaleLedgerFieldsTest(unittest.TestCase):
         with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*consumer.*implementation.*missing"):
             self.check()
 
-    def test_closed_implementation_ticket(self):
-        self.row["implementation_ticket"] = "#123"
+    def test_closed_implementation_ticket_on_missing_unverified_row(self):
+        self.row.update(implementation="missing", implementation_ticket="#123")
         with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_durable:example.*implementation_ticket.*#123.*closed"):
             self.check()
+
+    def test_closed_implementation_ticket_on_verified_promoted_row(self):
+        self.row.update(id="cch_chord:context:without-abort-signal", owner="cch_chord",
+                        implementation="partial", verification="verified", implementation_ticket="#1178")
+        consolidate.check_stale_fields([self.row], self.root, {"1178"}, [])
+
+    def test_closed_implementation_ticket_on_implemented_unverified_row(self):
+        self.row.update(implementation="implemented", implementation_ticket="#123")
+        self.check()
 
     def test_build_and_check_both_reject_a_new_contradiction(self):
         self.row.update(verification="verified", implementation="missing")

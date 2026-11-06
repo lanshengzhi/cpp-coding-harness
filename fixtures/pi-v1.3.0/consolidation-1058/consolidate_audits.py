@@ -1020,7 +1020,9 @@ def stale_field_violations(rows: list[dict], root: Path, closed: set[str]) -> li
             if row["implementation"] == "missing" and built and names_owner:
                 add(field, "names built owner while implementation is missing", row.get(field))
         ticket = row.get("implementation_ticket")
-        if isinstance(ticket, str) and ticket.startswith("#") and ticket[1:] in closed:
+        if (row["implementation"] in {"missing", "partial"} and row["verification"] != "verified"
+                and isinstance(ticket, str)
+                and ticket.startswith("#") and ticket[1:] in closed):
             add("implementation_ticket", f"{ticket} is closed", ticket)
     return violations
 

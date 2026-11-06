@@ -178,7 +178,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -1106,6 +1106,12 @@
       "sha256": "c7950b2bc8f4f1623e441484251dd962478c1681075c7e9243373b7cb51b4501"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -2429,7 +2435,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -3458,6 +3464,12 @@
       "sha256": "69dc3ff240ebaa1525adf8853a4b58398c00b4f2b1ef589dbada7404f544b945"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -4225,7 +4237,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -4440,6 +4452,12 @@
       "sha256": "61f711e99147d23e9836250b0d6a0b22b7783f346f781578be7ccaa2c0ec893b"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -4791,7 +4809,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -5814,6 +5832,12 @@
       "sha256": "034cba895a1cbd4b1213843f0574f0c2606a9b5e298e2d4d883794dc8808879c"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -6052,7 +6076,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -6208,6 +6232,12 @@
       "sha256": "257dc92d04651651ba162464642d022f1e0d8b8e371ab895c79cda3107520923"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -6424,7 +6454,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -6634,6 +6664,12 @@
       "sha256": "2b6ecde78bbf013bce82f6752a07b18ea3c9c5eb0b50274e0ee2c7e65736f1a5"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -6873,7 +6909,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -7549,6 +7585,12 @@
       "sha256": "a250dc83986eceb26c822fc727249180e2f43d98525293b01fcfb348c154caf5"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -7770,7 +7812,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -8415,6 +8457,12 @@
       "sha256": "603c70a7bd32f0c6890269afb945e007eea1b1848735308bb1ecdbc83591dc57"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -8515,7 +8563,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -8625,6 +8673,12 @@
    },
    "revalidation1239Review": {
     "reason": "The #1239 review adds a baseline ratchet keyed by row, field and contradiction and an offline snapshot age warning. Receipt claims, comparison evidence and routing are unchanged; this revalidation makes no new verification claim.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
     "changedInputs": [
      "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
     ]
@@ -8903,7 +8957,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -9665,6 +9719,12 @@
       "sha256": "ce672a5d0ddc059fdb492b3c268e606a7087839f1dc8b765188a34e48d50a117"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -9877,7 +9937,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -11419,6 +11479,12 @@
       "sha256": "7749b0bdace72cb85a9f568538e5e204e42a41e4045f35cddbdd546550366abb"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -11495,7 +11561,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -12137,6 +12203,12 @@
       "sha256": "b350b53627fc70de07a102d8d80808ca2b2f679ea33bd9798fad9103322003de"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
@@ -12209,7 +12281,7 @@
     },
     {
      "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-     "sha256": "dbded995b613b45234581fd5d7715f5f8990c62448fb1907aff2226fd73969d2"
+     "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
     },
     {
      "path": "scripts/evidence/audit_evidence.py",
@@ -12902,6 +12974,12 @@
       "sha256": "57c60b1f7c8538f54b52b29718ae950070681efca7ad8c8581dfa49a19d0b32f"
      }
     }
+   },
+   "revalidation1246": {
+    "reason": "Issue #1246 narrows the stale closed-ticket check to missing or partial, unverified rows. The receipt claims, comparison scenarios, routing and selected evidence are unchanged; no capability is promoted by this gate correction.",
+    "changedInputs": [
+     "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+    ]
    }
   },
   {
