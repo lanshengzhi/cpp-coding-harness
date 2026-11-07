@@ -324,14 +324,17 @@ TEST_CASE("a hung MCP server fails the call with an explicit timeout, never a si
     CHECK(hung.error().message.find("timed out") != std::string::npos);
 }
 
-TEST_CASE("an MCP call errors explicitly when the server dies between tools/list and tools/call",
-        "[coding_agent][mcp][issue872][spec]") {
+TEST_CASE("an MCP call errors explicitly when a dead server cannot reconnect", "[coding_agent][mcp][issue872][spec]") {
     tests::TempWorkspace workspace;
     const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
     tests::RuntimeFixture runtime;
     const auto trace = workspace.path() / "trace.log";
 
-    auto connected = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(echo_server_config(trace, 5000ms)));
+    const auto server_copy = workspace.path() / "echo_server.py";
+    std::filesystem::copy_file(fixture_path("echo_server.py"), server_copy);
+    auto config = echo_server_config(trace, 5000ms);
+    config.args = {server_copy.string()};
+    auto connected = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(std::move(config)));
     REQUIRE(connected.has_value());
     const std::shared_ptr<cch::mcp::StdioClient> client = *connected;
 
@@ -339,8 +342,9 @@ TEST_CASE("an MCP call errors explicitly when the server dies between tools/list
             tests::run_awaitable(runtime, support::detail::await_async_result(client->request("tools/list")));
     REQUIRE(listed.has_value());
 
-    // The server responds to `debug/exit` and dies; the process is gone before
-    // the next tools/call.
+    // The running server already loaded the script. Removing its private copy
+    // prevents a successful restart after the server exits.
+    REQUIRE(std::filesystem::remove(server_copy));
     const auto exited =
             tests::run_awaitable(runtime, support::detail::await_async_result(client->request("debug/exit")));
     REQUIRE(exited.has_value());
@@ -349,8 +353,8 @@ TEST_CASE("an MCP call errors explicitly when the server dies between tools/list
             support::detail::await_async_result(client->request(
                     "tools/call", tools_call_params("echo", support::JsonValue::object_t{{"text", "too late"}}))));
     REQUIRE_FALSE(call.has_value());
-    // A write to the dead process or a read of its closed stdout both surface
-    // as an explicit transport error naming the server.
+    // A failed write, EOF, or failed reconnect surfaces an explicit process
+    // error naming the server.
     CHECK(call.error().code == support::ErrorCode::Process);
     CHECK(call.error().message.find("echo") != std::string::npos);
 }
