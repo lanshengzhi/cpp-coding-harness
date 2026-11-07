@@ -18,3 +18,7 @@ worktrees/
 
 # lane-lock runtime artifact (scripts/dev/lane-lock.sh)
 .lane-lock.json
+
+# lane working notes (scratch: plans, mappings, one-off receipt builders).
+# Delivered artifacts are committed under fixtures/ and docs/research/.
+.lane-notes/
