@@ -214,6 +214,8 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 Making assert-level failure safety a general guarantee — a helper that enforces release-then-assert and heap-owned thread-visible state — is a follow-up slice, not a property the current suite provides.
 
+11.11. review-only: no static tool distinguishes a concurrent producer's settlement order from an intentionally ordered sequence; a reviewer checks the artifact's `normalizations` and the producer's concurrency contract. Compare a frozen capture array whose producer settles concurrently by its frozen key (for example `callId` <-> `toolCallId`), never by settlement or persistence index: a scheduler order is not an observation (`docs/research/pi-v1.3.0/1159-edit-tool-details.md:49-50`; issue #1247, where index-wise comparison of two concurrent tool results failed 45/200 runs). Match each frozen entry to the unique observed entry carrying the same key and fail when the key sets differ — a missing or duplicated key must not degrade into a size-only check — while keeping every frozen payload assertion.
+
 ## 12. CMake
 
 12.1. CMake targets conform to the Capability Owner Package graph in `docs/agents/architecture.md` and the authoritative parity manifest (`cmake/parity/manifest.json`; ADR 0039, ADR 0053). Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets. Headless Owner libraries remain independent of frontend targets; `implementation_owner_dependencies` adds permitted cross-Owner dependencies only for targets whose role is not `owner`. Flag any cross-Owner dependency or direct-include edge not permitted for the source target's Owner and role by `cmake/parity/manifest.json`.
