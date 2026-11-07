@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -259,14 +259,14 @@
             "-L",
             "^(issue1090|issue1101|issue1104)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1244-capture.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
           "selected": 36,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1244-capture.xml",
-            "sha256": "a6295e17cea620948bd3515823a3ca6c383a1556a824e995f5db5b2cf53129ba"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1101-structured-content.xml",
+            "sha256": "21ed42b919f687199f13f40f4aaa8bf30edd98eb71055f77485f4601658e5dea"
           }
         },
         "rows": [
@@ -1142,6 +1142,30 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "^(issue1090|issue1101|issue1104)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1244-capture.xml"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 36,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1101-structured-content-revalidation-1244-capture.xml",
+              "sha256": "a6295e17cea620948bd3515823a3ca6c383a1556a824e995f5db5b2cf53129ba"
+            }
+          }
         }
       },
       {
@@ -2465,7 +2489,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -2484,14 +2508,14 @@
             "-L",
             "issue1118",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1244-capture.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
           "selected": 19,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1244-capture.xml",
-            "sha256": "4e64aae053ccb28cac4fc2c46a7dd0d5609533b1abb6ac0ea0243f9e3a2d53b6"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1118-codemode-catalog.xml",
+            "sha256": "0b46da47aef31751dfaa15e851818820d8416179cb796001d3bae5ebf074540a"
           }
         },
         "rows": [
@@ -3500,6 +3524,30 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1118",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1244-capture.xml"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 19,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1118-codemode-catalog-revalidation-1244-capture.xml",
+              "sha256": "4e64aae053ccb28cac4fc2c46a7dd0d5609533b1abb6ac0ea0243f9e3a2d53b6"
+            }
+          }
         }
       },
       {
@@ -3545,14 +3593,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
           ],
-          "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
-          "recordedAt": "2026-11-06T19:45:39Z",
-          "selected": 91,
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
+          "selected": 92,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
-            "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
+            "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
           }
         },
         "rows": [
@@ -4267,7 +4315,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -4279,7 +4327,7 @@
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "f4d7a26bde2f7e51d135c7d77e26865d903a49962e2e04491f4dd6d8e7e32ceb"
+            "sha256": "c657149668e74e86e1488fd07227e94ad4e61e486ffe51efd9fd5eedf61ab299"
           },
           {
             "path": "tests/support/ChordEvidence.hpp",
@@ -4511,6 +4559,32 @@
             "junit": {
               "path": "docs/research/pi-v1.3.0/deliveries/1240-chord-masked-context.xml",
               "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
+            }
+          }
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "tests/chord/StrictJsonTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
+            ],
+            "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
+            "recordedAt": "2026-11-06T19:45:39Z",
+            "selected": 91,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
+              "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
             }
           }
         }
@@ -4864,7 +4938,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
@@ -4887,14 +4961,14 @@
             "-R",
             "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1244-capture.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
           "selected": 16,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1244-capture.xml",
-            "sha256": "19cd2fe05dac7cff7adafe2cc9f68d4b5922773496669f4818b3d6b83785c578"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1181-mcp-comparisons.xml",
+            "sha256": "7973f283cba59b78b83bb43eac8ccfa6ad8ba6dd43d822e68ff97e2ffecab859"
           }
         },
         "rows": [
@@ -5864,6 +5938,30 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(an MCP HTTP URL must be http or https|streamable HTTP transport connects over plain http|connecting an MCP HTTP server lists its tools with the pi naming and schema|a same-origin redirect is followed and keeps the request auth header|cross-origin redirect is followed without Authorization and is rejected|HTTPS transport rejects an untrusted certificate|an authorization code from another issuer never reaches the token endpoint|authorization server metadata naming another issuer stops before any token request|the MCP HTTP transport attaches a credential only when the server needs one|agent session lists MCP resources only on demand and can call tools after a resource failure|the real stdio fixture lists, templates, and reads over `resources/\\*`|a cancelled MCP OAuth discovery stops before any registration or token request|a cancelled MCP OAuth client registration stops before any token request|a browser callback wait cancelled by the sign-in stop token stops sign-in|a pasted redirect URL completes the MCP OAuth sign-in|protected resource discovery retries the bare origin after a path-suffixed miss)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1244-capture.xml"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 16,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1181-mcp-comparisons-revalidation-1244-capture.xml",
+              "sha256": "19cd2fe05dac7cff7adafe2cc9f68d4b5922773496669f4818b3d6b83785c578"
+            }
+          }
         }
       },
       {
@@ -5903,14 +6001,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
           ],
-          "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
-          "recordedAt": "2026-11-06T19:45:39Z",
-          "selected": 91,
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
+          "selected": 92,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
-            "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
+            "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
           }
         },
         "rows": [
@@ -6102,7 +6200,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -6138,7 +6236,7 @@
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "f4d7a26bde2f7e51d135c7d77e26865d903a49962e2e04491f4dd6d8e7e32ceb"
+            "sha256": "c657149668e74e86e1488fd07227e94ad4e61e486ffe51efd9fd5eedf61ab299"
           },
           {
             "path": "tests/support/ChordEvidence.hpp",
@@ -6289,6 +6387,32 @@
               "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
             }
           }
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "tests/chord/StrictJsonTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
+            ],
+            "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
+            "recordedAt": "2026-11-06T19:45:39Z",
+            "selected": 91,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
+              "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
+            }
+          }
         }
       },
       {
@@ -6309,14 +6433,14 @@
             "issue1184",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-context-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1184-chord-context-cancellation.xml"
           ],
-          "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
-          "recordedAt": "2026-11-06T19:10:26Z",
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
           "selected": 10,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-context-revalidation.xml",
-            "sha256": "5472d33b8c2b6516b44a264d10c437035758ba7f82e588e88f9d34111acca88d"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1184-chord-context-cancellation.xml",
+            "sha256": "1e5a545a00488ca9071b4324a9122edda68d0f316a2e188b4f8c29c00edecfdc"
           }
         },
         "rows": [
@@ -6505,7 +6629,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -6721,6 +6845,31 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1184",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-context-revalidation.xml"
+            ],
+            "testedRevision": "95e1faa0efd06817735e3a508ff781b56f9f18df",
+            "recordedAt": "2026-11-06T19:10:26Z",
+            "selected": 10,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-context-revalidation.xml",
+              "sha256": "5472d33b8c2b6516b44a264d10c437035758ba7f82e588e88f9d34111acca88d"
+            }
+          }
         }
       },
       {
@@ -6759,14 +6908,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
           ],
-          "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
-          "recordedAt": "2026-11-06T19:45:39Z",
-          "selected": 91,
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
+          "selected": 92,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
-            "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
+            "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
           }
         },
         "rows": [
@@ -6804,10 +6953,7 @@
           },
           {
             "id": "cch_chord:json:strict-validation",
-            "remainingBoundary": [
-              "The discriminating case reuses a comparison test; #1240 owns an independent discriminating case.",
-              "No separate frozen-scenario CTest case has been established for this claim: it must reject nested non-finite values, which root-only validation would accept."
-            ],
+            "remainingBoundary": [],
             "comparisons": [
               {
                 "artifact": "audit-1057/json-output-support.json",
@@ -6825,7 +6971,12 @@
             "discriminatingCase": {
               "test": "strict JSON rejects non-finite numbers at any depth",
               "testSource": "tests/chord/StrictJsonTest.cpp",
-              "reason": "A validator that checked only the root would accept the nested non-finite value; the case requires the deep rejection with the delivered message (the frozen text with the initial lowercase normalization) while the top-level cases also fail."
+              "reason": "A validator that checked only the root would accept the nested non-finite value; the case requires the deep rejection with the delivered message (the frozen text with the initial lowercase normalization) while the top-level cases also fail.",
+              "negativeControl": {
+                "test": "frozen nested JSON comparison rejects a root-only validator",
+                "testSource": "tests/chord/StrictJsonTest.cpp",
+                "reason": "A root-only validator rejects a root NaN but accepts the frozen nested NaN; the shared comparison rejects that result."
+              }
             }
           },
           {
@@ -6928,7 +7079,7 @@
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "f4d7a26bde2f7e51d135c7d77e26865d903a49962e2e04491f4dd6d8e7e32ceb"
+            "sha256": "c657149668e74e86e1488fd07227e94ad4e61e486ffe51efd9fd5eedf61ab299"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
@@ -6960,7 +7111,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -7667,6 +7818,32 @@
               "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
             }
           }
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "tests/chord/StrictJsonTest.cpp",
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
+            ],
+            "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
+            "recordedAt": "2026-11-06T19:45:39Z",
+            "selected": 91,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
+              "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
+            }
+          }
         }
       },
       {
@@ -7706,14 +7883,14 @@
             "chord",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml"
           ],
-          "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
-          "recordedAt": "2026-11-06T19:45:39Z",
-          "selected": 91,
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
+          "selected": 92,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
-            "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-chord.xml",
+            "sha256": "24e34050c9f175d4fc285909dd5e70b3419ca7672c1ab03c882754953411a3bc"
           }
         },
         "rows": [
@@ -7888,7 +8065,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -7924,7 +8101,7 @@
           },
           {
             "path": "tests/chord/StrictJsonTest.cpp",
-            "sha256": "f4d7a26bde2f7e51d135c7d77e26865d903a49962e2e04491f4dd6d8e7e32ceb"
+            "sha256": "c657149668e74e86e1488fd07227e94ad4e61e486ffe51efd9fd5eedf61ab299"
           },
           {
             "path": "tests/support/ChordEvidence.hpp",
@@ -8564,6 +8741,32 @@
               "sha256": "99bab75284b925e03847713a3c75a1efc354f032adca79d83ac48d626f15b961"
             }
           }
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
+            "tests/chord/StrictJsonTest.cpp"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "chord",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml"
+            ],
+            "testedRevision": "a3871a4237865d08078c39bd1480bca25223d4b9",
+            "recordedAt": "2026-11-06T19:45:39Z",
+            "selected": 91,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1240-nested-json-revalidation.xml",
+              "sha256": "1befb47183f3accb13b75b8e6d0bc902e592faaeca0ac12ffecb4d8debdfb915"
+            }
+          }
         }
       },
       {
@@ -8583,14 +8786,14 @@
             "issue1187",
             "--output-on-failure",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1187.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml"
           ],
-          "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
-          "recordedAt": "2026-11-04T20:01:09Z",
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
           "selected": 4,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1187.xml",
-            "sha256": "4b66373a8e4551c5e1a962523c961758e34f4256a6e36715fb2b2276cb7b51fc"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1187-chord-progress-pacing.xml",
+            "sha256": "96379d561959ccc4f98e373121859490ae934e90cb41e614fc9750b5c5d926fc"
           }
         },
         "inputs": [
@@ -8664,7 +8867,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -8783,6 +8986,31 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1187",
+              "--output-on-failure",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1187.xml"
+            ],
+            "testedRevision": "e561d4a61d50768c9ee67a4a366773d1d6199c53",
+            "recordedAt": "2026-11-04T20:01:09Z",
+            "selected": 4,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1202-revalidation-1187.xml",
+              "sha256": "4b66373a8e4551c5e1a962523c961758e34f4256a6e36715fb2b2276cb7b51fc"
+            }
+          }
         }
       },
       {
@@ -8800,14 +9028,14 @@
             "-L",
             "issue1182",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml"
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml"
           ],
-          "testedRevision": "6b08e8573949780dc1f20d199749b5b85edb2716",
-          "recordedAt": "2026-11-06T18:27:05Z",
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
           "selected": 13,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml",
-            "sha256": "dc5aa87866954f38c244d747fb0c9a89abf8ef6062e4db3d7a0c54f82abfcfe9"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1182-tui-comparisons.xml",
+            "sha256": "5c8a8372f5fda844603c4402707f2d03baf23734fada0a810ebbac8d530d2c3c"
           }
         },
         "rows": [
@@ -9058,7 +9286,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/tui_route_batches.py",
@@ -9826,6 +10054,30 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-L",
+              "issue1182",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml"
+            ],
+            "testedRevision": "6b08e8573949780dc1f20d199749b5b85edb2716",
+            "recordedAt": "2026-11-06T18:27:05Z",
+            "selected": 13,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1182-tui-route-revalidation-1245.xml",
+              "sha256": "dc5aa87866954f38c244d747fb0c9a89abf8ef6062e4db3d7a0c54f82abfcfe9"
+            }
+          }
         }
       },
       {
@@ -10038,7 +10290,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -10999,16 +11251,16 @@
             "-R",
             "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1244-capture.xml",
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1179-codemode-comparisons.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
           "selected": 52,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1244-capture.xml",
-            "sha256": "536541f829f875d05044666401068c8d22060c0e2fcb62ef0b6b4b8ab053faec"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1179-codemode-comparisons.xml",
+            "sha256": "97d89dbe52436208283886ee8eb1278f51fcd92143dad6dd13a03415295f3d18"
           }
         },
         "revalidation1179m": {
@@ -11586,6 +11838,32 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(Remote deterministic execution applies reversed answers by result number|Remote deterministic execution runs the script remotely and answers through deliver|RemoteCodemodeSandbox batches output instead of making one exchange per line|RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits|RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit|RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason|RemoteCodemodeSandbox runs tools in the caller and the script on the remote|RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately|a normal codemode run is not deterministic while start is|a public codemode caller aborting while a tool waits keeps partial output and cancels the call|a public codemode caller applies reversed answers by result number not arrival order|a public codemode caller binds a dotted global into its frozen namespace and spreads arguments|a public codemode caller catches unknown tools and thrown tool errors with error call status|a public codemode caller collects mixed output in order with the console marker and image MIME|a public codemode caller counts the interrupt budget across tool waits|a public codemode caller fails the run when the guest hits its output item limit|a public codemode caller gets UTC and no WeakRef in a deterministic run|a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run|a public codemode caller gets during for the result the VM was processing when the script ended|a public codemode caller gets illegal start options refused before any VM exists|a public codemode caller gets the fingerprint before the first call and a reused result number is refused|a public codemode caller keeps a call waiting when its answer cannot be serialized|a public codemode caller numbers globals with tools and gets rejection properties on the script Error|a public codemode caller reads a store snapshot across calls and drops failed writes|a public codemode caller records an unawaited call as cancelled and aborts it|a public codemode caller records settled calls with ok and error statuses|a public codemode caller rejects a reused result number a non-finite clock and an unknown call deterministically|a public codemode caller rejects invalid globals at construction with the frozen errors|a public codemode caller replays a deterministic run from the same start seed and answers|a public codemode caller reports a pre-aborted run with the abort reason and never starts it|a public codemode caller reports a script error with its name message stack and prior output|a public codemode caller reports guest memory exhaustion as an out-of-memory script error|a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors|a public codemode caller reports the deadline when a tool waits past it and keeps partial output|a public codemode caller returns its value and text output from a successful budgeted run|a public codemode caller sees a seed mismatch change randomness without changing the start time|a public codemode caller stops pure computation with the interrupt budget, not the deadline|a public codemode caller stringifies text and accepts image blocks with the frozen type errors|a public codemode caller treats exit\\(\\) as success with prior output and the write set|a run-supplied jsName overrides the derived script name|an over-limit script is interrupted with a timeout error|codemode worker admission follows wasm load and releases a failed start once|codemode worker results settle before exit while admission stays bounded|the public codemode declaration covers the frozen schema renderings|the public codemode declaration groups tools globals and namespaces with doc comments|the public codemode declaration preserves the relocated tool identifiers|the public codemode declaration renders frozen schema types|the public codemode declaration renders frozen tool signatures samples and blocks|the public codemode prelude is the frozen sandbox prelude with output and store limits|the public codemode source parser keeps only a first-line options command|the public codemode source parser rejects a misplaced options line with its line number|the public codemode source parser rejects invalid options and empty input with typed errors)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1244-capture.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 52,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1179-codemode-comparisons-revalidation-1244-capture.xml",
+              "sha256": "536541f829f875d05044666401068c8d22060c0e2fcb62ef0b6b4b8ab053faec"
+            }
+          }
         }
       },
       {
@@ -11662,7 +11940,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -11689,16 +11967,16 @@
             "-R",
             "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1244-capture.xml",
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
           "selected": 5,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1244-capture.xml",
-            "sha256": "78d6aefe643d47a9bdd33109b15031a8fb235108a5bed796cfc347950e53e9c1"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1176-agent-comparisons.xml",
+            "sha256": "c259864a7defd2a8b14849e3b77499ac4e5520fd503d2f6df3d5928b900afd6b"
           }
         },
         "rows": [
@@ -12310,6 +12588,32 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(reset restores the System Message baseline and clears queues while retaining live policy|run_tool_call executes successfully and records execute-only duration|run_tool_call returns error outcome for blocked tool call without executing|stateful Agent queue peek prefers steering and clear removes both queues|stateful Agent rejects a second prompt while its active run is suspended)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1244-capture.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 5,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1176-agent-comparisons-revalidation-1244-capture.xml",
+              "sha256": "78d6aefe643d47a9bdd33109b15031a8fb235108a5bed796cfc347950e53e9c1"
+            }
+          }
         }
       },
       {
@@ -12382,7 +12686,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-            "sha256": "c9d9b9d355d8685337541273545cd1c694f47f5b2d0564e4b7b097a754648a76"
+            "sha256": "77ee1fed43bd14a23cd7d7b93fdcc0e8e1973e4f96d2b67fc4e495eb719c3405"
           },
           {
             "path": "scripts/evidence/audit_evidence.py",
@@ -12429,16 +12733,16 @@
             "-R",
             "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
             "--output-junit",
-            "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1244-capture.xml",
+            "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
             "-j",
             "1"
           ],
-          "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
-          "recordedAt": "2026-11-06T17:17:20Z",
+          "testedRevision": "cde9255c41c3c575c6e9ce20b1432687869a36f7",
+          "recordedAt": "2026-11-07T07:06:07Z",
           "selected": 9,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1244-capture.xml",
-            "sha256": "84d7a758d173cfb2b47da10b23b1472e39f67b4cc09008a99a67dd432a5a8f07"
+            "path": "docs/research/pi-v1.3.0/deliveries/1240-pilot-1177-application-comparisons.xml",
+            "sha256": "10dde98ca54d5fd6fee1aeebf4e7d1f3a8b08ddc9a172f4fa6f0a7e63457f03f"
           }
         },
         "rows": [
@@ -13081,6 +13385,32 @@
           "changedInputs": [
             "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
           ]
+        },
+        "revalidation1240Pilot": {
+          "reason": "The negative-control pilot changes the consolidation gate and, for Chord receipts, the strict JSON comparison source. The original selection was rerun; Chord includes the new control.",
+          "changedInputs": [
+            "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py"
+          ],
+          "previousValidation": {
+            "command": [
+              "ctest",
+              "--preset",
+              "vcpkg",
+              "-R",
+              "^(a\\ real\\ session's\\ next\\ request\\ lists\\ MCP\\ tools\\ registered\\ late\\ and\\ executes\\ them|a\\ settings\\ document\\ the\\ schema\\ accepts\\ reshapes\\ the\\ request\\ and\\ reload\\ re\\-reads\\ it|an\\ inline\\ budget\\ omits\\ a\\ namespace's\\ tools\\ with\\ pi's\\ marker|disabling\\ a\\ server\\ and\\ changing\\ its\\ exposure\\ reshape\\ the\\ next\\ request's\\ catalog|namespaces\\ group\\ sections\\ and\\ the\\ inline\\ budget\\ omits\\ tools\\ with\\ an\\ explicit\\ marker|the\\ empty\\ codemode\\ catalog\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ description|the\\ on\\ loadout\\ lists\\ only\\ non\\-direct\\ callable\\ tools\\ and\\ adds\\ script\\-call\\ descriptions|the\\ only\\ loadout\\ lists\\ every\\ callable\\ tool\\ and\\ hides\\ direct\\ declarations|the\\ theme\\ token\\ set\\ matches\\ the\\ frozen\\ pi\\-v1\\.3\\.0\\ capture)$",
+              "--output-junit",
+              "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1244-capture.xml",
+              "-j",
+              "1"
+            ],
+            "testedRevision": "6451b872e665cc8d014582eaad3e6dce06ff22cd",
+            "recordedAt": "2026-11-06T17:17:20Z",
+            "selected": 9,
+            "junit": {
+              "path": "docs/research/pi-v1.3.0/deliveries/1177-application-comparisons-revalidation-1244-capture.xml",
+              "sha256": "84d7a758d173cfb2b47da10b23b1472e39f67b4cc09008a99a67dd432a5a8f07"
+            }
+          }
         }
       },
       {
@@ -31834,10 +32164,10 @@
         "not-applicable": 2
       },
       "cch_chord": {
-        "implemented": 30,
+        "implemented": 31,
         "missing": 25,
         "not-applicable": 5,
-        "partial": 5
+        "partial": 4
       },
       "cch_codemode": {
         "implemented": 45,
@@ -31874,16 +32204,16 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1090,
+      "implemented": 1091,
       "missing": 185,
       "not-applicable": 18,
-      "partial": 171
+      "partial": 170
     },
     "verification": {
       "not-applicable": 28,
       "unverified": 536,
-      "upstream-captured": 334,
-      "verified": 566
+      "upstream-captured": 333,
+      "verified": 567
     },
     "evidenceRoute": {
       "captured": 900,
@@ -42794,15 +43124,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "upstream-captured",
+      "implementation": "implemented",
+      "verification": "verified",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/documents.ts:materializeDocument; packages/durable/src/session/transaction.ts:prepared.value",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1186",
       "scenario": "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
       "comparisonScenarios": [
         "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
@@ -42815,14 +43145,12 @@
         "capturedScenarios": [
           "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays"
         ],
-        "result": "Distinct TypeError messages for function, undefined, non-finite, class instance and sparse array."
+        "result": "C++ comparisons passed; see docs/research/pi-v1.3.0/1186-chord-typed-json.md"
       },
       "missingObservation": null,
-      "gaps": [
-        "The current C++ parser is Glaze-compatible and tolerates trailing content; it is not a strict JSON-value validator."
-      ],
-      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add a strict validation pass at durable boundaries; do not rely on the JSON text parser alone.",
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "Delivered by #1186; whole-row comparisons and remaining boundaries: docs/research/pi-v1.3.0/1186-chord-typed-json.md",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -42835,7 +43163,28 @@
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
-      ]
+      ],
+      "auditStatus": {
+        "implementation_ticket": null,
+        "implementation": "partial",
+        "verification": "upstream-captured",
+        "evidence": {
+          "route": "captured",
+          "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+          "scenarioMatch": "direct",
+          "capturedScenarios": [
+            "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays"
+          ],
+          "result": "Distinct TypeError messages for function, undefined, non-finite, class instance and sparse array."
+        },
+        "missingObservation": null,
+        "gaps": [
+          "The current C++ parser is Glaze-compatible and tolerates trailing content; it is not a strict JSON-value validator."
+        ],
+        "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+        "notes": "Recommendation: Add a strict validation pass at durable boundaries; do not rely on the JSON text parser alone."
+      },
+      "delivery": "1186-chord-typed-json"
     },
     {
       "id": "cch_chord:output:bound-output",

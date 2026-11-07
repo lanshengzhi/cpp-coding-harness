@@ -45,6 +45,28 @@ constexpr const char* kNonFiniteMessage = "value contains a non-finite number an
     return normalized;
 }
 
+[[nodiscard]] JsonValue frozen_nested_non_finite(const cch::tests::FrozenChordScenario& frozen) {
+    const auto* input = frozen.inputs_member("value");
+    REQUIRE(input != nullptr);
+    auto nested = *input;
+    auto* outer = nested.get_if<JsonValue::object_t>();
+    REQUIRE(outer != nullptr);
+    auto* inner = outer->at("outer").get_if<JsonValue::object_t>();
+    REQUIRE(inner != nullptr);
+    auto* values = inner->at("inner").get_if<JsonValue::array_t>();
+    REQUIRE(values != nullptr);
+    REQUIRE(values->size() == 2);
+    REQUIRE(values->at(1).holds<std::string>());
+    REQUIRE(values->at(1).get_string() == "NaN");
+    values->at(1) = JsonValue{std::nan("")};
+    return nested;
+}
+
+[[nodiscard]] bool matches_frozen_failure(const support::Expected<JsonValue>& result, std::string_view message) {
+    return !result && result.error().code == ErrorCode::Validation &&
+           result.error().message == frozen_normalized_message(message);
+}
+
 [[nodiscard]] JsonValue::object_t* object_of(JsonValue& value) { return value.get_if<JsonValue::object_t>(); }
 
 [[nodiscard]] const JsonValue::object_t* object_of(const JsonValue& value) {
@@ -200,18 +222,31 @@ TEST_CASE("strict JSON rejects non-finite numbers at any depth", "[chord][json][
         CHECK(copied.error().message == kNonFiniteMessage);
     }
 
-    // The frozen nested observation is {outer:{inner:[1,"NaN"]]}} with the string naming the
-    // non-finite placeholder; the carrier value below carries the same shape at depth.
-    const JsonValue nested = JsonValue{JsonValue::object_t{
-            {"outer",
-                    JsonValue{JsonValue::object_t{
-                            {"inner", JsonValue{JsonValue::array_t{JsonValue{1.0}, JsonValue{std::nan("")}}}}}}},
-    }};
+    const JsonValue nested = frozen_nested_non_finite(frozen_nested);
     CHECK_FALSE(is_strict_json_value(nested));
     const auto copied = copy_strict_json(nested);
-    REQUIRE_FALSE(copied);
-    CHECK(copied.error().code == ErrorCode::Validation);
-    CHECK(copied.error().message == frozen_normalized_message(*frozen_nested_message));
+    CHECK(matches_frozen_failure(copied, *frozen_nested_message));
+}
+
+TEST_CASE("frozen nested JSON comparison rejects a root-only validator", "[chord][json][issue1240][spec]") {
+    const auto frozen = typed_json_scenario("copyJson rejects a non-finite number nested below the root");
+    const auto* failure = frozen.object_member("failure");
+    REQUIRE(failure != nullptr);
+    const auto message = support::json_string_member(*failure, "message");
+    REQUIRE(message.has_value());
+    const JsonValue nested = frozen_nested_non_finite(frozen);
+
+    // This mutant validates a root number but never inspects an object's descendants.
+    const auto root_only_copy = [](const JsonValue& value) -> support::Expected<JsonValue> {
+        const auto* number = value.get_if<double>();
+        if (number != nullptr && !std::isfinite(*number)) {
+            return std::unexpected(support::make_error(ErrorCode::Validation, kNonFiniteMessage));
+        }
+        return value;
+    };
+    CHECK(matches_frozen_failure(root_only_copy(JsonValue{std::nan("")}), *message));
+    CHECK_FALSE(matches_frozen_failure(root_only_copy(nested), *message));
+    CHECK(matches_frozen_failure(copy_strict_json(nested), *message));
 }
 
 // The frozen placeholder names NaN, which the support value represents as a double.

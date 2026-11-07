@@ -961,8 +961,18 @@ def delivery_updates(
             require(set(row["comparisonScenarios"]) == obligations,
                     f"{row_id}: comparisons do not cover exactly the row's audit obligations")
             control = claim.get("discriminatingCase") or {}
-            require(bounded_claim or control.get("test") not in {item["test"] for item in comparisons},
-                    f"{row_id}: discriminatingCase reuses a comparison test without remainingBoundary")
+            comparison_tests = {item["test"] for item in comparisons}
+            negative = control.get("negativeControl")
+            if not bounded_claim and control.get("test") in comparison_tests:
+                require(isinstance(negative, dict),
+                        f"{row_id}: discriminatingCase reuses a comparison test without remainingBoundary or negativeControl")
+                require(negative.get("test") in passed and negative.get("test") not in comparison_tests,
+                        f"{row_id}: negativeControl must be a distinct passing test")
+                source = negative.get("testSource")
+                require(isinstance(source, str) and source in paths and source.startswith("tests/"),
+                        f"{row_id}: negativeControl source is not pinned")
+                reason = negative.get("reason")
+                require(isinstance(reason, str) and reason.strip(), f"{row_id}: negativeControl reason is missing")
             require(control.get("test") in passed and control.get("reason", "").strip(),
                     f"{row_id}: missing passing discriminating case")
             require(control.get("testSource") in paths and control["testSource"].startswith("tests/"),

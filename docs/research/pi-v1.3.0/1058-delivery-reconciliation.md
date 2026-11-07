@@ -60,6 +60,15 @@ capability is covered. A green JUnit file, a hash, an existing symbol or a close
 ticket alone establishes none of those properties. Changes outside a record's
 selected inputs require a review of whether that record remains applicable.
 
+A comparison may also be its own discriminating case if it carries a
+`negativeControl` with a distinct passing test, pinned `tests/` source and a
+reason naming the shallow implementation. The control must exercise the same
+registered frozen scenario and acceptance judgment and demonstrate that the
+shallow implementation fails that judgment. The validator checks the references
+and passing results; review establishes their semantic connection. This exception
+was authorized for a single strict-JSON pilot in #1240; each further claim needs
+its own evidence and review.
+
 The offline stale-field gate reads `fixtures/pi-v1.3.0/consolidation-1058/1239-stale-fields.json`.
 Its dated baseline identifies each existing contradiction by row, field and contradiction, and
 records the field value as historical evidence plus its owner (#1180 for durable, #1044 otherwise);

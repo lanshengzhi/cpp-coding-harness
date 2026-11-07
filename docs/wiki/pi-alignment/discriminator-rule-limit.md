@@ -21,9 +21,9 @@ The test opens the frozen nested scenario and asserts the deep rejection, so a r
 
 #1229's actual defect was **vacuous** discriminating cases — a name repeated with no argument about what fails. The name-equality test was a proxy for that. A proxy cannot distinguish "the comparison is the discriminator and says why" from "the comparison is cited with no argument". Four lanes and 12 bounded claim classes later, the proxy has blocked work it was meant to protect.
 
-## Unresolved fork (owner decision, not taken)
+## Owner decision: single-row pilot
 
-Proposed amendment: allow the comparison test to serve as its own `discriminatingCase` when the claim names a shallow implementation **and** carries an executable negative control — a pinned case that runs a deliberately shallow implementation against the same frozen expectation and shows it failing. That converts the reason from prose into proof, and is stricter than adding a second happy-path case. Cost: a contract/tool change plus one shallow variant per row.
+The owner approved a pilot allowing the comparison test to serve as its own `discriminatingCase` when a pinned executable negative control demonstrates that a named shallow implementation fails the same frozen scenario and acceptance judgment. Mechanical checks bind the cited passing test and its source; review must establish their semantic connection. The pilot is `cch_chord:json:strict-validation`; its result does not establish that other claims qualify. See the [owner decision](https://github.com/lanshengzhi/cpp-coding-harness/issues/1240#issuecomment-6703651162).
 
 If refused, the alternative is explicit: every claim whose comparison test is already sharp stays unverified permanently, across the 44 rows in #1240–#1243 and #1229's 182, unless a genuinely different frozen observation is captured for each.
 

@@ -272,6 +272,23 @@ class DeliveryEvidenceTest(unittest.TestCase):
         with self.assertRaisesRegex(consolidate.ConsolidationError, "cch_mcp:example.*discriminatingCase.*remainingBoundary"):
             self.check()
 
+    def test_reused_comparison_requires_a_distinct_pinned_passing_negative_control(self) -> None:
+        self.claim["discriminatingCase"]["test"] = "compare"
+        negative = {"test": "control", "testSource": "tests/ExampleTest.cpp", "reason": "Rejects a shallow copy."}
+        self.claim["discriminatingCase"]["negativeControl"] = negative
+        self.assertEqual(self.check()["cch_mcp:example"]["verification"], "verified")
+        for key, value, error in (("test", "compare", "distinct passing"),
+                                  ("test", "missing", "distinct passing"),
+                                  ("testSource", "tests/unpinned.cpp", "source is not pinned"),
+                                  ("testSource", "src/Example.cpp", "source is not pinned"),
+                                  ("reason", " ", "reason is missing")):
+            with self.subTest(key=key, value=value):
+                original = negative[key]
+                negative[key] = value
+                with self.assertRaisesRegex(consolidate.ConsolidationError, error):
+                    self.check()
+                negative[key] = original
+
     def test_complete_delivery_promotes_only_its_row(self) -> None:
         self.rows.append({"id": "cch_mcp:unrelated", "membership": "supported", "comparisonScenarios": ["other"]})
         before = copy.deepcopy(self.rows)
@@ -950,8 +967,9 @@ class ReanchoredLedgerTest(unittest.TestCase):
         # rows whole-row: 602. #1221 slice B promoted 7 StdinBuffer framing rows
         # whole-row and left StdinBuffer.flush validated but bounded on the
         # combined flush+callback seam: 609.
-        # #1245 promotes ProcessTerminal.clearScreen: 566.
-        self.assertEqual(len(delivered), 566)
+        # #1245 promotes ProcessTerminal.clearScreen: 566; the #1240
+        # negative-control pilot promotes strict JSON validation: 567.
+        self.assertEqual(len(delivered), 567)
         for row in self.ledger["rows"]:
             if row["verification"] == "verified":
                 self.assertIn(row["id"], delivered)
@@ -970,8 +988,8 @@ class ReanchoredLedgerTest(unittest.TestCase):
         )
         self.assertEqual(len(image_processor["comparisons"]), 2)
 
-    def test_no_identical_discriminating_case_without_a_boundary(self) -> None:
-        """Every receipt must bound a claim that reuses a comparison as its control."""
+    def test_reused_discriminating_case_has_boundary_or_negative_control(self) -> None:
+        """A reused comparison needs either a boundary or a separate negative control."""
         full = load(ROOT / "docs" / "research" / "pi-v1.3.0" / "1058-deliveries.json")
         checked = 0
         for record in full["records"]:
@@ -982,9 +1000,8 @@ class ReanchoredLedgerTest(unittest.TestCase):
                 checked += 1
                 if dc["test"] in {c["test"] for c in claim["comparisons"]}:
                     self.assertTrue(
-                        claim["remainingBoundary"],
-                        f"{record['id']}:{claim['id']} cites its happy-path test as the "
-                        "discriminating case without a remainingBoundary disposition",
+                        claim["remainingBoundary"] or dc.get("negativeControl"),
+                        f"{record['id']}:{claim['id']} reuses its comparison without a boundary or negative control",
                     )
         self.assertEqual(checked, sum(len(record["rows"]) for record in full["records"]))
 
@@ -999,9 +1016,14 @@ class ReanchoredLedgerTest(unittest.TestCase):
             with self.subTest(row=row_id):
                 claim = claims[row_id]
                 self.assertTrue(claim["comparisons"])
-                self.assertTrue(any(f"#{ticket}" in boundary for boundary in claim["remainingBoundary"]))
-                self.assertNotEqual(rows[row_id]["verification"], "verified")
-                self.assertNotIn("delivery", rows[row_id])
+                if row_id == "cch_chord:json:strict-validation":
+                    self.assertEqual(claim["remainingBoundary"], [])
+                    self.assertIn("negativeControl", claim["discriminatingCase"])
+                    self.assertEqual(rows[row_id]["verification"], "verified")
+                else:
+                    self.assertTrue(any(f"#{ticket}" in boundary for boundary in claim["remainingBoundary"]))
+                    self.assertNotEqual(rows[row_id]["verification"], "verified")
+                    self.assertNotIn("delivery", rows[row_id])
 
     def test_committed_ledger_matches_a_fresh_build(self) -> None:
         plan = load(PLAN)
@@ -1258,7 +1280,6 @@ class TicketMappedLedgerTest(unittest.TestCase):
         "cch_chord:delta:overlap",
         "cch_chord:json:copy-json",
         "cch_chord:json:json-value",
-        "cch_chord:json:strict-validation",
         "cch_codemode:codemode-execute-outcome",
         "cch_codemode:codemode-portable-entry",
         "cch_coding_agent:codemode-models-description-gate",
